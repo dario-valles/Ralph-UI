@@ -14,6 +14,7 @@ pub struct ConfigState {
     /// Current merged configuration
     config: RwLock<RalphConfig>,
     /// Global config path
+    #[allow(dead_code)]
     global_path: Option<PathBuf>,
     /// Project config path (set when project is opened)
     project_path: RwLock<Option<PathBuf>>,

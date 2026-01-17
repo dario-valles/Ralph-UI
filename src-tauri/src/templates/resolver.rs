@@ -1,4 +1,5 @@
 // Template resolution with cascading lookup
+#![allow(dead_code)]
 
 use crate::templates::builtin;
 use anyhow::{Result, anyhow};

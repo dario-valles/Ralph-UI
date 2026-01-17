@@ -1,4 +1,5 @@
 // Worktree isolation coordinator for parallel agents
+#![allow(dead_code)]
 
 use crate::git::GitManager;
 use anyhow::{Result, anyhow};

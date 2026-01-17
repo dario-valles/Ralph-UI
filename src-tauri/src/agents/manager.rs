@@ -1,4 +1,5 @@
 // Agent process spawning and lifecycle management
+#![allow(dead_code)]
 
 use crate::models::{AgentType, LogEntry, LogLevel};
 use anyhow::{Result, anyhow};

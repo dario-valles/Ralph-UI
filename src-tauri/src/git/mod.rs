@@ -1,4 +1,5 @@
 // Git operations using git2-rs
+#![allow(dead_code)]
 
 use git2::{
     Branch, BranchType, Commit, Delta, Diff, DiffOptions, Error as GitError, Oid, Repository,

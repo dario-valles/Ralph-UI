@@ -1,4 +1,5 @@
 // Agent pool management with resource limits
+#![allow(dead_code)]
 
 use crate::agents::{AgentManager, AgentSpawnConfig};
 use anyhow::{Result, anyhow};

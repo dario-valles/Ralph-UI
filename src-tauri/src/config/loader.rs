@@ -1,4 +1,5 @@
 // Configuration file loading
+#![allow(dead_code)]
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};

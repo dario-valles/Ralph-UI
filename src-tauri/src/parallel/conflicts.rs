@@ -1,4 +1,5 @@
 // Merge conflict detection for parallel agent coordination
+#![allow(dead_code)]
 
 use crate::git::GitManager;
 use anyhow::Result;

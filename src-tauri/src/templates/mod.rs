@@ -1,4 +1,5 @@
 // Template system for prompt generation
+#![allow(dead_code)]
 
 pub mod engine;
 pub mod builtin;

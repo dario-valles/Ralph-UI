@@ -1,4 +1,5 @@
 // Utility functions
+#![allow(dead_code)]
 
 use chrono::Utc;
 

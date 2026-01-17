@@ -8,7 +8,7 @@ pub use loader::{
     ConfigLoader, RalphConfig, ExecutionConfig, GitConfig,
     ValidationConfig, FallbackSettings,
 };
-pub use merger::{ConfigMerger, PartialConfig, PartialExecutionConfig};
+pub use merger::{ConfigMerger, PartialConfig};
 
 use anyhow::Result;
 use std::path::Path;

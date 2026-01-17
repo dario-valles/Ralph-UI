@@ -1,4 +1,5 @@
 // Template rendering engine using Tera
+#![allow(dead_code)]
 
 use crate::models::{Task, Session};
 use anyhow::{Result, anyhow};

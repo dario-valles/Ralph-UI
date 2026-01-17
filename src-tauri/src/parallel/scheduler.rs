@@ -1,4 +1,5 @@
 // Parallel execution scheduler for tasks
+#![allow(dead_code)]
 
 use crate::models::{Task, TaskStatus, Agent, AgentStatus, AgentType};
 use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig};

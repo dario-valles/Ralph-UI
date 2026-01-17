@@ -1,4 +1,5 @@
 // Subagent trace parsing for Claude Code output
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
