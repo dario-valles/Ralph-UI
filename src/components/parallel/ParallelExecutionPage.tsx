@@ -7,28 +7,23 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { AgentComparison } from './AgentComparison'
 import { ConflictResolution } from './ConflictResolution'
-import type { Agent, Task } from '../../types'
+import type { Agent } from '../../types'
 import type {
   SchedulerConfig,
   SchedulerStats,
   PoolStats,
   MergeConflict,
   ConflictResolutionStrategy,
-  SchedulingStrategy,
 } from '../../lib/parallel-api'
 import {
   initParallelScheduler,
-  parallelAddTasks,
   parallelScheduleNext,
-  parallelCompleteTask,
-  parallelFailTask,
   parallelStopAll,
   parallelGetSchedulerStats,
   parallelGetPoolStats,
   parallelCheckViolations,
   conflictsDetect,
   createDefaultSchedulerConfig,
-  formatPoolStats,
   calculateUtilization,
   getSchedulingStrategyLabel,
 } from '../../lib/parallel-api'

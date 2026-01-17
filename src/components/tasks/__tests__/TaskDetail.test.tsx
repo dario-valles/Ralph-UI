@@ -13,17 +13,17 @@ const mockTask: Task = {
   id: 'task-1',
   title: 'Test Task',
   description: 'Test description',
-  status: 'Pending',
+  status: 'pending',
   priority: 1,
   dependencies: ['task-0'],
   assignedAgent: 'agent-1',
   estimatedTokens: 1000,
-  actualTokens: null,
-  startedAt: null,
-  completedAt: null,
+  actualTokens: undefined,
+  startedAt: undefined,
+  completedAt: undefined,
   branch: 'feature/test',
-  worktreePath: null,
-  error: null,
+  worktreePath: undefined,
+  error: undefined,
 }
 
 describe('TaskDetail', () => {

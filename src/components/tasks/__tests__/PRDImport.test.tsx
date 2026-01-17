@@ -157,7 +157,7 @@ describe('PRDImport', () => {
 
     const reader = new FileReader()
     reader.onload = () => {
-      fireEvent.load(reader)
+      // File reader loaded
     }
 
     Object.defineProperty(input, 'files', {

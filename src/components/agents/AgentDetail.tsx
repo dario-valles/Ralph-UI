@@ -9,7 +9,6 @@ import {
   Hash,
   GitBranch,
   FolderTree,
-  Play,
   Square,
   RotateCcw,
 } from 'lucide-react'

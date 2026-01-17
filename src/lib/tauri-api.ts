@@ -12,7 +12,6 @@ import type {
   SessionAnalytics,
   PRDDocument,
   PRDTemplate,
-  PRDExecution,
   CreatePRDRequest,
   UpdatePRDRequest,
   ExecutionConfig,
