@@ -23,6 +23,7 @@ import {
   parallelGetPoolStats,
   parallelCheckViolations,
   conflictsDetect,
+  conflictsResolve,
   createDefaultSchedulerConfig,
   calculateUtilization,
   getSchedulingStrategyLabel,
@@ -164,8 +165,24 @@ export function ParallelExecutionPage() {
     conflict: MergeConflict,
     strategy: ConflictResolutionStrategy
   ) => {
-    console.log('Resolving conflict:', conflict.filePath, 'with strategy:', strategy)
-    // Implementation would call backend to resolve
+    if (!initialized) return
+
+    try {
+      // Get base branch (main or master) for resolution
+      const baseBranch = 'main'
+
+      const result = await conflictsResolve(conflict, strategy, baseBranch)
+
+      if (result.success) {
+        // Remove resolved conflict from the list
+        setConflicts((prev) => prev.filter((c) => c.filePath !== conflict.filePath))
+        setError(null)
+      } else {
+        setError(`Conflict resolution: ${result.message}`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resolve conflict')
+    }
   }
 
   const utilization = poolStats ? calculateUtilization(poolStats) : null

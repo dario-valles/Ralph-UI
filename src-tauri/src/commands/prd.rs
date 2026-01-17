@@ -246,28 +246,40 @@ pub async fn execute_prd(
 
     // 4. Create session for this execution
     let session_id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now();
 
-    let session = crate::database::sessions::Session {
+    // Parse agent type
+    let agent_type = match config.agent_type.as_str() {
+        "claude" => crate::models::AgentType::Claude,
+        "opencode" => crate::models::AgentType::Opencode,
+        "cursor" => crate::models::AgentType::Cursor,
+        _ => crate::models::AgentType::Claude,
+    };
+
+    let session = crate::models::Session {
         id: session_id.clone(),
-        name: config.session_name.unwrap_or_else(|| format!("{} Execution", prd.title)),
+        name: config.session_name.clone().unwrap_or_else(|| format!("{} Execution", prd.title)),
         project_path: prd.project_path.clone().unwrap_or_else(|| ".".to_string()),
-        created_at: now.clone(),
+        created_at: now,
         last_resumed_at: None,
-        status: "active".to_string(),
-        max_parallel: config.max_parallel as i32,
-        max_iterations: config.max_iterations as i32,
-        max_retries: config.max_retries as i32,
-        agent_type: config.agent_type.clone(),
-        auto_create_prs: config.auto_create_prs,
-        draft_prs: config.draft_prs,
-        run_tests: config.run_tests,
-        run_lint: config.run_lint,
+        status: crate::models::SessionStatus::Active,
+        config: crate::models::SessionConfig {
+            max_parallel: config.max_parallel as i32,
+            max_iterations: config.max_iterations as i32,
+            max_retries: config.max_retries as i32,
+            agent_type,
+            auto_create_prs: config.auto_create_prs,
+            draft_prs: config.draft_prs,
+            run_tests: config.run_tests,
+            run_lint: config.run_lint,
+        },
+        tasks: vec![],
         total_cost: 0.0,
         total_tokens: 0,
     };
 
-    db_guard.create_session(&session)
+    let conn = db_guard.get_connection();
+    crate::database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
     // 5. Create tasks in database with PRD reference
@@ -275,18 +287,13 @@ pub async fn execute_prd(
     for prd_task in parsed_prd.tasks {
         let task_id = Uuid::new_v4().to_string();
 
-        let task = crate::database::tasks::Task {
+        let task = crate::models::Task {
             id: task_id.clone(),
-            session_id: session_id.clone(),
             title: prd_task.title,
             description: prd_task.description,
-            status: "pending".to_string(),
-            priority: prd_task.priority,
-            dependencies: if prd_task.dependencies.is_empty() {
-                None
-            } else {
-                Some(prd_task.dependencies.join(","))
-            },
+            status: crate::models::TaskStatus::Pending,
+            priority: prd_task.priority.unwrap_or(0),
+            dependencies: prd_task.dependencies,
             assigned_agent: None,
             estimated_tokens: prd_task.estimated_tokens,
             actual_tokens: None,
@@ -297,7 +304,7 @@ pub async fn execute_prd(
             error: None,
         };
 
-        db_guard.create_task(&task)
+        crate::database::tasks::create_task(conn, &session_id, &task)
             .map_err(|e| format!("Failed to create task: {}", e))?;
 
         task_ids.push(task_id);
@@ -310,7 +317,7 @@ pub async fn execute_prd(
         prd_id: prd_id.clone(),
         session_id: session_id.clone(),
         status: "in_progress".to_string(),
-        started_at: now.clone(),
+        started_at: now.to_rfc3339(),
         completed_at: None,
         total_tasks: task_ids.len() as i32,
         completed_tasks: 0,

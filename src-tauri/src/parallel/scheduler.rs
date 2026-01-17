@@ -282,6 +282,9 @@ impl ParallelScheduler {
     /// Mark a task as failed
     pub fn fail_task(&mut self, task_id: &str, error: String) -> Result<()> {
         if let Some(mut scheduled) = self.running.remove(task_id) {
+            // Capture agent_id before potential move
+            let agent_id = scheduled.assigned_agent_id.clone();
+
             // Check if we can retry
             if scheduled.retry_count < self.config.max_retries {
                 scheduled.retry_count += 1;
@@ -298,8 +301,8 @@ impl ParallelScheduler {
                 self.failed.insert(task_id.to_string());
             }
 
-            if let Some(agent_id) = &scheduled.assigned_agent_id {
-                let _ = self.pool.stop(agent_id); // Best effort
+            if let Some(agent_id) = agent_id {
+                let _ = self.pool.stop(&agent_id); // Best effort
             }
 
             Ok(())

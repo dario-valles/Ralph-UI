@@ -275,8 +275,11 @@ fn extract_priority(text: &str) -> (String, Option<i32>) {
 }
 
 /// Extract dependencies from list item like "**Dependencies:** task-1, task-2"
+/// Note: After markdown parsing, bold markers are stripped, so we match with or without **
 fn extract_dependencies(text: &str) -> Option<Vec<String>> {
-    let re = Regex::new(r"(?i)\*\*dependencies:?\*\*\s*(.+)").unwrap();
+    // Match: "**Dependencies:** ...", "Dependencies: ...", "- **Dependencies:** ..."
+    // The key pattern is "dependencies:" possibly surrounded by **
+    let re = Regex::new(r"(?i)^(?:-\s*)?\*{0,2}dependencies:\*{0,2}\s*(.+)").unwrap();
 
     re.captures(text).map(|cap| {
         cap.get(1)
@@ -292,8 +295,10 @@ fn extract_dependencies(text: &str) -> Option<Vec<String>> {
 }
 
 /// Extract tags from list item like "**Tags:** feature, backend"
+/// Note: After markdown parsing, bold markers are stripped, so we match with or without **
 fn extract_tags(text: &str) -> Option<Vec<String>> {
-    let re = Regex::new(r"(?i)\*\*(tags|labels):?\*\*\s*(.+)").unwrap();
+    // Match: "**Tags:** ...", "Tags: ...", "- **Labels:** ..."
+    let re = Regex::new(r"(?i)^(?:-\s*)?\*{0,2}(tags|labels):\*{0,2}\s*(.+)").unwrap();
 
     re.captures(text).map(|cap| {
         cap.get(2)
@@ -309,8 +314,10 @@ fn extract_tags(text: &str) -> Option<Vec<String>> {
 }
 
 /// Extract estimated tokens from list item like "**Estimated Tokens:** 1000"
+/// Note: After markdown parsing, bold markers are stripped, so we match with or without **
 fn extract_estimated_tokens(text: &str) -> Option<i32> {
-    let re = Regex::new(r"(?i)\*\*estimated\s*tokens:?\*\*\s*(\d+)").unwrap();
+    // Match: "**Estimated Tokens:** 1000", "Estimated Tokens: 1000"
+    let re = Regex::new(r"(?i)^(?:-\s*)?\*{0,2}estimated\s*tokens:\*{0,2}\s*(\d+)").unwrap();
 
     re.captures(text)
         .and_then(|cap| cap.get(1))

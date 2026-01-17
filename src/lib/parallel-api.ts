@@ -90,6 +90,13 @@ export interface ConflictSummary {
   conflictsByType: Record<ConflictType, number>
 }
 
+export interface ConflictResolutionResult {
+  filePath: string
+  strategyUsed: ConflictResolutionStrategy
+  success: boolean
+  message: string
+}
+
 // ===== Scheduler API =====
 
 /**
@@ -242,6 +249,17 @@ export async function conflictsGetSummary(
   conflicts: MergeConflict[]
 ): Promise<ConflictSummary> {
   return invoke('conflicts_get_summary', { conflicts })
+}
+
+/**
+ * Resolve a conflict using the specified strategy
+ */
+export async function conflictsResolve(
+  conflict: MergeConflict,
+  strategy: ConflictResolutionStrategy,
+  baseBranch: string
+): Promise<ConflictResolutionResult> {
+  return invoke('conflicts_resolve', { conflict, strategy, baseBranch })
 }
 
 // ===== Helper Functions =====

@@ -6,7 +6,7 @@ mod git;
 mod github;
 mod agents;
 mod utils;
-mod parsers;
+pub mod parsers;
 mod parallel;
 
 // Re-export models for use in commands
@@ -116,6 +116,7 @@ pub fn run() {
             commands::conflicts_detect,
             commands::conflicts_can_merge_safely,
             commands::conflicts_get_summary,
+            commands::conflicts_resolve,
             commands::export_session_json,
             commands::create_session_template,
             commands::get_session_templates,

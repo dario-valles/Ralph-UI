@@ -4,7 +4,6 @@ use crate::database::{self, Database};
 use crate::models::{AgentType, Session, SessionConfig, SessionStatus};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use tauri::State;
 use uuid::Uuid;
 
@@ -466,7 +465,7 @@ pub async fn compare_sessions(
         session2_name: session2.name,
         tasks_completed_diff: tasks1_completed - tasks2_completed,
         total_cost_diff: session1.total_cost - session2.total_cost,
-        total_tokens_diff: session1.total_tokens - session2.total_tokens,
+        total_tokens_diff: (session1.total_tokens - session2.total_tokens) as i64,
         config_differences,
         performance_summary,
     })

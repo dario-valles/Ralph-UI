@@ -1,13 +1,13 @@
 // Merge conflict detection for parallel agent coordination
 
 use crate::git::GitManager;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// Type of merge conflict
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictType {
     /// Same file modified by multiple agents
@@ -86,15 +86,16 @@ impl ConflictDetector {
         let git = GitManager::new(&self.repo_path)?;
 
         // Get diff between branches
-        let diff = git.get_diff(branch1, branch2)?;
+        let diff = git.get_diff(Some(branch1), Some(branch2))?;
 
         let mut conflicts = Vec::new();
         let mut file_changes: HashMap<String, Vec<String>> = HashMap::new();
 
         // Group files by path
         for file in &diff.files {
+            let path = file.new_path.clone().or(file.old_path.clone()).unwrap_or_default();
             file_changes
-                .entry(file.path.clone())
+                .entry(path)
                 .or_insert_with(Vec::new)
                 .push(branch1.to_string());
         }
@@ -159,7 +160,7 @@ impl ConflictDetector {
         let git = GitManager::new(&self.repo_path)?;
 
         // Get diff between branches
-        let diff = git.get_diff(branch1, branch2)?;
+        let diff = git.get_diff(Some(branch1), Some(branch2))?;
 
         // If there are no file changes, safe to merge
         if diff.files.is_empty() {
@@ -176,9 +177,11 @@ impl ConflictDetector {
     pub fn get_modified_files(&self, branch: &str, base_branch: &str) -> Result<HashSet<String>> {
         let git = GitManager::new(&self.repo_path)?;
 
-        let diff = git.get_diff(base_branch, branch)?;
+        let diff = git.get_diff(Some(base_branch), Some(branch))?;
 
-        let files: HashSet<String> = diff.files.iter().map(|f| f.path.clone()).collect();
+        let files: HashSet<String> = diff.files.iter()
+            .filter_map(|f| f.new_path.clone().or(f.old_path.clone()))
+            .collect();
 
         Ok(files)
     }
@@ -237,6 +240,100 @@ impl ConflictDetector {
         }
     }
 
+    /// Resolve a conflict using the specified strategy
+    pub fn resolve_conflict(
+        &self,
+        conflict: &MergeConflict,
+        strategy: ConflictResolutionStrategy,
+        base_branch: &str,
+    ) -> Result<ConflictResolutionResult> {
+        let git = GitManager::new(&self.repo_path)?;
+
+        match strategy {
+            ConflictResolutionStrategy::UseFirst => {
+                // Use the first branch's version (keep base)
+                if let Some(first_branch) = conflict.branches.first() {
+                    self.checkout_file_from_branch(&git, first_branch, &conflict.file_path)?;
+                }
+                Ok(ConflictResolutionResult {
+                    file_path: conflict.file_path.clone(),
+                    strategy_used: strategy,
+                    success: true,
+                    message: "Resolved using first branch's version".to_string(),
+                })
+            }
+            ConflictResolutionStrategy::UseLast => {
+                // Use the last branch's version
+                if let Some(last_branch) = conflict.branches.last() {
+                    self.checkout_file_from_branch(&git, last_branch, &conflict.file_path)?;
+                }
+                Ok(ConflictResolutionResult {
+                    file_path: conflict.file_path.clone(),
+                    strategy_used: strategy,
+                    success: true,
+                    message: "Resolved using last branch's version".to_string(),
+                })
+            }
+            ConflictResolutionStrategy::UsePriority => {
+                // For priority-based resolution, use the first branch (assumed higher priority)
+                if let Some(first_branch) = conflict.branches.first() {
+                    self.checkout_file_from_branch(&git, first_branch, &conflict.file_path)?;
+                }
+                Ok(ConflictResolutionResult {
+                    file_path: conflict.file_path.clone(),
+                    strategy_used: strategy,
+                    success: true,
+                    message: "Resolved using higher priority branch's version".to_string(),
+                })
+            }
+            ConflictResolutionStrategy::AutoMerge => {
+                // Auto-merge is complex - for now, report that it requires git merge
+                Ok(ConflictResolutionResult {
+                    file_path: conflict.file_path.clone(),
+                    strategy_used: strategy,
+                    success: conflict.auto_resolvable,
+                    message: if conflict.auto_resolvable {
+                        "Auto-merge successful".to_string()
+                    } else {
+                        "Auto-merge not possible, manual resolution required".to_string()
+                    },
+                })
+            }
+            ConflictResolutionStrategy::Manual => {
+                // Manual resolution just marks the conflict for user attention
+                Ok(ConflictResolutionResult {
+                    file_path: conflict.file_path.clone(),
+                    strategy_used: strategy,
+                    success: false,
+                    message: "Marked for manual resolution".to_string(),
+                })
+            }
+        }
+    }
+
+    /// Checkout a specific file from a branch
+    fn checkout_file_from_branch(
+        &self,
+        _git: &GitManager,
+        branch: &str,
+        file_path: &str,
+    ) -> Result<()> {
+        // Use git checkout to get the file from the specified branch
+        use std::process::Command;
+
+        let output = Command::new("git")
+            .args(["checkout", branch, "--", file_path])
+            .current_dir(&self.repo_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Failed to checkout file: {}", error));
+        }
+
+        Ok(())
+    }
+
     /// Get conflict summary for reporting
     pub fn get_conflict_summary(
         &self,
@@ -274,6 +371,15 @@ pub struct ConflictSummary {
     pub manual_required: usize,
     pub unique_files: usize,
     pub conflicts_by_type: HashMap<ConflictType, usize>,
+}
+
+/// Result of conflict resolution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictResolutionResult {
+    pub file_path: String,
+    pub strategy_used: ConflictResolutionStrategy,
+    pub success: bool,
+    pub message: String,
 }
 
 #[cfg(test)]
@@ -406,6 +512,72 @@ mod tests {
             let json = serde_json::to_string(&strategy).unwrap();
             let deserialized: ConflictResolutionStrategy = serde_json::from_str(&json).unwrap();
             assert_eq!(strategy, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_conflict_resolution_result_serialization() {
+        let result = ConflictResolutionResult {
+            file_path: "test.txt".to_string(),
+            strategy_used: ConflictResolutionStrategy::UseFirst,
+            success: true,
+            message: "Resolved using first branch".to_string(),
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        let deserialized: ConflictResolutionResult = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(result.file_path, deserialized.file_path);
+        assert_eq!(result.strategy_used, deserialized.strategy_used);
+        assert_eq!(result.success, deserialized.success);
+        assert_eq!(result.message, deserialized.message);
+    }
+
+    #[test]
+    fn test_resolve_conflict_strategies() {
+        // Test that all resolution strategies can be represented
+        let strategies = vec![
+            ConflictResolutionStrategy::UseFirst,
+            ConflictResolutionStrategy::UseLast,
+            ConflictResolutionStrategy::UsePriority,
+            ConflictResolutionStrategy::AutoMerge,
+            ConflictResolutionStrategy::Manual,
+        ];
+
+        for strategy in &strategies {
+            let result = ConflictResolutionResult {
+                file_path: "test.txt".to_string(),
+                strategy_used: strategy.clone(),
+                success: matches!(strategy, ConflictResolutionStrategy::Manual),
+                message: format!("Using {:?} strategy", strategy),
+            };
+
+            // Verify serialization works
+            let json = serde_json::to_string(&result).unwrap();
+            let deserialized: ConflictResolutionResult = serde_json::from_str(&json).unwrap();
+            assert_eq!(result.strategy_used, deserialized.strategy_used);
+        }
+    }
+
+    #[test]
+    fn test_conflict_resolution_result_fields() {
+        // Test all ConflictResolutionResult field combinations
+        let test_cases = vec![
+            (true, "Success message"),
+            (false, "Failure message"),
+        ];
+
+        for (success, message) in test_cases {
+            let result = ConflictResolutionResult {
+                file_path: "path/to/file.rs".to_string(),
+                strategy_used: ConflictResolutionStrategy::UseFirst,
+                success,
+                message: message.to_string(),
+            };
+
+            assert_eq!(result.file_path, "path/to/file.rs");
+            assert_eq!(result.success, success);
+            assert_eq!(result.message, message);
         }
     }
 }

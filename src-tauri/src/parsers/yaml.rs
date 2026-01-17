@@ -25,6 +25,19 @@ pub fn parse_yaml(content: &str) -> Result<PRDDocument> {
     let value: Value = serde_yaml::from_str(content)
         .context("Failed to parse YAML")?;
 
+    // Require the document to be a mapping (object) with at least a title or tasks field
+    // This prevents markdown content (which parses as comments/null) from being accepted
+    if !value.is_mapping() {
+        anyhow::bail!("YAML document must be a mapping/object");
+    }
+
+    let has_title = value.get("title").is_some() || value.get("name").is_some();
+    let has_tasks = value.get("tasks").is_some();
+
+    if !has_title && !has_tasks {
+        anyhow::bail!("YAML document must have at least a 'title' or 'tasks' field");
+    }
+
     let title = value.get("title")
         .or_else(|| value.get("name"))
         .and_then(|v| v.as_str())

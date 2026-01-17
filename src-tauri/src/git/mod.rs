@@ -149,18 +149,26 @@ impl GitManager {
 
     /// Create a worktree
     pub fn create_worktree(&self, branch: &str, path: &str) -> Result<WorktreeInfo, GitError> {
-        // First, try to create the branch if it doesn't exist
-        let branch_exists = self.repo.find_branch(branch, BranchType::Local).is_ok();
+        use git2::WorktreeAddOptions;
 
+        // Check if branch already exists, create it if not
+        let branch_exists = self.repo.find_branch(branch, BranchType::Local).is_ok();
         if !branch_exists {
             self.create_branch(branch, false)?;
         }
 
-        // Create the worktree
+        // Get the branch reference (now guaranteed to exist)
+        let branch_ref = self.repo.find_branch(branch, BranchType::Local)?;
+
+        // Create worktree options with the branch reference
+        let mut opts = WorktreeAddOptions::new();
+        opts.reference(Some(branch_ref.get()));
+
+        // Create the worktree with the branch reference
         let worktree = self.repo.worktree(
             branch,
             Path::new(path),
-            None,
+            Some(&opts),
         )?;
 
         Ok(self.worktree_to_info(&worktree)?)
@@ -172,7 +180,7 @@ impl GitManager {
 
         let mut result = Vec::new();
         for name in worktrees.iter() {
-            if let Some(name_str) = name.to_str() {
+            if let Some(name_str) = name {
                 if let Ok(worktree) = self.repo.find_worktree(name_str) {
                     result.push(self.worktree_to_info(&worktree)?);
                 }
@@ -378,7 +386,7 @@ impl GitManager {
     fn worktree_to_info(&self, worktree: &Worktree) -> Result<WorktreeInfo, GitError> {
         let name = worktree.name().unwrap_or("").to_string();
         let path = worktree.path().to_string_lossy().to_string();
-        let is_locked = worktree.is_locked().is_some();
+        let is_locked = worktree.is_locked().map(|status| !matches!(status, git2::WorktreeLockStatus::Unlocked)).unwrap_or(false);
 
         // Try to determine the branch for this worktree
         let branch = if let Ok(wt_repo) = Repository::open(worktree.path()) {

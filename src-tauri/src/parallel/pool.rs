@@ -1,13 +1,12 @@
 // Agent pool management with resource limits
 
 use crate::agents::{AgentManager, AgentSpawnConfig};
-use crate::models::Agent;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use sysinfo::{System, SystemExt, ProcessExt};
+use std::time::Instant;
+use sysinfo::{System, Pid};
 
 /// Resource limits for agent execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +71,7 @@ impl AgentPool {
             limits,
             running: Arc::new(Mutex::new(HashMap::new())),
             manager: Arc::new(Mutex::new(AgentManager::new())),
-            system: Arc::new(Mutex::new(System::new_all())),
+            system: Arc::new(Mutex::new(System::new())),
         }
     }
 
@@ -97,9 +96,17 @@ impl AgentPool {
 
         // Check system resources
         let mut system = self.system.lock().unwrap();
-        system.refresh_all();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
-        let (total_cpu, total_memory) = self.get_total_usage(&system)?;
+        // Calculate total usage inline to avoid deadlock (running is already locked)
+        let mut total_cpu = 0.0;
+        let mut total_memory_mb: u64 = 0;
+        for pooled in running.values() {
+            if let Some(process) = system.process(Pid::from_u32(pooled.process_id)) {
+                total_cpu += process.cpu_usage();
+                total_memory_mb += process.memory() / 1024 / 1024;
+            }
+        }
 
         // Check CPU limit
         if total_cpu >= self.limits.max_total_cpu {
@@ -107,7 +114,7 @@ impl AgentPool {
         }
 
         // Check memory limit
-        if total_memory >= self.limits.max_total_memory_mb {
+        if total_memory_mb >= self.limits.max_total_memory_mb {
             return Ok(false);
         }
 
@@ -191,7 +198,7 @@ impl AgentPool {
         let running = self.running.lock().unwrap();
 
         let mut system = self.system.lock().unwrap();
-        system.refresh_all();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         for (agent_id, pooled) in running.iter() {
             // Check runtime limit
@@ -204,7 +211,7 @@ impl AgentPool {
             }
 
             // Check process resource usage
-            if let Some(process) = system.process(pooled.process_id as i32) {
+            if let Some(process) = system.process(Pid::from_u32(pooled.process_id)) {
                 let cpu = process.cpu_usage();
                 let memory_mb = process.memory() / 1024 / 1024;
 
@@ -226,7 +233,7 @@ impl AgentPool {
         let mut total_memory_mb = 0;
 
         for pooled in running.values() {
-            if let Some(process) = system.process(pooled.process_id as i32) {
+            if let Some(process) = system.process(Pid::from_u32(pooled.process_id)) {
                 total_cpu += process.cpu_usage();
                 total_memory_mb += process.memory() / 1024 / 1024;
             }
@@ -239,9 +246,17 @@ impl AgentPool {
     pub fn get_stats(&self) -> Result<PoolStats> {
         let running = self.running.lock().unwrap();
         let mut system = self.system.lock().unwrap();
-        system.refresh_all();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
-        let (total_cpu, total_memory_mb) = self.get_total_usage(&system)?;
+        // Calculate total usage inline to avoid deadlock (running is already locked)
+        let mut total_cpu = 0.0;
+        let mut total_memory_mb: u64 = 0;
+        for pooled in running.values() {
+            if let Some(process) = system.process(Pid::from_u32(pooled.process_id)) {
+                total_cpu += process.cpu_usage();
+                total_memory_mb += process.memory() / 1024 / 1024;
+            }
+        }
 
         Ok(PoolStats {
             running_agents: running.len(),

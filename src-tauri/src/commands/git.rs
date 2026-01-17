@@ -288,12 +288,9 @@ mod tests {
     fn test_git_create_branch_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let result = git_create_branch(
-            repo_path,
-            "test-branch".to_string(),
-            false,
-            State::from(&state),
-        );
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.create_branch("test-branch", false)
+        });
 
         assert!(result.is_ok());
         let branch = result.unwrap();
@@ -304,14 +301,13 @@ mod tests {
     fn test_git_list_branches_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let _ = git_create_branch(
-            repo_path.clone(),
-            "branch1".to_string(),
-            false,
-            State::from(&state),
-        );
+        let _ = state.with_manager(&repo_path, |manager| {
+            manager.create_branch("branch1", false)
+        });
 
-        let result = git_list_branches(repo_path, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.list_branches()
+        });
 
         assert!(result.is_ok());
         let branches = result.unwrap();
@@ -322,7 +318,9 @@ mod tests {
     fn test_git_get_current_branch_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let result = git_get_current_branch(repo_path, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.get_current_branch()
+        });
 
         assert!(result.is_ok());
         let branch = result.unwrap();
@@ -333,22 +331,19 @@ mod tests {
     fn test_git_checkout_branch_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let _ = git_create_branch(
-            repo_path.clone(),
-            "checkout-test".to_string(),
-            false,
-            State::from(&state),
-        );
+        let _ = state.with_manager(&repo_path, |manager| {
+            manager.create_branch("checkout-test", false)
+        });
 
-        let result = git_checkout_branch(
-            repo_path.clone(),
-            "checkout-test".to_string(),
-            State::from(&state),
-        );
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.checkout_branch("checkout-test")
+        });
 
         assert!(result.is_ok());
 
-        let current = git_get_current_branch(repo_path, State::from(&state)).unwrap();
+        let current = state.with_manager(&repo_path, |manager| {
+            manager.get_current_branch()
+        }).unwrap();
         assert_eq!(current.name, "checkout-test");
     }
 
@@ -360,7 +355,9 @@ mod tests {
         let new_file = temp_dir.path().join("new.txt");
         fs::write(&new_file, "New content").unwrap();
 
-        let result = git_get_status(repo_path, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.get_status()
+        });
 
         assert!(result.is_ok());
         let status = result.unwrap();
@@ -371,7 +368,9 @@ mod tests {
     fn test_git_get_commit_history_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let result = git_get_commit_history(repo_path, 10, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.get_commit_history(10)
+        });
 
         assert!(result.is_ok());
         let history = result.unwrap();
@@ -387,11 +386,9 @@ mod tests {
         let new_file = temp_dir.path().join("stage.txt");
         fs::write(&new_file, "Stage me").unwrap();
 
-        let result = git_stage_files(
-            repo_path,
-            vec!["stage.txt".to_string()],
-            State::from(&state),
-        );
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.stage_files(&["stage.txt"])
+        });
 
         assert!(result.is_ok());
     }
@@ -402,12 +399,9 @@ mod tests {
 
         let worktree_path = temp_dir.path().join("worktree");
 
-        let result = git_create_worktree(
-            repo_path,
-            "wt-branch".to_string(),
-            worktree_path.to_str().unwrap().to_string(),
-            State::from(&state),
-        );
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.create_worktree("wt-branch", worktree_path.to_str().unwrap())
+        });
 
         assert!(result.is_ok());
         let worktree = result.unwrap();
@@ -419,14 +413,13 @@ mod tests {
         let (temp_dir, repo_path, state) = setup_test_repo();
 
         let worktree_path = temp_dir.path().join("worktree1");
-        let _ = git_create_worktree(
-            repo_path.clone(),
-            "wt1".to_string(),
-            worktree_path.to_str().unwrap().to_string(),
-            State::from(&state),
-        );
+        let _ = state.with_manager(&repo_path, |manager| {
+            manager.create_worktree("wt1", worktree_path.to_str().unwrap())
+        });
 
-        let result = git_list_worktrees(repo_path, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.list_worktrees()
+        });
 
         assert!(result.is_ok());
         let worktrees = result.unwrap();
@@ -441,7 +434,9 @@ mod tests {
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "Modified").unwrap();
 
-        let result = git_get_working_diff(repo_path, State::from(&state));
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.get_working_diff()
+        });
 
         assert!(result.is_ok());
         let diff = result.unwrap();
@@ -452,22 +447,19 @@ mod tests {
     fn test_git_delete_branch_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let _ = git_create_branch(
-            repo_path.clone(),
-            "delete-me".to_string(),
-            false,
-            State::from(&state),
-        );
+        let _ = state.with_manager(&repo_path, |manager| {
+            manager.create_branch("delete-me", false)
+        });
 
-        let result = git_delete_branch(
-            repo_path.clone(),
-            "delete-me".to_string(),
-            State::from(&state),
-        );
+        let result = state.with_manager(&repo_path, |manager| {
+            manager.delete_branch("delete-me")
+        });
 
         assert!(result.is_ok());
 
-        let branches = git_list_branches(repo_path, State::from(&state)).unwrap();
+        let branches = state.with_manager(&repo_path, |manager| {
+            manager.list_branches()
+        }).unwrap();
         let names: Vec<String> = branches.iter().map(|b| b.name.clone()).collect();
         assert!(!names.contains(&"delete-me".to_string()));
     }

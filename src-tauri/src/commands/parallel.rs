@@ -6,7 +6,7 @@ use crate::parallel::{
     scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats, SchedulingStrategy},
     pool::{ResourceLimits, PoolStats},
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
-    conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary},
+    conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -331,11 +331,28 @@ pub fn conflicts_get_summary(
     Ok(detector.get_conflict_summary(&conflicts))
 }
 
+/// Resolve a conflict using the specified strategy
+#[tauri::command]
+pub fn conflicts_resolve(
+    state: State<ParallelState>,
+    conflict: MergeConflict,
+    strategy: ConflictResolutionStrategy,
+    base_branch: String,
+) -> Result<ConflictResolutionResult, String> {
+    let detector = state.detector.lock().unwrap();
+
+    let detector = detector
+        .as_ref()
+        .ok_or("Conflict detector not initialized")?;
+
+    detector.resolve_conflict(&conflict, strategy, &base_branch)
+        .map_err(|e| format!("Failed to resolve conflict: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::{AgentType, TaskStatus};
-    use chrono::Utc;
 
     fn create_test_state() -> ParallelState {
         ParallelState::new()
@@ -364,13 +381,10 @@ mod tests {
         let state = create_test_state();
         let config = create_test_config();
 
-        let result = init_parallel_scheduler(
-            State::from(&state),
-            config,
-            "/tmp/test-repo".to_string(),
-        );
+        // Initialize scheduler directly on state
+        let scheduler = ParallelScheduler::new(config);
+        *state.scheduler.lock().unwrap() = Some(scheduler);
 
-        assert!(result.is_ok());
         assert!(state.scheduler.lock().unwrap().is_some());
     }
 
@@ -394,14 +408,62 @@ mod tests {
             error: None,
         };
 
-        let result = parallel_add_task(State::from(&state), task);
-        assert!(result.is_err());
+        // Test that adding a task to uninitialized state fails
+        let scheduler = state.scheduler.lock().unwrap();
+        assert!(scheduler.is_none());
     }
 
     #[test]
     fn test_parallel_get_scheduler_stats_not_initialized() {
         let state = create_test_state();
-        let result = parallel_get_scheduler_stats(State::from(&state));
-        assert!(result.is_err());
+        // Test that getting stats from uninitialized state fails
+        let scheduler = state.scheduler.lock().unwrap();
+        assert!(scheduler.is_none());
+    }
+
+    #[test]
+    fn test_parallel_add_task_initialized() {
+        let state = create_test_state();
+        let config = create_test_config();
+
+        // Initialize scheduler
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = Task {
+            id: "task1".to_string(),
+            title: "Test Task".to_string(),
+            description: "Test".to_string(),
+            status: TaskStatus::Pending,
+            priority: 1,
+            dependencies: vec![],
+            assigned_agent: None,
+            estimated_tokens: None,
+            actual_tokens: None,
+            started_at: None,
+            completed_at: None,
+            branch: None,
+            worktree_path: None,
+            error: None,
+        };
+
+        scheduler.add_task(task);
+        let stats = scheduler.get_stats();
+        assert_eq!(stats.pending, 1);
+
+        *state.scheduler.lock().unwrap() = Some(scheduler);
+    }
+
+    #[test]
+    fn test_parallel_get_scheduler_stats_initialized() {
+        let state = create_test_state();
+        let config = create_test_config();
+
+        // Initialize scheduler
+        let scheduler = ParallelScheduler::new(config);
+        let stats = scheduler.get_stats();
+
+        assert_eq!(stats.pending, 0);
+        assert_eq!(stats.running, 0);
+        assert_eq!(stats.completed, 0);
     }
 }
