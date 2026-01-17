@@ -8,6 +8,9 @@ mod agents;
 mod utils;
 pub mod parsers;
 mod parallel;
+mod session;
+mod templates;
+mod config;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -36,10 +39,22 @@ pub fn run() {
     // Initialize parallel state
     let parallel_state = commands::parallel::ParallelState::new();
 
+    // Initialize config state
+    let config_state = commands::config::ConfigState::new();
+
+    // Initialize trace state for subagent tracking
+    let trace_state = commands::traces::TraceState::new();
+
+    // Log startup info
+    log::info!("Ralph-UI starting up");
+    log::info!("Database path: {}", db_path);
+
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(db))
         .manage(git_state)
         .manage(parallel_state)
+        .manage(config_state)
+        .manage(trace_state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -126,6 +141,37 @@ pub fn run() {
             commands::get_recovery_state,
             commands::compare_sessions,
             commands::get_session_analytics,
+            // Config commands
+            commands::get_config,
+            commands::set_config_project_path,
+            commands::get_config_paths_cmd,
+            commands::update_execution_config,
+            commands::update_git_config,
+            commands::update_validation_config,
+            commands::update_fallback_config,
+            commands::reload_config,
+            // Template commands
+            commands::list_templates,
+            commands::list_builtin_templates,
+            commands::render_template,
+            commands::render_task_prompt,
+            commands::get_template_content,
+            // Recovery commands
+            commands::check_stale_sessions,
+            commands::recover_stale_session,
+            commands::recover_all_stale_sessions,
+            commands::acquire_session_lock,
+            commands::release_session_lock,
+            commands::get_session_lock_info,
+            commands::refresh_session_lock,
+            // Trace commands
+            commands::init_trace_parser,
+            commands::parse_agent_output,
+            commands::get_subagent_tree,
+            commands::get_subagent_summary,
+            commands::get_subagent_events,
+            commands::clear_trace_data,
+            commands::is_subagent_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

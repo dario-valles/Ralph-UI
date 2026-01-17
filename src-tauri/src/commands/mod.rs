@@ -7,6 +7,10 @@ pub mod git;
 pub mod github;
 pub mod parallel;
 pub mod prd;
+pub mod config;
+pub mod templates;
+pub mod recovery;
+pub mod traces;
 
 // Re-export all commands for easy registration
 pub use sessions::*;
@@ -16,6 +20,10 @@ pub use git::*;
 pub use github::*;
 pub use parallel::*;
 pub use prd::*;
+pub use config::*;
+pub use templates::*;
+pub use recovery::*;
+pub use traces::*;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {

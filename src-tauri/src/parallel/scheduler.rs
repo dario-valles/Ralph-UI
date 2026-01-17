@@ -1,7 +1,7 @@
 // Parallel execution scheduler for tasks
 
 use crate::models::{Task, TaskStatus, Agent, AgentStatus, AgentType};
-use crate::agents::AgentSpawnConfig;
+use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig};
 use crate::parallel::pool::{AgentPool, ResourceLimits};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,30 @@ impl Default for SchedulingStrategy {
     }
 }
 
+/// Error handling strategy for failed tasks
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorStrategy {
+    /// Retry with exponential backoff
+    Retry {
+        max_attempts: i32,
+        backoff_ms: u64,
+    },
+    /// Skip the task and continue with others
+    Skip,
+    /// Abort the entire scheduler
+    Abort,
+}
+
+impl Default for ErrorStrategy {
+    fn default() -> Self {
+        Self::Retry {
+            max_attempts: 3,
+            backoff_ms: 5000,
+        }
+    }
+}
+
 /// Configuration for parallel scheduler
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
@@ -35,7 +59,7 @@ pub struct SchedulerConfig {
     pub max_parallel: usize,
     /// Maximum iterations per agent
     pub max_iterations: i32,
-    /// Maximum retries for failed tasks
+    /// Maximum retries for failed tasks (deprecated: use error_strategy)
     pub max_retries: i32,
     /// Agent type to use
     pub agent_type: AgentType,
@@ -43,6 +67,10 @@ pub struct SchedulerConfig {
     pub strategy: SchedulingStrategy,
     /// Resource limits
     pub resource_limits: ResourceLimits,
+    /// Error handling strategy
+    pub error_strategy: ErrorStrategy,
+    /// Fallback configuration for rate limiting
+    pub fallback_config: FallbackConfig,
 }
 
 impl Default for SchedulerConfig {
@@ -54,6 +82,8 @@ impl Default for SchedulerConfig {
             agent_type: AgentType::Claude,
             strategy: SchedulingStrategy::DependencyFirst,
             resource_limits: ResourceLimits::default(),
+            error_strategy: ErrorStrategy::default(),
+            fallback_config: FallbackConfig::default(),
         }
     }
 }
@@ -83,12 +113,19 @@ pub struct ParallelScheduler {
     completed: HashSet<String>,
     /// Failed task IDs
     failed: HashSet<String>,
+    /// Skipped task IDs (due to Skip error strategy)
+    skipped: HashSet<String>,
+    /// Agent fallback manager for rate limit handling
+    fallback_manager: AgentFallbackManager,
+    /// Flag to indicate scheduler should abort
+    should_abort: bool,
 }
 
 impl ParallelScheduler {
     /// Create a new parallel scheduler
     pub fn new(config: SchedulerConfig) -> Self {
         let pool = AgentPool::with_limits(config.resource_limits.clone());
+        let fallback_manager = AgentFallbackManager::with_config(config.fallback_config.clone());
 
         Self {
             config,
@@ -98,7 +135,54 @@ impl ParallelScheduler {
             running: HashMap::new(),
             completed: HashSet::new(),
             failed: HashSet::new(),
+            skipped: HashSet::new(),
+            fallback_manager,
+            should_abort: false,
         }
+    }
+
+    /// Check if the scheduler should abort
+    pub fn should_abort(&self) -> bool {
+        self.should_abort
+    }
+
+    /// Reset the abort flag
+    pub fn reset_abort(&mut self) {
+        self.should_abort = false;
+    }
+
+    /// Get the fallback manager (for external rate limit handling)
+    pub fn fallback_manager(&self) -> &AgentFallbackManager {
+        &self.fallback_manager
+    }
+
+    /// Get mutable reference to fallback manager
+    pub fn fallback_manager_mut(&mut self) -> &mut AgentFallbackManager {
+        &mut self.fallback_manager
+    }
+
+    /// Handle rate limit error for a task
+    pub fn handle_rate_limit(&mut self, task_id: &str, agent_type: AgentType) -> Result<()> {
+        self.fallback_manager.mark_rate_limited(agent_type, task_id);
+
+        // Try to use fallback agent
+        if let Some(fallback) = self.fallback_manager.get_fallback(agent_type, task_id) {
+            // Re-queue the task with fallback agent
+            if let Some(mut scheduled) = self.running.remove(task_id) {
+                scheduled.task.status = TaskStatus::Pending;
+                scheduled.task.error = Some(format!(
+                    "Rate limited on {:?}, retrying with {:?}",
+                    agent_type, fallback
+                ));
+                scheduled.assigned_agent_id = None;
+                self.ready.push_front(scheduled); // High priority re-queue
+            }
+        } else {
+            // No fallback available, fail the task
+            self.fail_task(task_id, "Rate limited, no fallback available".to_string())?;
+        }
+
+        Ok(())
     }
 
     /// Add a task to the scheduler
@@ -281,24 +365,55 @@ impl ParallelScheduler {
 
     /// Mark a task as failed
     pub fn fail_task(&mut self, task_id: &str, error: String) -> Result<()> {
+        self.fail_task_with_strategy(task_id, error, None)
+    }
+
+    /// Mark a task as failed with optional strategy override
+    pub fn fail_task_with_strategy(
+        &mut self,
+        task_id: &str,
+        error: String,
+        strategy_override: Option<ErrorStrategy>,
+    ) -> Result<()> {
         if let Some(mut scheduled) = self.running.remove(task_id) {
             // Capture agent_id before potential move
             let agent_id = scheduled.assigned_agent_id.clone();
 
-            // Check if we can retry
-            if scheduled.retry_count < self.config.max_retries {
-                scheduled.retry_count += 1;
-                scheduled.task.status = TaskStatus::Pending;
-                scheduled.task.error = Some(format!("Retry {}: {}", scheduled.retry_count, error));
-                scheduled.assigned_agent_id = None;
+            // Use override strategy or default from config
+            let strategy = strategy_override.unwrap_or_else(|| self.config.error_strategy.clone());
 
-                // Move back to ready queue for retry
-                self.ready.push_back(scheduled);
-            } else {
-                // Max retries reached, mark as failed
-                scheduled.task.status = TaskStatus::Failed;
-                scheduled.task.error = Some(error);
-                self.failed.insert(task_id.to_string());
+            match strategy {
+                ErrorStrategy::Retry { max_attempts, backoff_ms: _ } => {
+                    // Check if we can retry
+                    if scheduled.retry_count < max_attempts {
+                        scheduled.retry_count += 1;
+                        scheduled.task.status = TaskStatus::Pending;
+                        scheduled.task.error = Some(format!("Retry {}: {}", scheduled.retry_count, error));
+                        scheduled.assigned_agent_id = None;
+
+                        // Move back to ready queue for retry
+                        self.ready.push_back(scheduled);
+                    } else {
+                        // Max retries reached, mark as failed
+                        scheduled.task.status = TaskStatus::Failed;
+                        scheduled.task.error = Some(format!("Max retries ({}) exceeded: {}", max_attempts, error));
+                        self.failed.insert(task_id.to_string());
+                    }
+                }
+                ErrorStrategy::Skip => {
+                    // Skip this task, mark as skipped, continue with others
+                    scheduled.task.status = TaskStatus::Failed; // Use Failed status but track in skipped set
+                    scheduled.task.error = Some(format!("Skipped: {}", error));
+                    self.skipped.insert(task_id.to_string());
+                    // Don't add to failed set - skipped tasks don't block dependents
+                }
+                ErrorStrategy::Abort => {
+                    // Mark as failed and signal abort
+                    scheduled.task.status = TaskStatus::Failed;
+                    scheduled.task.error = Some(format!("Aborted: {}", error));
+                    self.failed.insert(task_id.to_string());
+                    self.should_abort = true;
+                }
             }
 
             if let Some(agent_id) = agent_id {
@@ -333,8 +448,10 @@ impl ParallelScheduler {
             running: self.running.len(),
             completed: self.completed.len(),
             failed: self.failed.len(),
+            skipped: self.skipped.len(),
+            aborted: self.should_abort,
             total: self.pending.len() + self.ready.len() + self.running.len()
-                   + self.completed.len() + self.failed.len(),
+                   + self.completed.len() + self.failed.len() + self.skipped.len(),
         }
     }
 
@@ -372,12 +489,15 @@ impl ParallelScheduler {
 
 /// Scheduler statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SchedulerStats {
     pub pending: usize,
     pub ready: usize,
     pub running: usize,
     pub completed: usize,
     pub failed: usize,
+    pub skipped: usize,
+    pub aborted: bool,
     pub total: usize,
 }
 
@@ -555,22 +675,25 @@ mod tests {
     #[test]
     fn test_fail_task_max_retries() {
         let mut config = SchedulerConfig::default();
-        config.max_retries = 1;
+        config.error_strategy = ErrorStrategy::Retry {
+            max_attempts: 2,
+            backoff_ms: 1000,
+        };
         let mut scheduler = ParallelScheduler::new(config);
 
         let task = create_test_task("task1", 1, vec![]);
         scheduler.add_task(task);
 
-        // Manually add to running with max retries already used
+        // Manually add to running with retry count at max_attempts
         let mut scheduled = scheduler.pending.remove("task1").unwrap();
-        scheduled.retry_count = 1;
+        scheduled.retry_count = 2; // Already at max_attempts
         scheduler.running.insert("task1".to_string(), scheduled);
 
         // Fail the task
         let result = scheduler.fail_task("task1", "Test error".to_string());
         assert!(result.is_ok());
 
-        // Should be marked as failed
+        // Should be marked as failed (exceeded max_attempts)
         assert_eq!(scheduler.failed.len(), 1);
         assert_eq!(scheduler.ready.len(), 0);
     }
@@ -596,5 +719,173 @@ mod tests {
     fn test_default_scheduling_strategy() {
         let config = SchedulerConfig::default();
         assert_eq!(config.strategy, SchedulingStrategy::DependencyFirst);
+    }
+
+    // Error Strategy Tests
+
+    #[test]
+    fn test_error_strategy_retry_with_backoff() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Retry {
+            max_attempts: 3,
+            backoff_ms: 5000,
+        };
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        // Manually add to running
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        // First failure - should retry
+        scheduler.fail_task("task1", "Error 1".to_string()).unwrap();
+        assert_eq!(scheduler.ready.len(), 1);
+        assert_eq!(scheduler.failed.len(), 0);
+    }
+
+    #[test]
+    fn test_error_strategy_retry_respects_max_attempts() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Retry {
+            max_attempts: 2,
+            backoff_ms: 1000,
+        };
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        // Add to running with retry_count already at max
+        let mut scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduled.retry_count = 2;
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        // Should fail permanently
+        scheduler.fail_task("task1", "Error".to_string()).unwrap();
+        assert_eq!(scheduler.failed.len(), 1);
+        assert_eq!(scheduler.ready.len(), 0);
+    }
+
+    #[test]
+    fn test_error_strategy_skip() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Skip;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        // Add to running
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        // Should skip without retrying
+        scheduler.fail_task("task1", "Error".to_string()).unwrap();
+        assert_eq!(scheduler.skipped.len(), 1);
+        assert_eq!(scheduler.failed.len(), 0); // Not in failed set
+        assert_eq!(scheduler.ready.len(), 0);  // Not retried
+    }
+
+    #[test]
+    fn test_error_strategy_abort() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Abort;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        // Add to running
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        // Should abort
+        scheduler.fail_task("task1", "Error".to_string()).unwrap();
+        assert!(scheduler.should_abort());
+        assert_eq!(scheduler.failed.len(), 1);
+
+        let stats = scheduler.get_stats();
+        assert!(stats.aborted);
+    }
+
+    #[test]
+    fn test_default_error_strategy_is_retry() {
+        let config = SchedulerConfig::default();
+        assert_eq!(
+            config.error_strategy,
+            ErrorStrategy::Retry {
+                max_attempts: 3,
+                backoff_ms: 5000
+            }
+        );
+    }
+
+    #[test]
+    fn test_scheduler_with_fallback_config() {
+        let mut config = SchedulerConfig::default();
+        config.fallback_config.base_backoff_ms = 1000;
+        config.fallback_config.enable_fallback = true;
+        let scheduler = ParallelScheduler::new(config);
+
+        assert_eq!(scheduler.fallback_manager().get_config().base_backoff_ms, 1000);
+    }
+
+    #[test]
+    fn test_reset_abort_flag() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Abort;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        scheduler.fail_task("task1", "Error".to_string()).unwrap();
+        assert!(scheduler.should_abort());
+
+        scheduler.reset_abort();
+        assert!(!scheduler.should_abort());
+    }
+
+    #[test]
+    fn test_fail_task_with_strategy_override() {
+        let config = SchedulerConfig::default(); // Default is Retry
+        let mut scheduler = ParallelScheduler::new(config);
+
+        let task = create_test_task("task1", 1, vec![]);
+        scheduler.add_task(task);
+
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        // Override with Skip strategy
+        scheduler
+            .fail_task_with_strategy("task1", "Error".to_string(), Some(ErrorStrategy::Skip))
+            .unwrap();
+
+        assert_eq!(scheduler.skipped.len(), 1);
+        assert_eq!(scheduler.ready.len(), 0); // Not retried despite default being Retry
+    }
+
+    #[test]
+    fn test_stats_include_skipped() {
+        let mut config = SchedulerConfig::default();
+        config.error_strategy = ErrorStrategy::Skip;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        scheduler.add_task(create_test_task("task1", 1, vec![]));
+
+        let scheduled = scheduler.pending.remove("task1").unwrap();
+        scheduler.running.insert("task1".to_string(), scheduled);
+
+        scheduler.fail_task("task1", "Error".to_string()).unwrap();
+
+        let stats = scheduler.get_stats();
+        assert_eq!(stats.skipped, 1);
+        assert_eq!(stats.total, 1);
     }
 }

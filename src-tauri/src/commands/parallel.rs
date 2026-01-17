@@ -3,11 +3,12 @@
 use crate::database::Database;
 use crate::models::{Task, Agent};
 use crate::parallel::{
-    scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats, SchedulingStrategy},
+    scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats, SchedulingStrategy, ErrorStrategy},
     pool::{ResourceLimits, PoolStats},
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
+use crate::agents::FallbackConfig;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -366,6 +367,8 @@ mod tests {
             agent_type: AgentType::Claude,
             strategy: SchedulingStrategy::Priority,
             resource_limits: ResourceLimits::default(),
+            error_strategy: ErrorStrategy::default(),
+            fallback_config: FallbackConfig::default(),
         }
     }
 

@@ -199,3 +199,140 @@ export interface UpdatePRDRequest {
   description?: string
   content?: string
 }
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+export interface RalphConfig {
+  execution: RalphExecutionConfig
+  git: RalphGitConfig
+  validation: RalphValidationConfig
+  templates: RalphTemplateConfig
+  fallback: RalphFallbackSettings
+}
+
+export interface RalphExecutionConfig {
+  maxParallel: number
+  maxIterations: number
+  maxRetries: number
+  agentType: string
+  strategy: string
+}
+
+export interface RalphGitConfig {
+  autoCreatePrs: boolean
+  draftPrs: boolean
+  branchPattern: string
+}
+
+export interface RalphValidationConfig {
+  runTests: boolean
+  runLint: boolean
+  testCommand?: string
+  lintCommand?: string
+}
+
+export interface RalphTemplateConfig {
+  defaultTemplate?: string
+  templatesDir?: string
+}
+
+export interface RalphFallbackSettings {
+  enabled: boolean
+  baseBackoffMs: number
+  maxBackoffMs: number
+  fallbackAgent?: string
+}
+
+export interface ConfigPaths {
+  globalPath?: string
+  projectPath?: string
+  globalExists: boolean
+  projectExists: boolean
+}
+
+// ============================================================================
+// Template Types
+// ============================================================================
+
+export interface TemplateInfo {
+  name: string
+  source: 'builtin' | 'global' | 'project' | 'custom'
+  description: string
+}
+
+export interface RenderRequest {
+  templateName: string
+  taskTitle?: string
+  taskDescription?: string
+  acceptanceCriteria?: string[]
+  dependencies?: string[]
+  prdContent?: string
+  customVars?: Record<string, string>
+}
+
+// ============================================================================
+// Recovery Types
+// ============================================================================
+
+export interface StaleLockInfo {
+  sessionId: string
+  pid: number
+  timestamp: string
+  version: string
+}
+
+export interface RecoveryResult {
+  sessionId: string
+  tasksUnassigned: number
+  success: boolean
+  message: string
+}
+
+// ============================================================================
+// Subagent Trace Types
+// ============================================================================
+
+export type SubagentEventType = 'spawned' | 'progress' | 'completed' | 'failed'
+
+export interface SubagentEvent {
+  eventType: SubagentEventType
+  subagentId: string
+  parentAgentId: string
+  description: string
+  timestamp: string
+  depth: number
+}
+
+export interface SubagentTree {
+  events: SubagentEvent[]
+  hierarchy: Record<string, string[]>
+  active: string[]
+}
+
+export interface SubagentTreeSummary {
+  totalEvents: number
+  activeSubagents: string[]
+  maxDepth: number
+  spawnCount: number
+  completeCount: number
+  failCount: number
+}
+
+// ============================================================================
+// Error Strategy Types (for Parallel Scheduler)
+// ============================================================================
+
+export type ErrorStrategy =
+  | { retry: { maxAttempts: number; backoffMs: number } }
+  | { skip: {} }
+  | { abort: {} }
+
+export interface FallbackConfig {
+  enabled: boolean
+  primaryAgent: AgentType
+  fallbackChain: AgentType[]
+  baseBackoffMs: number
+  maxBackoffMs: number
+}
