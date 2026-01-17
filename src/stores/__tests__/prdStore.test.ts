@@ -46,8 +46,10 @@ describe('prdStore', () => {
     name: 'Startup MVP',
     description: 'Template for startup MVP',
     icon: '🚀',
-    sections: JSON.stringify([{ name: 'Overview' }]),
+    systemTemplate: true,
+    templateStructure: JSON.stringify([{ name: 'Overview' }]),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   }
 
   beforeEach(() => {

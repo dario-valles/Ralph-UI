@@ -227,7 +227,7 @@ export function PRDChatPanel() {
   }
 
   const handleCreateSession = () => {
-    startSession(currentSession?.agentType || 'claude-code')
+    startSession(currentSession?.agentType || 'claude')
   }
 
   const handleDeleteSession = (sessionId: string) => {
@@ -317,14 +317,14 @@ export function PRDChatPanel() {
                 <Select
                   id="agent-selector"
                   aria-label="Agent"
-                  value={currentSession?.agentType || 'claude-code'}
+                  value={currentSession?.agentType || 'claude'}
                   onChange={handleAgentChange}
                   disabled={streaming}
                   className="w-36"
                 >
-                  <option value="claude-code">Claude Code</option>
-                  <option value="codex">Codex</option>
+                  <option value="claude">Claude</option>
                   <option value="opencode">OpenCode</option>
+                  <option value="cursor">Cursor</option>
                 </Select>
               </div>
 

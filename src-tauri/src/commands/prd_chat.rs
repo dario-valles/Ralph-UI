@@ -486,7 +486,7 @@ use rusqlite::{params, Connection, Result};
 
 pub fn init_chat_tables(conn: &Connection) -> Result<()> {
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS prd_chat_sessions (
+        "CREATE TABLE IF NOT EXISTS chat_sessions (
             id TEXT PRIMARY KEY,
             agent_type TEXT NOT NULL,
             project_path TEXT,
@@ -499,19 +499,19 @@ pub fn init_chat_tables(conn: &Connection) -> Result<()> {
     )?;
 
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS prd_chat_messages (
+        "CREATE TABLE IF NOT EXISTS chat_messages (
             id TEXT PRIMARY KEY,
             session_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            FOREIGN KEY (session_id) REFERENCES prd_chat_sessions(id) ON DELETE CASCADE
+            FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
         )",
         [],
     )?;
 
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON prd_chat_messages(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id)",
         [],
     )?;
 
@@ -520,7 +520,7 @@ pub fn init_chat_tables(conn: &Connection) -> Result<()> {
 
 fn create_chat_session(conn: &Connection, session: &ChatSession) -> Result<()> {
     conn.execute(
-        "INSERT INTO prd_chat_sessions (id, agent_type, project_path, prd_id, created_at, updated_at)
+        "INSERT INTO chat_sessions (id, agent_type, project_path, prd_id, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             session.id,
@@ -537,7 +537,7 @@ fn create_chat_session(conn: &Connection, session: &ChatSession) -> Result<()> {
 fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
     conn.query_row(
         "SELECT id, agent_type, project_path, prd_id, created_at, updated_at
-         FROM prd_chat_sessions WHERE id = ?1",
+         FROM chat_sessions WHERE id = ?1",
         params![id],
         |row| {
             Ok(ChatSession {
@@ -555,7 +555,7 @@ fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
 fn list_chat_sessions(conn: &Connection) -> Result<Vec<ChatSession>> {
     let mut stmt = conn.prepare(
         "SELECT id, agent_type, project_path, prd_id, created_at, updated_at
-         FROM prd_chat_sessions
+         FROM chat_sessions
          ORDER BY updated_at DESC",
     )?;
 
@@ -575,7 +575,7 @@ fn list_chat_sessions(conn: &Connection) -> Result<Vec<ChatSession>> {
 
 fn delete_chat_session(conn: &Connection, id: &str) -> Result<()> {
     conn.execute(
-        "DELETE FROM prd_chat_sessions WHERE id = ?1",
+        "DELETE FROM chat_sessions WHERE id = ?1",
         params![id],
     )?;
     Ok(())
@@ -583,7 +583,7 @@ fn delete_chat_session(conn: &Connection, id: &str) -> Result<()> {
 
 fn update_chat_session_timestamp(conn: &Connection, id: &str, timestamp: &str) -> Result<()> {
     conn.execute(
-        "UPDATE prd_chat_sessions SET updated_at = ?1 WHERE id = ?2",
+        "UPDATE chat_sessions SET updated_at = ?1 WHERE id = ?2",
         params![timestamp, id],
     )?;
     Ok(())
@@ -591,7 +591,7 @@ fn update_chat_session_timestamp(conn: &Connection, id: &str, timestamp: &str) -
 
 fn create_chat_message(conn: &Connection, message: &ChatMessage) -> Result<()> {
     conn.execute(
-        "INSERT INTO prd_chat_messages (id, session_id, role, content, created_at)
+        "INSERT INTO chat_messages (id, session_id, role, content, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             message.id,
@@ -607,7 +607,7 @@ fn create_chat_message(conn: &Connection, message: &ChatMessage) -> Result<()> {
 fn get_messages_for_session(conn: &Connection, session_id: &str) -> Result<Vec<ChatMessage>> {
     let mut stmt = conn.prepare(
         "SELECT id, session_id, role, content, created_at
-         FROM prd_chat_messages
+         FROM chat_messages
          WHERE session_id = ?1
          ORDER BY created_at ASC",
     )?;
@@ -627,7 +627,7 @@ fn get_messages_for_session(conn: &Connection, session_id: &str) -> Result<Vec<C
 
 fn delete_messages_for_session(conn: &Connection, session_id: &str) -> Result<()> {
     conn.execute(
-        "DELETE FROM prd_chat_messages WHERE session_id = ?1",
+        "DELETE FROM chat_messages WHERE session_id = ?1",
         params![session_id],
     )?;
     Ok(())

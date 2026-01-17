@@ -35,7 +35,7 @@ const mockMessages: ChatMessage[] = [
 const mockSessions: ChatSession[] = [
   {
     id: 'session-1',
-    agentType: 'claude-code',
+    agentType: 'claude',
     title: 'Todo App PRD',
     createdAt: '2024-01-01T09:00:00.000Z',
     updatedAt: '2024-01-01T10:00:05.000Z',
@@ -43,7 +43,7 @@ const mockSessions: ChatSession[] = [
   },
   {
     id: 'session-2',
-    agentType: 'codex',
+    agentType: 'opencode',
     title: 'E-commerce PRD',
     createdAt: '2024-01-02T09:00:00.000Z',
     updatedAt: '2024-01-02T09:00:00.000Z',
@@ -102,16 +102,16 @@ describe('PRDChatPanel', () => {
       expect(agentSelector).toBeInTheDocument()
 
       // Check for all agent options
-      expect(screen.getByText('Claude Code')).toBeInTheDocument()
-      expect(screen.getByText('Codex')).toBeInTheDocument()
+      expect(screen.getByText('Claude')).toBeInTheDocument()
       expect(screen.getByText('OpenCode')).toBeInTheDocument()
+      expect(screen.getByText('Cursor')).toBeInTheDocument()
     })
 
     it('displays the currently selected agent', () => {
       render(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      expect(agentSelector).toHaveValue('claude-code')
+      expect(agentSelector).toHaveValue('claude')
     })
 
     it('creates new session when agent is changed', async () => {
@@ -119,11 +119,11 @@ describe('PRDChatPanel', () => {
       render(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      fireEvent.change(agentSelector, { target: { value: 'codex' } })
+      fireEvent.change(agentSelector, { target: { value: 'opencode' } })
 
       // Changing agent should start a new session with the selected agent type
       await waitFor(() => {
-        expect(mockStartSession).toHaveBeenCalledWith('codex')
+        expect(mockStartSession).toHaveBeenCalledWith('opencode')
       })
     })
 
