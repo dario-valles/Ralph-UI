@@ -1,0 +1,267 @@
+# Ralph UI
+
+**A modern cross-platform desktop and mobile application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://v2.tauri.app/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg)](https://www.typescriptlang.org/)
+
+---
+
+## What is Ralph UI?
+
+Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop** - an autonomous AI development technique that enables AI agents to work continuously on software development tasks using the filesystem and git history as long-term memory.
+
+### Key Features
+
+🤖 **Multi-Agent Orchestration** - Run multiple AI agents in parallel with complete isolation
+📊 **Real-Time Monitoring** - Watch your agents work with live terminal output and status updates
+🌳 **Git Integration** - Automatic worktree management, branching, and PR creation
+💰 **Cost Tracking** - Monitor token usage and costs across all agents
+⚡ **Session Persistence** - Pause, resume, and recover sessions at any time
+📱 **Cross-Platform** - Desktop (Windows, macOS, Linux) and Mobile (iOS, Android)
+🎯 **Task Management** - Import tasks from PRDs, YAML, JSON, or GitHub Issues
+
+---
+
+## Why Tauri 2.0?
+
+Ralph UI is built with **Tauri 2.0**, the cutting-edge framework for cross-platform desktop and mobile applications:
+
+- **Tiny Bundle Size:** 3-10 MB vs Electron's 100+ MB
+- **Low Memory Usage:** 30-40 MB vs Electron's 200-300 MB
+- **Fast Startup:** 0.4s vs Electron's 1.5s
+- **Mobile Support:** iOS and Android from a single codebase
+- **Secure:** Rust backend with memory safety and narrow permissions
+- **Efficient:** Native OS WebView instead of bundled browser
+
+See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the complete framework evaluation.
+
+---
+
+## Technology Stack
+
+**Frontend:**
+- React 18+ with TypeScript
+- Tailwind CSS + shadcn/ui
+- xterm.js for terminal emulation
+- Zustand for state management
+
+**Backend:**
+- Rust with Tauri 2.0
+- SQLite for data persistence
+- git2-rs for git operations
+- tokio for async I/O
+
+**Development:**
+- Bun for fast package management
+- Vite for blazing-fast builds
+- Vitest + Playwright for testing
+
+---
+
+## Project Status
+
+🚧 **Status:** Planning & Design Phase
+📅 **Started:** January 17, 2026
+🎯 **Target MVP:** ~15 weeks (Phases 1-7)
+🎯 **Target Mobile Release:** ~18 weeks (Phase 8)
+
+See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the complete roadmap.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Rust:** 1.75+ (install from [rustup.rs](https://rustup.rs))
+- **Node.js:** 18+ or **Bun:** 1.2+ (recommended)
+- **Tauri CLI:** `cargo install tauri-cli`
+
+### Installation (Coming Soon)
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/Ralph-UI.git
+cd Ralph-UI
+
+# Install dependencies
+bun install
+
+# Run in development mode
+bun tauri dev
+
+# Build for production
+bun tauri build
+```
+
+---
+
+## Documentation
+
+- **[Implementation Plan](./IMPLEMENTATION_PLAN.md)** - Comprehensive 18-week development roadmap
+- **[Framework Decision](./FRAMEWORK_DECISION.md)** - Why we chose Tauri 2.0 (coming soon)
+- **User Guide** - Coming soon
+- **API Documentation** - Coming soon
+
+---
+
+## What is the Ralph Wiggum Loop?
+
+The Ralph Wiggum Loop (named after the beloved Simpsons character) is an autonomous AI development technique where:
+
+1. **Infinite Iteration:** AI agents run in loops until all tasks are complete
+2. **Filesystem Memory:** Progress persists in files and git history, not LLM context
+3. **Fresh Context:** When context fills up, a new agent starts with fresh memory
+4. **Autonomous Operation:** Agents can work for hours without human intervention
+
+Originally coined by Geoffrey Huntley, this technique represents a paradigm shift in AI-assisted development, with community members reporting 14+ hour autonomous sessions successfully upgrading entire codebases.
+
+### Learn More
+
+- [2026 - The Year of the Ralph Loop Agent](https://dev.to/alexandergekov/2026-the-year-of-the-ralph-loop-agent-1gkj)
+- [Ralph Loop for Deep Agents: Building Autonomous AI](https://medium.com/ai-artistry/ralph-loop-for-deep-agents-building-autonomous-ai-that-just-keeps-going-cb4da3a09b37)
+- [What is Ralph Loop? A New Era of Autonomous Coding](https://medium.com/@tentenco/what-is-ralph-loop-a-new-era-of-autonomous-coding-96a4bb3e2ac8)
+- [The Ralph Wiggum Technique: Ship Code While You Sleep](https://ai-checker.webcoda.com.au/articles/ralph-wiggum-technique-claude-code-autonomous-loops-2026)
+
+---
+
+## Related Projects
+
+- **[ralph-tui](https://github.com/subsy/ralph-tui)** - Terminal UI implementation (TypeScript/Bun)
+- **[ralphy](https://github.com/michaelshimeles/ralphy)** - Bash automation tool for Ralph Loop
+- **[ralph](https://github.com/snarktank/ralph)** - Autonomous AI agent loop CLI
+
+Ralph UI aims to provide the most comprehensive graphical interface for the Ralph ecosystem.
+
+---
+
+## Supported AI Agents
+
+- ✅ **Claude Code** (Anthropic's official CLI)
+- ✅ **OpenCode** (Open source alternative)
+- 🚧 **Cursor Agent** (Coming soon)
+- 🚧 **Custom Agents** (Plugin system planned)
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Ralph UI (Tauri)                    │
+├─────────────────────────────────────────────────────────┤
+│  Frontend (React + TypeScript)                          │
+│  - Dashboard with real-time metrics                     │
+│  - Task list with dependency tracking                   │
+│  - Agent monitor with live terminal output              │
+│  - Git timeline and PR management                       │
+├─────────────────────────────────────────────────────────┤
+│  Backend (Rust)                                         │
+│  - Task engine (PRD parsing, state tracking)            │
+│  - Git manager (worktrees, branches, commits)           │
+│  - Agent manager (spawn, monitor, kill)                 │
+│  - Storage layer (SQLite)                               │
+├─────────────────────────────────────────────────────────┤
+│  External Integrations                                  │
+│  - Claude Code CLI, OpenCode CLI                        │
+│  - GitHub API (Issues, PRs)                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md#3-technical-architecture) for detailed architecture diagrams.
+
+---
+
+## Contributing
+
+We welcome contributions! This project is in early development, so there's plenty of opportunity to shape its direction.
+
+### How to Contribute
+
+1. Check the [Implementation Plan](./IMPLEMENTATION_PLAN.md) for current phase and tasks
+2. Look for issues tagged with `good-first-issue` or `help-wanted`
+3. Fork the repository and create a feature branch
+4. Make your changes with tests
+5. Submit a pull request with a clear description
+
+### Development Setup
+
+Coming soon once Phase 1 (Foundation) is complete.
+
+---
+
+## Roadmap
+
+### Phase 1-2: Foundation & Task Management (Weeks 1-4)
+- ✅ Planning and architecture design
+- 🚧 Tauri project setup
+- 🚧 Basic UI shell
+- 🚧 PRD parsing and task management
+
+### Phase 3-4: Agent Integration & Git (Weeks 5-9)
+- 🚧 Claude Code integration
+- 🚧 Real-time monitoring
+- 🚧 Git worktree management
+- 🚧 PR automation
+
+### Phase 5-6: Parallel Execution & Sessions (Weeks 10-13)
+- 🚧 Multi-agent orchestration
+- 🚧 Session persistence
+- 🚧 Advanced analytics
+
+### Phase 7: Polish & Testing (Weeks 14-15)
+- 🚧 E2E testing
+- 🚧 Performance optimization
+- 🚧 Documentation
+- 🚧 Security audit
+
+### Phase 8: Mobile Support (Weeks 16-18)
+- 🚧 iOS and Android builds
+- 🚧 Mobile-optimized UI
+- 🚧 App store submission
+
+See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md#4-implementation-phases) for detailed phase breakdown.
+
+---
+
+## Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| App Bundle Size | < 15 MB (desktop), < 25 MB (mobile) |
+| Startup Time | < 1s (cold), < 0.3s (warm) |
+| Memory Usage | < 100 MB idle, < 300 MB with 5 agents |
+| UI Responsiveness | < 100ms for all interactions |
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Acknowledgments
+
+- **Geoffrey Huntley** for pioneering the Ralph Wiggum Loop technique
+- **Anthropic** for Claude Code and official Ralph Wiggum plugin
+- **ralph-tui team** for inspiration and architectural patterns
+- **Tauri team** for the incredible cross-platform framework
+- **The Simpsons** for the lovably persistent Ralph Wiggum character
+
+---
+
+## Contact & Support
+
+- **Issues:** [GitHub Issues](https://github.com/your-org/Ralph-UI/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/your-org/Ralph-UI/discussions)
+- **Twitter:** [@RalphUI](https://twitter.com/RalphUI) (coming soon)
+
+---
+
+**Built with ❤️ using Tauri 2.0, React, and Rust**
+
+*Making autonomous AI development accessible, transparent, and delightful.*
