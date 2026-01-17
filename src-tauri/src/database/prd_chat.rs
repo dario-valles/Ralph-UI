@@ -5,13 +5,17 @@ use rusqlite::{params, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatSession {
     pub id: String,
     pub prd_id: Option<String>,
     pub agent_type: String,
     pub project_path: Option<String>,
+    pub title: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(skip_deserializing)]
+    pub message_count: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,13 +33,14 @@ impl super::Database {
     pub fn create_chat_session(&self, session: &ChatSession) -> Result<()> {
         self.get_connection().execute(
             "INSERT INTO chat_sessions (
-                id, prd_id, agent_type, project_path, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                id, prd_id, agent_type, project_path, title, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 session.id,
                 session.prd_id,
                 session.agent_type,
                 session.project_path,
+                session.title,
                 session.created_at,
                 session.updated_at,
             ],
@@ -45,8 +50,9 @@ impl super::Database {
 
     pub fn get_chat_session(&self, id: &str) -> Result<ChatSession> {
         self.get_connection().query_row(
-            "SELECT id, prd_id, agent_type, project_path, created_at, updated_at
-             FROM chat_sessions WHERE id = ?1",
+            "SELECT s.id, s.prd_id, s.agent_type, s.project_path, s.title, s.created_at, s.updated_at,
+                    (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
+             FROM chat_sessions s WHERE s.id = ?1",
             params![id],
             |row| {
                 Ok(ChatSession {
@@ -54,8 +60,10 @@ impl super::Database {
                     prd_id: row.get(1)?,
                     agent_type: row.get(2)?,
                     project_path: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    title: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    message_count: row.get(7)?,
                 })
             },
         )
@@ -64,9 +72,10 @@ impl super::Database {
     pub fn list_chat_sessions(&self) -> Result<Vec<ChatSession>> {
         let conn = self.get_connection();
         let mut stmt = conn.prepare(
-            "SELECT id, prd_id, agent_type, project_path, created_at, updated_at
-             FROM chat_sessions
-             ORDER BY updated_at DESC",
+            "SELECT s.id, s.prd_id, s.agent_type, s.project_path, s.title, s.created_at, s.updated_at,
+                    (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
+             FROM chat_sessions s
+             ORDER BY s.updated_at DESC",
         )?;
 
         let sessions = stmt.query_map([], |row| {
@@ -75,8 +84,10 @@ impl super::Database {
                 prd_id: row.get(1)?,
                 agent_type: row.get(2)?,
                 project_path: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                title: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                message_count: row.get(7)?,
             })
         })?;
 
@@ -86,12 +97,13 @@ impl super::Database {
     pub fn update_chat_session(&self, session: &ChatSession) -> Result<()> {
         self.get_connection().execute(
             "UPDATE chat_sessions SET
-                prd_id = ?1, agent_type = ?2, project_path = ?3, updated_at = ?4
-             WHERE id = ?5",
+                prd_id = ?1, agent_type = ?2, project_path = ?3, title = ?4, updated_at = ?5
+             WHERE id = ?6",
             params![
                 session.prd_id,
                 session.agent_type,
                 session.project_path,
+                session.title,
                 session.updated_at,
                 session.id,
             ],
@@ -175,8 +187,10 @@ mod tests {
             prd_id: None, // Use None to avoid FK constraint issues in tests
             agent_type: "prd_writer".to_string(),
             project_path: Some("/test/project".to_string()),
+            title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
+            message_count: None,
         }
     }
 
@@ -210,8 +224,10 @@ mod tests {
             prd_id: None,
             agent_type: "general".to_string(),
             project_path: None,
+            title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
+            message_count: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -294,8 +310,10 @@ mod tests {
             prd_id: None, // Keep None to avoid FK constraint issues
             agent_type: "task_decomposer".to_string(),
             project_path: Some("/updated/path".to_string()),
+            title: Some("Updated Title".to_string()),
             created_at: session.created_at.clone(),
             updated_at: "2026-01-17T12:00:00Z".to_string(),
+            message_count: None,
         };
 
         let result = db.update_chat_session(&updated_session);
@@ -519,8 +537,10 @@ mod tests {
             prd_id: Some("prd-for-chat".to_string()),
             agent_type: "prd_writer".to_string(),
             project_path: Some("/test/project".to_string()),
+            title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
+            message_count: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -540,8 +560,10 @@ mod tests {
             prd_id: Some("nonexistent-prd".to_string()),
             agent_type: "prd_writer".to_string(),
             project_path: None,
+            title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
+            message_count: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -560,8 +582,10 @@ mod tests {
             prd_id: None, // No prd_id initially
             agent_type: "prd_writer".to_string(),
             project_path: Some("/my/project".to_string()),
+            title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
+            message_count: None,
         };
         db.create_chat_session(&session).unwrap();
 

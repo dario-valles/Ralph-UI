@@ -183,14 +183,18 @@ export const prdChatApi = {
     projectPath?: string,
     prdId?: string
   ): Promise<ChatSession> => {
-    return await invoke('start_prd_chat_session', { agentType, projectPath, prdId })
+    return await invoke('start_prd_chat_session', {
+      request: { agentType, projectPath, prdId }
+    })
   },
 
   sendMessage: async (
     sessionId: string,
     content: string
   ): Promise<SendMessageResponse> => {
-    return await invoke('send_prd_chat_message', { sessionId, content })
+    return await invoke('send_prd_chat_message', {
+      request: { sessionId, content }
+    })
   },
 
   getHistory: async (sessionId: string): Promise<ChatMessage[]> => {
@@ -206,6 +210,8 @@ export const prdChatApi = {
   },
 
   exportToPRD: async (sessionId: string, title: string): Promise<PRDDocument> => {
-    return await invoke('export_chat_to_prd', { sessionId, title })
+    return await invoke('export_chat_to_prd', {
+      request: { sessionId, title }
+    })
   },
 }

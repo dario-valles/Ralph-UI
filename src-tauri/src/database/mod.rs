@@ -316,6 +316,7 @@ impl Database {
                 prd_id TEXT,
                 agent_type TEXT NOT NULL,
                 project_path TEXT,
+                title TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (prd_id) REFERENCES prd_documents(id) ON DELETE SET NULL

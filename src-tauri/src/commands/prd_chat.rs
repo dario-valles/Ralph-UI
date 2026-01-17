@@ -44,8 +44,11 @@ pub struct ChatSession {
     pub agent_type: String,
     pub project_path: Option<String>,
     pub prd_id: Option<String>,
+    pub title: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(skip_deserializing)]
+    pub message_count: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,8 +95,10 @@ pub async fn start_prd_chat_session(
         agent_type: request.agent_type,
         project_path: request.project_path,
         prd_id: request.prd_id,
+        title: None, // Will be set when user starts typing or explicitly sets it
         created_at: now.clone(),
         updated_at: now,
+        message_count: Some(0),
     };
 
     create_chat_session(db.get_connection(), &session)
@@ -491,12 +496,16 @@ pub fn init_chat_tables(conn: &Connection) -> Result<()> {
             agent_type TEXT NOT NULL,
             project_path TEXT,
             prd_id TEXT,
+            title TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (prd_id) REFERENCES prd_documents(id)
         )",
         [],
     )?;
+
+    // Add title column if it doesn't exist (migration for existing databases)
+    let _ = conn.execute("ALTER TABLE chat_sessions ADD COLUMN title TEXT", []);
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS chat_messages (
@@ -520,13 +529,14 @@ pub fn init_chat_tables(conn: &Connection) -> Result<()> {
 
 fn create_chat_session(conn: &Connection, session: &ChatSession) -> Result<()> {
     conn.execute(
-        "INSERT INTO chat_sessions (id, agent_type, project_path, prd_id, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO chat_sessions (id, agent_type, project_path, prd_id, title, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             session.id,
             session.agent_type,
             session.project_path,
             session.prd_id,
+            session.title,
             session.created_at,
             session.updated_at,
         ],
@@ -536,8 +546,9 @@ fn create_chat_session(conn: &Connection, session: &ChatSession) -> Result<()> {
 
 fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
     conn.query_row(
-        "SELECT id, agent_type, project_path, prd_id, created_at, updated_at
-         FROM chat_sessions WHERE id = ?1",
+        "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
+                (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
+         FROM chat_sessions s WHERE s.id = ?1",
         params![id],
         |row| {
             Ok(ChatSession {
@@ -545,8 +556,10 @@ fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
                 agent_type: row.get(1)?,
                 project_path: row.get(2)?,
                 prd_id: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                title: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                message_count: row.get(7)?,
             })
         },
     )
@@ -554,9 +567,10 @@ fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
 
 fn list_chat_sessions(conn: &Connection) -> Result<Vec<ChatSession>> {
     let mut stmt = conn.prepare(
-        "SELECT id, agent_type, project_path, prd_id, created_at, updated_at
-         FROM chat_sessions
-         ORDER BY updated_at DESC",
+        "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
+                (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
+         FROM chat_sessions s
+         ORDER BY s.updated_at DESC",
     )?;
 
     let sessions = stmt.query_map([], |row| {
@@ -565,8 +579,10 @@ fn list_chat_sessions(conn: &Connection) -> Result<Vec<ChatSession>> {
             agent_type: row.get(1)?,
             project_path: row.get(2)?,
             prd_id: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
+            title: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+            message_count: row.get(7)?,
         })
     })?;
 
@@ -665,8 +681,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: Some("/test/project".to_string()),
             prd_id: None,
+            title: Some("Test Session".to_string()),
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         let result = create_chat_session(db.get_connection(), &session);
@@ -682,8 +700,10 @@ mod tests {
             agent_type: "opencode".to_string(),
             project_path: Some("/test/path".to_string()),
             prd_id: None, // No PRD reference for this test
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         create_chat_session(db.get_connection(), &session).unwrap();
@@ -704,8 +724,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T01:00:00Z".to_string(),
+            message_count: None,
         };
 
         let session2 = ChatSession {
@@ -713,8 +735,10 @@ mod tests {
             agent_type: "cursor".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T02:00:00Z".to_string(),
+            message_count: None,
         };
 
         create_chat_session(db.get_connection(), &session1).unwrap();
@@ -737,8 +761,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         create_chat_session(db.get_connection(), &session).unwrap();
@@ -757,8 +783,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         create_chat_session(db.get_connection(), &session).unwrap();
@@ -778,8 +806,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         create_chat_session(db.get_connection(), &session).unwrap();
 
@@ -804,8 +834,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         create_chat_session(db.get_connection(), &session).unwrap();
 
@@ -857,8 +889,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         create_chat_session(db.get_connection(), &session).unwrap();
 
@@ -923,8 +957,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         let history: Vec<ChatMessage> = vec![];
@@ -942,8 +978,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: Some("/my/project".to_string()),
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         let history = vec![
@@ -1122,8 +1160,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: Some("/project".to_string()),
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         create_chat_session(conn, &session).unwrap();
 
@@ -1197,8 +1237,10 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: Some("prd-ref".to_string()),
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         create_chat_session(conn, &session).unwrap();
 
@@ -1217,16 +1259,20 @@ mod tests {
             agent_type: "claude".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
         let session2 = ChatSession {
             id: "session-b".to_string(),
             agent_type: "opencode".to_string(),
             project_path: None,
             prd_id: None,
+            title: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
         };
 
         create_chat_session(conn, &session1).unwrap();
