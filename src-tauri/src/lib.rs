@@ -7,6 +7,7 @@ mod github;
 mod agents;
 mod utils;
 mod parsers;
+mod parallel;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -32,9 +33,13 @@ pub fn run() {
     // Initialize git state
     let git_state = commands::git::GitState::new();
 
+    // Initialize parallel state
+    let parallel_state = commands::parallel::ParallelState::new();
+
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(db))
         .manage(git_state)
+        .manage(parallel_state)
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::greet,
@@ -84,6 +89,24 @@ pub fn run() {
             commands::github_list_pull_requests,
             commands::github_get_issue,
             commands::github_list_issues,
+            commands::init_parallel_scheduler,
+            commands::parallel_add_task,
+            commands::parallel_add_tasks,
+            commands::parallel_schedule_next,
+            commands::parallel_complete_task,
+            commands::parallel_fail_task,
+            commands::parallel_stop_all,
+            commands::parallel_get_scheduler_stats,
+            commands::parallel_get_pool_stats,
+            commands::parallel_check_violations,
+            commands::worktree_allocate,
+            commands::worktree_deallocate,
+            commands::worktree_deallocate_by_agent,
+            commands::worktree_get_allocations,
+            commands::worktree_cleanup_orphaned,
+            commands::conflicts_detect,
+            commands::conflicts_can_merge_safely,
+            commands::conflicts_get_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
