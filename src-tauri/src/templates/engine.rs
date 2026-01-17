@@ -243,6 +243,7 @@ impl Default for TemplateEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::TaskStatus;
 
     fn create_test_task() -> Task {
         Task {

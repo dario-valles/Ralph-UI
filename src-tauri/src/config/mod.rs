@@ -54,6 +54,7 @@ pub fn get_config_paths(project_path: Option<&Path>) -> (Option<std::path::PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::merger::PartialExecutionConfig;
     use tempfile::TempDir;
     use std::fs;
 

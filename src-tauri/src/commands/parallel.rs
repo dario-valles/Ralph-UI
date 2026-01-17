@@ -353,6 +353,9 @@ pub fn conflicts_resolve(
 mod tests {
     use super::*;
     use crate::models::{AgentType, TaskStatus};
+    use crate::parallel::scheduler::{SchedulingStrategy, ErrorStrategy};
+    use crate::parallel::pool::ResourceLimits;
+    use crate::agents::FallbackConfig;
 
     fn create_test_state() -> ParallelState {
         ParallelState::new()
