@@ -15,6 +15,7 @@ pub enum TaskStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
     pub title: String,
@@ -50,6 +51,7 @@ pub enum AgentType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionConfig {
     pub max_parallel: i32,
     pub max_iterations: i32,
@@ -62,6 +64,7 @@ pub struct SessionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: String,
     pub name: String,
@@ -103,6 +106,7 @@ pub struct LogEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Agent {
     pub id: String,
     pub session_id: String,

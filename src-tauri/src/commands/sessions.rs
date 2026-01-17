@@ -128,6 +128,7 @@ pub async fn export_session_json(
 
 /// Session template structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionTemplate {
     pub id: String,
     pub name: String,

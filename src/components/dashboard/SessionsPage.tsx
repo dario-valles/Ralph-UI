@@ -69,8 +69,9 @@ export function SessionsPage() {
     try {
       const loadedTemplates = await sessionApi.getTemplates()
       setTemplates(loadedTemplates)
-    } catch {
-      console.error('Failed to load templates')
+    } catch (err) {
+      // Templates are optional - silently handle if the feature isn't available
+      console.debug('Templates not available:', err)
     }
   }
 
