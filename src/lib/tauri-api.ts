@@ -10,6 +10,12 @@ import type {
   SessionRecoveryState,
   SessionComparison,
   SessionAnalytics,
+  PRDDocument,
+  PRDTemplate,
+  PRDExecution,
+  CreatePRDRequest,
+  UpdatePRDRequest,
+  ExecutionConfig,
 } from '@/types'
 
 // Session API
@@ -115,5 +121,44 @@ export const taskApi = {
     format?: string
   ): Promise<Task[]> => {
     return await invoke('import_prd', { sessionId, content, format })
+  },
+}
+
+// PRD API (Phase 7.5)
+export const prdApi = {
+  create: async (request: CreatePRDRequest): Promise<PRDDocument> => {
+    return await invoke('create_prd', { request })
+  },
+
+  getById: async (id: string): Promise<PRDDocument> => {
+    return await invoke('get_prd', { id })
+  },
+
+  update: async (request: UpdatePRDRequest): Promise<PRDDocument> => {
+    return await invoke('update_prd', { request })
+  },
+
+  delete: async (id: string): Promise<void> => {
+    return await invoke('delete_prd', { id })
+  },
+
+  list: async (): Promise<PRDDocument[]> => {
+    return await invoke('list_prds')
+  },
+
+  listTemplates: async (): Promise<PRDTemplate[]> => {
+    return await invoke('list_prd_templates')
+  },
+
+  export: async (prdId: string, format: 'json' | 'markdown' | 'yaml'): Promise<string> => {
+    return await invoke('export_prd', { prdId, format })
+  },
+
+  analyzeQuality: async (prdId: string): Promise<PRDDocument> => {
+    return await invoke('analyze_prd_quality', { prdId })
+  },
+
+  execute: async (prdId: string, config: ExecutionConfig): Promise<string> => {
+    return await invoke('execute_prd', { prdId, config })
   },
 }
