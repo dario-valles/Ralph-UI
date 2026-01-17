@@ -1,6 +1,6 @@
 // PRD database operations
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

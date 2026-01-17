@@ -245,7 +245,7 @@ impl ConflictDetector {
         &self,
         conflict: &MergeConflict,
         strategy: ConflictResolutionStrategy,
-        base_branch: &str,
+        _base_branch: &str,
     ) -> Result<ConflictResolutionResult> {
         let git = GitManager::new(&self.repo_path)?;
 

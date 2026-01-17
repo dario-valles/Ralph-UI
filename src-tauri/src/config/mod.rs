@@ -6,7 +6,7 @@ pub mod merger;
 // Re-export main types
 pub use loader::{
     ConfigLoader, RalphConfig, ExecutionConfig, GitConfig,
-    ValidationConfig, TemplateConfig, FallbackSettings,
+    ValidationConfig, FallbackSettings,
 };
 pub use merger::{ConfigMerger, PartialConfig, PartialExecutionConfig};
 

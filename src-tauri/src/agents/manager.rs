@@ -1,6 +1,6 @@
 // Agent process spawning and lifecycle management
 
-use crate::models::{Agent, AgentStatus, AgentType, LogEntry, LogLevel};
+use crate::models::{AgentType, LogEntry, LogLevel};
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use std::collections::HashMap;
@@ -55,7 +55,7 @@ impl AgentManager {
     ) -> Result<u32> {
         let mut command = self.build_command(&config)?;
 
-        let mut child = command
+        let child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

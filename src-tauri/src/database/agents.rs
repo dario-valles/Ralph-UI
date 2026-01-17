@@ -3,7 +3,7 @@
 use crate::models::{Agent, AgentStatus, LogEntry, LogLevel};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Row};
 
 impl super::Database {
     /// Create a new agent in the database

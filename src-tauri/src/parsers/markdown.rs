@@ -1,7 +1,7 @@
 // Markdown PRD parser
 
 use super::types::{PRDDocument, PRDTask};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use regex::Regex;
 

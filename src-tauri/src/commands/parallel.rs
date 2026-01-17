@@ -3,12 +3,11 @@
 use crate::database::Database;
 use crate::models::{Task, Agent};
 use crate::parallel::{
-    scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats, SchedulingStrategy, ErrorStrategy},
-    pool::{ResourceLimits, PoolStats},
+    scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats},
+    pool::PoolStats,
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
-use crate::agents::FallbackConfig;
 use std::sync::Mutex;
 use tauri::State;
 

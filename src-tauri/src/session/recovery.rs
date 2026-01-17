@@ -1,6 +1,6 @@
 // Session crash recovery
 
-use crate::models::{Session, SessionStatus, TaskStatus};
+use crate::models::{SessionStatus, TaskStatus};
 use crate::session::lock::{find_stale_locks, remove_stale_lock, LockInfo};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};

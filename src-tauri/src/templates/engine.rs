@@ -1,11 +1,11 @@
 // Template rendering engine using Tera
 
-use crate::models::{Task, Session, TaskStatus};
+use crate::models::{Task, Session};
 use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tera::{Tera, Context, Value};
+use tera::{Tera, Context};
 
 /// Template context for rendering
 #[derive(Debug, Clone, Serialize)]

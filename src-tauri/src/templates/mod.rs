@@ -5,9 +5,8 @@ pub mod builtin;
 pub mod resolver;
 
 // Re-export main types
-pub use engine::{TemplateEngine, TemplateContext, TaskContext, SessionContext, DependencyContext};
-pub use builtin::{get_builtin_templates, get_builtin_template, list_builtin_templates};
-pub use resolver::{TemplateResolver, TemplateSource, ResolvedTemplate};
+pub use engine::{TemplateEngine, TemplateContext, DependencyContext};
+pub use resolver::TemplateResolver;
 
 use crate::models::{Task, Session};
 use anyhow::Result;

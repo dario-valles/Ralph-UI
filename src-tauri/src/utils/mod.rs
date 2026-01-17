@@ -1,6 +1,6 @@
 // Utility functions
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 pub fn generate_id() -> String {
     // Generate a unique ID (using timestamp + random string for now)

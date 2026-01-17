@@ -1,8 +1,7 @@
 // Configuration Tauri commands
 
 use crate::config::{
-    load_merged_config, get_config_paths, RalphConfig, PartialConfig,
-    PartialExecutionConfig, ExecutionConfig, GitConfig, ValidationConfig,
+    load_merged_config, get_config_paths, RalphConfig, ExecutionConfig, GitConfig, ValidationConfig,
     FallbackSettings,
 };
 use serde::{Deserialize, Serialize};

@@ -163,7 +163,7 @@ impl ConfigMerger {
 
     // Full config mergers
 
-    fn merge_execution(&self, base: &ExecutionConfig, over: &ExecutionConfig) -> ExecutionConfig {
+    fn merge_execution(&self, _base: &ExecutionConfig, over: &ExecutionConfig) -> ExecutionConfig {
         ExecutionConfig {
             max_parallel: over.max_parallel,
             max_iterations: over.max_iterations,
@@ -173,7 +173,7 @@ impl ConfigMerger {
         }
     }
 
-    fn merge_git(&self, base: &GitConfig, over: &GitConfig) -> GitConfig {
+    fn merge_git(&self, _base: &GitConfig, over: &GitConfig) -> GitConfig {
         GitConfig {
             auto_create_prs: over.auto_create_prs,
             draft_prs: over.draft_prs,

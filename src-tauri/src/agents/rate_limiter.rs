@@ -1,6 +1,6 @@
 // Rate limit detection for agent processes
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;

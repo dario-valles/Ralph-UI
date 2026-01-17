@@ -3,7 +3,7 @@
 use crate::database::Database;
 use crate::session::{
     lock::{find_stale_locks, remove_stale_lock, SessionLock, LockInfo},
-    recovery::{SessionRecovery, RecoveryResult as InternalRecoveryResult},
+    recovery::SessionRecovery,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
