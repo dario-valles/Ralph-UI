@@ -7,7 +7,7 @@ pub mod agents;
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub struct Database {
     conn: Connection,
@@ -71,6 +71,9 @@ impl Database {
     fn run_migrations(&self, from_version: i32) -> Result<()> {
         if from_version < 1 {
             self.migrate_to_v1()?;
+        }
+        if from_version < 2 {
+            self.migrate_to_v2()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -172,6 +175,34 @@ impl Database {
         )?;
 
         self.set_schema_version(1)?;
+        Ok(())
+    }
+
+    fn migrate_to_v2(&self) -> Result<()> {
+        // Create session_templates table for Phase 6
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS session_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                config TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        // Create session_recovery table for crash recovery
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS session_recovery (
+                session_id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                state TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        self.set_schema_version(2)?;
         Ok(())
     }
 
