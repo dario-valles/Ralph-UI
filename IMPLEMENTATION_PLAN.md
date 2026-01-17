@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Ralph UI will be a modern, cross-platform desktop and mobile application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. The application will provide real-time visibility, task management, session persistence, and multi-agent orchestration with a focus on performance, security, and user experience.
+Ralph UI will be a modern, cross-platform desktop and mobile application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. The application will provide real-time visibility, AI-guided PRD creation, task management, session persistence, and multi-agent orchestration with a focus on performance, security, and user experience.
 
 ---
 
@@ -328,14 +328,25 @@ interface Agent {
    - Quick actions (pause/resume on mobile)
    - Mobile-optimized dashboard
 
-6. **AI Enhancements**
+6. **AI Enhancements** (Phase 7.5+)
+   - **AI-Guided PRD Creation** (Phase 7.5 - Core Feature)
    - Smart task prioritization
    - Automatic conflict resolution suggestions
-   - PRD generation assistant
+   - Context-aware PRD suggestions
 
 ---
 
 ## 4. Implementation Phases
+
+**Total Duration:** 20 weeks (5 months)
+**Phases:** 8 phases + 1 optional phase (Phase 7.5)
+
+**Phase Overview:**
+- **Phases 1-4:** Core functionality (Task management, Agent integration, Git workflows)
+- **Phases 5-6:** Advanced features (Parallel execution, Session management)
+- **Phase 7:** Polish & Testing (Production readiness)
+- **Phase 7.5:** AI-Guided PRD Creation (Interactive PRD builder with AI assistance)
+- **Phase 8:** Mobile Support (iOS and Android deployment)
 
 ### Phase 1: Foundation (Weeks 1-2)
 **Goal:** Project setup and basic infrastructure
@@ -443,7 +454,215 @@ interface Agent {
 
 **Deliverable:** Production-ready desktop application
 
-### Phase 8: Mobile Support (Weeks 16-18)
+### Phase 7.5: AI-Guided PRD Creation (Weeks 15.5-17)
+**Goal:** Interactive AI-powered PRD creation with chat interface
+
+**Background:**
+Currently, Ralph UI only supports importing pre-existing PRD files (JSON, YAML, Markdown). This phase adds an AI-guided PRD creation experience where users can collaboratively build comprehensive Product Requirements Documents through an interactive chat interface, following industry best practices from tools like ChatPRD, Miro AI PRD, and OpenAI's product development approach.
+
+**Key Features:**
+
+**1. AI Chat Interface (Weeks 15.5-16)**
+- [ ] Implement chat UI component with modern scaffolding pattern
+  - Side panel design for PRD creation (collapsible, persistent)
+  - Message threading with user/assistant distinction
+  - Streaming response support for real-time AI output
+  - Rich message formatting (markdown, code blocks, tables)
+- [ ] Build chat state management (Zustand store)
+  - Message history persistence
+  - Session management for PRD creation flows
+  - Context preservation across app navigation
+- [ ] Create AI integration layer
+  - Anthropic Claude API integration (Claude Opus 4.5 for complex reasoning)
+  - Streaming completion support
+  - Token usage tracking and cost estimation
+  - Error handling and retry logic
+- [ ] Implement context-aware prompting system
+  - Project context gathering (git repo analysis, existing code structure)
+  - User role detection (PM, developer, designer, stakeholder)
+  - Domain-specific prompt templates
+  - Progressive disclosure (start simple, add detail as needed)
+
+**2. Guided PRD Creation Workflow (Week 16)**
+- [ ] Multi-step PRD builder with AI guidance
+  - **Step 1: Project Discovery**
+    - Problem statement generation
+    - Target audience identification
+    - Success criteria definition
+    - Competitive analysis prompts
+  - **Step 2: Requirements Gathering**
+    - User stories generation
+    - Acceptance criteria creation
+    - Technical requirements extraction
+    - Dependency identification
+  - **Step 3: Task Breakdown**
+    - Epic/feature decomposition
+    - Task prioritization (MoSCoW, RICE, or custom)
+    - Effort estimation with AI suggestions
+    - Dependency graph creation
+  - **Step 4: Technical Planning**
+    - Architecture recommendations
+    - Technology stack suggestions
+    - Integration points identification
+    - Risk assessment
+  - **Step 5: Go-to-Market Planning**
+    - Launch checklist generation
+    - Documentation requirements
+    - Testing strategy
+    - Rollout phases
+- [ ] Visual PRD builder interface
+  - Real-time PRD preview (split view: chat + PRD document)
+  - Inline editing capabilities
+  - Section-by-section refinement
+  - Template selection (Startup MVP, Enterprise Feature, Bug Fix, Refactor, etc.)
+- [ ] AI-powered enhancements
+  - Auto-complete for common patterns
+  - Consistency checking across sections
+  - Completeness validation (missing sections, unclear requirements)
+  - Best practice suggestions (from OpenAI PM, ChatPRD patterns)
+
+**3. PRD Templates & Best Practices (Week 16.5)**
+- [ ] Implement template system
+  - Pre-built templates (based on ChatPRD, OpenAI AI PRD Template)
+    - **Startup MVP Template**: Lean, focused on core features
+    - **Enterprise Feature Template**: Comprehensive, compliance-focused
+    - **Bug Fix Template**: Lightweight, issue-focused
+    - **Refactoring Template**: Technical debt, performance-focused
+    - **API/Integration Template**: Contract-first, integration-focused
+  - Custom template creation and sharing
+  - Template versioning and updates
+- [ ] Best practices integration
+  - SMART goals validation (Specific, Measurable, Achievable, Relevant, Time-bound)
+  - User story formatting (As a [role], I want [feature], so that [benefit])
+  - Acceptance criteria structure (Given-When-Then format)
+  - Technical specification guidelines
+  - Non-functional requirements checklist (performance, security, accessibility)
+- [ ] PRD quality scoring
+  - Completeness score (all required sections filled)
+  - Clarity score (ambiguity detection using AI)
+  - Actionability score (clear tasks vs vague requirements)
+  - Recommendation engine for improvements
+
+**4. Integration with Existing System (Week 17)**
+- [ ] Seamless PRD to task conversion
+  - AI-generated PRD → Task extraction (reuse existing parsers)
+  - Automatic task creation in database
+  - Dependency graph generation from PRD
+  - Priority assignment based on PRD structure
+- [ ] PRD versioning and history
+  - SQLite schema for PRD storage
+  - Version control for PRD iterations
+  - Diff viewer for PRD changes
+  - Rollback capabilities
+- [ ] Multi-format export
+  - JSON export (for programmatic access)
+  - YAML export (for git-friendly storage)
+  - Markdown export (for GitHub, Notion, Linear)
+  - PDF export (for stakeholder sharing)
+  - HTML export (for web viewing)
+- [ ] Collaboration features
+  - PRD sharing via export/import
+  - Comment system for PRD sections
+  - Review workflow (draft → review → approved)
+  - Change tracking and audit log
+
+**5. Advanced AI Features (Week 17)**
+- [ ] Intelligent suggestions
+  - Similar PRD detection (based on existing PRDs in database)
+  - Auto-suggest dependencies from project history
+  - Effort estimation based on historical data
+  - Risk prediction using past project patterns
+- [ ] Context-aware refinement
+  - Code repository analysis (detect existing features, tech stack)
+  - Git history mining (understand project velocity, patterns)
+  - Issue tracker integration (GitHub Issues, Jira import)
+  - Documentation parsing (existing design docs, API specs)
+- [ ] Multi-agent collaboration
+  - Specialized AI agents for different sections:
+    - **Product Agent**: User stories, business value, success metrics
+    - **Technical Agent**: Architecture, technical requirements, risks
+    - **QA Agent**: Test cases, acceptance criteria, edge cases
+    - **PM Agent**: Timeline, resources, dependencies, stakeholders
+  - Agent orchestration for comprehensive PRD generation
+  - Consensus building across agent recommendations
+
+**6. UX Patterns & Interface Design (Throughout)**
+- [ ] Implement modern AI UX patterns
+  - **Scaffolding**: Side panel chat with collapsible sections
+  - **Contextual Actions**: Inline suggestions, quick edits
+  - **Progressive Disclosure**: Start simple, reveal complexity as needed
+  - **Generative UI**: Dynamic form generation based on PRD type
+  - **Prompt Strength Indicator**: Show confidence in AI suggestions
+  - **Capability Awareness**: Clear boundaries of what AI can/cannot do
+- [ ] Interaction patterns
+  - Drag-and-drop task reordering from chat
+  - Click-to-edit PRD sections directly from chat
+  - Voice input support (browser Speech API)
+  - Keyboard shortcuts for power users
+  - Mobile-friendly touch interactions
+- [ ] Visual design
+  - Consistent with existing Ralph UI theme
+  - Code syntax highlighting in chat
+  - Mermaid diagram rendering (for architecture, flows)
+  - Table rendering for requirements matrices
+  - Progress indicators for long AI operations
+
+**Technology Stack Additions:**
+
+**Frontend:**
+- **AI Chat UI**: Custom component with streaming support
+- **Markdown Rendering**: `react-markdown` with syntax highlighting
+- **Diagram Rendering**: `mermaid.js` for flowcharts, architecture diagrams
+- **PDF Export**: `jspdf` or `react-pdf`
+- **Voice Input**: Browser Speech Recognition API
+- **Rich Text Editor**: `lexical` or `tiptap` for PRD editing
+
+**Backend (Rust):**
+- **AI Integration**: `reqwest` for Anthropic API calls
+- **Streaming Support**: Server-Sent Events via Tauri
+- **PRD Storage**: SQLite schema extensions
+- **Export Generators**:
+  - `serde_json` for JSON
+  - `serde_yaml` for YAML
+  - `pulldown-cmark` for Markdown to HTML
+  - `headless_chrome` for PDF generation (or frontend-based)
+
+**Testing Requirements:**
+- [ ] Unit tests for PRD generation logic
+- [ ] Integration tests for AI API calls (with mocks)
+- [ ] E2E tests for full PRD creation workflow
+- [ ] Accessibility tests for chat interface
+- [ ] Performance tests for large PRD documents
+- [ ] Load tests for AI API rate limits
+
+**Documentation:**
+- [ ] PRD creation guide (step-by-step with screenshots)
+- [ ] Template usage documentation
+- [ ] AI prompt engineering best practices
+- [ ] Integration guide (how PRD connects to tasks/agents)
+- [ ] Video walkthrough (5-minute PRD creation demo)
+
+**Success Metrics:**
+- Average PRD creation time < 15 minutes (vs hours manually)
+- PRD completeness score > 80%
+- User satisfaction with AI suggestions > 4/5
+- Task extraction accuracy > 90%
+- AI response time < 3 seconds (p95)
+
+**Deliverable:** AI-powered PRD creation system with chat interface, templates, and seamless integration with existing task management
+
+**Dependencies:**
+- Requires Phase 7 completion (stable desktop app)
+- Anthropic API access (Claude Opus 4.5)
+- Optional: OpenAI API for comparison/fallback
+
+**Risk Mitigation:**
+- **API Cost Control**: Implement usage limits, caching, and cost warnings
+- **AI Hallucination**: Human-in-the-loop validation, confidence scoring
+- **Privacy**: Local processing option, API key security
+- **Offline Support**: Template-based creation without AI as fallback
+
+### Phase 8: Mobile Support (Weeks 18-20)
 **Goal:** iOS and Android applications
 
 **Tasks:**
@@ -656,10 +875,14 @@ interface Agent {
 
 ### 11.1 Development Metrics
 - [ ] All MVP features implemented (Phase 1-7)
+- [ ] AI-Guided PRD Creation completed (Phase 7.5)
+- [ ] Mobile apps published (Phase 8)
 - [ ] 80%+ test coverage
-- [ ] < 15 MB bundle size
+- [ ] < 15 MB bundle size (desktop), < 25 MB (mobile)
 - [ ] < 1s startup time
 - [ ] Zero critical security vulnerabilities
+- [ ] AI PRD creation time < 15 minutes
+- [ ] PRD completeness score > 80%
 
 ### 11.2 User Metrics (Post-Launch)
 - Active users per month
@@ -750,9 +973,9 @@ Ralph UI represents an opportunity to create the definitive graphical interface 
 ✅ **Better security** (Rust memory safety, narrow permissions)
 ✅ **Future-proof foundation** (active development, stable 2.0 release)
 
-The phased approach ensures we build a solid MVP (Phases 1-7) before expanding to mobile (Phase 8), reducing risk while delivering value early.
+The phased approach ensures we build a solid MVP (Phases 1-7) before adding AI-guided PRD creation (Phase 7.5) and expanding to mobile (Phase 8), reducing risk while delivering value early.
 
-**Estimated Timeline:** 18 weeks to full cross-platform release
+**Estimated Timeline:** 20 weeks to full cross-platform release (15 weeks for desktop MVP, +2.5 weeks for AI PRD creation, +2 weeks for mobile)
 **Estimated Team:** 2-3 developers (1 Rust, 1-2 React/TypeScript)
 **Budget Considerations:** Open source with community contributions, optional paid support tier
 
