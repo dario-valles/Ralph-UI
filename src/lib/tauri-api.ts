@@ -1,6 +1,6 @@
 // Tauri API wrappers for backend commands
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import type {
   Session,
   Task,
@@ -16,6 +16,17 @@ import type {
   UpdatePRDRequest,
   ExecutionConfig,
 } from '@/types'
+
+// Check if we're running inside Tauri
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+// Safe invoke wrapper that handles the case when Tauri isn't available
+async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri || typeof tauriInvoke !== 'function') {
+    throw new Error(`Tauri is not available. Command '${cmd}' cannot be executed outside of Tauri.`)
+  }
+  return tauriInvoke<T>(cmd, args)
+}
 
 // Session API
 export const sessionApi = {
