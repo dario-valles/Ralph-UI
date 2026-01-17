@@ -23,6 +23,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   'quality': 'Quality & Maintenance',
 }
 
+// Safely parse template structure with fallback
+function parseTemplateStructure(templateStructure: string | undefined): { sections: Array<{ id: string; title: string; required?: boolean }> } {
+  if (!templateStructure) {
+    return { sections: [] }
+  }
+  try {
+    return JSON.parse(templateStructure)
+  } catch {
+    return { sections: [] }
+  }
+}
+
 export function PRDTemplateSelector() {
   const navigate = useNavigate()
   const { templates, loading, error, loadTemplates, createPRD } = usePRDStore()
@@ -199,7 +211,7 @@ export function PRDTemplateSelector() {
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {categoryTemplates.map((template) => {
-                const structure = JSON.parse(template.templateStructure)
+                const structure = parseTemplateStructure(template.templateStructure)
                 const isSelected = selectedTemplate?.id === template.id && !useAIChat
 
                 return (
@@ -287,7 +299,7 @@ export function PRDTemplateSelector() {
               <div className="mt-4">
                 <h3 className="text-sm font-medium">Sections included:</h3>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {JSON.parse(selectedTemplate.templateStructure).sections.map((section: { id: string; title: string; required: boolean }) => (
+                  {parseTemplateStructure(selectedTemplate.templateStructure).sections.map((section: { id: string; title: string; required?: boolean }) => (
                     <Badge key={section.id} variant="secondary">
                       {section.title}
                       {section.required && <span className="ml-1 text-destructive">*</span>}
