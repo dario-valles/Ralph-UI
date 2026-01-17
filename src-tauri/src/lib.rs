@@ -46,6 +46,17 @@ pub fn run() {
             commands::delete_task,
             commands::update_task_status,
             commands::import_prd,
+            commands::create_agent,
+            commands::get_agent,
+            commands::get_agents_for_session,
+            commands::get_agents_for_task,
+            commands::get_active_agents,
+            commands::update_agent_status,
+            commands::update_agent_metrics,
+            commands::update_agent_process_id,
+            commands::delete_agent,
+            commands::add_agent_log,
+            commands::get_agent_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

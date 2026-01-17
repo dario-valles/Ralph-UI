@@ -1,0 +1,335 @@
+// Tauri commands for agent management
+
+use crate::database::Database;
+use crate::models::{Agent, AgentStatus, LogEntry};
+use std::sync::Mutex;
+use tauri::State;
+
+/// Create a new agent
+#[tauri::command]
+pub fn create_agent(
+    db: State<Mutex<Database>>,
+    agent: Agent,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.create_agent(&agent)
+        .map_err(|e| format!("Failed to create agent: {}", e))
+}
+
+/// Get an agent by ID
+#[tauri::command]
+pub fn get_agent(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+) -> Result<Option<Agent>, String> {
+    let db = db.lock().unwrap();
+    db.get_agent(&agent_id)
+        .map_err(|e| format!("Failed to get agent: {}", e))
+}
+
+/// Get all agents for a session
+#[tauri::command]
+pub fn get_agents_for_session(
+    db: State<Mutex<Database>>,
+    session_id: String,
+) -> Result<Vec<Agent>, String> {
+    let db = db.lock().unwrap();
+    db.get_agents_for_session(&session_id)
+        .map_err(|e| format!("Failed to get agents for session: {}", e))
+}
+
+/// Get all agents for a task
+#[tauri::command]
+pub fn get_agents_for_task(
+    db: State<Mutex<Database>>,
+    task_id: String,
+) -> Result<Vec<Agent>, String> {
+    let db = db.lock().unwrap();
+    db.get_agents_for_task(&task_id)
+        .map_err(|e| format!("Failed to get agents for task: {}", e))
+}
+
+/// Get active agents for a session
+#[tauri::command]
+pub fn get_active_agents(
+    db: State<Mutex<Database>>,
+    session_id: String,
+) -> Result<Vec<Agent>, String> {
+    let db = db.lock().unwrap();
+    db.get_active_agents(&session_id)
+        .map_err(|e| format!("Failed to get active agents: {}", e))
+}
+
+/// Update agent status
+#[tauri::command]
+pub fn update_agent_status(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+    status: AgentStatus,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.update_agent_status(&agent_id, &status)
+        .map_err(|e| format!("Failed to update agent status: {}", e))
+}
+
+/// Update agent metrics (tokens, cost, iterations)
+#[tauri::command]
+pub fn update_agent_metrics(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+    tokens: i32,
+    cost: f64,
+    iteration_count: i32,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.update_agent_metrics(&agent_id, tokens, cost, iteration_count)
+        .map_err(|e| format!("Failed to update agent metrics: {}", e))
+}
+
+/// Update agent process ID
+#[tauri::command]
+pub fn update_agent_process_id(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+    process_id: Option<u32>,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.update_agent_process_id(&agent_id, process_id)
+        .map_err(|e| format!("Failed to update agent process ID: {}", e))
+}
+
+/// Delete an agent
+#[tauri::command]
+pub fn delete_agent(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.delete_agent(&agent_id)
+        .map_err(|e| format!("Failed to delete agent: {}", e))
+}
+
+/// Add a log entry for an agent
+#[tauri::command]
+pub fn add_agent_log(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+    log: LogEntry,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.add_log(&agent_id, &log)
+        .map_err(|e| format!("Failed to add log: {}", e))
+}
+
+/// Get all logs for an agent
+#[tauri::command]
+pub fn get_agent_logs(
+    db: State<Mutex<Database>>,
+    agent_id: String,
+) -> Result<Vec<LogEntry>, String> {
+    let db = db.lock().unwrap();
+    db.get_logs_for_agent(&agent_id)
+        .map_err(|e| format!("Failed to get logs: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::Database;
+    use crate::models::{AgentType, SessionConfig, SessionStatus, Session, Task, TaskStatus, LogLevel};
+    use chrono::Utc;
+    use std::sync::Mutex;
+    use uuid::Uuid;
+
+    fn create_test_db() -> Mutex<Database> {
+        let db = Database::new(":memory:").unwrap();
+        db.init().unwrap();
+
+        // Create a test session
+        let session = Session {
+            id: "test-session".to_string(),
+            name: "Test Session".to_string(),
+            project_path: "/tmp/test".to_string(),
+            created_at: Utc::now(),
+            last_resumed_at: None,
+            status: SessionStatus::Active,
+            config: SessionConfig {
+                max_parallel: 1,
+                max_iterations: 10,
+                max_retries: 3,
+                agent_type: AgentType::Claude,
+                auto_create_prs: false,
+                draft_prs: false,
+                run_tests: false,
+                run_lint: false,
+            },
+            tasks: Vec::new(),
+            total_cost: 0.0,
+            total_tokens: 0,
+        };
+        crate::database::sessions::create_session(db.get_connection(), &session).unwrap();
+
+        // Create a test task
+        let task = Task {
+            id: "test-task".to_string(),
+            title: "Test Task".to_string(),
+            description: "A test task".to_string(),
+            status: TaskStatus::Pending,
+            priority: 1,
+            dependencies: Vec::new(),
+            assigned_agent: None,
+            estimated_tokens: None,
+            actual_tokens: None,
+            started_at: None,
+            completed_at: None,
+            branch: None,
+            worktree_path: None,
+            error: None,
+        };
+        crate::database::tasks::create_task(db.get_connection(), "test-session", &task).unwrap();
+
+        Mutex::new(db)
+    }
+
+    fn create_test_agent() -> Agent {
+        Agent {
+            id: Uuid::new_v4().to_string(),
+            session_id: "test-session".to_string(),
+            task_id: "test-task".to_string(),
+            status: AgentStatus::Idle,
+            process_id: None,
+            worktree_path: "/tmp/worktree".to_string(),
+            branch: "feature/test".to_string(),
+            iteration_count: 0,
+            tokens: 0,
+            cost: 0.0,
+            logs: Vec::new(),
+            subagents: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_create_agent_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+        let agent_id = agent.id.clone();
+
+        let db_lock = db.lock().unwrap();
+        let result = db_lock.create_agent(&agent);
+        assert!(result.is_ok());
+
+        let retrieved = db_lock.get_agent(&agent_id).unwrap();
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn test_get_agents_for_session_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+
+        {
+            let db_lock = db.lock().unwrap();
+            db_lock.create_agent(&agent).unwrap();
+            let agents = db_lock.get_agents_for_session("test-session").unwrap();
+            assert_eq!(agents.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_update_agent_status_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+        let agent_id = agent.id.clone();
+
+        {
+            let db_lock = db.lock().unwrap();
+            db_lock.create_agent(&agent).unwrap();
+            let result = db_lock.update_agent_status(&agent_id, &AgentStatus::Thinking);
+            assert!(result.is_ok());
+
+            let updated = db_lock.get_agent(&agent_id).unwrap().unwrap();
+            assert_eq!(updated.status, AgentStatus::Thinking);
+        }
+    }
+
+    #[test]
+    fn test_update_agent_metrics_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+        let agent_id = agent.id.clone();
+
+        {
+            let db_lock = db.lock().unwrap();
+            db_lock.create_agent(&agent).unwrap();
+            let result = db_lock.update_agent_metrics(&agent_id, 1000, 0.05, 5);
+            assert!(result.is_ok());
+
+            let updated = db_lock.get_agent(&agent_id).unwrap().unwrap();
+            assert_eq!(updated.tokens, 1000);
+            assert_eq!(updated.cost, 0.05);
+            assert_eq!(updated.iteration_count, 5);
+        }
+    }
+
+    #[test]
+    fn test_add_agent_log_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+        let agent_id = agent.id.clone();
+
+        {
+            let db_lock = db.lock().unwrap();
+            db_lock.create_agent(&agent).unwrap();
+
+            let log = LogEntry {
+                timestamp: Utc::now(),
+                level: LogLevel::Info,
+                message: "Test log".to_string(),
+            };
+
+            let result = db_lock.add_log(&agent_id, &log);
+            assert!(result.is_ok());
+
+            let logs = db_lock.get_logs_for_agent(&agent_id).unwrap();
+            assert_eq!(logs.len(), 1);
+            assert_eq!(logs[0].message, "Test log");
+        }
+    }
+
+    #[test]
+    fn test_delete_agent_command() {
+        let db = create_test_db();
+        let agent = create_test_agent();
+        let agent_id = agent.id.clone();
+
+        {
+            let db_lock = db.lock().unwrap();
+            db_lock.create_agent(&agent).unwrap();
+            let result = db_lock.delete_agent(&agent_id);
+            assert!(result.is_ok());
+
+            let retrieved = db_lock.get_agent(&agent_id).unwrap();
+            assert!(retrieved.is_none());
+        }
+    }
+
+    #[test]
+    fn test_get_active_agents_command() {
+        let db = create_test_db();
+
+        {
+            let db_lock = db.lock().unwrap();
+
+            let mut agent1 = create_test_agent();
+            agent1.status = AgentStatus::Thinking;
+            db_lock.create_agent(&agent1).unwrap();
+
+            let mut agent2 = create_test_agent();
+            agent2.status = AgentStatus::Idle;
+            db_lock.create_agent(&agent2).unwrap();
+
+            let active = db_lock.get_active_agents("test-session").unwrap();
+            assert_eq!(active.len(), 1);
+        }
+    }
+}

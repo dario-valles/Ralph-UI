@@ -156,7 +156,7 @@ impl ParserState {
     }
 
     fn process_heading(&mut self, level: u32) {
-        let text = self.current_heading_text.trim();
+        let text = self.current_heading_text.trim().to_string();
 
         if text.is_empty() {
             return;
@@ -166,7 +166,7 @@ impl ParserState {
             1 => {
                 // H1 is the document title
                 if self.title.is_none() {
-                    self.title = Some(text.to_string());
+                    self.title = Some(text);
                 }
             }
             2 => {
@@ -179,7 +179,7 @@ impl ParserState {
                 // H3 is a task title (if we're in tasks section)
                 if self.found_tasks_section {
                     self.save_current_task();
-                    let (title, priority) = extract_priority(text);
+                    let (title, priority) = extract_priority(&text);
                     self.current_task_title = Some(title);
                     if let Some(p) = priority {
                         self.current_task_metadata.priority = Some(p);
