@@ -395,8 +395,11 @@ mod tests {
 
         let templates = db.list_templates().unwrap();
 
-        assert_eq!(templates.len(), 5);
+        assert_eq!(templates.len(), 14);
         assert!(templates.iter().any(|t| t.id == "startup-mvp"));
         assert!(templates.iter().any(|t| t.id == "enterprise-feature"));
+        assert!(templates.iter().any(|t| t.id == "ui-component"));
+        assert!(templates.iter().any(|t| t.id == "backend-service"));
+        assert!(templates.iter().any(|t| t.id == "security-feature"));
     }
 }

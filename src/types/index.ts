@@ -336,3 +336,34 @@ export interface FallbackConfig {
   baseBackoffMs: number
   maxBackoffMs: number
 }
+
+// ============================================================================
+// PRD Chat Types
+// ============================================================================
+
+export type ChatMessageRole = 'user' | 'assistant' | 'system'
+
+export interface ChatMessage {
+  id: string
+  sessionId: string
+  role: ChatMessageRole
+  content: string
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export interface ChatSession {
+  id: string
+  agentType: string
+  projectPath?: string
+  prdId?: string
+  title?: string
+  createdAt: string
+  updatedAt: string
+  messageCount?: number
+}
+
+export interface SendMessageResponse {
+  userMessage: ChatMessage
+  assistantMessage: ChatMessage
+}

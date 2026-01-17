@@ -4,11 +4,12 @@ pub mod tasks;
 pub mod sessions;
 pub mod agents;
 pub mod prd;
+pub mod prd_chat;
 
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 
 pub struct Database {
     conn: Connection,
@@ -78,6 +79,9 @@ impl Database {
         }
         if from_version < 3 {
             self.migrate_to_v3()?;
+        }
+        if from_version < 4 {
+            self.migrate_to_v4()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -302,6 +306,56 @@ impl Database {
         Ok(())
     }
 
+    fn migrate_to_v4(&self) -> Result<()> {
+        // Phase 7.5: PRD Chat Tables
+
+        // Create chat_sessions table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS chat_sessions (
+                id TEXT PRIMARY KEY,
+                prd_id TEXT,
+                agent_type TEXT NOT NULL,
+                project_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (prd_id) REFERENCES prd_documents(id) ON DELETE SET NULL
+            )",
+            [],
+        )?;
+
+        // Create chat_messages table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS chat_messages (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // Create indexes for better query performance
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_prd_id ON chat_sessions(prd_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON chat_sessions(updated_at)",
+            [],
+        )?;
+
+        self.set_schema_version(4)?;
+        Ok(())
+    }
+
     fn insert_builtin_templates(&self) -> Result<()> {
         let templates = vec![
             (
@@ -379,6 +433,147 @@ impl Database {
                         {"id": "data_flow", "title": "Data Flow", "required": true},
                         {"id": "error_handling", "title": "Error Handling", "required": true},
                         {"id": "testing", "title": "Testing Strategy", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "ui-component",
+                "UI Component",
+                "Frontend component or design system element",
+                "🎨",
+                r#"{
+                    "sections": [
+                        {"id": "component_overview", "title": "Component Overview", "required": true},
+                        {"id": "design_specs", "title": "Design Specifications", "required": true},
+                        {"id": "props_api", "title": "Props & API", "required": true},
+                        {"id": "states", "title": "Component States", "required": true},
+                        {"id": "accessibility", "title": "Accessibility Requirements", "required": true},
+                        {"id": "examples", "title": "Usage Examples", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "backend-service",
+                "Backend Service",
+                "Microservice or backend module development",
+                "🔧",
+                r#"{
+                    "sections": [
+                        {"id": "service_overview", "title": "Service Overview", "required": true},
+                        {"id": "api_design", "title": "API Design", "required": true},
+                        {"id": "data_model", "title": "Data Model", "required": true},
+                        {"id": "business_logic", "title": "Business Logic", "required": true},
+                        {"id": "dependencies", "title": "Dependencies", "required": false},
+                        {"id": "deployment", "title": "Deployment & Scaling", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "database-migration",
+                "Database Migration",
+                "Schema changes and data migrations",
+                "🗄️",
+                r#"{
+                    "sections": [
+                        {"id": "migration_goal", "title": "Migration Goal", "required": true},
+                        {"id": "current_schema", "title": "Current Schema", "required": true},
+                        {"id": "target_schema", "title": "Target Schema", "required": true},
+                        {"id": "migration_steps", "title": "Migration Steps", "required": true},
+                        {"id": "rollback_plan", "title": "Rollback Plan", "required": true},
+                        {"id": "data_validation", "title": "Data Validation", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "performance-optimization",
+                "Performance Optimization",
+                "Speed and efficiency improvements",
+                "⚡",
+                r#"{
+                    "sections": [
+                        {"id": "current_metrics", "title": "Current Performance Metrics", "required": true},
+                        {"id": "bottlenecks", "title": "Identified Bottlenecks", "required": true},
+                        {"id": "target_metrics", "title": "Target Performance", "required": true},
+                        {"id": "optimization_plan", "title": "Optimization Approach", "required": true},
+                        {"id": "benchmarks", "title": "Benchmarking Strategy", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "security-feature",
+                "Security Feature",
+                "Authentication, authorization, and security implementations",
+                "🔒",
+                r#"{
+                    "sections": [
+                        {"id": "security_goal", "title": "Security Goal", "required": true},
+                        {"id": "threat_model", "title": "Threat Model", "required": true},
+                        {"id": "implementation", "title": "Security Implementation", "required": true},
+                        {"id": "testing", "title": "Security Testing", "required": true},
+                        {"id": "compliance", "title": "Compliance Requirements", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "mobile-feature",
+                "Mobile Feature",
+                "iOS/Android app feature development",
+                "📱",
+                r#"{
+                    "sections": [
+                        {"id": "feature_overview", "title": "Feature Overview", "required": true},
+                        {"id": "user_flow", "title": "User Flow", "required": true},
+                        {"id": "ui_screens", "title": "UI Screens", "required": true},
+                        {"id": "platform_specifics", "title": "Platform Specifics", "required": true},
+                        {"id": "offline_support", "title": "Offline Support", "required": false},
+                        {"id": "testing", "title": "Testing Plan", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "devops-automation",
+                "DevOps/Automation",
+                "CI/CD, infrastructure, and automation tasks",
+                "🔄",
+                r#"{
+                    "sections": [
+                        {"id": "automation_goal", "title": "Automation Goal", "required": true},
+                        {"id": "current_process", "title": "Current Process", "required": true},
+                        {"id": "target_process", "title": "Target Process", "required": true},
+                        {"id": "tools", "title": "Tools & Technologies", "required": true},
+                        {"id": "implementation_steps", "title": "Implementation Steps", "required": true},
+                        {"id": "monitoring", "title": "Monitoring & Alerts", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "documentation",
+                "Documentation",
+                "Technical docs, guides, or API documentation",
+                "📚",
+                r#"{
+                    "sections": [
+                        {"id": "doc_purpose", "title": "Documentation Purpose", "required": true},
+                        {"id": "audience", "title": "Target Audience", "required": true},
+                        {"id": "outline", "title": "Document Outline", "required": true},
+                        {"id": "examples", "title": "Code Examples", "required": false},
+                        {"id": "maintenance", "title": "Maintenance Plan", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "testing-strategy",
+                "Testing Strategy",
+                "Test plans and quality assurance",
+                "🧪",
+                r#"{
+                    "sections": [
+                        {"id": "test_scope", "title": "Test Scope", "required": true},
+                        {"id": "test_types", "title": "Test Types", "required": true},
+                        {"id": "test_cases", "title": "Key Test Cases", "required": true},
+                        {"id": "coverage_goals", "title": "Coverage Goals", "required": true},
+                        {"id": "automation", "title": "Test Automation", "required": false},
+                        {"id": "environments", "title": "Test Environments", "required": false}
                     ]
                 }"#,
             ),

@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, ListTodo, Bot, Settings, FolderGit2, FileText } from 'lucide-react'
+import { LayoutDashboard, ListTodo, Bot, Settings, FolderGit2, FileText, MessageSquare } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
   { name: 'PRDs', to: '/prds', icon: FileText },
+  { name: 'PRD Chat', to: '/prds/chat', icon: MessageSquare },
   { name: 'Tasks', to: '/tasks', icon: ListTodo },
   { name: 'Agents', to: '/agents', icon: Bot },
   { name: 'Sessions', to: '/sessions', icon: FolderGit2 },

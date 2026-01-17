@@ -8,6 +8,7 @@ import { SettingsPage } from './components/settings/SettingsPage'
 import { PRDList } from './components/prd/PRDList'
 import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
+import { PRDChatPanel } from './components/prd/PRDChatPanel'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="prds" element={<PRDList />} />
           <Route path="prds/new" element={<PRDTemplateSelector />} />
+          <Route path="prds/chat" element={<PRDChatPanel />} />
           <Route path="prds/:id" element={<PRDEditor />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

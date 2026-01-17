@@ -178,6 +178,13 @@ pub fn run() {
             commands::get_subagent_events,
             commands::clear_trace_data,
             commands::is_subagent_active,
+            // PRD Chat commands
+            commands::start_prd_chat_session,
+            commands::send_prd_chat_message,
+            commands::get_prd_chat_history,
+            commands::list_prd_chat_sessions,
+            commands::delete_prd_chat_session,
+            commands::export_chat_to_prd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

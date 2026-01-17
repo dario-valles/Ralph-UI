@@ -7,6 +7,7 @@ pub mod git;
 pub mod github;
 pub mod parallel;
 pub mod prd;
+pub mod prd_chat;
 pub mod config;
 pub mod templates;
 pub mod recovery;
@@ -24,6 +25,7 @@ pub use config::*;
 pub use templates::*;
 pub use recovery::*;
 pub use traces::*;
+pub use prd_chat::*;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {
