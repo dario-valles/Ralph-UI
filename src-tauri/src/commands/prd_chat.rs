@@ -192,6 +192,10 @@ pub async fn get_prd_chat_history(
 ) -> Result<Vec<ChatMessage>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
 
+    // Ensure chat tables exist
+    init_chat_tables(db.get_connection())
+        .map_err(|e| format!("Failed to initialize chat tables: {}", e))?;
+
     get_messages_for_session(db.get_connection(), &session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))
 }
@@ -202,6 +206,10 @@ pub async fn list_prd_chat_sessions(
     db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<ChatSession>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
+
+    // Ensure chat tables exist
+    init_chat_tables(db.get_connection())
+        .map_err(|e| format!("Failed to initialize chat tables: {}", e))?;
 
     list_chat_sessions(db.get_connection())
         .map_err(|e| format!("Failed to list chat sessions: {}", e))
