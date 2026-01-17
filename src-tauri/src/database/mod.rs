@@ -18,6 +18,8 @@ pub struct Database {
 impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
+        // Enable foreign key enforcement - must be done on each connection
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
         Ok(Self { conn })
     }
 

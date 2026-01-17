@@ -1,31 +1,8 @@
 // PRD Chat database operations
 #![allow(dead_code)]
 
+use crate::models::{ChatMessage, ChatSession, MessageRole};
 use rusqlite::{params, Result};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatSession {
-    pub id: String,
-    pub prd_id: Option<String>,
-    pub agent_type: String,
-    pub project_path: Option<String>,
-    pub title: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    #[serde(skip_deserializing)]
-    pub message_count: Option<i32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub id: String,
-    pub session_id: String,
-    pub role: String, // "user", "assistant", "system"
-    pub content: String,
-    pub created_at: String,
-}
 
 impl super::Database {
     // Chat Session operations
@@ -50,16 +27,16 @@ impl super::Database {
 
     pub fn get_chat_session(&self, id: &str) -> Result<ChatSession> {
         self.get_connection().query_row(
-            "SELECT s.id, s.prd_id, s.agent_type, s.project_path, s.title, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s WHERE s.id = ?1",
             params![id],
             |row| {
                 Ok(ChatSession {
                     id: row.get(0)?,
-                    prd_id: row.get(1)?,
-                    agent_type: row.get(2)?,
-                    project_path: row.get(3)?,
+                    agent_type: row.get(1)?,
+                    project_path: row.get(2)?,
+                    prd_id: row.get(3)?,
                     title: row.get(4)?,
                     created_at: row.get(5)?,
                     updated_at: row.get(6)?,
@@ -72,7 +49,7 @@ impl super::Database {
     pub fn list_chat_sessions(&self) -> Result<Vec<ChatSession>> {
         let conn = self.get_connection();
         let mut stmt = conn.prepare(
-            "SELECT s.id, s.prd_id, s.agent_type, s.project_path, s.title, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s
              ORDER BY s.updated_at DESC",
@@ -81,9 +58,9 @@ impl super::Database {
         let sessions = stmt.query_map([], |row| {
             Ok(ChatSession {
                 id: row.get(0)?,
-                prd_id: row.get(1)?,
-                agent_type: row.get(2)?,
-                project_path: row.get(3)?,
+                agent_type: row.get(1)?,
+                project_path: row.get(2)?,
+                prd_id: row.get(3)?,
                 title: row.get(4)?,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
@@ -129,7 +106,7 @@ impl super::Database {
             params![
                 message.id,
                 message.session_id,
-                message.role,
+                message.role.as_str(),
                 message.content,
                 message.created_at,
             ],
@@ -147,10 +124,18 @@ impl super::Database {
         )?;
 
         let messages = stmt.query_map(params![session_id], |row| {
+            let role_str: String = row.get(2)?;
+            let role = role_str.parse::<MessageRole>().map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Text,
+                    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                )
+            })?;
             Ok(ChatMessage {
                 id: row.get(0)?,
                 session_id: row.get(1)?,
-                role: row.get(2)?,
+                role,
                 content: row.get(3)?,
                 created_at: row.get(4)?,
             })
@@ -184,9 +169,9 @@ mod tests {
     fn sample_chat_session(id: &str) -> ChatSession {
         ChatSession {
             id: id.to_string(),
-            prd_id: None, // Use None to avoid FK constraint issues in tests
             agent_type: "prd_writer".to_string(),
             project_path: Some("/test/project".to_string()),
+            prd_id: None, // Use None to avoid FK constraint issues in tests
             title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
@@ -195,12 +180,12 @@ mod tests {
     }
 
     // Helper function to create a sample chat message
-    fn sample_chat_message(id: &str, session_id: &str, role: &str) -> ChatMessage {
+    fn sample_chat_message(id: &str, session_id: &str, role: MessageRole) -> ChatMessage {
         ChatMessage {
             id: id.to_string(),
             session_id: session_id.to_string(),
-            role: role.to_string(),
-            content: format!("Test message from {}", role),
+            role,
+            content: format!("Test message from {}", role.as_str()),
             created_at: "2026-01-17T10:00:00Z".to_string(),
         }
     }
@@ -221,9 +206,9 @@ mod tests {
         let db = create_test_db();
         let session = ChatSession {
             id: "session-null".to_string(),
-            prd_id: None,
             agent_type: "general".to_string(),
             project_path: None,
+            prd_id: None,
             title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
@@ -307,9 +292,9 @@ mod tests {
         // Update the session (keeping prd_id as None to avoid FK constraint)
         let updated_session = ChatSession {
             id: "session-update".to_string(),
-            prd_id: None, // Keep None to avoid FK constraint issues
             agent_type: "task_decomposer".to_string(),
             project_path: Some("/updated/path".to_string()),
+            prd_id: None, // Keep None to avoid FK constraint issues
             title: Some("Updated Title".to_string()),
             created_at: session.created_at.clone(),
             updated_at: "2026-01-17T12:00:00Z".to_string(),
@@ -366,7 +351,7 @@ mod tests {
         db.create_chat_session(&session).unwrap();
 
         // Create a message
-        let message = sample_chat_message("msg-1", "session-msg", "user");
+        let message = sample_chat_message("msg-1", "session-msg", MessageRole::User);
 
         let result = db.create_chat_message(&message);
         assert!(result.is_ok(), "Failed to create chat message: {:?}", result.err());
@@ -379,9 +364,9 @@ mod tests {
         db.create_chat_session(&session).unwrap();
 
         // Test all valid roles
-        let user_msg = sample_chat_message("msg-user", "session-roles", "user");
-        let assistant_msg = sample_chat_message("msg-assistant", "session-roles", "assistant");
-        let system_msg = sample_chat_message("msg-system", "session-roles", "system");
+        let user_msg = sample_chat_message("msg-user", "session-roles", MessageRole::User);
+        let assistant_msg = sample_chat_message("msg-assistant", "session-roles", MessageRole::Assistant);
+        let system_msg = sample_chat_message("msg-system", "session-roles", MessageRole::System);
 
         assert!(db.create_chat_message(&user_msg).is_ok());
         assert!(db.create_chat_message(&assistant_msg).is_ok());
@@ -413,15 +398,15 @@ mod tests {
         db.create_chat_session(&session).unwrap();
 
         // Create messages with different timestamps (simulating conversation order)
-        let mut msg1 = sample_chat_message("msg-1", "session-multi", "user");
+        let mut msg1 = sample_chat_message("msg-1", "session-multi", MessageRole::User);
         msg1.created_at = "2026-01-17T10:01:00Z".to_string();
         msg1.content = "Hello, I need help with my PRD".to_string();
 
-        let mut msg2 = sample_chat_message("msg-2", "session-multi", "assistant");
+        let mut msg2 = sample_chat_message("msg-2", "session-multi", MessageRole::Assistant);
         msg2.created_at = "2026-01-17T10:02:00Z".to_string();
         msg2.content = "Of course! What would you like to work on?".to_string();
 
-        let mut msg3 = sample_chat_message("msg-3", "session-multi", "user");
+        let mut msg3 = sample_chat_message("msg-3", "session-multi", MessageRole::User);
         msg3.created_at = "2026-01-17T10:03:00Z".to_string();
         msg3.content = "I want to add a new feature".to_string();
 
@@ -449,9 +434,9 @@ mod tests {
         db.create_chat_session(&session2).unwrap();
 
         // Create messages in both sessions
-        let msg1 = sample_chat_message("msg-s1-1", "session-iso-1", "user");
-        let msg2 = sample_chat_message("msg-s1-2", "session-iso-1", "assistant");
-        let msg3 = sample_chat_message("msg-s2-1", "session-iso-2", "user");
+        let msg1 = sample_chat_message("msg-s1-1", "session-iso-1", MessageRole::User);
+        let msg2 = sample_chat_message("msg-s1-2", "session-iso-1", MessageRole::Assistant);
+        let msg3 = sample_chat_message("msg-s2-1", "session-iso-2", MessageRole::User);
 
         db.create_chat_message(&msg1).unwrap();
         db.create_chat_message(&msg2).unwrap();
@@ -474,8 +459,8 @@ mod tests {
         db.create_chat_session(&session).unwrap();
 
         // Create messages
-        let msg1 = sample_chat_message("msg-del-1", "session-del-msgs", "user");
-        let msg2 = sample_chat_message("msg-del-2", "session-del-msgs", "assistant");
+        let msg1 = sample_chat_message("msg-del-1", "session-del-msgs", MessageRole::User);
+        let msg2 = sample_chat_message("msg-del-2", "session-del-msgs", MessageRole::Assistant);
         db.create_chat_message(&msg1).unwrap();
         db.create_chat_message(&msg2).unwrap();
 
@@ -534,9 +519,9 @@ mod tests {
         // Now create a chat session linked to the PRD
         let session = ChatSession {
             id: "session-with-prd".to_string(),
-            prd_id: Some("prd-for-chat".to_string()),
             agent_type: "prd_writer".to_string(),
             project_path: Some("/test/project".to_string()),
+            prd_id: Some("prd-for-chat".to_string()),
             title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
@@ -557,9 +542,9 @@ mod tests {
         // Try to create a chat session with a non-existent PRD reference
         let session = ChatSession {
             id: "session-invalid-prd".to_string(),
-            prd_id: Some("nonexistent-prd".to_string()),
             agent_type: "prd_writer".to_string(),
             project_path: None,
+            prd_id: Some("nonexistent-prd".to_string()),
             title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
@@ -579,9 +564,9 @@ mod tests {
         // 1. Create a chat session (without prd_id to avoid FK constraint)
         let session = ChatSession {
             id: "workflow-session".to_string(),
-            prd_id: None, // No prd_id initially
             agent_type: "prd_writer".to_string(),
             project_path: Some("/my/project".to_string()),
+            prd_id: None, // No prd_id initially
             title: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
@@ -593,7 +578,7 @@ mod tests {
         let system_msg = ChatMessage {
             id: "msg-sys".to_string(),
             session_id: "workflow-session".to_string(),
-            role: "system".to_string(),
+            role: MessageRole::System,
             content: "You are a PRD writing assistant.".to_string(),
             created_at: "2026-01-17T10:00:01Z".to_string(),
         };
@@ -603,7 +588,7 @@ mod tests {
         let user_msg = ChatMessage {
             id: "msg-usr".to_string(),
             session_id: "workflow-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Help me write a PRD for a todo app".to_string(),
             created_at: "2026-01-17T10:01:00Z".to_string(),
         };
@@ -613,7 +598,7 @@ mod tests {
         let assistant_msg = ChatMessage {
             id: "msg-ast".to_string(),
             session_id: "workflow-session".to_string(),
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: "I'd be happy to help! Let's start with the problem statement.".to_string(),
             created_at: "2026-01-17T10:01:30Z".to_string(),
         };
@@ -629,9 +614,9 @@ mod tests {
         // 6. Verify all messages are retrievable
         let messages = db.get_messages_by_session("workflow-session").unwrap();
         assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].role, "system");
-        assert_eq!(messages[1].role, "user");
-        assert_eq!(messages[2].role, "assistant");
+        assert_eq!(messages[0].role, MessageRole::System);
+        assert_eq!(messages[1].role, MessageRole::User);
+        assert_eq!(messages[2].role, MessageRole::Assistant);
 
         // 7. Verify session is in list
         let sessions = db.list_chat_sessions().unwrap();
@@ -659,7 +644,7 @@ mod tests {
         let message = ChatMessage {
             id: "msg-large".to_string(),
             session_id: "session-large".to_string(),
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: large_content.clone(),
             created_at: "2026-01-17T10:00:00Z".to_string(),
         };
@@ -694,7 +679,7 @@ mod tests {
         let message = ChatMessage {
             id: "msg-special".to_string(),
             session_id: "session-special".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: special_content.to_string(),
             created_at: "2026-01-17T10:00:00Z".to_string(),
         };

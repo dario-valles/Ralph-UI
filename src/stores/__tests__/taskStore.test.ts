@@ -259,7 +259,7 @@ describe('taskStore', () => {
       vi.mocked(taskApi.importPRD).mockRejectedValue(new Error(errorMessage))
 
       const store = useTaskStore.getState()
-      await store.importPRD('session-1', 'invalid')
+      await expect(store.importPRD('session-1', 'invalid')).rejects.toThrow(errorMessage)
 
       expect(useTaskStore.getState().error).toContain(errorMessage)
     })

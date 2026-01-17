@@ -330,4 +330,221 @@ describe('PRDImport', () => {
 
     expect(mockOnOpenChange).toHaveBeenCalledWith(false)
   })
+
+  describe('file validation', () => {
+    it('shows error for invalid file type', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      const file = new File(['test content'], 'test.exe', { type: 'application/x-msdownload' })
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Invalid file type/)).toBeInTheDocument()
+      })
+    })
+
+    it('shows error for file exceeding size limit', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      // Create a file object with a mocked size property (6MB)
+      const file = new File(['test'], 'large.json', { type: 'application/json' })
+      Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 })
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/File is too large/)).toBeInTheDocument()
+      })
+    })
+
+    it('shows error for empty file', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      // Create an empty file
+      const file = new File([], 'empty.json', { type: 'application/json' })
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/File is empty/)).toBeInTheDocument()
+      })
+    })
+
+    it('shows error for file with only whitespace', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      mockFileContent = '   \n\t  '
+      const file = new File(['   \n\t  '], 'whitespace.json', { type: 'application/json' })
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/empty or contains only whitespace/)).toBeInTheDocument()
+      })
+    })
+
+    it('accepts valid .txt file', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      mockFileContent = 'This is a valid text file'
+      const file = new File([mockFileContent], 'valid.txt', { type: 'text/plain' })
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText('valid.txt')).toBeInTheDocument()
+      })
+
+      // Wait for FileReader to complete
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // Should not show validation error
+      expect(screen.queryByText(/Invalid file type/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/File is too large/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/File is empty/)).not.toBeInTheDocument()
+    })
+
+    it('clears validation error when dialog is closed', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      // First, trigger a validation error
+      const invalidFile = new File(['test'], 'test.exe', { type: 'application/x-msdownload' })
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [invalidFile],
+        writable: false,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Invalid file type/)).toBeInTheDocument()
+      })
+
+      // Close the dialog
+      const cancelButton = screen.getByText('Cancel')
+      fireEvent.click(cancelButton)
+
+      expect(mockOnOpenChange).toHaveBeenCalledWith(false)
+    })
+
+    it('clears previous validation error when selecting new file', async () => {
+      render(
+        <PRDImport
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          sessionId="session-1"
+        />
+      )
+
+      // First, trigger a validation error with invalid file
+      const invalidFile = new File(['test'], 'test.exe', { type: 'application/x-msdownload' })
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+      Object.defineProperty(input, 'files', {
+        value: [invalidFile],
+        configurable: true,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Invalid file type/)).toBeInTheDocument()
+      })
+
+      // Now select a valid file
+      mockFileContent = 'valid content'
+      const validFile = new File([mockFileContent], 'valid.json', { type: 'application/json' })
+
+      // Redefine the property with configurable: true to allow subsequent redefinition
+      Object.defineProperty(input, 'files', {
+        value: [validFile],
+        configurable: true,
+      })
+
+      fireEvent.change(input)
+
+      await waitFor(() => {
+        expect(screen.getByText('valid.json')).toBeInTheDocument()
+      })
+
+      // Wait for FileReader to complete
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // Error should be cleared
+      expect(screen.queryByText(/Invalid file type/)).not.toBeInTheDocument()
+    })
+  })
 })

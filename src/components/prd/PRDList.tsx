@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
+import { toast } from '@/stores/toastStore'
 import type { PRDDocument } from '@/types'
 
 export function PRDList() {
@@ -49,8 +50,10 @@ export function PRDList() {
     setDeleting(id)
     try {
       await deletePRD(id)
+      toast.success('PRD deleted', 'The document has been removed.')
     } catch (err) {
       console.error('Failed to delete PRD:', err)
+      toast.error('Failed to delete PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
     } finally {
       setDeleting(null)
     }

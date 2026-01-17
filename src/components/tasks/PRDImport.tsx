@@ -10,7 +10,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useTaskStore } from '@/stores/taskStore'
+import { toast } from '@/stores/toastStore'
 import { FileText, Upload, AlertCircle } from 'lucide-react'
+
+// Validation constants
+const ALLOWED_EXTENSIONS = ['.json', '.yaml', '.yml', '.md', '.markdown', '.txt']
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE_MB = 5
 
 interface PRDImportProps {
   open: boolean
@@ -18,15 +24,56 @@ interface PRDImportProps {
   sessionId: string
 }
 
+/**
+ * Validates a file for upload
+ * @param file - The file to validate
+ * @returns An error message if validation fails, or null if valid
+ */
+function validateFile(file: File): string | null {
+  // Check file extension
+  const fileName = file.name.toLowerCase()
+  const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => fileName.endsWith(ext))
+  if (!hasValidExtension) {
+    return `Invalid file type. Allowed types: ${ALLOWED_EXTENSIONS.join(', ')}`
+  }
+
+  // Check file size
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return `File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB`
+  }
+
+  // Check for empty file
+  if (file.size === 0) {
+    return 'File is empty. Please select a file with content'
+  }
+
+  return null
+}
+
 export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
   const { importPRD, loading, error } = useTaskStore()
   const [format, setFormat] = useState<string>('auto')
   const [fileContent, setFileContent] = useState<string>('')
   const [fileName, setFileName] = useState<string>('')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Clear previous errors
+    setValidationError(null)
+    setFileContent('')
+    setFileName('')
+
+    // Validate the file before processing
+    const validationResult = validateFile(file)
+    if (validationResult) {
+      setValidationError(validationResult)
+      // Reset the input so the same file can be selected again after fixing
+      e.target.value = ''
+      return
+    }
 
     setFileName(file.name)
 
@@ -34,12 +81,22 @@ export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (ext === 'json') setFormat('json')
     else if (ext === 'yaml' || ext === 'yml') setFormat('yaml')
-    else if (ext === 'md' || ext === 'markdown') setFormat('markdown')
+    else if (ext === 'md' || ext === 'markdown' || ext === 'txt') setFormat('markdown')
 
     const reader = new FileReader()
     reader.onload = (event) => {
       const content = event.target?.result as string
+      // Additional check: file might have size but contain only whitespace
+      if (!content || content.trim().length === 0) {
+        setValidationError('File appears to be empty or contains only whitespace')
+        setFileName('')
+        return
+      }
       setFileContent(content)
+    }
+    reader.onerror = () => {
+      setValidationError('Failed to read file. Please try again')
+      setFileName('')
     }
     reader.readAsText(file)
   }
@@ -48,14 +105,17 @@ export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
     if (!fileContent) return
 
     const formatToUse = format === 'auto' ? undefined : format
-    await importPRD(sessionId, fileContent, formatToUse)
-
-    if (!error) {
+    try {
+      await importPRD(sessionId, fileContent, formatToUse)
+      toast.success('PRD imported', 'Tasks have been imported successfully.')
       // Reset and close on success
       setFileContent('')
       setFileName('')
       setFormat('auto')
       onOpenChange(false)
+    } catch (err) {
+      console.error('Failed to import PRD:', err)
+      toast.error('Failed to import PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
     }
   }
 
@@ -63,6 +123,7 @@ export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
     setFileContent('')
     setFileName('')
     setFormat('auto')
+    setValidationError(null)
     onOpenChange(false)
   }
 
@@ -94,7 +155,7 @@ export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
               <input
                 id="file-upload"
                 type="file"
-                accept=".json,.yaml,.yml,.md,.markdown"
+                accept=".json,.yaml,.yml,.md,.markdown,.txt"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -135,10 +196,10 @@ export function PRDImport({ open, onOpenChange, sessionId }: PRDImportProps) {
           )}
 
           {/* Error Display */}
-          {error && (
+          {(error || validationError) && (
             <div className="flex items-start gap-2 rounded-md border border-destructive bg-destructive/10 p-3">
               <AlertCircle className="h-4 w-4 text-destructive" />
-              <div className="flex-1 text-sm text-destructive">{error}</div>
+              <div className="flex-1 text-sm text-destructive">{validationError || error}</div>
             </div>
           )}
         </div>

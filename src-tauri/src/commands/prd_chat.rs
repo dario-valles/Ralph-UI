@@ -1,7 +1,7 @@
 // PRD Chat Tauri commands - AI-assisted PRD creation through conversation
 
 use crate::database::Database;
-use crate::models::AgentType;
+use crate::models::{AgentType, ChatMessage, ChatSession, MessageRole};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -31,34 +31,6 @@ pub struct SendMessageRequest {
 pub struct ExportToPRDRequest {
     pub session_id: String,
     pub title: String,
-}
-
-// ============================================================================
-// Database Models
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatSession {
-    pub id: String,
-    pub agent_type: String,
-    pub project_path: Option<String>,
-    pub prd_id: Option<String>,
-    pub title: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    #[serde(skip_deserializing)]
-    pub message_count: Option<i32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatMessage {
-    pub id: String,
-    pub session_id: String,
-    pub role: String, // "user" or "assistant"
-    pub content: String,
-    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,7 +99,7 @@ pub async fn send_prd_chat_message(
         let user_message = ChatMessage {
             id: Uuid::new_v4().to_string(),
             session_id: request.session_id.clone(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: request.content.clone(),
             created_at: now.clone(),
         };
@@ -164,7 +136,7 @@ pub async fn send_prd_chat_message(
         let assistant_message = ChatMessage {
             id: Uuid::new_v4().to_string(),
             session_id: request.session_id.clone(),
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: response_content,
             created_at: response_now.clone(),
         };
@@ -321,7 +293,11 @@ fn build_prd_chat_prompt(
     if !history.is_empty() {
         prompt.push_str("=== Conversation History ===\n\n");
         for msg in history {
-            let role_label = if msg.role == "user" { "User" } else { "Assistant" };
+            let role_label = match msg.role {
+                MessageRole::User => "User",
+                MessageRole::Assistant => "Assistant",
+                MessageRole::System => "System",
+            };
             prompt.push_str(&format!("{}: {}\n\n", role_label, msg.content));
         }
         prompt.push_str("=== End History ===\n\n");
@@ -415,7 +391,14 @@ fn convert_chat_to_prd_content(messages: &[ChatMessage]) -> String {
     // Full conversation for reference
     let conversation = messages
         .iter()
-        .map(|m| format!("**{}**: {}", if m.role == "user" { "User" } else { "Assistant" }, m.content))
+        .map(|m| {
+            let role_label = match m.role {
+                MessageRole::User => "User",
+                MessageRole::Assistant => "Assistant",
+                MessageRole::System => "System",
+            };
+            format!("**{}**: {}", role_label, m.content)
+        })
         .collect::<Vec<_>>()
         .join("\n\n");
 
@@ -440,7 +423,7 @@ fn extract_overview_from_messages(messages: &[ChatMessage]) -> String {
     // Combine early messages for overview
     early_messages
         .iter()
-        .filter(|m| m.role == "assistant")
+        .filter(|m| m.role == MessageRole::Assistant)
         .map(|m| m.content.clone())
         .collect::<Vec<_>>()
         .join("\n\n")
@@ -467,7 +450,7 @@ fn extract_tasks_from_messages(messages: &[ChatMessage]) -> String {
 
     messages
         .iter()
-        .filter(|m| m.role == "assistant")
+        .filter(|m| m.role == MessageRole::Assistant)
         .filter(|m| {
             let content_lower = m.content.to_lowercase();
             task_indicators.iter().any(|ind| content_lower.contains(ind))
@@ -612,7 +595,7 @@ fn create_chat_message(conn: &Connection, message: &ChatMessage) -> Result<()> {
         params![
             message.id,
             message.session_id,
-            message.role,
+            message.role.as_str(),
             message.content,
             message.created_at,
         ],
@@ -629,10 +612,18 @@ fn get_messages_for_session(conn: &Connection, session_id: &str) -> Result<Vec<C
     )?;
 
     let messages = stmt.query_map(params![session_id], |row| {
+        let role_str: String = row.get(2)?;
+        let role = role_str.parse::<MessageRole>().map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(
+                2,
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+            )
+        })?;
         Ok(ChatMessage {
             id: row.get(0)?,
             session_id: row.get(1)?,
-            role: row.get(2)?,
+            role,
             content: row.get(3)?,
             created_at: row.get(4)?,
         })
@@ -816,7 +807,7 @@ mod tests {
         let message = ChatMessage {
             id: "msg-1".to_string(),
             session_id: "msg-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Help me create a PRD".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
@@ -844,7 +835,7 @@ mod tests {
         let msg1 = ChatMessage {
             id: "msg-1".to_string(),
             session_id: "history-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Hello".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
@@ -852,7 +843,7 @@ mod tests {
         let msg2 = ChatMessage {
             id: "msg-2".to_string(),
             session_id: "history-session".to_string(),
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: "Hi! How can I help?".to_string(),
             created_at: "2026-01-17T00:02:00Z".to_string(),
         };
@@ -860,7 +851,7 @@ mod tests {
         let msg3 = ChatMessage {
             id: "msg-3".to_string(),
             session_id: "history-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "I need a PRD".to_string(),
             created_at: "2026-01-17T00:03:00Z".to_string(),
         };
@@ -874,9 +865,9 @@ mod tests {
         assert_eq!(messages.len(), 3);
         // Should be ordered by created_at ASC
         assert_eq!(messages[0].id, "msg-1");
-        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[0].role, MessageRole::User);
         assert_eq!(messages[1].id, "msg-2");
-        assert_eq!(messages[1].role, "assistant");
+        assert_eq!(messages[1].role, MessageRole::Assistant);
         assert_eq!(messages[2].id, "msg-3");
     }
 
@@ -899,7 +890,7 @@ mod tests {
         let msg = ChatMessage {
             id: "to-delete".to_string(),
             session_id: "delete-msgs-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Delete me".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
@@ -988,14 +979,14 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "I want to build a todo app".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "Great! Let me help you define the requirements.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
@@ -1016,14 +1007,14 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "I need a todo app that must support multiple lists".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "I'll help you create a todo app. We should implement task creation first.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
@@ -1058,14 +1049,14 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "User question".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "This is the overview content from assistant.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
@@ -1083,21 +1074,21 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "The app must support offline mode".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "Users should be able to sync when online".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
             ChatMessage {
                 id: "3".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "Just a regular message".to_string(),
                 created_at: "2026-01-17T00:02:00Z".to_string(),
             },
@@ -1116,21 +1107,21 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "We should implement the login flow first".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "Then we need to create the database schema".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
             ChatMessage {
                 id: "3".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "User message should not be a task".to_string(),
                 created_at: "2026-01-17T00:02:00Z".to_string(),
             },
@@ -1171,7 +1162,7 @@ mod tests {
         let user_msg = ChatMessage {
             id: "u1".to_string(),
             session_id: "workflow-session".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Create a PRD for a task manager".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
@@ -1180,7 +1171,7 @@ mod tests {
         let assistant_msg = ChatMessage {
             id: "a1".to_string(),
             session_id: "workflow-session".to_string(),
-            role: "assistant".to_string(),
+            role: MessageRole::Assistant,
             content: "I'll help you create a comprehensive PRD for a task manager.".to_string(),
             created_at: "2026-01-17T00:02:00Z".to_string(),
         };
@@ -1189,8 +1180,8 @@ mod tests {
         // 3. Verify history
         let history = get_messages_for_session(conn, "workflow-session").unwrap();
         assert_eq!(history.len(), 2);
-        assert_eq!(history[0].role, "user");
-        assert_eq!(history[1].role, "assistant");
+        assert_eq!(history[0].role, MessageRole::User);
+        assert_eq!(history[1].role, MessageRole::Assistant);
 
         // 4. Update timestamp
         update_chat_session_timestamp(conn, "workflow-session", "2026-01-17T00:02:00Z").unwrap();
@@ -1282,14 +1273,14 @@ mod tests {
         let msg_a = ChatMessage {
             id: "msg-a".to_string(),
             session_id: "session-a".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Message for session A".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
         let msg_b = ChatMessage {
             id: "msg-b".to_string(),
             session_id: "session-b".to_string(),
-            role: "user".to_string(),
+            role: MessageRole::User,
             content: "Message for session B".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
@@ -1313,14 +1304,14 @@ mod tests {
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
-                role: "user".to_string(),
+                role: MessageRole::User,
                 content: "I need a user authentication feature".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
             },
             ChatMessage {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
-                role: "assistant".to_string(),
+                role: MessageRole::Assistant,
                 content: "Let's implement OAuth2 with Google and GitHub support".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
             },
@@ -1341,5 +1332,91 @@ mod tests {
         assert!(has_overview, "Missing required overview section");
         assert!(has_requirements, "Missing required requirements section");
         assert!(has_tasks, "Missing required tasks section");
+    }
+
+    // -------------------------------------------------------------------------
+    // MessageRole Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_message_role_as_str() {
+        assert_eq!(MessageRole::User.as_str(), "user");
+        assert_eq!(MessageRole::Assistant.as_str(), "assistant");
+        assert_eq!(MessageRole::System.as_str(), "system");
+    }
+
+    #[test]
+    fn test_message_role_from_str() {
+        assert_eq!("user".parse::<MessageRole>().unwrap(), MessageRole::User);
+        assert_eq!("assistant".parse::<MessageRole>().unwrap(), MessageRole::Assistant);
+        assert_eq!("system".parse::<MessageRole>().unwrap(), MessageRole::System);
+    }
+
+    #[test]
+    fn test_message_role_from_str_case_insensitive() {
+        assert_eq!("USER".parse::<MessageRole>().unwrap(), MessageRole::User);
+        assert_eq!("Assistant".parse::<MessageRole>().unwrap(), MessageRole::Assistant);
+        assert_eq!("SYSTEM".parse::<MessageRole>().unwrap(), MessageRole::System);
+    }
+
+    #[test]
+    fn test_message_role_from_str_invalid() {
+        let result = "invalid".parse::<MessageRole>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid message role"));
+    }
+
+    #[test]
+    fn test_message_role_display() {
+        assert_eq!(format!("{}", MessageRole::User), "user");
+        assert_eq!(format!("{}", MessageRole::Assistant), "assistant");
+        assert_eq!(format!("{}", MessageRole::System), "system");
+    }
+
+    #[test]
+    fn test_message_role_serde_serialize() {
+        let user = MessageRole::User;
+        let serialized = serde_json::to_string(&user).unwrap();
+        assert_eq!(serialized, "\"user\"");
+
+        let assistant = MessageRole::Assistant;
+        let serialized = serde_json::to_string(&assistant).unwrap();
+        assert_eq!(serialized, "\"assistant\"");
+
+        let system = MessageRole::System;
+        let serialized = serde_json::to_string(&system).unwrap();
+        assert_eq!(serialized, "\"system\"");
+    }
+
+    #[test]
+    fn test_message_role_serde_deserialize() {
+        let user: MessageRole = serde_json::from_str("\"user\"").unwrap();
+        assert_eq!(user, MessageRole::User);
+
+        let assistant: MessageRole = serde_json::from_str("\"assistant\"").unwrap();
+        assert_eq!(assistant, MessageRole::Assistant);
+
+        let system: MessageRole = serde_json::from_str("\"system\"").unwrap();
+        assert_eq!(system, MessageRole::System);
+    }
+
+    #[test]
+    fn test_chat_message_serde_roundtrip() {
+        let message = ChatMessage {
+            id: "test-id".to_string(),
+            session_id: "session-id".to_string(),
+            role: MessageRole::Assistant,
+            content: "Hello, world!".to_string(),
+            created_at: "2026-01-17T00:00:00Z".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&message).unwrap();
+        let deserialized: ChatMessage = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.id, message.id);
+        assert_eq!(deserialized.session_id, message.session_id);
+        assert_eq!(deserialized.role, message.role);
+        assert_eq!(deserialized.content, message.content);
+        assert_eq!(deserialized.created_at, message.created_at);
     }
 }

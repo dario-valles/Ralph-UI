@@ -207,6 +207,8 @@ mod tests {
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
+        // Enable foreign key enforcement
+        conn.execute("PRAGMA foreign_keys = ON", []).unwrap();
 
         // Create tables
         conn.execute(

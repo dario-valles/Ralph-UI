@@ -1,6 +1,9 @@
 // Data models matching the frontend TypeScript types
 
+pub mod prd_chat;
 pub mod state_machine;
+
+pub use prd_chat::{ChatMessage, ChatSession, MessageRole};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

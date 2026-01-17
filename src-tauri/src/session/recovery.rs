@@ -242,6 +242,8 @@ mod tests {
     fn setup_test_db() -> (Connection, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let conn = Connection::open_in_memory().unwrap();
+        // Enable foreign key enforcement
+        conn.execute("PRAGMA foreign_keys = ON", []).unwrap();
 
         // Create sessions table
         conn.execute(

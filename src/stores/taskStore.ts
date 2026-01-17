@@ -111,6 +111,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       }))
     } catch (error) {
       set({ error: String(error), loading: false })
+      throw error
     }
   },
 

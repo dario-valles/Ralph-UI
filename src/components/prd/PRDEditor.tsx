@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { PRDExecutionDialog } from './PRDExecutionDialog'
+import { toast } from '@/stores/toastStore'
 import type { PRDSection } from '@/types'
 
 export function PRDEditor() {
@@ -46,6 +47,7 @@ export function PRDEditor() {
         setSections(parsed.sections || [])
       } catch (err) {
         console.error('Failed to parse PRD content:', err)
+        toast.error('Failed to parse PRD content', 'The document may be corrupted or in an invalid format.')
       }
     }
   }, [currentPRD])
@@ -67,8 +69,10 @@ export function PRDEditor() {
         description,
         content: JSON.stringify({ sections }),
       })
+      toast.success('PRD saved', 'Your changes have been saved successfully.')
     } catch (err) {
       console.error('Failed to save PRD:', err)
+      toast.error('Failed to save PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
     } finally {
       setSaving(false)
     }
@@ -80,8 +84,10 @@ export function PRDEditor() {
     setAnalyzing(true)
     try {
       await analyzeQuality(currentPRD.id)
+      toast.success('Quality analysis complete', 'Your PRD has been analyzed.')
     } catch (err) {
       console.error('Failed to analyze quality:', err)
+      toast.error('Failed to analyze quality', err instanceof Error ? err.message : 'An unexpected error occurred.')
     } finally {
       setAnalyzing(false)
     }
