@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { useTaskStore } from '@/stores/taskStore'
 import type { TaskStatus } from '@/types'
 import { CheckCircle2, Circle, XCircle, Clock, Search } from 'lucide-react'
@@ -20,7 +19,7 @@ const statusConfig = {
   failed: { icon: XCircle, variant: 'destructive' as const, label: 'Failed' },
 }
 
-export function TaskList({ sessionId, onTaskClick }: TaskListProps) {
+export function TaskList({ sessionId: _sessionId, onTaskClick }: TaskListProps) {
   const { getFilteredTasks, setFilter, filter } = useTaskStore()
   const [searchQuery, setSearchQuery] = useState('')
 

@@ -3,7 +3,7 @@ import { CommitInfo, gitApi, gitHelpers } from "../../lib/git-api";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { RefreshCw, GitCommit, User, Calendar } from "lucide-react";
+import { RefreshCw, GitCommit, User } from "lucide-react";
 
 interface CommitHistoryProps {
   repoPath: string;

@@ -9,7 +9,7 @@ interface DependencyGraphProps {
   onTaskClick?: (taskId: string) => void
 }
 
-export function DependencyGraph({ sessionId, onTaskClick }: DependencyGraphProps) {
+export function DependencyGraph({ sessionId: _sessionId, onTaskClick }: DependencyGraphProps) {
   const { tasks } = useTaskStore()
 
   // Build dependency map
@@ -162,11 +162,11 @@ export function DependencyGraph({ sessionId, onTaskClick }: DependencyGraphProps
                       <span className="flex-1 font-medium">{task.title}</span>
                       <Badge
                         variant={
-                          task.status === 'Completed'
+                          task.status === 'completed'
                             ? 'success'
-                            : task.status === 'Failed'
+                            : task.status === 'failed'
                               ? 'destructive'
-                              : task.status === 'InProgress'
+                              : task.status === 'in_progress'
                                 ? 'info'
                                 : 'secondary'
                         }

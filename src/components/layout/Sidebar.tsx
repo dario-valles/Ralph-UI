@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, ListTodo, Bot, Settings, FolderGit2 } from 'lucide-react'
+import { LayoutDashboard, ListTodo, Bot, Settings, FolderGit2, FileText } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+  { name: 'PRDs', to: '/prds', icon: FileText },
   { name: 'Tasks', to: '/tasks', icon: ListTodo },
   { name: 'Agents', to: '/agents', icon: Bot },
   { name: 'Sessions', to: '/sessions', icon: FolderGit2 },
@@ -40,8 +41,8 @@ export function Sidebar() {
       </nav>
       <div className="border-t p-4">
         <div className="text-xs text-muted-foreground">
-          <p>Phase 1 - Foundation</p>
-          <p className="mt-1">v0.1.0</p>
+          <p>Phase 7.5 - PRD Management</p>
+          <p className="mt-1">v0.7.5</p>
         </div>
       </div>
     </div>

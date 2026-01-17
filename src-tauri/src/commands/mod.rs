@@ -6,6 +6,7 @@ pub mod agents;
 pub mod git;
 pub mod github;
 pub mod parallel;
+pub mod prd;
 
 // Re-export all commands for easy registration
 pub use sessions::*;
@@ -14,6 +15,7 @@ pub use agents::*;
 pub use git::*;
 pub use github::*;
 pub use parallel::*;
+pub use prd::*;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {

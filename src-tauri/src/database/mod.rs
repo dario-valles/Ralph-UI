@@ -3,11 +3,12 @@
 pub mod tasks;
 pub mod sessions;
 pub mod agents;
+pub mod prd;
 
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 pub struct Database {
     conn: Connection,
@@ -74,6 +75,9 @@ impl Database {
         }
         if from_version < 2 {
             self.migrate_to_v2()?;
+        }
+        if from_version < 3 {
+            self.migrate_to_v3()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -203,6 +207,193 @@ impl Database {
         )?;
 
         self.set_schema_version(2)?;
+        Ok(())
+    }
+
+    fn migrate_to_v3(&self) -> Result<()> {
+        // Phase 7.5: PRD Management Tables
+
+        // Create PRD documents table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS prd_documents (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                template_id TEXT,
+                content TEXT NOT NULL,
+                quality_score_completeness INTEGER,
+                quality_score_clarity INTEGER,
+                quality_score_actionability INTEGER,
+                quality_score_overall INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                project_path TEXT,
+                FOREIGN KEY (template_id) REFERENCES prd_templates(id)
+            )",
+            [],
+        )?;
+
+        // Create PRD templates table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS prd_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                icon TEXT,
+                system_template INTEGER DEFAULT 0,
+                template_structure TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        // Create PRD executions table for tracking execution status
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS prd_executions (
+                id TEXT PRIMARY KEY,
+                prd_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                total_tasks INTEGER NOT NULL,
+                completed_tasks INTEGER DEFAULT 0,
+                failed_tasks INTEGER DEFAULT 0,
+                config TEXT NOT NULL,
+                FOREIGN KEY (prd_id) REFERENCES prd_documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // Add PRD reference fields to tasks table
+        self.conn.execute(
+            "ALTER TABLE tasks ADD COLUMN prd_id TEXT",
+            [],
+        )?;
+
+        self.conn.execute(
+            "ALTER TABLE tasks ADD COLUMN prd_section TEXT",
+            [],
+        )?;
+
+        // Create indexes for PRD tables
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_prd_executions_prd_id ON prd_executions(prd_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_prd_executions_session_id ON prd_executions(session_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_prd_id ON tasks(prd_id)",
+            [],
+        )?;
+
+        // Insert built-in PRD templates
+        self.insert_builtin_templates()?;
+
+        self.set_schema_version(3)?;
+        Ok(())
+    }
+
+    fn insert_builtin_templates(&self) -> Result<()> {
+        let templates = vec![
+            (
+                "startup-mvp",
+                "Startup MVP",
+                "Lean, focused on core features and rapid iteration",
+                "🚀",
+                r#"{
+                    "sections": [
+                        {"id": "problem", "title": "Problem Statement", "required": true},
+                        {"id": "solution", "title": "Proposed Solution", "required": true},
+                        {"id": "users", "title": "Target Users", "required": true},
+                        {"id": "user_stories", "title": "User Stories", "required": true},
+                        {"id": "mvp_scope", "title": "MVP Scope", "required": true},
+                        {"id": "success_metrics", "title": "Success Metrics", "required": true},
+                        {"id": "timeline", "title": "Timeline", "required": false}
+                    ]
+                }"#,
+            ),
+            (
+                "enterprise-feature",
+                "Enterprise Feature",
+                "Comprehensive with compliance, security, scalability",
+                "🏢",
+                r#"{
+                    "sections": [
+                        {"id": "business_case", "title": "Business Case", "required": true},
+                        {"id": "requirements", "title": "Requirements", "required": true},
+                        {"id": "architecture", "title": "Architecture", "required": true},
+                        {"id": "security", "title": "Security & Compliance", "required": true},
+                        {"id": "rollout", "title": "Rollout Plan", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "bug-fix",
+                "Bug Fix",
+                "Structured approach to bug resolution",
+                "🐛",
+                r#"{
+                    "sections": [
+                        {"id": "bug_description", "title": "Bug Description", "required": true},
+                        {"id": "reproduction", "title": "Steps to Reproduce", "required": true},
+                        {"id": "root_cause", "title": "Root Cause Analysis", "required": false},
+                        {"id": "solution", "title": "Proposed Solution", "required": true},
+                        {"id": "testing", "title": "Testing Plan", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "refactoring",
+                "Refactoring",
+                "Code improvement and technical debt reduction",
+                "⚡",
+                r#"{
+                    "sections": [
+                        {"id": "current_state", "title": "Current State", "required": true},
+                        {"id": "issues", "title": "Technical Issues", "required": true},
+                        {"id": "goals", "title": "Refactoring Goals", "required": true},
+                        {"id": "approach", "title": "Approach", "required": true},
+                        {"id": "risks", "title": "Risks & Mitigation", "required": true}
+                    ]
+                }"#,
+            ),
+            (
+                "api-integration",
+                "API/Integration",
+                "Third-party service integration",
+                "🔌",
+                r#"{
+                    "sections": [
+                        {"id": "integration_goal", "title": "Integration Goal", "required": true},
+                        {"id": "api_overview", "title": "API Overview", "required": true},
+                        {"id": "endpoints", "title": "Endpoints to Integrate", "required": true},
+                        {"id": "data_flow", "title": "Data Flow", "required": true},
+                        {"id": "error_handling", "title": "Error Handling", "required": true},
+                        {"id": "testing", "title": "Testing Strategy", "required": true}
+                    ]
+                }"#,
+            ),
+        ];
+
+        let now = chrono::Utc::now().to_rfc3339();
+
+        for (id, name, description, icon, structure) in templates {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO prd_templates (id, name, description, icon, system_template, template_structure, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7)",
+                params![id, name, description, icon, structure, &now, &now],
+            )?;
+        }
+
         Ok(())
     }
 

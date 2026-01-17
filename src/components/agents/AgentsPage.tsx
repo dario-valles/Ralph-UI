@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { RefreshCw, Play } from 'lucide-react'
 
 export function AgentsPage() {
-  const { currentSessionId } = useSessionStore()
+  const { currentSession } = useSessionStore()
   const {
     agents,
     activeAgentId,
@@ -24,10 +24,10 @@ export function AgentsPage() {
 
   // Load agents when session changes
   useEffect(() => {
-    if (currentSessionId) {
-      loadAgentsForSession(currentSessionId)
+    if (currentSession?.id) {
+      loadAgentsForSession(currentSession?.id)
     }
-  }, [currentSessionId, loadAgentsForSession])
+  }, [currentSession?.id, loadAgentsForSession])
 
   // Get selected agent
   const selectedAgent = useMemo(() => {
@@ -35,14 +35,14 @@ export function AgentsPage() {
   }, [agents, activeAgentId])
 
   const handleRefresh = () => {
-    if (currentSessionId) {
-      loadAgentsForSession(currentSessionId)
+    if (currentSession?.id) {
+      loadAgentsForSession(currentSession?.id)
     }
   }
 
   const handleLoadActive = () => {
-    if (currentSessionId) {
-      loadActiveAgents(currentSessionId)
+    if (currentSession?.id) {
+      loadActiveAgents(currentSession?.id)
     }
   }
 
@@ -54,7 +54,7 @@ export function AgentsPage() {
     await updateStatus(agentId, 'thinking')
   }
 
-  if (!currentSessionId) {
+  if (!currentSession?.id) {
     return (
       <div className="space-y-6">
         <div>
@@ -77,7 +77,7 @@ export function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
           <p className="text-muted-foreground">
-            Monitor AI agents for session {currentSessionId.slice(0, 8)}
+            Monitor AI agents for session {currentSession?.id.slice(0, 8)}
           </p>
         </div>
         <div className="flex gap-2">

@@ -114,3 +114,88 @@ export interface SessionAnalytics {
   averageTokensPerTask: number
   totalDurationHours: number
 }
+
+// Phase 7.5: PRD Management Types
+
+export interface PRDSection {
+  id: string
+  title: string
+  content: string
+  required: boolean
+}
+
+export interface PRDDocument {
+  id: string
+  title: string
+  description?: string
+  templateId?: string
+  content: string // JSON string of sections
+  qualityScoreCompleteness?: number
+  qualityScoreClarity?: number
+  qualityScoreActionability?: number
+  qualityScoreOverall?: number
+  createdAt: string
+  updatedAt: string
+  version: number
+  projectPath?: string
+}
+
+export interface PRDTemplate {
+  id: string
+  name: string
+  description?: string
+  icon?: string
+  systemTemplate: boolean
+  templateStructure: string // JSON string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PRDExecutionStatus = 'not_started' | 'in_progress' | 'completed' | 'failed' | 'paused'
+
+export interface PRDExecution {
+  id: string
+  prdId: string
+  sessionId: string
+  status: PRDExecutionStatus
+  startedAt: string
+  completedAt?: string
+  totalTasks: number
+  completedTasks: number
+  failedTasks: number
+  config: string // JSON string of ExecutionConfig
+}
+
+export interface ExecutionConfig {
+  sessionName?: string
+  agentType: AgentType
+  executionMode: 'sequential' | 'parallel'
+  maxParallel: number
+  maxIterations: number
+  maxRetries: number
+  autoCreatePRs: boolean
+  draftPRs: boolean
+  runTests: boolean
+  runLint: boolean
+}
+
+export interface PRDQualityScores {
+  completeness: number
+  clarity: number
+  actionability: number
+  overall: number
+}
+
+export interface CreatePRDRequest {
+  title: string
+  description?: string
+  templateId?: string
+  projectPath?: string
+}
+
+export interface UpdatePRDRequest {
+  id: string
+  title?: string
+  description?: string
+  content?: string
+}

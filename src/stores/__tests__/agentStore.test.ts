@@ -9,8 +9,10 @@ import {
   updateAgentMetrics,
   addAgentLog,
   getAgentLogs,
+  type Agent,
+  type AgentStatus,
+  type LogEntry,
 } from '@/lib/agent-api'
-import type { Agent, AgentStatus, LogEntry } from '@/types'
 
 // Mock the agent API
 vi.mock('@/lib/agent-api', () => ({
@@ -27,11 +29,11 @@ vi.mock('@/lib/agent-api', () => ({
 describe('agentStore', () => {
   const mockAgent: Agent = {
     id: 'agent-1',
-    sessionId: 'session-1',
-    taskId: 'task-1',
+    session_id: 'session-1',
+    task_id: 'task-1',
     status: 'idle' as AgentStatus,
-    processId: 12345,
-    worktreePath: '/path/to/worktree',
+    process_id: 12345,
+    worktree_path: '/path/to/worktree',
     branch: 'feature/test',
     iteration_count: 0,
     tokens: 0,
@@ -47,11 +49,9 @@ describe('agentStore', () => {
   }
 
   const mockLogEntry: LogEntry = {
-    id: 'log-1',
     timestamp: new Date().toISOString(),
     level: 'info',
     message: 'Test log message',
-    agentId: 'agent-1',
   }
 
   beforeEach(() => {
