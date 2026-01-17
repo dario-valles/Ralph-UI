@@ -196,6 +196,17 @@ pub fn get_session_with_tasks(conn: &Connection, session_id: &str) -> Result<Ses
     Ok(session)
 }
 
+/// Get unique project paths from all sessions
+/// Used for auto-recovery on startup to check each project for stale sessions
+pub fn get_unique_project_paths(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT project_path FROM sessions"
+    )?;
+
+    let paths = stmt.query_map([], |row| row.get(0))?;
+    paths.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

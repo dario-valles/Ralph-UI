@@ -1,10 +1,12 @@
 // Agent process spawning and lifecycle management
 #![allow(dead_code)]
 
+use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
 use crate::models::{AgentType, LogEntry, LogLevel};
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -15,6 +17,17 @@ pub struct AgentManager {
     processes: Arc<Mutex<HashMap<String, Child>>>,
     /// Event sender for agent logs
     log_tx: Option<mpsc::UnboundedSender<AgentLogEvent>>,
+    /// Rate limit detector for parsing stderr output
+    rate_limit_detector: RateLimitDetector,
+    /// Event sender for rate limit events
+    rate_limit_tx: Option<mpsc::UnboundedSender<RateLimitEvent>>,
+}
+
+/// Event emitted when a rate limit is detected
+#[derive(Debug, Clone)]
+pub struct RateLimitEvent {
+    pub agent_id: String,
+    pub rate_limit_info: RateLimitInfo,
 }
 
 /// Event emitted when an agent produces a log
@@ -40,12 +53,19 @@ impl AgentManager {
         Self {
             processes: Arc::new(Mutex::new(HashMap::new())),
             log_tx: None,
+            rate_limit_detector: RateLimitDetector::new(),
+            rate_limit_tx: None,
         }
     }
 
     /// Set the log event sender for real-time log streaming
     pub fn set_log_sender(&mut self, tx: mpsc::UnboundedSender<AgentLogEvent>) {
         self.log_tx = Some(tx);
+    }
+
+    /// Set the rate limit event sender for rate limit notifications
+    pub fn set_rate_limit_sender(&mut self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
+        self.rate_limit_tx = Some(tx);
     }
 
     /// Spawn a new agent process
@@ -206,6 +226,96 @@ impl AgentManager {
             let _ = tx.send(event); // Best effort
         }
     }
+
+    /// Parse stderr output and check for rate limits
+    /// Returns Some(RateLimitInfo) if a rate limit is detected
+    pub fn check_stderr_for_rate_limit(&self, stderr: &str) -> Option<RateLimitInfo> {
+        self.rate_limit_detector.detect_in_stderr(stderr)
+    }
+
+    /// Emit a rate limit event
+    fn emit_rate_limit(&self, agent_id: &str, info: RateLimitInfo) {
+        if let Some(tx) = &self.rate_limit_tx {
+            let event = RateLimitEvent {
+                agent_id: agent_id.to_string(),
+                rate_limit_info: info.clone(),
+            };
+            let _ = tx.send(event); // Best effort
+        }
+
+        // Also emit as a warning log
+        let retry_msg = info.retry_after_ms
+            .map(|ms| format!(", retry after {}ms", ms))
+            .unwrap_or_default();
+
+        self.emit_log(
+            agent_id,
+            LogLevel::Warn,
+            format!(
+                "Rate limit detected: {:?}{}",
+                info.limit_type.unwrap_or(crate::agents::rate_limiter::RateLimitType::RateLimit),
+                retry_msg
+            ),
+        );
+    }
+
+    /// Wait for an agent process to complete while monitoring stderr for rate limits
+    /// Returns the exit code and any rate limit info detected
+    pub fn wait_for_agent_with_rate_limit_check(
+        &mut self,
+        agent_id: &str,
+    ) -> Result<(i32, Option<RateLimitInfo>)> {
+        let mut processes = self.processes.lock().unwrap();
+
+        if let Some(mut child) = processes.remove(agent_id) {
+            // Capture stderr and check for rate limits
+            let mut rate_limit_info = None;
+
+            if let Some(stderr) = child.stderr.take() {
+                let reader = BufReader::new(stderr);
+                let mut stderr_buffer = String::new();
+
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        stderr_buffer.push_str(&line);
+                        stderr_buffer.push('\n');
+
+                        // Check each line for rate limit indicators
+                        if let Some(info) = self.rate_limit_detector.detect_in_stderr(&line) {
+                            rate_limit_info = Some(info.clone());
+                            self.emit_rate_limit(agent_id, info);
+                        }
+                    }
+                }
+            }
+
+            let status = child.wait()
+                .map_err(|e| anyhow!("Failed to wait for agent: {}", e))?;
+
+            let exit_code = status.code().unwrap_or(-1);
+
+            self.emit_log(
+                agent_id,
+                if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
+                format!("Agent exited with code {}", exit_code)
+            );
+
+            Ok((exit_code, rate_limit_info))
+        } else {
+            Err(anyhow!("Agent process not found: {}", agent_id))
+        }
+    }
+
+    /// Process a chunk of stderr output for an agent
+    /// Useful for streaming stderr monitoring
+    pub fn process_stderr_chunk(&self, agent_id: &str, stderr_chunk: &str) -> Option<RateLimitInfo> {
+        if let Some(info) = self.rate_limit_detector.detect_in_stderr(stderr_chunk) {
+            self.emit_rate_limit(agent_id, info.clone());
+            Some(info)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for AgentManager {
@@ -294,6 +404,46 @@ mod tests {
     fn test_running_count() {
         let manager = AgentManager::new();
         assert_eq!(manager.running_count(), 0);
+    }
+
+    #[test]
+    fn test_rate_limit_sender() {
+        let mut manager = AgentManager::new();
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        manager.set_rate_limit_sender(tx);
+        assert!(manager.rate_limit_tx.is_some());
+    }
+
+    #[test]
+    fn test_check_stderr_for_rate_limit_detects_429() {
+        let manager = AgentManager::new();
+
+        let result = manager.check_stderr_for_rate_limit("Error: 429 Too Many Requests");
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert!(info.is_rate_limited);
+    }
+
+    #[test]
+    fn test_check_stderr_for_rate_limit_no_match() {
+        let manager = AgentManager::new();
+
+        let result = manager.check_stderr_for_rate_limit("Normal error: file not found");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_process_stderr_chunk() {
+        let manager = AgentManager::new();
+
+        // Should return rate limit info when detected
+        let result = manager.process_stderr_chunk("agent-1", "rate limit exceeded");
+        assert!(result.is_some());
+
+        // Should return None when no rate limit
+        let result = manager.process_stderr_chunk("agent-1", "task completed");
+        assert!(result.is_none());
     }
 
     // Note: We can't easily test actual process spawning in unit tests

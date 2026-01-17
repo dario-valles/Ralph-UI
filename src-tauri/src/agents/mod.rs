@@ -6,6 +6,7 @@ pub mod fallback;
 pub mod trace_parser;
 
 // Re-export for convenience
-pub use manager::{AgentManager, AgentSpawnConfig};
+pub use manager::{AgentManager, AgentSpawnConfig, RateLimitEvent};
+pub use rate_limiter::{RateLimitDetector, RateLimitInfo, RateLimitType};
 pub use fallback::{AgentFallbackManager, FallbackConfig};
 pub use trace_parser::{SubagentTraceParser, SubagentEvent, SubagentEventType, SubagentTree};

@@ -15,6 +15,8 @@ mod config;
 // Re-export models for use in commands
 pub use models::*;
 
+use std::path::Path;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logger
@@ -32,6 +34,10 @@ pub fn run() {
         .expect("Failed to open database");
 
     db.init().expect("Failed to initialize database");
+
+    // Perform auto-recovery on startup
+    // Check all known project paths for stale sessions that need recovery
+    perform_auto_recovery(&db);
 
     // Initialize git state
     let git_state = commands::git::GitState::new();
@@ -175,4 +181,65 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Perform automatic recovery of stale sessions on startup
+/// This checks all known project paths for sessions that were left in Active state
+/// but have stale lock files (indicating a crash), and transitions them to Paused.
+fn perform_auto_recovery(db: &database::Database) {
+    let conn = db.get_connection();
+
+    // Get all unique project paths from existing sessions
+    let project_paths = match database::sessions::get_unique_project_paths(conn) {
+        Ok(paths) => paths,
+        Err(e) => {
+            log::warn!("Failed to get project paths for auto-recovery: {}", e);
+            return;
+        }
+    };
+
+    if project_paths.is_empty() {
+        log::debug!("No sessions found, skipping auto-recovery");
+        return;
+    }
+
+    log::info!("Checking {} project paths for stale sessions", project_paths.len());
+
+    let mut total_recovered = 0;
+
+    for project_path in project_paths {
+        let path = Path::new(&project_path);
+
+        // Skip if path doesn't exist (project may have been moved/deleted)
+        if !path.exists() {
+            log::debug!("Skipping non-existent project path: {}", project_path);
+            continue;
+        }
+
+        match session::auto_recover_on_startup(conn, path) {
+            Ok(results) => {
+                for result in &results {
+                    log::info!(
+                        "Auto-recovered session '{}': {} tasks unassigned",
+                        result.session_id,
+                        result.tasks_unassigned
+                    );
+                }
+                total_recovered += results.len();
+            }
+            Err(e) => {
+                log::warn!(
+                    "Auto-recovery failed for project '{}': {}",
+                    project_path,
+                    e
+                );
+            }
+        }
+    }
+
+    if total_recovered > 0 {
+        log::info!("Auto-recovery complete: {} sessions recovered", total_recovered);
+    } else {
+        log::debug!("Auto-recovery complete: no stale sessions found");
+    }
 }
