@@ -3,6 +3,7 @@ mod commands;
 mod models;
 mod database;
 mod git;
+mod github;
 mod agents;
 mod utils;
 mod parsers;
@@ -28,8 +29,12 @@ pub fn run() {
 
     db.init().expect("Failed to initialize database");
 
+    // Initialize git state
+    let git_state = commands::git::GitState::new();
+
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(db))
+        .manage(git_state)
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::greet,
@@ -57,6 +62,28 @@ pub fn run() {
             commands::delete_agent,
             commands::add_agent_log,
             commands::get_agent_logs,
+            commands::git_create_branch,
+            commands::git_create_branch_from_commit,
+            commands::git_delete_branch,
+            commands::git_list_branches,
+            commands::git_get_current_branch,
+            commands::git_checkout_branch,
+            commands::git_create_worktree,
+            commands::git_list_worktrees,
+            commands::git_remove_worktree,
+            commands::git_get_status,
+            commands::git_get_commit_history,
+            commands::git_get_commit,
+            commands::git_create_commit,
+            commands::git_stage_files,
+            commands::git_stage_all,
+            commands::git_get_diff,
+            commands::git_get_working_diff,
+            commands::github_create_pull_request,
+            commands::github_get_pull_request,
+            commands::github_list_pull_requests,
+            commands::github_get_issue,
+            commands::github_list_issues,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
