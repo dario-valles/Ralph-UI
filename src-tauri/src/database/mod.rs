@@ -2,6 +2,7 @@
 
 pub mod tasks;
 pub mod sessions;
+pub mod agents;
 
 use rusqlite::{Connection, Result, params};
 use std::path::Path;

@@ -69,7 +69,7 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         .and_then(|v| v.as_i64())
         .map(|n| n as i32);
 
-    let dependencies = value.get("dependencies")
+    let dependencies: Vec<String> = value.get("dependencies")
         .or_else(|| value.get("depends_on"))
         .and_then(|v| v.as_sequence())
         .map(|seq| {
@@ -79,7 +79,7 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         })
         .unwrap_or_default();
 
-    let tags = value.get("tags")
+    let tags: Vec<String> = value.get("tags")
         .or_else(|| value.get("labels"))
         .and_then(|v| v.as_sequence())
         .map(|seq| {
