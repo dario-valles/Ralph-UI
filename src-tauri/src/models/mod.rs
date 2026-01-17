@@ -1,10 +1,12 @@
 // Data models matching the frontend TypeScript types
 
+pub mod state_machine;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
     InProgress,
@@ -31,7 +33,7 @@ pub struct Task {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
     Active,
     Paused,
@@ -40,7 +42,7 @@ pub enum SessionStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum AgentType {
     Claude,
     Opencode,
@@ -74,7 +76,7 @@ pub struct Session {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
     Idle,
     Thinking,
