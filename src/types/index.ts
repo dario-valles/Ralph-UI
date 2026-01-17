@@ -74,3 +74,43 @@ export interface Agent {
   logs: LogEntry[]
   subagents: Agent[] // Nested agent calls
 }
+
+// Phase 6: Session Management Types
+export interface SessionTemplate {
+  id: string
+  name: string
+  description: string
+  config: SessionConfig
+  createdAt: Date
+}
+
+export interface SessionRecoveryState {
+  sessionId: string
+  timestamp: Date
+  activeTasks: string[]
+  activeAgents: string[]
+}
+
+export interface SessionComparison {
+  session1Id: string
+  session2Id: string
+  session1Name: string
+  session2Name: string
+  tasksCompletedDiff: number
+  totalCostDiff: number
+  totalTokensDiff: number
+  configDifferences: string[]
+  performanceSummary: string
+}
+
+export interface SessionAnalytics {
+  sessionId: string
+  totalTasks: number
+  completedTasks: number
+  failedTasks: number
+  inProgressTasks: number
+  completionRate: number
+  averageCostPerTask: number
+  averageTokensPerTask: number
+  totalDurationHours: number
+}

@@ -1,7 +1,16 @@
 // Tauri API wrappers for backend commands
 
 import { invoke } from '@tauri-apps/api/core'
-import type { Session, Task, SessionStatus, TaskStatus } from '@/types'
+import type {
+  Session,
+  Task,
+  SessionStatus,
+  TaskStatus,
+  SessionTemplate,
+  SessionRecoveryState,
+  SessionComparison,
+  SessionAnalytics,
+} from '@/types'
 
 // Session API
 export const sessionApi = {
@@ -27,6 +36,50 @@ export const sessionApi = {
 
   updateStatus: async (sessionId: string, status: SessionStatus): Promise<void> => {
     return await invoke('update_session_status', { sessionId, status })
+  },
+
+  // Phase 6: Session Management Features
+  exportJson: async (sessionId: string): Promise<string> => {
+    return await invoke('export_session_json', { sessionId })
+  },
+
+  createTemplate: async (
+    sessionId: string,
+    templateName: string,
+    description: string
+  ): Promise<SessionTemplate> => {
+    return await invoke('create_session_template', { sessionId, templateName, description })
+  },
+
+  getTemplates: async (): Promise<SessionTemplate[]> => {
+    return await invoke('get_session_templates')
+  },
+
+  createFromTemplate: async (
+    templateId: string,
+    name: string,
+    projectPath: string
+  ): Promise<Session> => {
+    return await invoke('create_session_from_template', { templateId, name, projectPath })
+  },
+
+  saveRecoveryState: async (sessionId: string): Promise<void> => {
+    return await invoke('save_recovery_state', { sessionId })
+  },
+
+  getRecoveryState: async (sessionId: string): Promise<SessionRecoveryState | null> => {
+    return await invoke('get_recovery_state', { sessionId })
+  },
+
+  compareSessions: async (
+    session1Id: string,
+    session2Id: string
+  ): Promise<SessionComparison> => {
+    return await invoke('compare_sessions', { session1Id, session2Id })
+  },
+
+  getAnalytics: async (sessionId: string): Promise<SessionAnalytics> => {
+    return await invoke('get_session_analytics', { sessionId })
   },
 }
 

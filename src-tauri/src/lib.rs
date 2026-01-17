@@ -107,6 +107,14 @@ pub fn run() {
             commands::conflicts_detect,
             commands::conflicts_can_merge_safely,
             commands::conflicts_get_summary,
+            commands::export_session_json,
+            commands::create_session_template,
+            commands::get_session_templates,
+            commands::create_session_from_template,
+            commands::save_recovery_state,
+            commands::get_recovery_state,
+            commands::compare_sessions,
+            commands::get_session_analytics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
