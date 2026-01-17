@@ -8,6 +8,24 @@ vi.mock('@/stores/taskStore', () => ({
   useTaskStore: vi.fn(),
 }))
 
+// Mock FileReader for tests
+let mockFileContent = ''
+
+class MockFileReader {
+  onload: ((event: any) => void) | null = null
+
+  readAsText(file: Blob) {
+    // Simulate async file reading
+    setTimeout(() => {
+      if (this.onload) {
+        this.onload({ target: { result: mockFileContent } })
+      }
+    }, 0)
+  }
+}
+
+global.FileReader = MockFileReader as any
+
 describe('PRDImport', () => {
   const mockImportPRD = vi.fn()
   const mockOnOpenChange = vi.fn()
@@ -152,13 +170,9 @@ describe('PRDImport', () => {
     )
 
     const fileContent = 'This is test PRD content'
+    mockFileContent = fileContent
     const file = new File([fileContent], 'test.md', { type: 'text/markdown' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      // File reader loaded
-    }
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -184,6 +198,7 @@ describe('PRDImport', () => {
     )
 
     const fileContent = '{"title": "Test", "tasks": []}'
+    mockFileContent = fileContent
     const file = new File([fileContent], 'test.json', { type: 'application/json' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
 
@@ -194,9 +209,13 @@ describe('PRDImport', () => {
 
     fireEvent.change(input)
 
+    // Wait for filename to appear
     await waitFor(() => {
       expect(screen.getByText('test.json')).toBeInTheDocument()
     })
+
+    // Wait a bit for FileReader to complete
+    await new Promise(resolve => setTimeout(resolve, 50))
 
     const importButton = screen.getByText('Import Tasks')
     fireEvent.click(importButton)
@@ -221,7 +240,8 @@ describe('PRDImport', () => {
       />
     )
 
-    const file = new File(['test'], 'test.json', { type: 'application/json' })
+    mockFileContent = 'test content'
+    const file = new File(['test content'], 'test.json', { type: 'application/json' })
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
 
     Object.defineProperty(input, 'files', {
@@ -231,14 +251,20 @@ describe('PRDImport', () => {
 
     fireEvent.change(input)
 
+    // Wait for file to be loaded
     await waitFor(() => {
-      const importButton = screen.getByText('Import Tasks')
-      fireEvent.click(importButton)
+      expect(screen.getByText('test.json')).toBeInTheDocument()
     })
+
+    // Wait for FileReader to complete
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    const importButton = screen.getByText('Import Tasks')
+    fireEvent.click(importButton)
 
     await waitFor(() => {
       expect(mockOnOpenChange).toHaveBeenCalledWith(false)
-    })
+    }, { timeout: 2000 })
   })
 
   it('displays error message on import failure', () => {
