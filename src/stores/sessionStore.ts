@@ -1,87 +1,120 @@
-import { create } from 'zustand'
-import { Session, Task } from '@/types'
+// Session management store using Zustand
 
-interface SessionState {
-  currentSession: Session | null
+import { create } from 'zustand'
+import type { Session, SessionStatus } from '@/types'
+import { sessionApi } from '@/lib/tauri-api'
+
+interface SessionStore {
   sessions: Session[]
+  currentSession: Session | null
+  loading: boolean
+  error: string | null
+
+  // Actions
+  fetchSessions: () => Promise<void>
+  fetchSession: (id: string) => Promise<void>
+  createSession: (name: string, projectPath: string) => Promise<Session | null>
+  updateSession: (session: Session) => Promise<void>
+  deleteSession: (id: string) => Promise<void>
+  updateSessionStatus: (sessionId: string, status: SessionStatus) => Promise<void>
   setCurrentSession: (session: Session | null) => void
-  addSession: (session: Session) => void
-  updateSession: (id: string, updates: Partial<Session>) => void
-  deleteSession: (id: string) => void
-  addTask: (sessionId: string, task: Task) => void
-  updateTask: (sessionId: string, taskId: string, updates: Partial<Task>) => void
-  deleteTask: (sessionId: string, taskId: string) => void
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
-  currentSession: null,
+export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
+  currentSession: null,
+  loading: false,
+  error: null,
 
-  setCurrentSession: (session) => set({ currentSession: session }),
+  fetchSessions: async () => {
+    set({ loading: true, error: null })
+    try {
+      const sessions = await sessionApi.getAll()
+      set({ sessions, loading: false })
+    } catch (error) {
+      set({ error: String(error), loading: false })
+    }
+  },
 
-  addSession: (session) =>
-    set((state) => ({
-      sessions: [...state.sessions, session],
-    })),
+  fetchSession: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const session = await sessionApi.getById(id)
+      set({ currentSession: session, loading: false })
+    } catch (error) {
+      set({ error: String(error), loading: false })
+    }
+  },
 
-  updateSession: (id, updates) =>
-    set((state) => ({
-      sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
-      currentSession:
-        state.currentSession?.id === id
-          ? { ...state.currentSession, ...updates }
-          : state.currentSession,
-    })),
+  createSession: async (name: string, projectPath: string) => {
+    set({ loading: true, error: null })
+    try {
+      const session = await sessionApi.create(name, projectPath)
+      set((state) => ({
+        sessions: [...state.sessions, session],
+        currentSession: session,
+        loading: false,
+      }))
+      return session
+    } catch (error) {
+      set({ error: String(error), loading: false })
+      return null
+    }
+  },
 
-  deleteSession: (id) =>
-    set((state) => ({
-      sessions: state.sessions.filter((s) => s.id !== id),
-      currentSession: state.currentSession?.id === id ? null : state.currentSession,
-    })),
+  updateSession: async (session: Session) => {
+    set({ loading: true, error: null })
+    try {
+      const updatedSession = await sessionApi.update(session)
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === updatedSession.id ? updatedSession : s
+        ),
+        currentSession:
+          state.currentSession?.id === updatedSession.id
+            ? updatedSession
+            : state.currentSession,
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: String(error), loading: false })
+    }
+  },
 
-  addTask: (sessionId, task) =>
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...s, tasks: [...s.tasks, task] } : s
-      ),
-      currentSession:
-        state.currentSession?.id === sessionId
-          ? { ...state.currentSession, tasks: [...state.currentSession.tasks, task] }
-          : state.currentSession,
-    })),
+  deleteSession: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      await sessionApi.delete(id)
+      set((state) => ({
+        sessions: state.sessions.filter((s) => s.id !== id),
+        currentSession: state.currentSession?.id === id ? null : state.currentSession,
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: String(error), loading: false })
+    }
+  },
 
-  updateTask: (sessionId, taskId, updates) =>
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId
-          ? {
-              ...s,
-              tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t)),
-            }
-          : s
-      ),
-      currentSession:
-        state.currentSession?.id === sessionId
-          ? {
-              ...state.currentSession,
-              tasks: state.currentSession.tasks.map((t) =>
-                t.id === taskId ? { ...t, ...updates } : t
-              ),
-            }
-          : state.currentSession,
-    })),
+  updateSessionStatus: async (sessionId: string, status: SessionStatus) => {
+    set({ loading: true, error: null })
+    try {
+      await sessionApi.updateStatus(sessionId, status)
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, status } : s
+        ),
+        currentSession:
+          state.currentSession?.id === sessionId
+            ? { ...state.currentSession, status }
+            : state.currentSession,
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: String(error), loading: false })
+    }
+  },
 
-  deleteTask: (sessionId, taskId) =>
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) } : s
-      ),
-      currentSession:
-        state.currentSession?.id === sessionId
-          ? {
-              ...state.currentSession,
-              tasks: state.currentSession.tasks.filter((t) => t.id !== taskId),
-            }
-          : state.currentSession,
-    })),
+  setCurrentSession: (session: Session | null) => {
+    set({ currentSession: session })
+  },
 }))

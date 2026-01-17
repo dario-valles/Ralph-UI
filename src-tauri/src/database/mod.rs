@@ -1,5 +1,8 @@
 // SQLite database operations and migrations
 
+pub mod tasks;
+pub mod sessions;
+
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 

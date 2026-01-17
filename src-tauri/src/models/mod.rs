@@ -1,5 +1,7 @@
 // Data models matching the frontend TypeScript types
 
+pub mod state_machine;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
