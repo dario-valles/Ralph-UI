@@ -41,6 +41,7 @@ pub fn run() {
         .manage(git_state)
         .manage(parallel_state)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::greet,
             commands::create_session,

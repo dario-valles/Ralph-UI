@@ -32,6 +32,7 @@ import {
   MoreHorizontal,
   FileText,
 } from 'lucide-react'
+import { open } from '@tauri-apps/plugin-dialog'
 import { useSessionStore } from '@/stores/sessionStore'
 import { sessionApi } from '@/lib/tauri-api'
 import type { SessionStatus, SessionTemplate, SessionAnalytics } from '@/types'
@@ -134,6 +135,21 @@ export function SessionsPage() {
       setAnalytics((prev) => ({ ...prev, [sessionId]: data }))
     } catch (err) {
       console.error('Failed to load analytics:', err)
+    }
+  }
+
+  const handleSelectFolder = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Project Directory',
+      })
+      if (selected) {
+        setNewSessionPath(selected as string)
+      }
+    } catch (err) {
+      console.error('Failed to open folder picker:', err)
     }
   }
 
@@ -259,7 +275,7 @@ export function SessionsPage() {
                   placeholder="/path/to/project"
                   className="flex-1"
                 />
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" onClick={handleSelectFolder}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>
               </div>
