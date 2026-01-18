@@ -200,6 +200,8 @@ export interface ExecutionConfig {
   runLint: boolean
   /** Dry-run mode: preview execution without spawning agents */
   dryRun?: boolean
+  /** Model to use for agents (e.g., "anthropic/claude-sonnet-4-5", "claude-sonnet-4-5") */
+  model?: string
 }
 
 /** Result of a dry-run schedule preview */
@@ -210,6 +212,8 @@ export interface DryRunResult {
   branch: string
   worktreePath: string
   maxIterations: number
+  /** Model that would be used (if specified) */
+  model?: string
 }
 
 export interface PRDQualityScores {
@@ -252,6 +256,8 @@ export interface RalphExecutionConfig {
   maxRetries: number
   agentType: string
   strategy: string
+  /** Default model to use for agents */
+  model?: string
 }
 
 export interface RalphGitConfig {

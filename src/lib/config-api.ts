@@ -64,6 +64,7 @@ export const configApi = {
       maxRetries: config.maxRetries,
       agentType: config.agentType,
       strategy: config.strategy,
+      model: config.model,
     })
   },
 

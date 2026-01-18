@@ -119,6 +119,7 @@ pub async fn update_execution_config(
     max_retries: Option<i32>,
     agent_type: Option<String>,
     strategy: Option<String>,
+    model: Option<String>,
     config_state: State<'_, ConfigState>,
 ) -> Result<ExecutionConfig, String> {
     let mut config = config_state.config.write()
@@ -144,6 +145,9 @@ pub async fn update_execution_config(
     }
     if let Some(v) = strategy {
         config.execution.strategy = v;
+    }
+    if model.is_some() {
+        config.execution.model = model;
     }
 
     Ok(config.execution.clone())

@@ -19,6 +19,7 @@ pub trait ModelProvider: Send + Sync {
     fn discover_models(&self) -> Result<Vec<ModelInfo>, String>;
 
     /// Get the agent type this provider handles
+    #[allow(dead_code)]
     fn agent_type(&self) -> AgentType;
 }
 

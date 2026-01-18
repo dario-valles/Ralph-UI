@@ -38,6 +38,8 @@ export interface SchedulerConfig {
   agentType: AgentType
   strategy: SchedulingStrategy
   resourceLimits: ResourceLimits
+  /** Model to use for agents (e.g., "anthropic/claude-sonnet-4-5") */
+  model?: string
 }
 
 export interface SchedulerStats {
@@ -293,7 +295,8 @@ export function createDefaultResourceLimits(): ResourceLimits {
  * Create default scheduler config
  */
 export function createDefaultSchedulerConfig(
-  agentType: AgentType = 'claude'
+  agentType: AgentType = 'claude',
+  model?: string
 ): SchedulerConfig {
   return {
     maxParallel: 3,
@@ -302,6 +305,7 @@ export function createDefaultSchedulerConfig(
     agentType,
     strategy: 'dependency_first',
     resourceLimits: createDefaultResourceLimits(),
+    model,
   }
 }
 

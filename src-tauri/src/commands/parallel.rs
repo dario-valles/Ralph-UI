@@ -43,6 +43,8 @@ pub fn init_parallel_scheduler(
     config: SchedulerConfig,
     repo_path: String,
 ) -> Result<(), String> {
+    log::info!("[Parallel] Initializing scheduler with config: {:?}, repo_path: {}", config, repo_path);
+
     let scheduler = ParallelScheduler::new(config);
 
     // Wire up rate limit event sender so agents can report rate limits to frontend
@@ -56,6 +58,7 @@ pub fn init_parallel_scheduler(
     *state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))? = Some(coordinator);
     *state.detector.lock().map_err(|e| format!("Lock error: {}", e))? = Some(detector);
 
+    log::info!("[Parallel] Scheduler initialized successfully");
     Ok(())
 }
 
@@ -81,6 +84,11 @@ pub fn parallel_add_tasks(
     state: State<ParallelState>,
     tasks: Vec<Task>,
 ) -> Result<(), String> {
+    log::info!("[Parallel] Adding {} tasks to scheduler", tasks.len());
+    for task in &tasks {
+        log::debug!("[Parallel] Task: {} - {}", task.id, task.title);
+    }
+
     let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
@@ -88,6 +96,7 @@ pub fn parallel_add_tasks(
         .ok_or("Scheduler not initialized")?;
 
     scheduler.add_tasks(tasks);
+    log::info!("[Parallel] Tasks added successfully");
     Ok(())
 }
 
@@ -99,23 +108,90 @@ pub fn parallel_schedule_next(
     session_id: String,
     project_path: String,
 ) -> Result<Option<Agent>, String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    log::info!("[Parallel] schedule_next called for session: {}, project: {}", session_id, project_path);
 
+    // First, peek at what task would be scheduled
+    let task_info = {
+        let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let scheduler = scheduler
+            .as_mut()
+            .ok_or("Scheduler not initialized")?;
+
+        scheduler.peek_next_task()
+    };
+
+    let task_info = match task_info {
+        Some(info) => {
+            log::info!("[Parallel] Next task to schedule: {} ({})", info.1, info.0);
+            info
+        }
+        None => {
+            log::info!("[Parallel] No task available to schedule");
+            return Ok(None);
+        }
+    };
+
+    let (task_id, _task_title) = task_info;
+
+    // Allocate worktree for the task
+    log::info!("[Parallel] Allocating worktree for task: {}", task_id);
+    let worktree_allocation = {
+        let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let coordinator = coordinator
+            .as_mut()
+            .ok_or("Coordinator not initialized")?;
+
+        // Ensure base directory exists
+        coordinator.ensure_base_directory()
+            .map_err(|e| format!("Failed to ensure worktree base directory: {}", e))?;
+
+        // Create branch name for this task
+        let branch = format!("task/{}", task_id);
+
+        // Generate a unique agent ID for this allocation
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        match coordinator.allocate_worktree(&agent_id, &task_id, &branch) {
+            Ok(allocation) => {
+                log::info!("[Parallel] Worktree allocated: {} on branch {}", allocation.worktree_path, allocation.branch);
+                Some((allocation.worktree_path, allocation.branch))
+            }
+            Err(e) => {
+                log::error!("[Parallel] Failed to allocate worktree: {}", e);
+                // If worktree allocation fails, try to continue without it
+                // The agent will run in the main project directory
+                log::warn!("[Parallel] Falling back to project path: {}", project_path);
+                None
+            }
+        }
+    };
+
+    // Now schedule the task with the allocated worktree
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
 
-    match scheduler.schedule_next(&session_id, &project_path) {
+    log::info!("[Parallel] Calling scheduler.schedule_next_with_worktree...");
+    match scheduler.schedule_next_with_worktree(&session_id, &project_path, worktree_allocation) {
         Ok(Some(agent)) => {
+            log::info!("[Parallel] Agent scheduled: {} for task {}", agent.id, agent.task_id);
             // Save agent to database
             let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
             db.create_agent(&agent)
                 .map_err(|e| format!("Failed to save agent: {}", e))?;
+            log::info!("[Parallel] Agent saved to database");
 
             Ok(Some(agent))
         }
-        Ok(None) => Ok(None),
-        Err(e) => Err(format!("Failed to schedule next task: {}", e)),
+        Ok(None) => {
+            log::info!("[Parallel] No task available to schedule (unexpected after peek)");
+            Ok(None)
+        }
+        Err(e) => {
+            log::error!("[Parallel] Failed to schedule next task: {}", e);
+            Err(format!("Failed to schedule next task: {}", e))
+        }
     }
 }
 
@@ -379,6 +455,7 @@ mod tests {
             error_strategy: ErrorStrategy::default(),
             fallback_config: FallbackConfig::default(),
             dry_run: false,
+            model: None,
         }
     }
 

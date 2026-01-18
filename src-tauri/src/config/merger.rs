@@ -29,6 +29,7 @@ pub struct PartialExecutionConfig {
     pub agent_type: Option<String>,
     pub strategy: Option<String>,
     pub dry_run: Option<bool>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -164,7 +165,7 @@ impl ConfigMerger {
 
     // Full config mergers
 
-    fn merge_execution(&self, _base: &ExecutionConfig, over: &ExecutionConfig) -> ExecutionConfig {
+    fn merge_execution(&self, base: &ExecutionConfig, over: &ExecutionConfig) -> ExecutionConfig {
         ExecutionConfig {
             max_parallel: over.max_parallel,
             max_iterations: over.max_iterations,
@@ -172,6 +173,7 @@ impl ConfigMerger {
             agent_type: over.agent_type.clone(),
             strategy: over.strategy.clone(),
             dry_run: over.dry_run,
+            model: over.model.clone().or_else(|| base.model.clone()),
         }
     }
 
@@ -222,6 +224,7 @@ impl ConfigMerger {
             agent_type: partial.agent_type.clone().unwrap_or_else(|| base.agent_type.clone()),
             strategy: partial.strategy.clone().unwrap_or_else(|| base.strategy.clone()),
             dry_run: partial.dry_run.unwrap_or(base.dry_run),
+            model: partial.model.clone().or_else(|| base.model.clone()),
         }
     }
 
@@ -290,6 +293,7 @@ mod tests {
                 agent_type: "claude".to_string(),
                 strategy: "priority".to_string(),
                 dry_run: false,
+                model: None,
             },
             git: GitConfig {
                 auto_create_prs: true,
@@ -309,6 +313,7 @@ mod tests {
                 agent_type: "opencode".to_string(),
                 strategy: "fifo".to_string(),
                 dry_run: false,
+                model: Some("anthropic/claude-sonnet-4-5".to_string()),
             },
             ..Default::default()
         }
@@ -434,6 +439,7 @@ mod tests {
                 agent_type: "claude".to_string(),
                 strategy: "priority".to_string(),
                 dry_run: false,
+                model: None,
             },
             ..Default::default()
         };
@@ -446,6 +452,7 @@ mod tests {
                 agent_type: "opencode".to_string(),
                 strategy: "fifo".to_string(),
                 dry_run: false,
+                model: Some("anthropic/claude-sonnet-4-5".to_string()),
             },
             ..Default::default()
         };

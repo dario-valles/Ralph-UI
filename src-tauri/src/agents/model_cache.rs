@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::models::AgentType;
 use super::models::{ModelInfo, get_fallback_models};
-use super::providers::{ModelProvider, get_provider};
+use super::providers::get_provider;
 
 /// Default cache TTL (5 minutes)
 const DEFAULT_TTL_SECS: u64 = 300;

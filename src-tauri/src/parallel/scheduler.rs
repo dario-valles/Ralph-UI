@@ -79,6 +79,9 @@ pub struct SchedulerConfig {
     /// Dry-run mode: preview execution without spawning agents
     #[serde(default)]
     pub dry_run: bool,
+    /// Model to use for agents (e.g., "anthropic/claude-sonnet-4-5")
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 impl Default for SchedulerConfig {
@@ -93,6 +96,7 @@ impl Default for SchedulerConfig {
             error_strategy: ErrorStrategy::default(),
             fallback_config: FallbackConfig::default(),
             dry_run: false,
+            model: None,
         }
     }
 }
@@ -202,6 +206,9 @@ impl ParallelScheduler {
 
     /// Add a task to the scheduler
     pub fn add_task(&mut self, task: Task) {
+        log::info!("[Scheduler] Adding task: {} ({}) - dependencies: {:?}",
+            task.title, task.id, task.dependencies);
+
         let scheduled = ScheduledTask {
             task,
             retry_count: 0,
@@ -210,17 +217,23 @@ impl ParallelScheduler {
         };
 
         self.pending.insert(scheduled.task.id.clone(), scheduled);
+        log::info!("[Scheduler] Task added. Pending count now: {}", self.pending.len());
     }
 
     /// Add multiple tasks to the scheduler
     pub fn add_tasks(&mut self, tasks: Vec<Task>) {
+        log::info!("[Scheduler] Adding {} tasks to scheduler", tasks.len());
         for task in tasks {
             self.add_task(task);
         }
+        log::info!("[Scheduler] Finished adding tasks. Total pending: {}", self.pending.len());
     }
 
     /// Update task dependency status
     fn update_dependencies(&mut self) {
+        log::info!("[Scheduler] update_dependencies called. Pending: {}, Ready: {}, Completed: {}, Failed: {}",
+            self.pending.len(), self.ready.len(), self.completed.len(), self.failed.len());
+
         let completed = &self.completed;
         let failed = &self.failed;
 
@@ -228,7 +241,11 @@ impl ParallelScheduler {
         let mut newly_ready = Vec::new();
 
         for (task_id, scheduled) in self.pending.iter_mut() {
+            log::debug!("[Scheduler] Checking task '{}' ({}): dependencies_met={}, deps={:?}",
+                scheduled.task.title, task_id, scheduled.dependencies_met, scheduled.task.dependencies);
+
             if scheduled.dependencies_met {
+                log::debug!("[Scheduler] Task '{}' already has dependencies_met=true, skipping", task_id);
                 continue;
             }
 
@@ -242,29 +259,43 @@ impl ParallelScheduler {
                 failed.contains(dep_id)
             });
 
+            log::debug!("[Scheduler] Task '{}': all_met={}, any_failed={}, has_no_deps={}",
+                task_id, all_met, any_failed, scheduled.task.dependencies.is_empty());
+
             if any_failed {
                 // Mark task as failed due to dependency failure
+                log::info!("[Scheduler] Task '{}' has failed dependency, marking as failed", task_id);
                 newly_ready.push((task_id.clone(), false));
             } else if all_met {
                 // Mark dependencies as met
+                log::info!("[Scheduler] Task '{}' dependencies all met, moving to ready queue", task_id);
                 scheduled.dependencies_met = true;
                 newly_ready.push((task_id.clone(), true));
+            } else {
+                log::debug!("[Scheduler] Task '{}' still waiting on dependencies", task_id);
             }
         }
+
+        log::info!("[Scheduler] Moving {} tasks to ready/failed state", newly_ready.len());
 
         // Move ready tasks from pending to ready queue
         for (task_id, is_ready) in newly_ready {
             if let Some(mut scheduled) = self.pending.remove(&task_id) {
                 if is_ready {
+                    log::info!("[Scheduler] Task '{}' moved to ready queue", task_id);
                     self.ready.push_back(scheduled);
                 } else {
                     // Dependency failed, mark as failed
+                    log::info!("[Scheduler] Task '{}' marked as failed due to dependency failure", task_id);
                     scheduled.task.status = TaskStatus::Failed;
                     scheduled.task.error = Some("Dependency task failed".to_string());
                     self.failed.insert(task_id);
                 }
             }
         }
+
+        log::info!("[Scheduler] After update_dependencies: Pending: {}, Ready: {}",
+            self.pending.len(), self.ready.len());
     }
 
     /// Sort ready queue based on strategy
@@ -292,8 +323,11 @@ impl ParallelScheduler {
         self.ready = tasks.into();
     }
 
-    /// Try to schedule next task from ready queue
-    pub fn schedule_next(&mut self, session_id: &str, project_path: &str) -> Result<Option<Agent>> {
+    /// Peek at the next task that would be scheduled (without removing it)
+    /// Returns (task_id, task_title) if a task is ready to be scheduled
+    pub fn peek_next_task(&mut self) -> Option<(String, String)> {
+        log::info!("[Scheduler] peek_next_task called");
+
         // Update dependencies
         self.update_dependencies();
 
@@ -301,25 +335,98 @@ impl ParallelScheduler {
         self.sort_ready_queue();
 
         // Check if we can spawn more agents
-        if !self.pool.can_spawn()? {
-            return Ok(None);
+        if self.running.len() >= self.config.max_parallel {
+            log::info!("[Scheduler] At max parallel limit, no task to peek");
+            return None;
+        }
+
+        // Peek at front of ready queue
+        self.ready.front().map(|s| {
+            log::info!("[Scheduler] Next task to schedule: {} ({})", s.task.title, s.task.id);
+            (s.task.id.clone(), s.task.title.clone())
+        })
+    }
+
+    /// Try to schedule next task from ready queue
+    pub fn schedule_next(&mut self, session_id: &str, project_path: &str) -> Result<Option<Agent>> {
+        self.schedule_next_with_worktree(session_id, project_path, None)
+    }
+
+    /// Schedule next task with an optional pre-created worktree path
+    /// If worktree_path is provided, use it instead of generating one
+    pub fn schedule_next_with_worktree(
+        &mut self,
+        session_id: &str,
+        project_path: &str,
+        worktree_allocation: Option<(String, String)>, // (worktree_path, branch)
+    ) -> Result<Option<Agent>> {
+        log::info!("[Scheduler] schedule_next called for session: {}, project: {}", session_id, project_path);
+        log::info!("[Scheduler] Current state - Pending: {}, Ready: {}, Running: {}, MaxParallel: {}",
+            self.pending.len(), self.ready.len(), self.running.len(), self.config.max_parallel);
+        log::info!("[Scheduler] Worktree allocation provided: {:?}", worktree_allocation);
+
+        // Update dependencies
+        self.update_dependencies();
+
+        log::info!("[Scheduler] After update_dependencies - Pending: {}, Ready: {}", self.pending.len(), self.ready.len());
+
+        // Sort ready queue
+        self.sort_ready_queue();
+
+        // Check if we can spawn more agents
+        match self.pool.can_spawn() {
+            Ok(can) => {
+                log::info!("[Scheduler] Pool can_spawn: {}", can);
+                if !can {
+                    log::warn!("[Scheduler] Cannot spawn - pool resource limits reached");
+                    return Ok(None);
+                }
+            }
+            Err(e) => {
+                log::error!("[Scheduler] Error checking pool can_spawn: {}", e);
+                return Err(e);
+            }
         }
 
         // Check if we're at max parallel limit
         if self.running.len() >= self.config.max_parallel {
+            log::warn!("[Scheduler] At max parallel limit ({}/{}), cannot schedule more",
+                self.running.len(), self.config.max_parallel);
             return Ok(None);
         }
 
         // Get next ready task
         let mut scheduled = match self.ready.pop_front() {
-            Some(task) => task,
-            None => return Ok(None),
+            Some(task) => {
+                log::info!("[Scheduler] Got task from ready queue: {} ({})", task.task.title, task.task.id);
+                task
+            }
+            None => {
+                log::warn!("[Scheduler] Ready queue is empty, no task to schedule");
+                return Ok(None);
+            }
         };
 
         // Create agent
         let agent_id = Uuid::new_v4().to_string();
-        let branch = format!("task/{}", scheduled.task.id);
-        let worktree_path = format!("{}/worktrees/{}", project_path, scheduled.task.id);
+
+        // Use provided worktree allocation or fall back to project path
+        let (worktree_path, branch) = match worktree_allocation {
+            Some((wt_path, br)) => {
+                log::info!("[Scheduler] Using provided worktree allocation: {} on branch {}", wt_path, br);
+                (wt_path, br)
+            }
+            None => {
+                // No worktree allocated - use project_path directly as working directory
+                // This happens when worktree creation failed (e.g., invalid repo path)
+                let branch = format!("task/{}", scheduled.task.id);
+                log::warn!("[Scheduler] No worktree allocated, using project path directly: {}", project_path);
+                (project_path.to_string(), branch)
+            }
+        };
+
+        log::info!("[Scheduler] Creating agent {} for task {} with branch {} at {}",
+            agent_id, scheduled.task.id, branch, worktree_path);
 
         // Spawn agent
         let config = AgentSpawnConfig {
@@ -329,9 +436,12 @@ impl ParallelScheduler {
             branch: branch.clone(),
             max_iterations: self.config.max_iterations,
             prompt: Some(scheduled.task.description.clone()),
+            model: self.config.model.clone(),
         };
 
+        log::info!("[Scheduler] Spawning {:?} agent...", self.config.agent_type);
         let process_id = self.pool.spawn(&agent_id, config)?;
+        log::info!("[Scheduler] Agent spawned with process_id: {}", process_id);
 
         // Update scheduled task
         scheduled.assigned_agent_id = Some(agent_id.clone());
@@ -358,6 +468,9 @@ impl ParallelScheduler {
 
         // Move to running
         self.running.insert(scheduled.task.id.clone(), scheduled);
+
+        log::info!("[Scheduler] Successfully scheduled agent {} for task. Running count: {}",
+            agent.id, self.running.len());
 
         Ok(Some(agent))
     }
@@ -506,6 +619,7 @@ impl ParallelScheduler {
                 branch,
                 worktree_path,
                 max_iterations: self.config.max_iterations,
+                model: self.config.model.clone(),
             });
         }
 
@@ -521,6 +635,7 @@ impl ParallelScheduler {
                 branch,
                 worktree_path,
                 max_iterations: self.config.max_iterations,
+                model: self.config.model.clone(),
             });
         }
 
@@ -646,6 +761,8 @@ pub struct DryRunResult {
     pub worktree_path: String,
     /// Maximum iterations configured
     pub max_iterations: i32,
+    /// Model that would be used (if specified)
+    pub model: Option<String>,
 }
 
 #[cfg(test)]

@@ -47,6 +47,9 @@ pub struct ExecutionConfig {
     /// Dry-run mode: preview execution without actually spawning agents
     #[serde(default)]
     pub dry_run: bool,
+    /// Default model to use for agents (e.g., "anthropic/claude-sonnet-4-5")
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 fn default_max_parallel() -> i32 { 3 }
@@ -64,6 +67,7 @@ impl Default for ExecutionConfig {
             agent_type: default_agent_type(),
             strategy: default_strategy(),
             dry_run: false,
+            model: None,
         }
     }
 }

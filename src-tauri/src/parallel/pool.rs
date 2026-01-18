@@ -137,14 +137,36 @@ impl AgentPool {
         agent_id: &str,
         config: AgentSpawnConfig,
     ) -> Result<u32> {
+        log::info!("[AgentPool] spawn called for agent: {}", agent_id);
+
         // Check if we can spawn
-        if !self.can_spawn()? {
-            return Err(anyhow!("Resource limits exceeded, cannot spawn agent"));
+        match self.can_spawn() {
+            Ok(can) => {
+                if !can {
+                    log::warn!("[AgentPool] Cannot spawn - resource limits exceeded");
+                    return Err(anyhow!("Resource limits exceeded, cannot spawn agent"));
+                }
+                log::info!("[AgentPool] Resource check passed, can spawn");
+            }
+            Err(e) => {
+                log::error!("[AgentPool] Error checking resources: {}", e);
+                return Err(e);
+            }
         }
 
         // Spawn the agent
+        log::info!("[AgentPool] Calling manager.spawn_agent...");
         let mut manager = self.manager.lock().expect("mutex poisoned");
-        let process_id = manager.spawn_agent(agent_id, config.clone())?;
+        let process_id = match manager.spawn_agent(agent_id, config.clone()) {
+            Ok(pid) => {
+                log::info!("[AgentPool] Agent spawned with PID: {}", pid);
+                pid
+            }
+            Err(e) => {
+                log::error!("[AgentPool] Failed to spawn agent: {}", e);
+                return Err(e);
+            }
+        };
 
         // Add to running pool
         let pooled = PooledAgent {
