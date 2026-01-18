@@ -14,6 +14,7 @@ import {
   LucideIcon,
   FolderOpen,
   ChevronDown,
+  Rocket,
 } from 'lucide-react'
 import { PRD_TYPES as PRD_TYPE_CONFIG, type PRDTypeConfig } from '@/config/prdTypes'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
@@ -27,6 +28,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   RefreshCw,
   Link: Plug,  // Using Plug for Link
   FileText,
+  Rocket,
 }
 
 interface PRDTypeOption {
@@ -53,6 +55,8 @@ function getColorClass(value: PRDTypeValue): string {
   switch (value) {
     case 'new_feature':
       return 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+    case 'full_new_app':
+      return 'bg-amber-50 border-amber-200 hover:bg-amber-100'
     case 'bug_fix':
       return 'bg-red-50 border-red-200 hover:bg-red-100'
     case 'refactoring':

@@ -128,6 +128,7 @@ fn get_prd_type_title(prd_type: &PRDType) -> String {
         PRDType::Refactoring => "Refactoring PRD".to_string(),
         PRDType::ApiIntegration => "API Integration PRD".to_string(),
         PRDType::General => "General PRD".to_string(),
+        PRDType::FullNewApp => "Full New App PRD".to_string(),
     }
 }
 
@@ -138,6 +139,7 @@ fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
         Some(PRDType::BugFix) => "bug fix",
         Some(PRDType::Refactoring) => "refactoring effort",
         Some(PRDType::ApiIntegration) => "API integration",
+        Some(PRDType::FullNewApp) => "new application",
         Some(PRDType::General) | None => "project",
     };
 
@@ -150,6 +152,8 @@ fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
             "What part of the codebase are you looking to refactor? What are the main issues with the current implementation (e.g., performance, maintainability, technical debt)?",
         Some(PRDType::ApiIntegration) =>
             "Which API or service are you integrating with? What functionality do you need from this integration?",
+        Some(PRDType::FullNewApp) =>
+            "What kind of application are you planning to build? Please describe the main purpose and the problem it will solve for users.",
         Some(PRDType::General) | None =>
             "What would you like to build or accomplish? Please describe your project idea and its main goals.",
     };
@@ -676,6 +680,20 @@ fn add_type_specific_suggestions(suggestions: &mut Vec<String>, prd_type: PRDTyp
             }
         }
         PRDType::General => {}
+        PRDType::FullNewApp => {
+            if !extracted.overview.to_lowercase().contains("persona") && !extracted.overview.to_lowercase().contains("user") {
+                suggestions.push("Add user personas to clarify target audience".to_string());
+            }
+            if !extracted.overview.to_lowercase().contains("mvp") && !extracted.overview.to_lowercase().contains("minimum viable") {
+                suggestions.push("Define MVP scope to focus initial development".to_string());
+            }
+            if !extracted.technical_constraints.iter().any(|c| c.to_lowercase().contains("stack") || c.to_lowercase().contains("framework")) {
+                suggestions.push("Document technology stack choices".to_string());
+            }
+            if !extracted.technical_constraints.iter().any(|c| c.to_lowercase().contains("deploy") || c.to_lowercase().contains("host")) {
+                suggestions.push("Include deployment and hosting strategy".to_string());
+            }
+        }
     }
 }
 
@@ -866,6 +884,106 @@ fn generate_guided_questions(prd_type: PRDType) -> Vec<GuidedQuestion> {
                     options: None,
                     required: false,
                     hint: Some("e.g., must work with existing database, specific framework requirements".to_string()),
+                },
+            ]);
+        }
+        PRDType::FullNewApp => {
+            questions.extend(vec![
+                // Vision questions
+                GuidedQuestion {
+                    id: "project_vision".to_string(),
+                    question: "What is the vision and main goals for this application?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Describe what success looks like and the core value proposition".to_string()),
+                },
+                GuidedQuestion {
+                    id: "target_audience".to_string(),
+                    question: "Who is the target audience? Describe your user personas.".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Include demographics, needs, and pain points".to_string()),
+                },
+                GuidedQuestion {
+                    id: "success_metrics".to_string(),
+                    question: "How will you measure success for this application?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: false,
+                    hint: Some("e.g., user adoption, revenue, engagement metrics".to_string()),
+                },
+                // Technical questions
+                GuidedQuestion {
+                    id: "tech_stack".to_string(),
+                    question: "What type of application are you building?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "Web Application".to_string(),
+                        "Mobile Application".to_string(),
+                        "Desktop Application".to_string(),
+                        "CLI Tool".to_string(),
+                        "API/Backend Service".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "frontend_framework".to_string(),
+                    question: "Do you have a frontend framework preference?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "React".to_string(),
+                        "Vue".to_string(),
+                        "Svelte".to_string(),
+                        "None/Not applicable".to_string(),
+                        "Other".to_string(),
+                    ]),
+                    required: false,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "backend_database".to_string(),
+                    question: "What are your backend and database requirements?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Include language preferences, database type, and any infrastructure needs".to_string()),
+                },
+                GuidedQuestion {
+                    id: "auth_needs".to_string(),
+                    question: "What authentication does your app need?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "Email/Password".to_string(),
+                        "OAuth (Google, GitHub, etc.)".to_string(),
+                        "No authentication needed".to_string(),
+                        "Other".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "core_features".to_string(),
+                    question: "What are the core features for the MVP?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("List the essential features needed for first release".to_string()),
+                },
+                GuidedQuestion {
+                    id: "deployment_target".to_string(),
+                    question: "Where will this application be deployed?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "Cloud (AWS, GCP, Azure, etc.)".to_string(),
+                        "Self-hosted".to_string(),
+                        "Desktop application".to_string(),
+                        "Mobile app stores".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
                 },
             ]);
         }

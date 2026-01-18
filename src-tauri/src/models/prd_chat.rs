@@ -97,6 +97,7 @@ pub enum PRDType {
     Refactoring,
     ApiIntegration,
     General,
+    FullNewApp,
 }
 
 impl PRDType {
@@ -107,6 +108,7 @@ impl PRDType {
             PRDType::Refactoring => "refactoring",
             PRDType::ApiIntegration => "api_integration",
             PRDType::General => "general",
+            PRDType::FullNewApp => "full_new_app",
         }
     }
 
@@ -117,6 +119,7 @@ impl PRDType {
             PRDType::Refactoring => "Refactoring",
             PRDType::ApiIntegration => "API Integration",
             PRDType::General => "General",
+            PRDType::FullNewApp => "Full New App",
         }
     }
 }
@@ -137,7 +140,8 @@ impl std::str::FromStr for PRDType {
             "refactoring" => Ok(PRDType::Refactoring),
             "api_integration" | "apiintegration" => Ok(PRDType::ApiIntegration),
             "general" => Ok(PRDType::General),
-            _ => Err(format!("Invalid PRD type: '{}'. Expected 'new_feature', 'bug_fix', 'refactoring', 'api_integration', or 'general'", s)),
+            "full_new_app" | "fullnewapp" => Ok(PRDType::FullNewApp),
+            _ => Err(format!("Invalid PRD type: '{}'. Expected 'new_feature', 'bug_fix', 'refactoring', 'api_integration', 'general', or 'full_new_app'", s)),
         }
     }
 }

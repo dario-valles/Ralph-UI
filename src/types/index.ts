@@ -386,7 +386,7 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>
 }
 
-export type PRDTypeValue = 'new_feature' | 'bug_fix' | 'refactoring' | 'api_integration' | 'general'
+export type PRDTypeValue = 'new_feature' | 'bug_fix' | 'refactoring' | 'api_integration' | 'general' | 'full_new_app'
 
 export interface ChatSession {
   id: string

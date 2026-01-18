@@ -22,6 +22,13 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     color: 'text-blue-500',
   },
   {
+    value: 'full_new_app',
+    label: 'Full New App',
+    description: 'Design and plan an entirely new application',
+    icon: 'Rocket',
+    color: 'text-amber-500',
+  },
+  {
     value: 'bug_fix',
     label: 'Bug Fix',
     description: 'Fix an existing problem or issue',

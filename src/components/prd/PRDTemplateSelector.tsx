@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { FileText, Loader2, MessageSquare, Search, Sparkles, Bug, RefreshCw, Link } from 'lucide-react'
+import { FileText, Loader2, MessageSquare, Search, Sparkles, Bug, RefreshCw, Link, Rocket } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { PRD_TYPES } from '@/config/prdTypes'
 import type { PRDTemplate, PRDTypeValue } from '@/types'
@@ -39,6 +39,7 @@ function parseTemplateStructure(templateStructure: string | undefined): { sectio
 // Icon mapping for PRD types
 const PRD_TYPE_ICONS: Record<PRDTypeValue, React.ReactNode> = {
   new_feature: <Sparkles className="h-4 w-4" />,
+  full_new_app: <Rocket className="h-4 w-4" />,
   bug_fix: <Bug className="h-4 w-4" />,
   refactoring: <RefreshCw className="h-4 w-4" />,
   api_integration: <Link className="h-4 w-4" />,
