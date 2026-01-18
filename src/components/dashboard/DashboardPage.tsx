@@ -2,15 +2,18 @@ import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Activity, CheckCircle2, Clock, DollarSign, FolderOpen, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useProjectStore } from '@/stores/projectStore'
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { agents } = useAgentStore()
   const { tasks } = useTaskStore()
-  const { sessions, currentSession, fetchSessions } = useSessionStore()
+  const { sessions, currentSession, fetchSessions, setCurrentSession } = useSessionStore()
+  const { setActiveProject, projects } = useProjectStore()
 
   // Fetch sessions on mount
   useEffect(() => {
@@ -158,11 +161,21 @@ export function DashboardPage() {
                         {session.status} - {session.tasks?.length || 0} tasks
                       </p>
                     </div>
-                    <Link to={`/sessions/${session.id}`}>
-                      <Button variant="ghost" size="sm">
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        // Set session and project context before navigating
+                        setCurrentSession(session)
+                        const project = projects.find((p) => p.path === session.projectPath)
+                        if (project) {
+                          setActiveProject(project.id)
+                        }
+                        navigate(`/sessions/${session.id}`)
+                      }}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>

@@ -40,8 +40,8 @@ function getInitialProjectPath(
 
 export function NewSessionModal({ open, onOpenChange, defaultProjectPath }: NewSessionModalProps) {
   const navigate = useNavigate()
-  const { sessions, createSession, loading: sessionLoading } = useSessionStore()
-  const { projects, loadProjects, getRecentProjects, loading: projectsLoading } = useProjectStore()
+  const { sessions, createSession, setCurrentSession, loading: sessionLoading } = useSessionStore()
+  const { projects, loadProjects, getRecentProjects, setActiveProject, loading: projectsLoading } = useProjectStore()
   const inputRef = useRef<HTMLInputElement>(null)
 
   // State for form fields
@@ -117,6 +117,12 @@ export function NewSessionModal({ open, onOpenChange, defaultProjectPath }: NewS
     try {
       const session = await createSession(finalName, selectedProjectPath)
       if (session) {
+        // Set session and project context before navigating
+        setCurrentSession(session)
+        const project = projects.find((p) => p.path === selectedProjectPath)
+        if (project) {
+          setActiveProject(project.id)
+        }
         handleOpenChange(false)
         // Navigate to the new session
         navigate(`/sessions/${session.id}`)

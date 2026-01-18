@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { AgentMiniCard } from './AgentMiniCard'
 import type { ActiveAgentWithContext } from '@/hooks/useMissionControlData'
 import { cn } from '@/lib/utils'
+import { useSessionStore } from '@/stores/sessionStore'
+import { useProjectStore } from '@/stores/projectStore'
 
 interface ActiveAgentsGridProps {
   agents: ActiveAgentWithContext[]
@@ -81,8 +83,19 @@ export function ActiveAgentsGrid({
   onRetry,
 }: ActiveAgentsGridProps) {
   const navigate = useNavigate()
+  const { sessions, setCurrentSession } = useSessionStore()
+  const { projects, setActiveProject } = useProjectStore()
 
   const handleAgentClick = (agent: ActiveAgentWithContext) => {
+    // Set session and project context before navigating
+    const session = sessions.find((s) => s.id === agent.session_id)
+    if (session) {
+      setCurrentSession(session)
+      const project = projects.find((p) => p.path === session.projectPath)
+      if (project) {
+        setActiveProject(project.id)
+      }
+    }
     // Navigate to the agents page with the agent selected
     navigate('/agents', { state: { agentId: agent.id, sessionId: agent.session_id } })
   }

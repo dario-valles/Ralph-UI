@@ -15,6 +15,7 @@ import { Slider } from '@/components/ui/slider'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, Play, Eye } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
+import { useSessionStore } from '@/stores/sessionStore'
 import type { ExecutionConfig, AgentType } from '@/types'
 
 interface PRDExecutionDialogProps {
@@ -26,6 +27,7 @@ interface PRDExecutionDialogProps {
 export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDialogProps) {
   const navigate = useNavigate()
   const { executePRD } = usePRDStore()
+  const { fetchSession } = useSessionStore()
   const [executing, setExecuting] = useState(false)
 
   // Execution configuration state
@@ -48,8 +50,12 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     try {
       const sessionId = await executePRD(prdId, config)
       onOpenChange(false)
-      // Navigate to agent monitor with the session
-      navigate(`/agents?session=${sessionId}`)
+
+      // Fetch the created session (this sets currentSession in the store)
+      await fetchSession(sessionId)
+
+      // Navigate to agent monitor
+      navigate('/agents')
     } catch (err) {
       console.error('Failed to execute PRD:', err)
     } finally {
