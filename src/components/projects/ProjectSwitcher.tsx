@@ -19,10 +19,11 @@ import { open } from '@tauri-apps/plugin-dialog'
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
+  compact?: boolean
   className?: string
 }
 
-export function ProjectSwitcher({ collapsed = false, className }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ collapsed = false, compact = false, className }: ProjectSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -154,13 +155,16 @@ export function ProjectSwitcher({ collapsed = false, className }: ProjectSwitche
           }
         }}
         className={cn(
-          'flex items-center w-full gap-2 px-3 py-2 rounded-lg border transition-colors cursor-pointer',
+          'flex items-center w-full border transition-colors cursor-pointer',
           'hover:bg-accent text-left',
-          activeProject ? 'bg-accent/50' : 'bg-background'
+          activeProject ? 'bg-accent/50' : 'bg-background',
+          compact
+            ? 'gap-1.5 px-2.5 py-1 rounded-full text-xs'
+            : 'gap-2 px-3 py-2 rounded-lg'
         )}
       >
-        <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate text-sm">
+        <FolderOpen className={cn('shrink-0 text-muted-foreground', compact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+        <span className={cn('flex-1 truncate', compact ? 'text-xs' : 'text-sm')}>
           {activeProject ? getDisplayName(activeProject) : 'Select Project'}
         </span>
         {activeProject && (
@@ -168,12 +172,13 @@ export function ProjectSwitcher({ collapsed = false, className }: ProjectSwitche
             onClick={handleClearProject}
             className="p-0.5 rounded hover:bg-background"
           >
-            <X className="h-3 w-3 text-muted-foreground" />
+            <X className={cn('text-muted-foreground', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
           </button>
         )}
         <ChevronDown
           className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            'shrink-0 text-muted-foreground transition-transform',
+            compact ? 'h-3 w-3' : 'h-4 w-4',
             isOpen && 'rotate-180'
           )}
         />

@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "ralph-ui-temp",
-        "width": 800,
-        "height": 600
+        "title": "Ralph UI",
+        "width": 1200,
+        "height": 800,
+        "titleBarStyle": "overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

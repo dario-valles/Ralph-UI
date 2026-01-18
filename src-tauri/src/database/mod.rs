@@ -5,11 +5,12 @@ pub mod sessions;
 pub mod agents;
 pub mod prd;
 pub mod prd_chat;
+pub mod projects;
 
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 pub struct Database {
     conn: Connection,
@@ -87,6 +88,9 @@ impl Database {
         }
         if from_version < 5 {
             self.migrate_to_v5()?;
+        }
+        if from_version < 6 {
+            self.migrate_to_v6()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -386,6 +390,37 @@ impl Database {
         )?;
 
         self.set_schema_version(5)?;
+        Ok(())
+    }
+
+    fn migrate_to_v6(&self) -> Result<()> {
+        // Phase 8: Projects table for workspace organization
+
+        // Create projects table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                last_used_at TEXT NOT NULL,
+                is_favorite INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        // Create index for faster queries
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_projects_last_used_at ON projects(last_used_at)",
+            [],
+        )?;
+
+        self.set_schema_version(6)?;
         Ok(())
     }
 

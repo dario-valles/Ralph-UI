@@ -1,6 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, ListTodo, Bot, Settings, FolderGit2, FileText, MessageSquare } from 'lucide-react'
+import {
+  LayoutDashboard,
+  ListTodo,
+  Bot,
+  FolderGit2,
+  FileText,
+  MessageSquare,
+} from 'lucide-react'
+import { useUIStore } from '@/stores/uiStore'
+import { usePRDChatStore } from '@/stores/prdChatStore'
 
 const navigation = [
   { name: 'Dashboard', to: '/', icon: LayoutDashboard },
@@ -9,43 +18,51 @@ const navigation = [
   { name: 'Tasks', to: '/tasks', icon: ListTodo },
   { name: 'Agents', to: '/agents', icon: Bot },
   { name: 'Sessions', to: '/sessions', icon: FolderGit2 },
-  { name: 'Settings', to: '/settings', icon: Settings },
 ]
 
 export function Sidebar() {
+  const { sidebarCollapsed } = useUIStore()
+  const processingSessionId = usePRDChatStore((state) => state.processingSessionId)
+
+  if (sidebarCollapsed) {
+    return null
+  }
+
   return (
-    <div className="flex w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center justify-center border-b px-6">
-        <h1 className="text-xl font-bold">Ralph UI</h1>
-      </div>
-      <nav className="flex-1 space-y-1 p-4">
+    <div className="flex flex-col w-48 border-r bg-card">
+      <nav className="flex-1 space-y-0.5 p-1.5">
         {navigation.map((item) => {
           const Icon = item.icon
-          return (
+          const showProcessingBadge = item.to === '/prds/chat' && processingSessionId !== null
+          const navItem = (
             <NavLink
               key={item.name}
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2.5 rounded-md py-1.5 px-2.5 text-sm font-medium transition-colors relative',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )
               }
             >
-              <Icon className="h-5 w-5" />
-              {item.name}
+              <div className="relative">
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                {showProcessingBadge && (
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                )}
+              </div>
+              <span>{item.name}</span>
+              {showProcessingBadge && (
+                <span className="ml-auto text-xs text-yellow-500 animate-pulse">●</span>
+              )}
             </NavLink>
           )
+
+          return navItem
         })}
       </nav>
-      <div className="border-t p-4">
-        <div className="text-xs text-muted-foreground">
-          <p>Phase 7.5 - PRD Management</p>
-          <p className="mt-1">v0.7.5</p>
-        </div>
-      </div>
     </div>
   )
 }

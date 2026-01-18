@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { DashboardPage } from './components/dashboard/DashboardPage'
@@ -10,8 +11,14 @@ import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { ToastContainer } from './components/ui/toast'
+import { useProjectStore } from './stores/projectStore'
 
 function App() {
+  const loadProjects = useProjectStore((state) => state.loadProjects)
+
+  useEffect(() => {
+    loadProjects()
+  }, [loadProjects])
   return (
     <BrowserRouter>
       <Routes>

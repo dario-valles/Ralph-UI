@@ -189,6 +189,18 @@ pub fn run() {
             commands::get_guided_questions,
             commands::preview_prd_extraction,
             commands::check_agent_availability,
+            // Project commands
+            commands::register_project,
+            commands::get_project,
+            commands::get_project_by_path,
+            commands::get_all_projects,
+            commands::get_recent_projects,
+            commands::get_favorite_projects,
+            commands::update_project_name,
+            commands::toggle_project_favorite,
+            commands::set_project_favorite,
+            commands::touch_project,
+            commands::delete_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { QualityScoreCard } from './QualityScoreCard'
 import { ChatMessageItem } from './ChatMessageItem'
@@ -42,6 +43,9 @@ export function PRDChatPanel() {
   const [searchParams] = useSearchParams()
   const prdIdFromUrl = searchParams.get('prdId')
 
+  const { getActiveProject, registerProject } = useProjectStore()
+  const activeProject = getActiveProject()
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
   const [showTypeSelector, setShowTypeSelector] = useState(false)
@@ -58,6 +62,7 @@ export function PRDChatPanel() {
     streaming,
     error,
     qualityAssessment,
+    processingSessionId,
     sendMessage,
     startSession,
     deleteSession,
@@ -68,10 +73,26 @@ export function PRDChatPanel() {
     assessQuality,
   } = usePRDChatStore()
 
-  // Load sessions on mount
+  // Track the previous processing session to detect when processing completes
+  const prevProcessingSessionIdRef = useRef<string | null>(null)
+
+  // Load sessions on mount and auto-refresh if returning after processing
   useEffect(() => {
     loadSessions()
-  }, [loadSessions])
+
+    // If we had a processing session stored and we're returning to this view,
+    // reload its history to show the new messages
+    const storedProcessingId = prevProcessingSessionIdRef.current
+    if (storedProcessingId && !processingSessionId) {
+      // Processing completed while we were away - reload history
+      loadHistory(storedProcessingId)
+    }
+  }, [loadSessions, loadHistory, processingSessionId])
+
+  // Keep track of processing session ID changes
+  useEffect(() => {
+    prevProcessingSessionIdRef.current = processingSessionId
+  }, [processingSessionId])
 
   // Handle prdId URL param for "Continue in Chat" functionality
   useEffect(() => {
@@ -120,6 +141,10 @@ export function PRDChatPanel() {
   }
 
   const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string) => {
+    // Register the project when starting a session
+    if (projectPath) {
+      registerProject(projectPath)
+    }
     startSession({
       agentType: currentSession?.agentType || 'claude',
       prdType,
@@ -205,7 +230,7 @@ export function PRDChatPanel() {
         <PRDTypeSelector
           onSelect={handleTypeSelected}
           loading={loading}
-          defaultProjectPath={currentSession?.projectPath}
+          defaultProjectPath={currentSession?.projectPath || activeProject?.path}
         />
       </div>
     )
@@ -252,6 +277,7 @@ export function PRDChatPanel() {
                   key={session.id}
                   session={session}
                   isActive={currentSession?.id === session.id}
+                  isProcessing={processingSessionId === session.id}
                   onSelect={() => handleSelectSession(session)}
                   onDelete={() => handleDeleteSession(session.id)}
                 />

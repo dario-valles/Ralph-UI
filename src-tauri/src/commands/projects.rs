@@ -1,0 +1,151 @@
+// Tauri commands for project management
+
+use crate::database::{Database, projects};
+use std::sync::Mutex;
+use tauri::State;
+
+pub type DbState = Mutex<Database>;
+
+/// Register (or get existing) project from a folder path
+#[tauri::command]
+pub fn register_project(
+    db: State<DbState>,
+    path: String,
+    name: Option<String>,
+) -> Result<projects::Project, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::upsert_project(conn, &path, name.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// Get a project by ID
+#[tauri::command]
+pub fn get_project(
+    db: State<DbState>,
+    project_id: String,
+) -> Result<projects::Project, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::get_project(conn, &project_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get a project by path
+#[tauri::command]
+pub fn get_project_by_path(
+    db: State<DbState>,
+    path: String,
+) -> Result<projects::Project, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::get_project_by_path(conn, &path)
+        .map_err(|e| e.to_string())
+}
+
+/// Get all projects
+#[tauri::command]
+pub fn get_all_projects(
+    db: State<DbState>,
+) -> Result<Vec<projects::Project>, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::get_all_projects(conn)
+        .map_err(|e| e.to_string())
+}
+
+/// Get recent projects (limited)
+#[tauri::command]
+pub fn get_recent_projects(
+    db: State<DbState>,
+    limit: Option<i32>,
+) -> Result<Vec<projects::Project>, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::get_recent_projects(conn, limit.unwrap_or(5))
+        .map_err(|e| e.to_string())
+}
+
+/// Get favorite projects
+#[tauri::command]
+pub fn get_favorite_projects(
+    db: State<DbState>,
+) -> Result<Vec<projects::Project>, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::get_favorite_projects(conn)
+        .map_err(|e| e.to_string())
+}
+
+/// Update project name
+#[tauri::command]
+pub fn update_project_name(
+    db: State<DbState>,
+    project_id: String,
+    name: String,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::update_project_name(conn, &project_id, &name)
+        .map_err(|e| e.to_string())
+}
+
+/// Toggle project favorite status
+#[tauri::command]
+pub fn toggle_project_favorite(
+    db: State<DbState>,
+    project_id: String,
+) -> Result<bool, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::toggle_project_favorite(conn, &project_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Set project favorite status explicitly
+#[tauri::command]
+pub fn set_project_favorite(
+    db: State<DbState>,
+    project_id: String,
+    is_favorite: bool,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::set_project_favorite(conn, &project_id, is_favorite)
+        .map_err(|e| e.to_string())
+}
+
+/// Touch project (update last_used_at)
+#[tauri::command]
+pub fn touch_project(
+    db: State<DbState>,
+    project_id: String,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::touch_project(conn, &project_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Delete a project
+#[tauri::command]
+pub fn delete_project(
+    db: State<DbState>,
+    project_id: String,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get_connection();
+
+    projects::delete_project(conn, &project_id)
+        .map_err(|e| e.to_string())
+}

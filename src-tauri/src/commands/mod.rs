@@ -12,6 +12,7 @@ pub mod config;
 pub mod templates;
 pub mod recovery;
 pub mod traces;
+pub mod projects;
 
 // Re-export all commands for easy registration
 pub use sessions::*;
@@ -26,6 +27,7 @@ pub use templates::*;
 pub use recovery::*;
 pub use traces::*;
 pub use prd_chat::*;
+pub use projects::*;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {

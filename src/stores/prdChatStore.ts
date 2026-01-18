@@ -31,6 +31,7 @@ interface PRDChatStore {
   qualityAssessment: QualityAssessment | null
   guidedQuestions: GuidedQuestion[]
   extractedContent: ExtractedPRDContent | null
+  processingSessionId: string | null
 
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
@@ -57,6 +58,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   qualityAssessment: null,
   guidedQuestions: [],
   extractedContent: null,
+  processingSessionId: null,
 
   // Start a new chat session
   startSession: async (options: StartSessionOptions) => {
@@ -116,6 +118,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, optimisticMessage],
       streaming: true,
+      processingSessionId: currentSession.id,
       error: null,
     }))
 
@@ -144,6 +147,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
             response.assistantMessage,
           ],
           streaming: false,
+          processingSessionId: null,
           currentSession: updatedSession,
           sessions: updatedSessions,
         }
@@ -153,6 +157,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       set((state) => ({
         messages: state.messages.filter((m) => m.id !== optimisticMessage.id),
         streaming: false,
+        processingSessionId: null,
         error: error instanceof Error && error.message ? error.message : 'Failed to send message',
       }))
       throw error
