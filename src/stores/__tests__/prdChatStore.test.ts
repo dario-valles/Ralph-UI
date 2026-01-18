@@ -76,9 +76,9 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude', '/test/project')
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined)
       expect(usePRDChatStore.getState().currentSession).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions).toContainEqual(mockSession)
       expect(usePRDChatStore.getState().messages).toEqual([])
@@ -90,9 +90,9 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(sessionWithPrd)
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude', '/test/project', 'prd-123')
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project', prdId: 'prd-123' })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', 'prd-123')
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', 'prd-123', undefined, undefined, undefined)
       expect(usePRDChatStore.getState().currentSession).toEqual(sessionWithPrd)
     })
 
@@ -101,7 +101,7 @@ describe('prdChatStore', () => {
       store.sessions = [mockSession2]
 
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(usePRDChatStore.getState().sessions[0]).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions[1]).toEqual(mockSession2)
@@ -115,7 +115,7 @@ describe('prdChatStore', () => {
       })
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(loadingDuringCall).toBe(true)
     })
@@ -125,7 +125,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue(error)
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
       expect(usePRDChatStore.getState().loading).toBe(false)
@@ -137,7 +137,7 @@ describe('prdChatStore', () => {
       store.error = 'Previous error'
 
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(usePRDChatStore.getState().error).toBeNull()
     })
@@ -556,7 +556,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue('String error')
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
     })
@@ -565,7 +565,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue(new Error())
 
       const store = usePRDChatStore.getState()
-      await store.startSession('claude')
+      await store.startSession({ agentType: 'claude' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
     })

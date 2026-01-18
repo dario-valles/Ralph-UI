@@ -1,7 +1,11 @@
 // PRD Chat Tauri commands - AI-assisted PRD creation through conversation
 
 use crate::database::Database;
-use crate::models::{AgentType, ChatMessage, ChatSession, MessageRole};
+use crate::models::{
+    AgentType, ChatMessage, ChatSession, ExtractedPRDContent, GuidedQuestion,
+    MessageRole, PRDType, QualityAssessment, QuestionType,
+};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -17,6 +21,12 @@ pub struct StartChatSessionRequest {
     pub agent_type: String,
     pub project_path: Option<String>,
     pub prd_id: Option<String>,
+    /// Type of PRD being created (new_feature, bug_fix, refactoring, api_integration, general)
+    pub prd_type: Option<String>,
+    /// Whether to use guided interview mode
+    pub guided_mode: Option<bool>,
+    /// Template ID to use for structure
+    pub template_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,12 +62,14 @@ pub async fn start_prd_chat_session(
 ) -> Result<ChatSession, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
 
-    // Ensure chat tables exist
-    init_chat_tables(db.get_connection())
-        .map_err(|e| format!("Failed to initialize chat tables: {}", e))?;
-
     // Validate agent type
     let _agent_type = parse_agent_type(&request.agent_type)?;
+
+    // Validate PRD type if provided
+    if let Some(ref prd_type) = request.prd_type {
+        let _ = prd_type.parse::<PRDType>()
+            .map_err(|e| format!("Invalid PRD type: {}", e))?;
+    }
 
     let now = chrono::Utc::now().to_rfc3339();
     let session_id = Uuid::new_v4().to_string();
@@ -68,12 +80,16 @@ pub async fn start_prd_chat_session(
         project_path: request.project_path,
         prd_id: request.prd_id,
         title: None, // Will be set when user starts typing or explicitly sets it
+        prd_type: request.prd_type,
+        guided_mode: request.guided_mode.unwrap_or(true), // Default to guided mode
+        quality_score: None,
+        template_id: request.template_id,
         created_at: now.clone(),
         updated_at: now,
         message_count: Some(0),
     };
 
-    create_chat_session(db.get_connection(), &session)
+    db.create_chat_session(&session)
         .map_err(|e| format!("Failed to create chat session: {}", e))?;
 
     Ok(session)
@@ -90,7 +106,7 @@ pub async fn send_prd_chat_message(
         let db_guard = db.lock().map_err(|e| e.to_string())?;
 
         // Get the session
-        let session = get_chat_session_by_id(db_guard.get_connection(), &request.session_id)
+        let session = db_guard.get_chat_session(&request.session_id)
             .map_err(|e| format!("Session not found: {}", e))?;
 
         let now = chrono::Utc::now().to_rfc3339();
@@ -104,11 +120,11 @@ pub async fn send_prd_chat_message(
             created_at: now.clone(),
         };
 
-        create_chat_message(db_guard.get_connection(), &user_message)
+        db_guard.create_chat_message(&user_message)
             .map_err(|e| format!("Failed to store user message: {}", e))?;
 
         // Get chat history for context
-        let history = get_messages_for_session(db_guard.get_connection(), &request.session_id)
+        let history = db_guard.get_messages_by_session(&request.session_id)
             .map_err(|e| format!("Failed to get chat history: {}", e))?;
 
         // Build prompt with PRD context
@@ -141,7 +157,7 @@ pub async fn send_prd_chat_message(
             created_at: response_now.clone(),
         };
 
-        create_chat_message(db_guard.get_connection(), &assistant_message)
+        db_guard.create_chat_message(&assistant_message)
             .map_err(|e| format!("Failed to store assistant message: {}", e))?;
 
         // Update session timestamp
@@ -169,11 +185,7 @@ pub async fn get_prd_chat_history(
 ) -> Result<Vec<ChatMessage>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
 
-    // Ensure chat tables exist
-    init_chat_tables(db.get_connection())
-        .map_err(|e| format!("Failed to initialize chat tables: {}", e))?;
-
-    get_messages_for_session(db.get_connection(), &session_id)
+    db.get_messages_by_session(&session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))
 }
 
@@ -184,11 +196,7 @@ pub async fn list_prd_chat_sessions(
 ) -> Result<Vec<ChatSession>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
 
-    // Ensure chat tables exist
-    init_chat_tables(db.get_connection())
-        .map_err(|e| format!("Failed to initialize chat tables: {}", e))?;
-
-    list_chat_sessions(db.get_connection())
+    db.list_chat_sessions()
         .map_err(|e| format!("Failed to list chat sessions: {}", e))
 }
 
@@ -201,11 +209,11 @@ pub async fn delete_prd_chat_session(
     let db = db.lock().map_err(|e| e.to_string())?;
 
     // Delete messages first (foreign key constraint)
-    delete_messages_for_session(db.get_connection(), &session_id)
+    db.delete_messages_by_session(&session_id)
         .map_err(|e| format!("Failed to delete messages: {}", e))?;
 
     // Delete session
-    delete_chat_session(db.get_connection(), &session_id)
+    db.delete_chat_session(&session_id)
         .map_err(|e| format!("Failed to delete session: {}", e))
 }
 
@@ -218,11 +226,11 @@ pub async fn export_chat_to_prd(
     let db_guard = db.lock().map_err(|e| e.to_string())?;
 
     // Get session
-    let session = get_chat_session_by_id(db_guard.get_connection(), &request.session_id)
+    let session = db_guard.get_chat_session(&request.session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
 
     // Get all messages
-    let messages = get_messages_for_session(db_guard.get_connection(), &request.session_id)
+    let messages = db_guard.get_messages_by_session(&request.session_id)
         .map_err(|e| format!("Failed to get messages: {}", e))?;
 
     // Convert conversation to PRD content
@@ -253,6 +261,62 @@ pub async fn export_chat_to_prd(
     Ok(prd)
 }
 
+/// Assess the quality of a PRD chat session before export
+#[tauri::command]
+pub async fn assess_prd_quality(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<QualityAssessment, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+
+    // Get session
+    let session = db.get_chat_session(&session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    // Get all messages
+    let messages = db.get_messages_by_session(&session_id)
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    // Perform quality assessment
+    let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
+
+    // Update session with quality score
+    update_chat_session_quality_score(
+        db.get_connection(),
+        &session_id,
+        assessment.overall as i32,
+    ).map_err(|e| format!("Failed to update quality score: {}", e))?;
+
+    Ok(assessment)
+}
+
+/// Get guided questions based on PRD type
+#[tauri::command]
+pub async fn get_guided_questions(
+    prd_type: String,
+) -> Result<Vec<GuidedQuestion>, String> {
+    let prd_type = prd_type.parse::<PRDType>()
+        .map_err(|e| format!("Invalid PRD type: {}", e))?;
+
+    Ok(generate_guided_questions(prd_type))
+}
+
+/// Extract content from chat for preview before export
+#[tauri::command]
+pub async fn preview_prd_extraction(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<ExtractedPRDContent, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+
+    // Get all messages
+    let messages = db.get_messages_by_session(&session_id)
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    // Extract content using improved algorithm
+    Ok(extract_prd_content_advanced(&messages))
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -264,6 +328,769 @@ fn parse_agent_type(agent_type: &str) -> Result<AgentType, String> {
         "cursor" => Ok(AgentType::Cursor),
         _ => Err(format!("Unknown agent type: {}", agent_type)),
     }
+}
+
+// ============================================================================
+// Quality Assessment Functions
+// ============================================================================
+
+fn calculate_quality_assessment(messages: &[ChatMessage], prd_type: Option<&str>) -> QualityAssessment {
+    let extracted = extract_prd_content_advanced(messages);
+
+    let mut missing_sections = vec![];
+    let mut suggestions = vec![];
+
+    // Calculate completeness score based on required sections
+    let mut completeness_score = 0u8;
+
+    if !extracted.overview.is_empty() && extracted.overview.len() > 50 {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Problem Statement / Overview".to_string());
+        suggestions.push("Describe the problem you're solving and why it matters".to_string());
+    }
+
+    if !extracted.user_stories.is_empty() {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("User Stories".to_string());
+        suggestions.push("Add user stories in the format: 'As a [user], I want [feature] so that [benefit]'".to_string());
+    }
+
+    if !extracted.functional_requirements.is_empty() {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Functional Requirements".to_string());
+        suggestions.push("List what the system must do using 'must', 'shall', or 'should' language".to_string());
+    }
+
+    if !extracted.tasks.is_empty() {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Implementation Tasks".to_string());
+        suggestions.push("Break down the feature into actionable implementation tasks".to_string());
+    }
+
+    if !extracted.acceptance_criteria.is_empty() {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Acceptance Criteria".to_string());
+        suggestions.push("Define clear acceptance criteria for when the feature is complete".to_string());
+    }
+
+    if !extracted.success_metrics.is_empty() {
+        completeness_score += 10;
+    } else {
+        missing_sections.push("Success Metrics".to_string());
+        suggestions.push("How will you measure if this feature is successful?".to_string());
+    }
+
+    if !extracted.technical_constraints.is_empty() {
+        completeness_score += 8;
+    }
+
+    if !extracted.out_of_scope.is_empty() {
+        completeness_score += 7;
+    }
+
+    // Calculate clarity score based on content quality
+    let clarity_score = calculate_clarity_score(&extracted, messages);
+
+    // Calculate actionability score
+    let actionability_score = calculate_actionability_score(&extracted, prd_type);
+
+    // Calculate overall score (weighted average)
+    let overall = ((completeness_score as f32 * 0.4) +
+                   (clarity_score as f32 * 0.3) +
+                   (actionability_score as f32 * 0.3)) as u8;
+
+    // Add PRD type-specific suggestions
+    if let Some(prd_type_str) = prd_type {
+        if let Ok(pt) = prd_type_str.parse::<PRDType>() {
+            add_type_specific_suggestions(&mut suggestions, pt, &extracted);
+        }
+    }
+
+    let ready_for_export = overall >= 60 && missing_sections.len() <= 2;
+
+    QualityAssessment {
+        completeness: completeness_score,
+        clarity: clarity_score,
+        actionability: actionability_score,
+        overall,
+        missing_sections,
+        suggestions,
+        ready_for_export,
+    }
+}
+
+fn calculate_clarity_score(extracted: &ExtractedPRDContent, messages: &[ChatMessage]) -> u8 {
+    let mut score = 50u8; // Base score
+
+    // Penalize if overview is too short
+    if extracted.overview.len() < 100 {
+        score = score.saturating_sub(15);
+    } else if extracted.overview.len() > 200 {
+        score = score.saturating_add(10);
+    }
+
+    // Bonus for well-formatted requirements (contain action verbs)
+    let action_verb_pattern = Regex::new(r"(?i)\b(must|shall|should|will|can|may)\b").unwrap();
+    let reqs_with_action = extracted.functional_requirements.iter()
+        .filter(|r| action_verb_pattern.is_match(r))
+        .count();
+    if reqs_with_action > 0 {
+        score = score.saturating_add((reqs_with_action * 5).min(20) as u8);
+    }
+
+    // Bonus for having numbered or bulleted tasks
+    let task_count = extracted.tasks.len();
+    if task_count >= 3 && task_count <= 15 {
+        score = score.saturating_add(15);
+    } else if task_count > 15 {
+        score = score.saturating_add(10); // Slightly penalize too many tasks
+    }
+
+    // Check for contradictions or confusion (multiple "?" in assistant messages)
+    let confusion_count = messages.iter()
+        .filter(|m| m.role == MessageRole::Assistant)
+        .filter(|m| m.content.matches('?').count() > 3)
+        .count();
+    if confusion_count > 2 {
+        score = score.saturating_sub(10);
+    }
+
+    score.min(100)
+}
+
+fn calculate_actionability_score(extracted: &ExtractedPRDContent, prd_type: Option<&str>) -> u8 {
+    let mut score = 40u8; // Base score
+
+    // Bonus for having tasks
+    let task_count = extracted.tasks.len();
+    score = score.saturating_add((task_count * 5).min(25) as u8);
+
+    // Bonus for acceptance criteria
+    let ac_count = extracted.acceptance_criteria.len();
+    score = score.saturating_add((ac_count * 5).min(20) as u8);
+
+    // Bonus for having out-of-scope items (shows bounded scope)
+    if !extracted.out_of_scope.is_empty() {
+        score = score.saturating_add(10);
+    }
+
+    // PRD type-specific adjustments
+    if let Some(prd_type_str) = prd_type {
+        if let Ok(pt) = prd_type_str.parse::<PRDType>() {
+            match pt {
+                PRDType::BugFix => {
+                    // Bug fixes should have clear reproduction steps
+                    if extracted.overview.to_lowercase().contains("reproduce") ||
+                       extracted.overview.to_lowercase().contains("steps") {
+                        score = score.saturating_add(10);
+                    }
+                }
+                PRDType::ApiIntegration => {
+                    // API integrations should mention endpoints or data formats
+                    if extracted.technical_constraints.iter()
+                        .any(|c| c.to_lowercase().contains("endpoint") ||
+                                 c.to_lowercase().contains("api") ||
+                                 c.to_lowercase().contains("json")) {
+                        score = score.saturating_add(10);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    score.min(100)
+}
+
+fn add_type_specific_suggestions(suggestions: &mut Vec<String>, prd_type: PRDType, extracted: &ExtractedPRDContent) {
+    match prd_type {
+        PRDType::BugFix => {
+            if !extracted.overview.to_lowercase().contains("reproduce") {
+                suggestions.push("Include steps to reproduce the bug".to_string());
+            }
+            if !extracted.overview.to_lowercase().contains("expected") {
+                suggestions.push("Describe expected vs actual behavior".to_string());
+            }
+        }
+        PRDType::NewFeature => {
+            if extracted.user_stories.is_empty() {
+                suggestions.push("Add user stories to clarify who benefits and how".to_string());
+            }
+        }
+        PRDType::ApiIntegration => {
+            if !extracted.technical_constraints.iter().any(|c| c.to_lowercase().contains("endpoint")) {
+                suggestions.push("Document the API endpoints that will be used".to_string());
+            }
+            if !extracted.technical_constraints.iter().any(|c| c.to_lowercase().contains("auth")) {
+                suggestions.push("Describe the authentication requirements".to_string());
+            }
+        }
+        PRDType::Refactoring => {
+            if !extracted.out_of_scope.iter().any(|s| s.to_lowercase().contains("behavior")) {
+                suggestions.push("Clarify that existing behavior should not change".to_string());
+            }
+        }
+        PRDType::General => {}
+    }
+}
+
+// ============================================================================
+// Guided Questions Generator
+// ============================================================================
+
+fn generate_guided_questions(prd_type: PRDType) -> Vec<GuidedQuestion> {
+    let mut questions = vec![
+        // Common questions for all PRD types
+        GuidedQuestion {
+            id: "problem_statement".to_string(),
+            question: "What problem are you trying to solve?".to_string(),
+            question_type: QuestionType::FreeText,
+            options: None,
+            required: true,
+            hint: Some("Describe the pain point or need that this addresses".to_string()),
+        },
+        GuidedQuestion {
+            id: "target_user".to_string(),
+            question: "Who is the target user for this?".to_string(),
+            question_type: QuestionType::FreeText,
+            options: None,
+            required: true,
+            hint: Some("Be specific about the user persona or role".to_string()),
+        },
+    ];
+
+    // Add type-specific questions
+    match prd_type {
+        PRDType::NewFeature => {
+            questions.extend(vec![
+                GuidedQuestion {
+                    id: "user_story".to_string(),
+                    question: "Can you describe a user story? (As a [user], I want [feature] so that [benefit])".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("User stories help clarify the value proposition".to_string()),
+                },
+                GuidedQuestion {
+                    id: "success_metrics".to_string(),
+                    question: "How will you measure success?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: false,
+                    hint: Some("e.g., user adoption rate, time saved, error reduction".to_string()),
+                },
+                GuidedQuestion {
+                    id: "out_of_scope".to_string(),
+                    question: "What is explicitly out of scope for this feature?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: false,
+                    hint: Some("Defining boundaries helps prevent scope creep".to_string()),
+                },
+            ]);
+        }
+        PRDType::BugFix => {
+            questions.extend(vec![
+                GuidedQuestion {
+                    id: "repro_steps".to_string(),
+                    question: "What are the steps to reproduce this bug?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("List numbered steps to reliably trigger the bug".to_string()),
+                },
+                GuidedQuestion {
+                    id: "expected_behavior".to_string(),
+                    question: "What is the expected behavior?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "actual_behavior".to_string(),
+                    question: "What is the actual (buggy) behavior?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "severity".to_string(),
+                    question: "What is the severity of this bug?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "Critical - System unusable".to_string(),
+                        "High - Major feature broken".to_string(),
+                        "Medium - Feature partially broken".to_string(),
+                        "Low - Minor inconvenience".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
+                },
+            ]);
+        }
+        PRDType::Refactoring => {
+            questions.extend(vec![
+                GuidedQuestion {
+                    id: "current_state".to_string(),
+                    question: "What is the current state of the code you want to refactor?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Describe the code smell or architectural issue".to_string()),
+                },
+                GuidedQuestion {
+                    id: "desired_state".to_string(),
+                    question: "What is the desired state after refactoring?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Describe the target architecture or patterns".to_string()),
+                },
+                GuidedQuestion {
+                    id: "behavior_change".to_string(),
+                    question: "Should this refactoring change any external behavior?".to_string(),
+                    question_type: QuestionType::Confirmation,
+                    options: Some(vec![
+                        "No, behavior must remain identical".to_string(),
+                        "Yes, some behavior changes are acceptable".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
+                },
+            ]);
+        }
+        PRDType::ApiIntegration => {
+            questions.extend(vec![
+                GuidedQuestion {
+                    id: "api_provider".to_string(),
+                    question: "What API or service are you integrating with?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Name of the service and link to API docs if available".to_string()),
+                },
+                GuidedQuestion {
+                    id: "auth_method".to_string(),
+                    question: "What authentication method does the API use?".to_string(),
+                    question_type: QuestionType::MultipleChoice,
+                    options: Some(vec![
+                        "API Key".to_string(),
+                        "OAuth 2.0".to_string(),
+                        "JWT/Bearer Token".to_string(),
+                        "Basic Auth".to_string(),
+                        "No Authentication".to_string(),
+                        "Other".to_string(),
+                    ]),
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "data_flow".to_string(),
+                    question: "Describe the data flow: what data do you send and receive?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: Some("Include request/response formats if known".to_string()),
+                },
+                GuidedQuestion {
+                    id: "error_handling".to_string(),
+                    question: "How should API errors be handled?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: false,
+                    hint: Some("Retry strategy, fallbacks, user messaging".to_string()),
+                },
+            ]);
+        }
+        PRDType::General => {
+            questions.extend(vec![
+                GuidedQuestion {
+                    id: "description".to_string(),
+                    question: "Describe what you want to build or change.".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: true,
+                    hint: None,
+                },
+                GuidedQuestion {
+                    id: "constraints".to_string(),
+                    question: "Are there any technical constraints or dependencies?".to_string(),
+                    question_type: QuestionType::FreeText,
+                    options: None,
+                    required: false,
+                    hint: Some("e.g., must work with existing database, specific framework requirements".to_string()),
+                },
+            ]);
+        }
+    }
+
+    // Add common closing questions
+    questions.push(GuidedQuestion {
+        id: "acceptance_criteria".to_string(),
+        question: "What are the acceptance criteria for this to be considered complete?".to_string(),
+        question_type: QuestionType::FreeText,
+        options: None,
+        required: true,
+        hint: Some("List specific, testable criteria".to_string()),
+    });
+
+    questions
+}
+
+// ============================================================================
+// Advanced Extraction Algorithm
+// ============================================================================
+
+fn extract_prd_content_advanced(messages: &[ChatMessage]) -> ExtractedPRDContent {
+    let all_content: String = messages.iter()
+        .map(|m| m.content.clone())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let user_content: String = messages.iter()
+        .filter(|m| m.role == MessageRole::User)
+        .map(|m| m.content.clone())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let assistant_content: String = messages.iter()
+        .filter(|m| m.role == MessageRole::Assistant)
+        .map(|m| m.content.clone())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    ExtractedPRDContent {
+        overview: extract_overview_advanced(&user_content, &assistant_content),
+        user_stories: extract_user_stories(&all_content),
+        functional_requirements: extract_functional_requirements(&all_content),
+        non_functional_requirements: extract_non_functional_requirements(&all_content),
+        technical_constraints: extract_technical_constraints(&all_content),
+        success_metrics: extract_success_metrics(&all_content),
+        tasks: extract_tasks_advanced(&all_content),
+        acceptance_criteria: extract_acceptance_criteria(&all_content),
+        out_of_scope: extract_out_of_scope(&all_content),
+    }
+}
+
+fn extract_overview_advanced(user_content: &str, assistant_content: &str) -> String {
+    // First, try to get the user's initial problem statement
+    let first_user_statement = user_content.lines()
+        .take(5)
+        .filter(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Then get any summary from the assistant
+    let summary_patterns = [
+        r"(?i)(?:summary|overview|problem statement|in summary)[:\s]+([^\n]{30,})",
+        r"(?i)(?:you want to|you're looking to|the goal is)[:\s]*([^\n]{30,})",
+    ];
+
+    let mut assistant_summary = String::new();
+    for pattern in summary_patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            if let Some(cap) = re.captures(assistant_content) {
+                if let Some(m) = cap.get(1) {
+                    assistant_summary = m.as_str().trim().to_string();
+                    break;
+                }
+            }
+        }
+    }
+
+    if !assistant_summary.is_empty() {
+        format!("{}\n\n{}", first_user_statement, assistant_summary)
+    } else {
+        first_user_statement
+    }
+}
+
+fn extract_user_stories(content: &str) -> Vec<String> {
+    let mut stories = vec![];
+
+    // Pattern: "As a [user], I want [feature] so that [benefit]"
+    let user_story_pattern = Regex::new(
+        r"(?i)as (?:a|an) ([^,]+),?\s*I want ([^,]+?)(?:,?\s*so that ([^\n.]+))?"
+    ).unwrap();
+
+    for cap in user_story_pattern.captures_iter(content) {
+        let user = cap.get(1).map_or("", |m| m.as_str()).trim();
+        let want = cap.get(2).map_or("", |m| m.as_str()).trim();
+        let benefit = cap.get(3).map_or("", |m| m.as_str()).trim();
+
+        if !benefit.is_empty() {
+            stories.push(format!("As a {}, I want {} so that {}", user, want, benefit));
+        } else {
+            stories.push(format!("As a {}, I want {}", user, want));
+        }
+    }
+
+    // Deduplicate
+    stories.sort();
+    stories.dedup();
+    stories
+}
+
+fn extract_functional_requirements(content: &str) -> Vec<String> {
+    let mut requirements = vec![];
+
+    // Pattern: Lines containing requirement keywords
+    let requirement_pattern = Regex::new(
+        r"(?i)(?:^|\n)\s*[-*•]?\s*(?:the system |the app(?:lication)? |it |users? )?(?:must|shall|should|will|needs? to)\s+([^\n.]+[.\n])"
+    ).unwrap();
+
+    for cap in requirement_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(1) {
+            let req = m.as_str().trim().trim_end_matches('.');
+            if req.len() > 10 { // Skip very short matches
+                requirements.push(req.to_string());
+            }
+        }
+    }
+
+    // Also look for numbered requirements
+    let numbered_pattern = Regex::new(
+        r"(?i)(?:^|\n)\s*\d+[.)]\s*([^\n]{15,})"
+    ).unwrap();
+
+    for cap in numbered_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(1) {
+            let req = m.as_str().trim();
+            // Check if it looks like a requirement
+            if req.to_lowercase().contains("must") ||
+               req.to_lowercase().contains("shall") ||
+               req.to_lowercase().contains("should") ||
+               req.to_lowercase().contains("require") {
+                requirements.push(req.trim_end_matches('.').to_string());
+            }
+        }
+    }
+
+    // Deduplicate and limit
+    requirements.sort();
+    requirements.dedup();
+    requirements.truncate(20);
+    requirements
+}
+
+fn extract_non_functional_requirements(content: &str) -> Vec<String> {
+    let mut nfrs = vec![];
+
+    let nfr_keywords = [
+        "performance", "scalab", "secur", "reliab", "availab",
+        "maintainab", "usab", "access", "latency", "throughput",
+        "response time", "uptime", "backup", "compliance", "gdpr"
+    ];
+
+    for line in content.lines() {
+        let lower = line.to_lowercase();
+        if nfr_keywords.iter().any(|kw| lower.contains(kw)) {
+            let trimmed = line.trim().trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')').trim();
+            if trimmed.len() > 15 {
+                nfrs.push(trimmed.to_string());
+            }
+        }
+    }
+
+    nfrs.sort();
+    nfrs.dedup();
+    nfrs.truncate(10);
+    nfrs
+}
+
+fn extract_technical_constraints(content: &str) -> Vec<String> {
+    let mut constraints = vec![];
+
+    let constraint_keywords = [
+        "constraint", "limitation", "must use", "required to use",
+        "compatible with", "integrate with", "api", "endpoint",
+        "database", "framework", "library", "version", "protocol"
+    ];
+
+    for line in content.lines() {
+        let lower = line.to_lowercase();
+        if constraint_keywords.iter().any(|kw| lower.contains(kw)) {
+            let trimmed = line.trim().trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')').trim();
+            if trimmed.len() > 10 {
+                constraints.push(trimmed.to_string());
+            }
+        }
+    }
+
+    constraints.sort();
+    constraints.dedup();
+    constraints.truncate(10);
+    constraints
+}
+
+fn extract_success_metrics(content: &str) -> Vec<String> {
+    let mut metrics = vec![];
+
+    let metric_keywords = [
+        "metric", "measure", "kpi", "success", "goal", "target",
+        "increase", "decrease", "reduce", "improve", "%", "percent"
+    ];
+
+    // Pattern for metrics with numbers
+    let metric_pattern = Regex::new(
+        r"(?i)(?:increase|decrease|reduce|improve|achieve|reach|target)[:\s]+[^\n]*\d+[^\n]*"
+    ).unwrap();
+
+    for cap in metric_pattern.find_iter(content) {
+        let metric = cap.as_str().trim();
+        if metric.len() > 10 {
+            metrics.push(metric.to_string());
+        }
+    }
+
+    // Also look for lines with metric keywords
+    for line in content.lines() {
+        let lower = line.to_lowercase();
+        if metric_keywords.iter().any(|kw| lower.contains(kw)) {
+            let trimmed = line.trim().trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')').trim();
+            if trimmed.len() > 10 && !metrics.contains(&trimmed.to_string()) {
+                metrics.push(trimmed.to_string());
+            }
+        }
+    }
+
+    metrics.truncate(10);
+    metrics
+}
+
+fn extract_tasks_advanced(content: &str) -> Vec<String> {
+    let mut tasks = vec![];
+
+    // Pattern: Task-like sentences with action verbs
+    let task_pattern = Regex::new(
+        r"(?i)(?:^|\n)\s*[-*•]?\s*(?:\d+[.)]\s*)?(?:implement|create|build|add|update|fix|refactor|design|develop|integrate|write|test|deploy|configure|set up|remove|delete|modify)\s+([^\n]{10,})"
+    ).unwrap();
+
+    for cap in task_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(0) {
+            let task = m.as_str().trim()
+                .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace())
+                .trim();
+            if task.len() > 10 {
+                tasks.push(task.to_string());
+            }
+        }
+    }
+
+    // Look for numbered lists that might be tasks
+    let numbered_task_pattern = Regex::new(
+        r"(?:^|\n)\s*(\d+)[.)]\s+([^\n]{15,})"
+    ).unwrap();
+
+    for cap in numbered_task_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(2) {
+            let task = m.as_str().trim();
+            let lower = task.to_lowercase();
+            // Check if it looks like a task
+            if lower.starts_with("implement") || lower.starts_with("create") ||
+               lower.starts_with("build") || lower.starts_with("add") ||
+               lower.starts_with("update") || lower.starts_with("fix") ||
+               lower.starts_with("refactor") || lower.starts_with("design") ||
+               lower.contains("should") || lower.contains("need to") {
+                if !tasks.contains(&task.to_string()) {
+                    tasks.push(task.to_string());
+                }
+            }
+        }
+    }
+
+    // Deduplicate and limit
+    tasks.sort();
+    tasks.dedup();
+    tasks.truncate(15);
+    tasks
+}
+
+fn extract_acceptance_criteria(content: &str) -> Vec<String> {
+    let mut criteria = vec![];
+
+    // Look for acceptance criteria section
+    let ac_section_pattern = Regex::new(
+        r"(?i)acceptance criteria[:\s]*\n((?:[-*•]?\s*[^\n]+\n?)+)"
+    ).unwrap();
+
+    if let Some(cap) = ac_section_pattern.captures(content) {
+        if let Some(m) = cap.get(1) {
+            for line in m.as_str().lines() {
+                let trimmed = line.trim()
+                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')' || c == '[' || c == ']')
+                    .trim();
+                if trimmed.len() > 5 {
+                    criteria.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    // Also look for "Given/When/Then" patterns
+    let gwt_pattern = Regex::new(
+        r"(?i)(given[^\n]+when[^\n]+then[^\n]+)"
+    ).unwrap();
+
+    for cap in gwt_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(1) {
+            criteria.push(m.as_str().trim().to_string());
+        }
+    }
+
+    // Look for "verify that" or "ensure that" patterns
+    let verify_pattern = Regex::new(
+        r"(?i)(?:verify|ensure|confirm|check) that\s+([^\n.]+)"
+    ).unwrap();
+
+    for cap in verify_pattern.captures_iter(content) {
+        if let Some(m) = cap.get(1) {
+            let criterion = format!("Verify that {}", m.as_str().trim());
+            if !criteria.contains(&criterion) {
+                criteria.push(criterion);
+            }
+        }
+    }
+
+    criteria.truncate(15);
+    criteria
+}
+
+fn extract_out_of_scope(content: &str) -> Vec<String> {
+    let mut out_of_scope = vec![];
+
+    // Look for out of scope section
+    let oos_patterns = [
+        r"(?i)(?:out of scope|not in scope|excluded|won't include|will not include)[:\s]*\n((?:[-*•]?\s*[^\n]+\n?)+)",
+        r"(?i)(?:this (?:does not|doesn't|won't|will not) include)[:\s]*([^\n]+)",
+    ];
+
+    for pattern in oos_patterns {
+        if let Ok(re) = Regex::new(pattern) {
+            for cap in re.captures_iter(content) {
+                if let Some(m) = cap.get(1) {
+                    for line in m.as_str().lines() {
+                        let trimmed = line.trim()
+                            .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')')
+                            .trim();
+                        if trimmed.len() > 5 && !out_of_scope.contains(&trimmed.to_string()) {
+                            out_of_scope.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out_of_scope.truncate(10);
+    out_of_scope
 }
 
 fn build_prd_chat_prompt(
@@ -467,118 +1294,10 @@ fn extract_tasks_from_messages(messages: &[ChatMessage]) -> String {
 }
 
 // ============================================================================
-// Database Operations
+// Database Helper Functions (for specific update operations)
 // ============================================================================
 
 use rusqlite::{params, Connection, Result};
-
-pub fn init_chat_tables(conn: &Connection) -> Result<()> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS chat_sessions (
-            id TEXT PRIMARY KEY,
-            agent_type TEXT NOT NULL,
-            project_path TEXT,
-            prd_id TEXT,
-            title TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (prd_id) REFERENCES prd_documents(id)
-        )",
-        [],
-    )?;
-
-    // Add title column if it doesn't exist (migration for existing databases)
-    let _ = conn.execute("ALTER TABLE chat_sessions ADD COLUMN title TEXT", []);
-
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS chat_messages (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id)",
-        [],
-    )?;
-
-    Ok(())
-}
-
-fn create_chat_session(conn: &Connection, session: &ChatSession) -> Result<()> {
-    conn.execute(
-        "INSERT INTO chat_sessions (id, agent_type, project_path, prd_id, title, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            session.id,
-            session.agent_type,
-            session.project_path,
-            session.prd_id,
-            session.title,
-            session.created_at,
-            session.updated_at,
-        ],
-    )?;
-    Ok(())
-}
-
-fn get_chat_session_by_id(conn: &Connection, id: &str) -> Result<ChatSession> {
-    conn.query_row(
-        "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
-                (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
-         FROM chat_sessions s WHERE s.id = ?1",
-        params![id],
-        |row| {
-            Ok(ChatSession {
-                id: row.get(0)?,
-                agent_type: row.get(1)?,
-                project_path: row.get(2)?,
-                prd_id: row.get(3)?,
-                title: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-                message_count: row.get(7)?,
-            })
-        },
-    )
-}
-
-fn list_chat_sessions(conn: &Connection) -> Result<Vec<ChatSession>> {
-    let mut stmt = conn.prepare(
-        "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
-                (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
-         FROM chat_sessions s
-         ORDER BY s.updated_at DESC",
-    )?;
-
-    let sessions = stmt.query_map([], |row| {
-        Ok(ChatSession {
-            id: row.get(0)?,
-            agent_type: row.get(1)?,
-            project_path: row.get(2)?,
-            prd_id: row.get(3)?,
-            title: row.get(4)?,
-            created_at: row.get(5)?,
-            updated_at: row.get(6)?,
-            message_count: row.get(7)?,
-        })
-    })?;
-
-    sessions.collect()
-}
-
-fn delete_chat_session(conn: &Connection, id: &str) -> Result<()> {
-    conn.execute(
-        "DELETE FROM chat_sessions WHERE id = ?1",
-        params![id],
-    )?;
-    Ok(())
-}
 
 fn update_chat_session_timestamp(conn: &Connection, id: &str, timestamp: &str) -> Result<()> {
     conn.execute(
@@ -588,54 +1307,11 @@ fn update_chat_session_timestamp(conn: &Connection, id: &str, timestamp: &str) -
     Ok(())
 }
 
-fn create_chat_message(conn: &Connection, message: &ChatMessage) -> Result<()> {
+fn update_chat_session_quality_score(conn: &Connection, id: &str, score: i32) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
-        "INSERT INTO chat_messages (id, session_id, role, content, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            message.id,
-            message.session_id,
-            message.role.as_str(),
-            message.content,
-            message.created_at,
-        ],
-    )?;
-    Ok(())
-}
-
-fn get_messages_for_session(conn: &Connection, session_id: &str) -> Result<Vec<ChatMessage>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, session_id, role, content, created_at
-         FROM chat_messages
-         WHERE session_id = ?1
-         ORDER BY created_at ASC",
-    )?;
-
-    let messages = stmt.query_map(params![session_id], |row| {
-        let role_str: String = row.get(2)?;
-        let role = role_str.parse::<MessageRole>().map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                2,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-            )
-        })?;
-        Ok(ChatMessage {
-            id: row.get(0)?,
-            session_id: row.get(1)?,
-            role,
-            content: row.get(3)?,
-            created_at: row.get(4)?,
-        })
-    })?;
-
-    messages.collect()
-}
-
-fn delete_messages_for_session(conn: &Connection, session_id: &str) -> Result<()> {
-    conn.execute(
-        "DELETE FROM chat_messages WHERE session_id = ?1",
-        params![session_id],
+        "UPDATE chat_sessions SET quality_score = ?1, updated_at = ?2 WHERE id = ?3",
+        params![score, now, id],
     )?;
     Ok(())
 }
@@ -652,11 +1328,26 @@ mod tests {
     fn create_test_db() -> Database {
         let db = Database::new(":memory:").unwrap();
         db.init().unwrap();
-
-        // Initialize chat tables
-        init_chat_tables(db.get_connection()).unwrap();
-
+        // Chat tables are created in migration v4 by db.init()
         db
+    }
+
+    // Helper to create a test session with default new fields
+    fn make_test_session(id: &str) -> ChatSession {
+        ChatSession {
+            id: id.to_string(),
+            agent_type: "claude".to_string(),
+            project_path: None,
+            prd_id: None,
+            title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
+            created_at: "2026-01-17T00:00:00Z".to_string(),
+            updated_at: "2026-01-17T00:00:00Z".to_string(),
+            message_count: None,
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -667,18 +1358,11 @@ mod tests {
     fn test_create_chat_session() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "test-session-1".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: Some("/test/project".to_string()),
-            prd_id: None,
-            title: Some("Test Session".to_string()),
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let mut session = make_test_session("test-session-1");
+        session.project_path = Some("/test/project".to_string());
+        session.title = Some("Test Session".to_string());
 
-        let result = create_chat_session(db.get_connection(), &session);
+        let result = db.create_chat_session(&session);
         assert!(result.is_ok());
     }
 
@@ -686,56 +1370,39 @@ mod tests {
     fn test_get_chat_session_by_id() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "test-session-2".to_string(),
-            agent_type: "opencode".to_string(),
-            project_path: Some("/test/path".to_string()),
-            prd_id: None, // No PRD reference for this test
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let mut session = make_test_session("test-session-2");
+        session.agent_type = "opencode".to_string();
+        session.project_path = Some("/test/path".to_string());
+        session.prd_type = Some("new_feature".to_string());
+        session.quality_score = Some(75);
 
-        create_chat_session(db.get_connection(), &session).unwrap();
-        let retrieved = get_chat_session_by_id(db.get_connection(), "test-session-2").unwrap();
+        db.create_chat_session(&session).unwrap();
+        let retrieved = db.get_chat_session("test-session-2").unwrap();
 
         assert_eq!(retrieved.id, "test-session-2");
         assert_eq!(retrieved.agent_type, "opencode");
         assert_eq!(retrieved.project_path, Some("/test/path".to_string()));
         assert_eq!(retrieved.prd_id, None);
+        assert_eq!(retrieved.prd_type, Some("new_feature".to_string()));
+        assert!(retrieved.guided_mode);
+        assert_eq!(retrieved.quality_score, Some(75));
     }
 
     #[test]
     fn test_list_chat_sessions() {
         let db = create_test_db();
 
-        let session1 = ChatSession {
-            id: "session-1".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T01:00:00Z".to_string(),
-            message_count: None,
-        };
+        let mut session1 = make_test_session("session-1");
+        session1.updated_at = "2026-01-17T01:00:00Z".to_string();
 
-        let session2 = ChatSession {
-            id: "session-2".to_string(),
-            agent_type: "cursor".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T02:00:00Z".to_string(),
-            message_count: None,
-        };
+        let mut session2 = make_test_session("session-2");
+        session2.agent_type = "cursor".to_string();
+        session2.updated_at = "2026-01-17T02:00:00Z".to_string();
 
-        create_chat_session(db.get_connection(), &session1).unwrap();
-        create_chat_session(db.get_connection(), &session2).unwrap();
+        db.create_chat_session(&session1).unwrap();
+        db.create_chat_session(&session2).unwrap();
 
-        let sessions = list_chat_sessions(db.get_connection()).unwrap();
+        let sessions = db.list_chat_sessions().unwrap();
 
         assert_eq!(sessions.len(), 2);
         // Should be ordered by updated_at DESC
@@ -747,21 +1414,12 @@ mod tests {
     fn test_delete_chat_session() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "delete-test".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let session = make_test_session("delete-test");
 
-        create_chat_session(db.get_connection(), &session).unwrap();
-        delete_chat_session(db.get_connection(), "delete-test").unwrap();
+        db.create_chat_session(&session).unwrap();
+        db.delete_chat_session("delete-test").unwrap();
 
-        let result = get_chat_session_by_id(db.get_connection(), "delete-test");
+        let result = db.get_chat_session("delete-test");
         assert!(result.is_err());
     }
 
@@ -769,22 +1427,26 @@ mod tests {
     fn test_update_chat_session_timestamp() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "timestamp-test".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let session = make_test_session("timestamp-test");
 
-        create_chat_session(db.get_connection(), &session).unwrap();
+        db.create_chat_session(&session).unwrap();
         update_chat_session_timestamp(db.get_connection(), "timestamp-test", "2026-01-17T12:00:00Z").unwrap();
 
-        let retrieved = get_chat_session_by_id(db.get_connection(), "timestamp-test").unwrap();
+        let retrieved = db.get_chat_session("timestamp-test").unwrap();
         assert_eq!(retrieved.updated_at, "2026-01-17T12:00:00Z");
+    }
+
+    #[test]
+    fn test_update_chat_session_quality_score() {
+        let db = create_test_db();
+
+        let session = make_test_session("quality-test");
+
+        db.create_chat_session(&session).unwrap();
+        update_chat_session_quality_score(db.get_connection(), "quality-test", 85).unwrap();
+
+        let retrieved = db.get_chat_session("quality-test").unwrap();
+        assert_eq!(retrieved.quality_score, Some(85));
     }
 
     #[test]
@@ -792,17 +1454,8 @@ mod tests {
         let db = create_test_db();
 
         // Create session first
-        let session = ChatSession {
-            id: "msg-session".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        create_chat_session(db.get_connection(), &session).unwrap();
+        let session = make_test_session("msg-session");
+        db.create_chat_session(&session).unwrap();
 
         let message = ChatMessage {
             id: "msg-1".to_string(),
@@ -812,7 +1465,7 @@ mod tests {
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
 
-        let result = create_chat_message(db.get_connection(), &message);
+        let result = db.create_chat_message(&message);
         assert!(result.is_ok());
     }
 
@@ -820,17 +1473,8 @@ mod tests {
     fn test_get_messages_for_session() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "history-session".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        create_chat_session(db.get_connection(), &session).unwrap();
+        let session = make_test_session("history-session");
+        db.create_chat_session(&session).unwrap();
 
         let msg1 = ChatMessage {
             id: "msg-1".to_string(),
@@ -856,11 +1500,11 @@ mod tests {
             created_at: "2026-01-17T00:03:00Z".to_string(),
         };
 
-        create_chat_message(db.get_connection(), &msg1).unwrap();
-        create_chat_message(db.get_connection(), &msg2).unwrap();
-        create_chat_message(db.get_connection(), &msg3).unwrap();
+        db.create_chat_message(&msg1).unwrap();
+        db.create_chat_message(&msg2).unwrap();
+        db.create_chat_message(&msg3).unwrap();
 
-        let messages = get_messages_for_session(db.get_connection(), "history-session").unwrap();
+        let messages = db.get_messages_by_session("history-session").unwrap();
 
         assert_eq!(messages.len(), 3);
         // Should be ordered by created_at ASC
@@ -875,17 +1519,8 @@ mod tests {
     fn test_delete_messages_for_session() {
         let db = create_test_db();
 
-        let session = ChatSession {
-            id: "delete-msgs-session".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        create_chat_session(db.get_connection(), &session).unwrap();
+        let session = make_test_session("delete-msgs-session");
+        db.create_chat_session(&session).unwrap();
 
         let msg = ChatMessage {
             id: "to-delete".to_string(),
@@ -894,11 +1529,11 @@ mod tests {
             content: "Delete me".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
-        create_chat_message(db.get_connection(), &msg).unwrap();
+        db.create_chat_message(&msg).unwrap();
 
-        delete_messages_for_session(db.get_connection(), "delete-msgs-session").unwrap();
+        db.delete_messages_by_session("delete-msgs-session").unwrap();
 
-        let messages = get_messages_for_session(db.get_connection(), "delete-msgs-session").unwrap();
+        let messages = db.get_messages_by_session("delete-msgs-session").unwrap();
         assert_eq!(messages.len(), 0);
     }
 
@@ -943,16 +1578,7 @@ mod tests {
 
     #[test]
     fn test_build_prd_chat_prompt_empty_history() {
-        let session = ChatSession {
-            id: "test".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let session = make_test_session("test");
 
         let history: Vec<ChatMessage> = vec![];
         let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app");
@@ -964,16 +1590,8 @@ mod tests {
 
     #[test]
     fn test_build_prd_chat_prompt_with_history() {
-        let session = ChatSession {
-            id: "test".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: Some("/my/project".to_string()),
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let mut session = make_test_session("test");
+        session.project_path = Some("/my/project".to_string());
 
         let history = vec![
             ChatMessage {
@@ -1152,11 +1770,15 @@ mod tests {
             project_path: Some("/project".to_string()),
             prd_id: None,
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,
         };
-        create_chat_session(conn, &session).unwrap();
+        db.create_chat_session(&session).unwrap();
 
         // 2. Add messages
         let user_msg = ChatMessage {
@@ -1166,7 +1788,7 @@ mod tests {
             content: "Create a PRD for a task manager".to_string(),
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
-        create_chat_message(conn, &user_msg).unwrap();
+        db.create_chat_message(&user_msg).unwrap();
 
         let assistant_msg = ChatMessage {
             id: "a1".to_string(),
@@ -1175,10 +1797,10 @@ mod tests {
             content: "I'll help you create a comprehensive PRD for a task manager.".to_string(),
             created_at: "2026-01-17T00:02:00Z".to_string(),
         };
-        create_chat_message(conn, &assistant_msg).unwrap();
+        db.create_chat_message(&assistant_msg).unwrap();
 
         // 3. Verify history
-        let history = get_messages_for_session(conn, "workflow-session").unwrap();
+        let history = db.get_messages_by_session("workflow-session").unwrap();
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].role, MessageRole::User);
         assert_eq!(history[1].role, MessageRole::Assistant);
@@ -1187,22 +1809,21 @@ mod tests {
         update_chat_session_timestamp(conn, "workflow-session", "2026-01-17T00:02:00Z").unwrap();
 
         // 5. Verify session list
-        let sessions = list_chat_sessions(conn).unwrap();
+        let sessions = db.list_chat_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].updated_at, "2026-01-17T00:02:00Z");
 
         // 6. Delete and verify
-        delete_messages_for_session(conn, "workflow-session").unwrap();
-        delete_chat_session(conn, "workflow-session").unwrap();
+        db.delete_messages_by_session("workflow-session").unwrap();
+        db.delete_chat_session("workflow-session").unwrap();
 
-        let sessions = list_chat_sessions(conn).unwrap();
+        let sessions = db.list_chat_sessions().unwrap();
         assert_eq!(sessions.len(), 0);
     }
 
     #[test]
     fn test_session_with_prd_reference() {
         let db = create_test_db();
-        let conn = db.get_connection();
 
         // Create a PRD first
         let prd = crate::database::prd::PRDDocument {
@@ -1223,51 +1844,25 @@ mod tests {
         db.create_prd(&prd).unwrap();
 
         // Create session linked to PRD
-        let session = ChatSession {
-            id: "linked-session".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: Some("prd-ref".to_string()),
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        create_chat_session(conn, &session).unwrap();
+        let mut session = make_test_session("linked-session");
+        session.prd_id = Some("prd-ref".to_string());
+        db.create_chat_session(&session).unwrap();
 
-        let retrieved = get_chat_session_by_id(conn, "linked-session").unwrap();
+        let retrieved = db.get_chat_session("linked-session").unwrap();
         assert_eq!(retrieved.prd_id, Some("prd-ref".to_string()));
     }
 
     #[test]
     fn test_multiple_sessions_isolation() {
         let db = create_test_db();
-        let conn = db.get_connection();
 
         // Create two sessions
-        let session1 = ChatSession {
-            id: "session-a".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        let session2 = ChatSession {
-            id: "session-b".to_string(),
-            agent_type: "opencode".to_string(),
-            project_path: None,
-            prd_id: None,
-            title: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
+        let session1 = make_test_session("session-a");
+        let mut session2 = make_test_session("session-b");
+        session2.agent_type = "opencode".to_string();
 
-        create_chat_session(conn, &session1).unwrap();
-        create_chat_session(conn, &session2).unwrap();
+        db.create_chat_session(&session1).unwrap();
+        db.create_chat_session(&session2).unwrap();
 
         // Add messages to each session
         let msg_a = ChatMessage {
@@ -1285,12 +1880,12 @@ mod tests {
             created_at: "2026-01-17T00:01:00Z".to_string(),
         };
 
-        create_chat_message(conn, &msg_a).unwrap();
-        create_chat_message(conn, &msg_b).unwrap();
+        db.create_chat_message(&msg_a).unwrap();
+        db.create_chat_message(&msg_b).unwrap();
 
         // Verify isolation
-        let messages_a = get_messages_for_session(conn, "session-a").unwrap();
-        let messages_b = get_messages_for_session(conn, "session-b").unwrap();
+        let messages_a = db.get_messages_by_session("session-a").unwrap();
+        let messages_b = db.get_messages_by_session("session-b").unwrap();
 
         assert_eq!(messages_a.len(), 1);
         assert_eq!(messages_b.len(), 1);
@@ -1418,5 +2013,235 @@ mod tests {
         assert_eq!(deserialized.role, message.role);
         assert_eq!(deserialized.content, message.content);
         assert_eq!(deserialized.created_at, message.created_at);
+    }
+
+    // -------------------------------------------------------------------------
+    // Quality Assessment Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_quality_assessment_empty_conversation() {
+        let messages: Vec<ChatMessage> = vec![];
+        let assessment = calculate_quality_assessment(&messages, None);
+
+        assert_eq!(assessment.completeness, 0);
+        assert!(assessment.missing_sections.len() > 0);
+        assert!(!assessment.ready_for_export);
+    }
+
+    #[test]
+    fn test_quality_assessment_basic_conversation() {
+        let messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I want to build a todo app that must support multiple lists and must allow task prioritization".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "I'll help you create a comprehensive PRD for your todo app. Here's the overview: The todo application will support multiple task lists with prioritization features.".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+            },
+        ];
+
+        let assessment = calculate_quality_assessment(&messages, Some("new_feature"));
+
+        // Should have some completeness score
+        assert!(assessment.completeness > 0);
+        // Should have suggestions
+        assert!(assessment.suggestions.len() > 0);
+    }
+
+    #[test]
+    fn test_quality_assessment_complete_conversation() {
+        let messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I want to build a todo app. As a user, I want to create tasks so that I can track my work.".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "The app must support task creation. The system shall allow task prioritization. We should implement a clean UI.".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+            },
+            ChatMessage {
+                id: "3".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "The acceptance criteria: verify that tasks can be created, ensure tasks appear in list".to_string(),
+                created_at: "2026-01-17T00:02:00Z".to_string(),
+            },
+            ChatMessage {
+                id: "4".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "Tasks to implement: 1. Create task model 2. Build task list component 3. Add task creation form. Success metric: increase task completion by 20%".to_string(),
+                created_at: "2026-01-17T00:03:00Z".to_string(),
+            },
+        ];
+
+        let assessment = calculate_quality_assessment(&messages, Some("new_feature"));
+
+        // Should have higher completeness with more content
+        assert!(assessment.completeness > 30);
+        assert!(assessment.overall > 20);
+    }
+
+    // -------------------------------------------------------------------------
+    // Guided Questions Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_guided_questions_new_feature() {
+        let questions = generate_guided_questions(PRDType::NewFeature);
+
+        // Should have common questions plus feature-specific ones
+        assert!(questions.len() >= 4);
+
+        // Should have problem statement
+        assert!(questions.iter().any(|q| q.id == "problem_statement"));
+
+        // Should have user story question for new features
+        assert!(questions.iter().any(|q| q.id == "user_story"));
+
+        // All questions should have required field set
+        assert!(questions.iter().all(|q| q.question.len() > 0));
+    }
+
+    #[test]
+    fn test_guided_questions_bug_fix() {
+        let questions = generate_guided_questions(PRDType::BugFix);
+
+        // Bug fix should have reproduction steps
+        assert!(questions.iter().any(|q| q.id == "repro_steps"));
+
+        // Should have expected vs actual behavior
+        assert!(questions.iter().any(|q| q.id == "expected_behavior"));
+        assert!(questions.iter().any(|q| q.id == "actual_behavior"));
+
+        // Should have severity
+        assert!(questions.iter().any(|q| q.id == "severity"));
+    }
+
+    #[test]
+    fn test_guided_questions_api_integration() {
+        let questions = generate_guided_questions(PRDType::ApiIntegration);
+
+        // API integration should ask about the API
+        assert!(questions.iter().any(|q| q.id == "api_provider"));
+
+        // Should ask about auth method
+        assert!(questions.iter().any(|q| q.id == "auth_method"));
+
+        // Auth method should have multiple choice options
+        let auth_q = questions.iter().find(|q| q.id == "auth_method").unwrap();
+        assert!(auth_q.options.is_some());
+        assert!(auth_q.options.as_ref().unwrap().len() >= 4);
+    }
+
+    // -------------------------------------------------------------------------
+    // Advanced Extraction Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_user_stories() {
+        let content = "As a developer, I want to deploy my code quickly so that I can iterate faster. As an admin, I want to manage users.";
+        let stories = extract_user_stories(content);
+
+        assert!(stories.len() >= 2);
+        assert!(stories.iter().any(|s| s.contains("developer")));
+        assert!(stories.iter().any(|s| s.contains("admin")));
+    }
+
+    #[test]
+    fn test_extract_functional_requirements() {
+        let content = "The system must validate user input.\nUsers should be able to export data.\nThe app needs to support offline mode.";
+        let reqs = extract_functional_requirements(content);
+
+        assert!(reqs.len() >= 2);
+    }
+
+    #[test]
+    fn test_extract_tasks_advanced() {
+        let content = "1. Implement user authentication\n2. Create database schema\n3. Build the API endpoints\n4. Add unit tests";
+        let tasks = extract_tasks_advanced(content);
+
+        assert!(tasks.len() >= 3);
+    }
+
+    #[test]
+    fn test_extract_acceptance_criteria() {
+        let content = "Acceptance criteria:\n- Users can log in\n- Tasks are saved\nVerify that the system handles errors gracefully.";
+        let criteria = extract_acceptance_criteria(content);
+
+        assert!(criteria.len() >= 1);
+    }
+
+    #[test]
+    fn test_extract_prd_content_advanced() {
+        let messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I need a user authentication system. As a user, I want to log in so that I can access my data.".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "Summary: You want to build a secure authentication system.\n\nThe system must support OAuth2. Users should be able to reset passwords.\n\nTasks:\n1. Implement login endpoint\n2. Create session management\n3. Add password reset flow".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+            },
+        ];
+
+        let extracted = extract_prd_content_advanced(&messages);
+
+        // Should extract overview
+        assert!(!extracted.overview.is_empty());
+
+        // Should extract user stories
+        assert!(!extracted.user_stories.is_empty());
+
+        // Should extract requirements
+        assert!(!extracted.functional_requirements.is_empty());
+
+        // Should extract tasks
+        assert!(!extracted.tasks.is_empty());
+    }
+
+    // -------------------------------------------------------------------------
+    // PRD Type Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_prd_type_parsing() {
+        assert_eq!("new_feature".parse::<PRDType>().unwrap(), PRDType::NewFeature);
+        assert_eq!("bug_fix".parse::<PRDType>().unwrap(), PRDType::BugFix);
+        assert_eq!("refactoring".parse::<PRDType>().unwrap(), PRDType::Refactoring);
+        assert_eq!("api_integration".parse::<PRDType>().unwrap(), PRDType::ApiIntegration);
+        assert_eq!("general".parse::<PRDType>().unwrap(), PRDType::General);
+    }
+
+    #[test]
+    fn test_prd_type_display() {
+        assert_eq!(PRDType::NewFeature.as_str(), "new_feature");
+        assert_eq!(PRDType::BugFix.display_name(), "Bug Fix");
+    }
+
+    #[test]
+    fn test_prd_type_invalid() {
+        let result = "invalid_type".parse::<PRDType>();
+        assert!(result.is_err());
     }
 }

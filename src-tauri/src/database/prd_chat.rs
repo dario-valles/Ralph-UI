@@ -10,14 +10,18 @@ impl super::Database {
     pub fn create_chat_session(&self, session: &ChatSession) -> Result<()> {
         self.get_connection().execute(
             "INSERT INTO chat_sessions (
-                id, prd_id, agent_type, project_path, title, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                id, prd_id, agent_type, project_path, title, prd_type, guided_mode, quality_score, template_id, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 session.id,
                 session.prd_id,
                 session.agent_type,
                 session.project_path,
                 session.title,
+                session.prd_type,
+                session.guided_mode as i32,
+                session.quality_score,
+                session.template_id,
                 session.created_at,
                 session.updated_at,
             ],
@@ -27,20 +31,25 @@ impl super::Database {
 
     pub fn get_chat_session(&self, id: &str) -> Result<ChatSession> {
         self.get_connection().query_row(
-            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s WHERE s.id = ?1",
             params![id],
             |row| {
+                let guided_mode_int: i32 = row.get::<_, Option<i32>>(6)?.unwrap_or(1);
                 Ok(ChatSession {
                     id: row.get(0)?,
                     agent_type: row.get(1)?,
                     project_path: row.get(2)?,
                     prd_id: row.get(3)?,
                     title: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
-                    message_count: row.get(7)?,
+                    prd_type: row.get(5)?,
+                    guided_mode: guided_mode_int != 0,
+                    quality_score: row.get(7)?,
+                    template_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                    message_count: row.get(11)?,
                 })
             },
         )
@@ -49,22 +58,27 @@ impl super::Database {
     pub fn list_chat_sessions(&self) -> Result<Vec<ChatSession>> {
         let conn = self.get_connection();
         let mut stmt = conn.prepare(
-            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s
              ORDER BY s.updated_at DESC",
         )?;
 
         let sessions = stmt.query_map([], |row| {
+            let guided_mode_int: i32 = row.get::<_, Option<i32>>(6)?.unwrap_or(1);
             Ok(ChatSession {
                 id: row.get(0)?,
                 agent_type: row.get(1)?,
                 project_path: row.get(2)?,
                 prd_id: row.get(3)?,
                 title: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-                message_count: row.get(7)?,
+                prd_type: row.get(5)?,
+                guided_mode: guided_mode_int != 0,
+                quality_score: row.get(7)?,
+                template_id: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+                message_count: row.get(11)?,
             })
         })?;
 
@@ -173,6 +187,10 @@ mod tests {
             project_path: Some("/test/project".to_string()),
             prd_id: None, // Use None to avoid FK constraint issues in tests
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -210,6 +228,10 @@ mod tests {
             project_path: None,
             prd_id: None,
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -296,6 +318,10 @@ mod tests {
             project_path: Some("/updated/path".to_string()),
             prd_id: None, // Keep None to avoid FK constraint issues
             title: Some("Updated Title".to_string()),
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: session.created_at.clone(),
             updated_at: "2026-01-17T12:00:00Z".to_string(),
             message_count: None,
@@ -523,6 +549,10 @@ mod tests {
             project_path: Some("/test/project".to_string()),
             prd_id: Some("prd-for-chat".to_string()),
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -546,6 +576,10 @@ mod tests {
             project_path: None,
             prd_id: Some("nonexistent-prd".to_string()),
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -568,6 +602,10 @@ mod tests {
             project_path: Some("/my/project".to_string()),
             prd_id: None, // No prd_id initially
             title: None,
+            prd_type: None,
+            guided_mode: true,
+            quality_score: None,
+            template_id: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,

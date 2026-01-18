@@ -5,6 +5,14 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Send,
   Plus,
   Trash2,
@@ -13,9 +21,12 @@ import {
   MessageSquare,
   Bot,
   User,
+  BarChart3,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
-import type { ChatMessage, ChatSession } from '@/types'
+import { PRDTypeSelector } from './PRDTypeSelector'
+import { QualityScoreCard } from './QualityScoreCard'
+import type { ChatMessage, ChatSession, PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -182,6 +193,8 @@ function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps
 export function PRDChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
+  const [showTypeSelector, setShowTypeSelector] = useState(false)
+  const [showQualityPanel, setShowQualityPanel] = useState(false)
 
   const {
     sessions,
@@ -190,6 +203,7 @@ export function PRDChatPanel() {
     loading,
     streaming,
     error,
+    qualityAssessment,
     sendMessage,
     startSession,
     deleteSession,
@@ -197,6 +211,7 @@ export function PRDChatPanel() {
     loadHistory,
     loadSessions,
     exportToPRD,
+    assessQuality,
   } = usePRDChatStore()
 
   // Load sessions on mount
@@ -217,9 +232,9 @@ export function PRDChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleAgentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const agentType = e.target.value
-    startSession(agentType)
+  const handleAgentChange = (_e: React.ChangeEvent<HTMLSelectElement>) => {
+    // When changing agent, start a new session with type selector
+    setShowTypeSelector(true)
   }
 
   const handleSendMessage = (content: string) => {
@@ -227,7 +242,27 @@ export function PRDChatPanel() {
   }
 
   const handleCreateSession = () => {
-    startSession(currentSession?.agentType || 'claude')
+    setShowTypeSelector(true)
+  }
+
+  const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string) => {
+    startSession({
+      agentType: currentSession?.agentType || 'claude',
+      prdType,
+      guidedMode,
+      projectPath,
+    })
+    setShowTypeSelector(false)
+  }
+
+  const handleQuickStart = () => {
+    // Quick start without type selection (general type)
+    startSession({
+      agentType: 'claude',
+      prdType: 'general',
+      guidedMode: true,
+    })
+    setShowTypeSelector(false)
   }
 
   const handleDeleteSession = (sessionId: string) => {
@@ -239,19 +274,49 @@ export function PRDChatPanel() {
     loadHistory(session.id)
   }
 
-  const handleExportToPRD = () => {
+  const handleExportToPRD = async () => {
     if (currentSession) {
+      // Assess quality before export
+      const assessment = await assessQuality()
+      if (assessment && !assessment.readyForExport) {
+        setShowQualityPanel(true)
+        return
+      }
       exportToPRD(currentSession.title || 'Untitled PRD')
     }
+  }
+
+  const handleForceExport = () => {
+    if (currentSession) {
+      exportToPRD(currentSession.title || 'Untitled PRD')
+      setShowQualityPanel(false)
+    }
+  }
+
+  const handleRefreshQuality = () => {
+    assessQuality()
   }
 
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
+  // Show type selector when creating a new session
+  if (showTypeSelector) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <PRDTypeSelector
+          onSelect={handleTypeSelected}
+          loading={loading}
+          defaultProjectPath={currentSession?.projectPath}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full gap-4">
       {/* Session Sidebar */}
-      <Card className="w-64 shrink-0">
+      <Card className="w-64 shrink-0 flex flex-col">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Sessions</CardTitle>
@@ -266,7 +331,7 @@ export function PRDChatPanel() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-2">
+        <CardContent className="p-2 flex-1 overflow-auto">
           {sessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
@@ -296,6 +361,18 @@ export function PRDChatPanel() {
             </div>
           )}
         </CardContent>
+
+        {/* Quality Score in Sidebar */}
+        {currentSession && hasMessages && (
+          <div className="p-2 border-t">
+            <QualityScoreCard
+              assessment={qualityAssessment}
+              loading={loading}
+              onRefresh={handleRefreshQuality}
+              className="border-0 shadow-none"
+            />
+          </div>
+        )}
       </Card>
 
       {/* Chat Panel */}
@@ -327,6 +404,28 @@ export function PRDChatPanel() {
                   <option value="cursor">Cursor</option>
                 </Select>
               </div>
+
+              {/* Quality Score Button */}
+              {hasMessages && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefreshQuality}
+                  disabled={streaming || loading}
+                  aria-label="Check quality"
+                  className="gap-1"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  {qualityAssessment && (
+                    <span className={cn(
+                      'text-xs font-medium',
+                      qualityAssessment.overall >= 60 ? 'text-green-600' : 'text-yellow-600'
+                    )}>
+                      {qualityAssessment.overall}%
+                    </span>
+                  )}
+                </Button>
+              )}
 
               {/* Export Button */}
               {hasMessages && (
@@ -372,26 +471,50 @@ export function PRDChatPanel() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Start a conversation to create your PRD
                 </p>
-                <Button onClick={handleCreateSession} aria-label="New session">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Session
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleCreateSession} aria-label="New session">
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Session
+                  </Button>
+                  <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start">
+                    Quick Start
+                  </Button>
+                </div>
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <Bot className="h-12 w-12 text-muted-foreground mb-3" />
                 <h3 className="font-medium mb-1">Start a conversation</h3>
                 <p className="text-sm text-muted-foreground">
-                  Ask the AI to help you create your PRD
+                  {currentSession.prdType
+                    ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
+                    : 'Ask the AI to help you create your PRD'}
                 </p>
+                {currentSession.guidedMode && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Guided mode is on - AI will ask structured questions
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 mt-4 max-w-md justify-center">
-                  <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                  <Badge
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-secondary/80"
+                    onClick={() => sendMessage("Help me create a PRD")}
+                  >
                     Help me create a PRD
                   </Badge>
-                  <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                  <Badge
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-secondary/80"
+                    onClick={() => sendMessage("What should my PRD include?")}
+                  >
                     What should my PRD include?
                   </Badge>
-                  <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                  <Badge
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-secondary/80"
+                    onClick={() => sendMessage("PRD best practices")}
+                  >
                     PRD best practices
                   </Badge>
                 </div>
@@ -421,6 +544,33 @@ export function PRDChatPanel() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Quality Warning Dialog */}
+      <Dialog open={showQualityPanel} onOpenChange={setShowQualityPanel}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>PRD Quality Assessment</DialogTitle>
+            <DialogDescription>
+              Your PRD may be incomplete. Review the quality assessment below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <QualityScoreCard
+              assessment={qualityAssessment}
+              loading={loading}
+              onRefresh={handleRefreshQuality}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQualityPanel(false)}>
+              Continue Editing
+            </Button>
+            <Button onClick={handleForceExport}>
+              Export Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

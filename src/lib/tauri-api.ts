@@ -18,6 +18,10 @@ import type {
   ChatSession,
   ChatMessage,
   SendMessageResponse,
+  QualityAssessment,
+  GuidedQuestion,
+  ExtractedPRDContent,
+  PRDTypeValue,
 } from '@/types'
 
 // Check if we're running inside Tauri
@@ -181,10 +185,13 @@ export const prdChatApi = {
   startSession: async (
     agentType: string,
     projectPath?: string,
-    prdId?: string
+    prdId?: string,
+    prdType?: PRDTypeValue,
+    guidedMode?: boolean,
+    templateId?: string
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
-      request: { agentType, projectPath, prdId }
+      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId }
     })
   },
 
@@ -213,5 +220,20 @@ export const prdChatApi = {
     return await invoke('export_chat_to_prd', {
       request: { sessionId, title }
     })
+  },
+
+  /** Assess the quality of a PRD chat session before export */
+  assessQuality: async (sessionId: string): Promise<QualityAssessment> => {
+    return await invoke('assess_prd_quality', { sessionId })
+  },
+
+  /** Get guided questions based on PRD type */
+  getGuidedQuestions: async (prdType: PRDTypeValue): Promise<GuidedQuestion[]> => {
+    return await invoke('get_guided_questions', { prdType })
+  },
+
+  /** Preview extracted PRD content before export */
+  previewExtraction: async (sessionId: string): Promise<ExtractedPRDContent> => {
+    return await invoke('preview_prd_extraction', { sessionId })
   },
 }

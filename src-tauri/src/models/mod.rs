@@ -3,7 +3,10 @@
 pub mod prd_chat;
 pub mod state_machine;
 
-pub use prd_chat::{ChatMessage, ChatSession, MessageRole};
+pub use prd_chat::{
+    ChatMessage, ChatSession, ExtractedPRDContent, GuidedQuestion, MessageRole,
+    PRDType, QualityAssessment, QuestionType,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

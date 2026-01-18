@@ -319,6 +319,10 @@ impl Database {
                 agent_type TEXT NOT NULL,
                 project_path TEXT,
                 title TEXT,
+                prd_type TEXT,
+                guided_mode INTEGER DEFAULT 1,
+                quality_score INTEGER,
+                template_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (prd_id) REFERENCES prd_documents(id) ON DELETE SET NULL

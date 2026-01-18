@@ -1,7 +1,24 @@
 // PRD Chat State Management Store
 import { create } from 'zustand'
 import { prdChatApi } from '@/lib/tauri-api'
-import type { ChatSession, ChatMessage, PRDDocument } from '@/types'
+import type {
+  ChatSession,
+  ChatMessage,
+  PRDDocument,
+  QualityAssessment,
+  GuidedQuestion,
+  ExtractedPRDContent,
+  PRDTypeValue,
+} from '@/types'
+
+interface StartSessionOptions {
+  agentType: string
+  projectPath?: string
+  prdId?: string
+  prdType?: PRDTypeValue
+  guidedMode?: boolean
+  templateId?: string
+}
 
 interface PRDChatStore {
   // State
@@ -11,9 +28,12 @@ interface PRDChatStore {
   loading: boolean
   streaming: boolean
   error: string | null
+  qualityAssessment: QualityAssessment | null
+  guidedQuestions: GuidedQuestion[]
+  extractedContent: ExtractedPRDContent | null
 
   // Actions
-  startSession: (agentType: string, projectPath?: string, prdId?: string) => Promise<void>
+  startSession: (options: StartSessionOptions) => Promise<void>
   sendMessage: (content: string) => Promise<void>
   loadHistory: (sessionId: string) => Promise<void>
   loadSessions: () => Promise<void>
@@ -21,6 +41,9 @@ interface PRDChatStore {
   deleteSession: (sessionId: string) => Promise<void>
   exportToPRD: (title: string) => Promise<PRDDocument | null>
   clearError: () => void
+  assessQuality: () => Promise<QualityAssessment | null>
+  loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
+  previewExtraction: () => Promise<ExtractedPRDContent | null>
 }
 
 export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
@@ -31,18 +54,34 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   loading: false,
   streaming: false,
   error: null,
+  qualityAssessment: null,
+  guidedQuestions: [],
+  extractedContent: null,
 
   // Start a new chat session
-  startSession: async (agentType: string, projectPath?: string, prdId?: string) => {
-    set({ loading: true, error: null })
+  startSession: async (options: StartSessionOptions) => {
+    set({ loading: true, error: null, qualityAssessment: null, guidedQuestions: [], extractedContent: null })
     try {
-      const session = await prdChatApi.startSession(agentType, projectPath, prdId)
+      const session = await prdChatApi.startSession(
+        options.agentType,
+        options.projectPath,
+        options.prdId,
+        options.prdType,
+        options.guidedMode,
+        options.templateId
+      )
       set((state) => ({
         sessions: [session, ...state.sessions],
         currentSession: session,
         messages: [],
         loading: false,
       }))
+
+      // Load guided questions if prdType is specified
+      if (options.prdType && options.guidedMode !== false) {
+        const questions = await prdChatApi.getGuidedQuestions(options.prdType)
+        set({ guidedQuestions: questions })
+      }
     } catch (error) {
       set({
         error: error instanceof Error && error.message ? error.message : 'Failed to start session',
@@ -177,5 +216,59 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Clear error
   clearError: () => {
     set({ error: null })
+  },
+
+  // Assess quality of current session
+  assessQuality: async () => {
+    const { currentSession } = get()
+    if (!currentSession) {
+      return null
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const assessment = await prdChatApi.assessQuality(currentSession.id)
+      set({ qualityAssessment: assessment, loading: false })
+      return assessment
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to assess quality',
+        loading: false,
+      })
+      return null
+    }
+  },
+
+  // Load guided questions for a PRD type
+  loadGuidedQuestions: async (prdType: PRDTypeValue) => {
+    try {
+      const questions = await prdChatApi.getGuidedQuestions(prdType)
+      set({ guidedQuestions: questions })
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to load guided questions',
+      })
+    }
+  },
+
+  // Preview extraction before export
+  previewExtraction: async () => {
+    const { currentSession } = get()
+    if (!currentSession) {
+      return null
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const content = await prdChatApi.previewExtraction(currentSession.id)
+      set({ extractedContent: content, loading: false })
+      return content
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to preview extraction',
+        loading: false,
+      })
+      return null
+    }
   },
 }))

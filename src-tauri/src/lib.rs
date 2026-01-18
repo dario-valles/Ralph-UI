@@ -185,6 +185,9 @@ pub fn run() {
             commands::list_prd_chat_sessions,
             commands::delete_prd_chat_session,
             commands::export_chat_to_prd,
+            commands::assess_prd_quality,
+            commands::get_guided_questions,
+            commands::preview_prd_extraction,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

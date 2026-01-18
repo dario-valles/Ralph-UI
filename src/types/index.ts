@@ -352,12 +352,22 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>
 }
 
+export type PRDTypeValue = 'new_feature' | 'bug_fix' | 'refactoring' | 'api_integration' | 'general'
+
 export interface ChatSession {
   id: string
   agentType: string
   projectPath?: string
   prdId?: string
   title?: string
+  /** Type of PRD being created */
+  prdType?: PRDTypeValue
+  /** Whether guided interview mode is enabled */
+  guidedMode: boolean
+  /** Latest quality score (0-100) */
+  qualityScore?: number
+  /** Template ID if using a template */
+  templateId?: string
   createdAt: string
   updatedAt: string
   messageCount?: number
@@ -366,4 +376,56 @@ export interface ChatSession {
 export interface SendMessageResponse {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
+}
+
+// ============================================================================
+// Quality Assessment Types
+// ============================================================================
+
+export interface QualityAssessment {
+  /** Completeness score (0-100) */
+  completeness: number
+  /** Clarity score (0-100) */
+  clarity: number
+  /** Actionability score (0-100) */
+  actionability: number
+  /** Overall quality score (0-100) */
+  overall: number
+  /** List of missing sections that need to be filled */
+  missingSections: string[]
+  /** Suggestions for improving the PRD */
+  suggestions: string[]
+  /** Whether the PRD is ready for export */
+  readyForExport: boolean
+}
+
+// ============================================================================
+// Guided Questions Types
+// ============================================================================
+
+export type QuestionType = 'multiple_choice' | 'free_text' | 'confirmation'
+
+export interface GuidedQuestion {
+  id: string
+  question: string
+  questionType: QuestionType
+  options?: string[]
+  required: boolean
+  hint?: string
+}
+
+// ============================================================================
+// Extracted PRD Content Types
+// ============================================================================
+
+export interface ExtractedPRDContent {
+  overview: string
+  userStories: string[]
+  functionalRequirements: string[]
+  nonFunctionalRequirements: string[]
+  technicalConstraints: string[]
+  successMetrics: string[]
+  tasks: string[]
+  acceptanceCriteria: string[]
+  outOfScope: string[]
 }

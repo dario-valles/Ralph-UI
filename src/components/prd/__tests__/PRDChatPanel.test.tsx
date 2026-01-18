@@ -60,6 +60,9 @@ describe('PRDChatPanel', () => {
   const mockLoadSessions = vi.fn()
   const mockExportToPRD = vi.fn()
   const mockClearError = vi.fn()
+  const mockAssessQuality = vi.fn()
+  const mockLoadGuidedQuestions = vi.fn()
+  const mockPreviewExtraction = vi.fn()
 
   const defaultStoreState = {
     sessions: mockSessions,
@@ -68,6 +71,9 @@ describe('PRDChatPanel', () => {
     loading: false,
     streaming: false,
     error: null,
+    qualityAssessment: null,
+    guidedQuestions: [],
+    extractedContent: null,
     sendMessage: mockSendMessage,
     startSession: mockStartSession,
     deleteSession: mockDeleteSession,
@@ -76,6 +82,9 @@ describe('PRDChatPanel', () => {
     loadSessions: mockLoadSessions,
     exportToPRD: mockExportToPRD,
     clearError: mockClearError,
+    assessQuality: mockAssessQuality,
+    loadGuidedQuestions: mockLoadGuidedQuestions,
+    previewExtraction: mockPreviewExtraction,
   }
 
   beforeEach(() => {
@@ -114,16 +123,15 @@ describe('PRDChatPanel', () => {
       expect(agentSelector).toHaveValue('claude')
     })
 
-    it('creates new session when agent is changed', async () => {
-      const user = userEvent.setup()
+    it('shows type selector when agent is changed', async () => {
       render(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       fireEvent.change(agentSelector, { target: { value: 'opencode' } })
 
-      // Changing agent should start a new session with the selected agent type
+      // Changing agent should show the type selector modal
       await waitFor(() => {
-        expect(mockStartSession).toHaveBeenCalledWith('opencode')
+        expect(screen.getByText(/What type of PRD are you creating/i)).toBeInTheDocument()
       })
     })
 
@@ -413,14 +421,53 @@ describe('PRDChatPanel', () => {
       expect(screen.queryByRole('button', { name: /export to prd/i })).not.toBeInTheDocument()
     })
 
-    it('calls exportToPRD when export button is clicked', async () => {
+    it('calls exportToPRD when export button is clicked and quality is ready', async () => {
+      // Mock assessQuality to return a ready-for-export assessment
+      mockAssessQuality.mockResolvedValue({
+        overall: 80,
+        completeness: 85,
+        clarity: 75,
+        actionability: 80,
+        missingSections: [],
+        suggestions: [],
+        readyForExport: true,
+      })
+
       const user = userEvent.setup()
       render(<PRDChatPanel />)
 
       const exportButton = screen.getByRole('button', { name: /export to prd/i })
       await user.click(exportButton)
 
-      expect(mockExportToPRD).toHaveBeenCalled()
+      await waitFor(() => {
+        expect(mockAssessQuality).toHaveBeenCalled()
+        expect(mockExportToPRD).toHaveBeenCalled()
+      })
+    })
+
+    it('shows quality panel when PRD is not ready for export', async () => {
+      // Mock assessQuality to return a not-ready assessment
+      mockAssessQuality.mockResolvedValue({
+        overall: 40,
+        completeness: 35,
+        clarity: 45,
+        actionability: 40,
+        missingSections: ['User Stories', 'Acceptance Criteria'],
+        suggestions: ['Add more detail'],
+        readyForExport: false,
+      })
+
+      const user = userEvent.setup()
+      render(<PRDChatPanel />)
+
+      const exportButton = screen.getByRole('button', { name: /export to prd/i })
+      await user.click(exportButton)
+
+      await waitFor(() => {
+        expect(mockAssessQuality).toHaveBeenCalled()
+      })
+      // Export should not be called if not ready
+      expect(mockExportToPRD).not.toHaveBeenCalled()
     })
 
     it('disables export button when streaming', () => {
@@ -469,14 +516,17 @@ describe('PRDChatPanel', () => {
       expect(createButton).toBeInTheDocument()
     })
 
-    it('calls startSession when create button is clicked', async () => {
+    it('shows type selector when create button is clicked', async () => {
       const user = userEvent.setup()
       render(<PRDChatPanel />)
 
       const createButton = screen.getByRole('button', { name: /new session/i })
       await user.click(createButton)
 
-      expect(mockStartSession).toHaveBeenCalled()
+      // Should show the type selector modal
+      await waitFor(() => {
+        expect(screen.getByText(/What type of PRD are you creating/i)).toBeInTheDocument()
+      })
     })
 
     it('calls setCurrentSession and loadHistory when session is selected', async () => {
