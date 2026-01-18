@@ -35,7 +35,9 @@ pub struct ExecutionConfig {
     pub max_parallel: u8,
     pub max_iterations: u32,
     pub max_retries: u32,
+    #[serde(rename = "autoCreatePRs")]
     pub auto_create_prs: bool,
+    #[serde(rename = "draftPRs")]
     pub draft_prs: bool,
     pub run_tests: bool,
     pub run_lint: bool,
