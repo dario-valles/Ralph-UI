@@ -106,6 +106,31 @@ Originally coined by Geoffrey Huntley, this technique represents a paradigm shif
 - **Claude Code** (Anthropic's official CLI) - Fully integrated
 - **OpenCode** (Open source alternative) - Fully integrated
 - **Cursor Agent** - Integrated
+- **Codex CLI** (OpenAI) - Integrated
+
+---
+
+## Advanced Features
+
+### Dry-Run Mode
+Preview execution without spawning agents or creating branches. Toggle in the PRD Execution dialog to validate your PRD and configuration before committing resources.
+
+### @filename Syntax
+Reference file contents in prompts using `@filename` syntax:
+```
+Check @README.md for project context
+Look at @src/main.rs for the entry point
+```
+Files are automatically injected into agent prompts.
+
+### Progress File Tracking
+Sessions persist progress to `.ralph/progress_{session_id}.txt` for recovery after interruptions. Tracks task state changes with timestamps.
+
+### Graceful Shutdown
+Signal handlers (SIGINT, SIGTERM, SIGHUP) ensure clean shutdown:
+- Stops all running agents
+- Cleans up worktrees
+- Preserves committed branches
 
 ---
 

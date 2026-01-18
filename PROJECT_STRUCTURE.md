@@ -180,14 +180,21 @@ Multi-agent orchestration:
 - `coordinator.rs` - Worktree coordination
 - `conflicts.rs` - Merge conflict detection
 
+### Session Management (`src-tauri/src/session/`)
+
+- `mod.rs` - Module exports
+- `lock.rs` - Session locking for crash recovery
+- `recovery.rs` - Auto-recovery on startup
+- `progress.rs` - Progress file tracking (`.ralph/progress_{session_id}.txt`)
+
 ### Other Backend Modules
 
-- `session/` - Session locking and recovery
 - `parsers/` - PRD parsers (JSON, YAML, Markdown)
-- `templates/` - Template engine and built-in templates
+- `templates/` - Template engine with @filename resolution
 - `config/` - Configuration loading and merging
 - `github/` - GitHub API client
 - `events.rs` - Event system for real-time updates
+- `shutdown.rs` - Graceful shutdown and signal handling
 
 ## Testing
 

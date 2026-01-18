@@ -109,7 +109,14 @@ cd src-tauri
 cargo test
 ```
 
-Runs 150+ backend tests.
+Runs 418+ backend tests covering:
+- Database operations
+- Git operations
+- Agent management
+- Parallel scheduling
+- Template rendering
+- Progress tracking
+- Signal handling
 
 ---
 
