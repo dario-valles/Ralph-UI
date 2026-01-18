@@ -407,12 +407,15 @@ export function useTauriEventListeners(onRefresh: () => void) {
   useEffect(() => {
     if (!isTauri) return
 
-    // Track resolved unlisten functions
-    const unlistenFns: UnlistenFn[] = []
+    // Track pending listener promises and resolved unlisten functions
+    const pendingListeners: Promise<UnlistenFn | null>[] = []
     let isMounted = true
 
-    // Helper to register a listener and store its unlisten function
-    const registerListener = async (eventName: string, handler?: (event: unknown) => void) => {
+    // Helper to register a listener and return its unlisten function
+    const registerListener = async (
+      eventName: string,
+      handler?: (event: unknown) => void
+    ): Promise<UnlistenFn | null> => {
       try {
         const unlisten = await listen(eventName, (event) => {
           if (isMounted) {
@@ -423,46 +426,43 @@ export function useTauriEventListeners(onRefresh: () => void) {
             }
           }
         })
-        // Only store if still mounted
-        if (isMounted) {
-          unlistenFns.push(unlisten)
-        } else {
-          // Component unmounted while we were setting up - clean up immediately
-          try {
-            unlisten()
-          } catch {
-            // Ignore errors during cleanup
-          }
-        }
+        return unlisten
       } catch {
         // Ignore errors if listen fails (e.g., not in Tauri environment)
+        return null
       }
     }
 
-    // Register all listeners
-    registerListener(TAURI_EVENTS.AGENT_STATUS_CHANGED)
-    registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED)
-    registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED)
-    registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH)
+    // Register all listeners and track their promises
+    pendingListeners.push(registerListener(TAURI_EVENTS.AGENT_STATUS_CHANGED))
+    pendingListeners.push(registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED))
+    pendingListeners.push(registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED))
+    pendingListeners.push(registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH))
 
     // Register rate limit listener with custom handler for toast notification
-    registerListener(TAURI_EVENTS.RATE_LIMIT_DETECTED, (payload) => {
-      const event = payload as RateLimitEvent
-      toast.rateLimitWarning(event)
-      // Also trigger refresh to update UI
-      onRefresh()
-    })
+    pendingListeners.push(
+      registerListener(TAURI_EVENTS.RATE_LIMIT_DETECTED, (payload) => {
+        const event = payload as RateLimitEvent
+        toast.rateLimitWarning(event)
+        // Also trigger refresh to update UI
+        onRefresh()
+      })
+    )
 
     // Cleanup listeners on unmount
     return () => {
       isMounted = false
-      // Cleanup all resolved listeners
-      unlistenFns.forEach((unlisten) => {
-        try {
-          unlisten()
-        } catch {
-          // Ignore errors during cleanup - listener may already be removed
-        }
+      // Wait for all listeners to resolve, then cleanup
+      Promise.allSettled(pendingListeners).then((results) => {
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value) {
+            try {
+              result.value()
+            } catch {
+              // Ignore errors during cleanup - listener may already be removed
+            }
+          }
+        })
       })
     }
   }, [onRefresh])
