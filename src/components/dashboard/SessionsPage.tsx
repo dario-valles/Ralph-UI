@@ -38,6 +38,7 @@ import {
 import { useSessionStore } from '@/stores/sessionStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { sessionApi } from '@/lib/tauri-api'
+import { formatBackendDateOnly } from '@/lib/date-utils'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import type { SessionStatus, SessionTemplate, SessionAnalytics, Session } from '@/types'
 
@@ -91,7 +92,7 @@ export function SessionsPage() {
     if (activeProject && !newSessionPath) {
       setNewSessionPath(activeProject.path)
     }
-    openCreateDialog()
+    setIsCreateOpen(true)
   }
 
   // Filter and group sessions
@@ -480,7 +481,7 @@ export function SessionsPage() {
                         <TableCell>{session.tasks?.length || 0}</TableCell>
                         <TableCell>${session.totalCost?.toFixed(2) || '0.00'}</TableCell>
                         <TableCell>
-                          {new Date(session.createdAt).toLocaleDateString()}
+                          {formatBackendDateOnly(session.createdAt)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
@@ -490,6 +491,7 @@ export function SessionsPage() {
                                 size="icon"
                                 onClick={() => handleStatusChange(session.id, 'paused')}
                                 title="Pause session"
+                                aria-label="Pause session"
                               >
                                 <Pause className="h-4 w-4" />
                               </Button>
@@ -499,6 +501,7 @@ export function SessionsPage() {
                                 size="icon"
                                 onClick={() => handleStatusChange(session.id, 'active')}
                                 title="Resume session"
+                                aria-label="Resume session"
                               >
                                 <Play className="h-4 w-4" />
                               </Button>
@@ -508,6 +511,7 @@ export function SessionsPage() {
                               size="icon"
                               onClick={() => handleExportSession(session.id)}
                               title="Export session"
+                              aria-label="Export session"
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -519,6 +523,7 @@ export function SessionsPage() {
                                 setIsTemplateOpen(true)
                               }}
                               title="Save as template"
+                              aria-label="Save as template"
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -530,6 +535,7 @@ export function SessionsPage() {
                                 setCurrentSession(session)
                               }}
                               title="Set as current"
+                              aria-label="Set as current session"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -538,6 +544,7 @@ export function SessionsPage() {
                               size="icon"
                               onClick={() => deleteSession(session.id)}
                               title="Delete session"
+                              aria-label="Delete session"
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>

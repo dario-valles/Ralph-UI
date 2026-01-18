@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
 import { useTaskStore } from '@/stores/taskStore'
+import { formatBackendDateTime } from '@/lib/date-utils'
 import type { Task, TaskStatus } from '@/types'
 import { CheckCircle2, Circle, XCircle, Clock, AlertCircle } from 'lucide-react'
 
@@ -233,13 +234,13 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
             {task.startedAt && (
               <div>
                 <span className="font-medium">Started:</span>{' '}
-                {new Date(task.startedAt).toLocaleString()}
+                {formatBackendDateTime(task.startedAt)}
               </div>
             )}
             {task.completedAt && (
               <div>
                 <span className="font-medium">Completed:</span>{' '}
-                {new Date(task.completedAt).toLocaleString()}
+                {formatBackendDateTime(task.completedAt)}
               </div>
             )}
           </div>

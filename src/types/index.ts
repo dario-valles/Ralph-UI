@@ -29,8 +29,8 @@ export interface Task {
   assignedAgent?: string
   estimatedTokens?: number
   actualTokens?: number
-  startedAt?: Date
-  completedAt?: Date
+  startedAt?: string // RFC3339 timestamp from backend
+  completedAt?: string // RFC3339 timestamp from backend
   branch?: string
   worktreePath?: string
   error?: string
@@ -54,8 +54,8 @@ export interface Session {
   id: string
   name: string
   projectPath: string
-  createdAt: Date
-  lastResumedAt?: Date
+  createdAt: string // RFC3339 timestamp from backend
+  lastResumedAt?: string // RFC3339 timestamp from backend
   status: SessionStatus
   config: SessionConfig
   tasks: Task[]
@@ -72,7 +72,7 @@ export type AgentStatus =
   | 'committing'
 
 export interface LogEntry {
-  timestamp: Date
+  timestamp: string // RFC3339 timestamp from backend
   level: 'info' | 'warn' | 'error' | 'debug'
   message: string
 }
@@ -98,12 +98,12 @@ export interface SessionTemplate {
   name: string
   description: string
   config: SessionConfig
-  createdAt: Date
+  createdAt: string // RFC3339 timestamp from backend
 }
 
 export interface SessionRecoveryState {
   sessionId: string
-  timestamp: Date
+  timestamp: string // RFC3339 timestamp from backend
   activeTasks: string[]
   activeAgents: string[]
 }

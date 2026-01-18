@@ -88,6 +88,7 @@ function SessionActions({ session, onStatusChange, isLoading }: SessionActionsPr
             size="icon"
             className="h-6 w-6"
             disabled={isLoading}
+            aria-label="Pause session"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -106,6 +107,7 @@ function SessionActions({ session, onStatusChange, isLoading }: SessionActionsPr
             size="icon"
             className="h-6 w-6"
             disabled={isLoading}
+            aria-label="Resume session"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -123,6 +125,7 @@ function SessionActions({ session, onStatusChange, isLoading }: SessionActionsPr
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-destructive"
           disabled={isLoading}
+          aria-label="Stop session"
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()

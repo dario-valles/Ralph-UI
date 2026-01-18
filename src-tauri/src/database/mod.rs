@@ -28,6 +28,14 @@ impl Database {
         self.create_metadata_table()?;
         let version = self.get_schema_version()?;
 
+        // Forward compatibility check: prevent app from using database created by newer version
+        if version > SCHEMA_VERSION {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Database schema version {} is newer than application version {}. Please upgrade the application.",
+                version, SCHEMA_VERSION
+            )));
+        }
+
         if version < SCHEMA_VERSION {
             self.run_migrations(version)?;
         }
@@ -728,5 +736,22 @@ mod tests {
         db.init().unwrap();
         let version = db.get_schema_version().unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn test_forward_compatibility_check() {
+        let db = Database::new(":memory:").unwrap();
+        db.create_metadata_table().unwrap();
+        // Set a future schema version that's higher than SCHEMA_VERSION
+        db.conn.execute(
+            "INSERT INTO schema_metadata (key, value) VALUES ('version', '999')",
+            [],
+        ).unwrap();
+
+        // init() should fail with forward compatibility error
+        let result = db.init();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("newer than application version"));
     }
 }

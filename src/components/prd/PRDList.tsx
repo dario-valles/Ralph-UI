@@ -32,6 +32,7 @@ import {
 import { usePRDStore } from '@/stores/prdStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { toast } from '@/stores/toastStore'
+import { formatBackendDateOnly, formatBackendTime } from '@/lib/date-utils'
 import type { PRDDocument } from '@/types'
 
 export function PRDList() {
@@ -364,9 +365,9 @@ function PRDTableRow({ prd, deleting, onNavigate, onDelete, getQualityBadge }: P
         {getQualityBadge(prd)}
       </TableCell>
       <TableCell onClick={() => onNavigate(`/prds/${prd.id}`)}>
-        <div className="text-sm">{new Date(prd.updatedAt).toLocaleDateString()}</div>
+        <div className="text-sm">{formatBackendDateOnly(prd.updatedAt)}</div>
         <div className="text-xs text-muted-foreground">
-          {new Date(prd.updatedAt).toLocaleTimeString()}
+          {formatBackendTime(prd.updatedAt)}
         </div>
       </TableCell>
       <TableCell className="text-right">

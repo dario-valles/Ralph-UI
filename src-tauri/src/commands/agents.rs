@@ -12,7 +12,7 @@ pub fn create_agent(
     db: State<Mutex<Database>>,
     agent: Agent,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.create_agent(&agent)
         .map_err(|e| format!("Failed to create agent: {}", e))
 }
@@ -23,7 +23,7 @@ pub fn get_agent(
     db: State<Mutex<Database>>,
     agent_id: String,
 ) -> Result<Option<Agent>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_agent(&agent_id)
         .map_err(|e| format!("Failed to get agent: {}", e))
 }
@@ -34,7 +34,7 @@ pub fn get_agents_for_session(
     db: State<Mutex<Database>>,
     session_id: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_agents_for_session(&session_id)
         .map_err(|e| format!("Failed to get agents for session: {}", e))
 }
@@ -45,7 +45,7 @@ pub fn get_agents_for_task(
     db: State<Mutex<Database>>,
     task_id: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_agents_for_task(&task_id)
         .map_err(|e| format!("Failed to get agents for task: {}", e))
 }
@@ -56,7 +56,7 @@ pub fn get_active_agents(
     db: State<Mutex<Database>>,
     session_id: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_active_agents(&session_id)
         .map_err(|e| format!("Failed to get active agents: {}", e))
 }
@@ -66,7 +66,7 @@ pub fn get_active_agents(
 pub fn get_all_active_agents(
     db: State<Mutex<Database>>,
 ) -> Result<Vec<Agent>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_all_active_agents()
         .map_err(|e| format!("Failed to get all active agents: {}", e))
 }
@@ -79,7 +79,7 @@ pub fn update_agent_status(
     agent_id: String,
     status: AgentStatus,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     // Get the current agent to capture old status and session_id
     let agent = db
@@ -119,7 +119,7 @@ pub fn update_agent_metrics(
     cost: f64,
     iteration_count: i32,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.update_agent_metrics(&agent_id, tokens, cost, iteration_count)
         .map_err(|e| format!("Failed to update agent metrics: {}", e))
 }
@@ -131,7 +131,7 @@ pub fn update_agent_process_id(
     agent_id: String,
     process_id: Option<u32>,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.update_agent_process_id(&agent_id, process_id)
         .map_err(|e| format!("Failed to update agent process ID: {}", e))
 }
@@ -142,7 +142,7 @@ pub fn delete_agent(
     db: State<Mutex<Database>>,
     agent_id: String,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.delete_agent(&agent_id)
         .map_err(|e| format!("Failed to delete agent: {}", e))
 }
@@ -154,7 +154,7 @@ pub fn add_agent_log(
     agent_id: String,
     log: LogEntry,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.add_log(&agent_id, &log)
         .map_err(|e| format!("Failed to add log: {}", e))
 }
@@ -165,7 +165,7 @@ pub fn get_agent_logs(
     db: State<Mutex<Database>>,
     agent_id: String,
 ) -> Result<Vec<LogEntry>, String> {
-    let db = db.lock().unwrap();
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_logs_for_agent(&agent_id)
         .map_err(|e| format!("Failed to get logs: {}", e))
 }

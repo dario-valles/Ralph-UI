@@ -12,6 +12,7 @@ import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { ToastContainer } from './components/ui/toast'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { useProjectStore } from './stores/projectStore'
 
 function App() {
@@ -21,23 +22,25 @@ function App() {
     loadProjects()
   }, [loadProjects])
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<MissionControlPage />} />
-          <Route path="tasks" element={<TasksPage />} />
-          <Route path="agents" element={<AgentsPage />} />
-          <Route path="sessions" element={<SessionsPage />} />
-          <Route path="sessions/:id" element={<SessionDetailPage />} />
-          <Route path="prds" element={<PRDList />} />
-          <Route path="prds/new" element={<PRDTemplateSelector />} />
-          <Route path="prds/chat" element={<PRDChatPanel />} />
-          <Route path="prds/:id" element={<PRDEditor />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
-      <ToastContainer />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<MissionControlPage />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="agents" element={<AgentsPage />} />
+            <Route path="sessions" element={<SessionsPage />} />
+            <Route path="sessions/:id" element={<SessionDetailPage />} />
+            <Route path="prds" element={<PRDList />} />
+            <Route path="prds/new" element={<PRDTemplateSelector />} />
+            <Route path="prds/chat" element={<PRDChatPanel />} />
+            <Route path="prds/:id" element={<PRDEditor />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+        <ToastContainer />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 

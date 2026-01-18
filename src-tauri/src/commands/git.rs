@@ -16,7 +16,7 @@ impl GitState {
     }
 
     pub fn get_or_create(&self, repo_path: &str) -> Result<(), String> {
-        let mut managers = self.managers.lock().unwrap();
+        let mut managers = self.managers.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         if !managers.contains_key(repo_path) {
             let manager = GitManager::new(repo_path)
@@ -32,7 +32,7 @@ impl GitState {
         F: FnOnce(&GitManager) -> Result<R, git2::Error>,
     {
         self.get_or_create(repo_path)?;
-        let managers = self.managers.lock().unwrap();
+        let managers = self.managers.lock().map_err(|e| format!("Lock error: {}", e))?;
         let manager = managers.get(repo_path)
             .ok_or_else(|| "Repository not found".to_string())?;
         f(manager).map_err(|e| format!("Git operation failed: {}", e))

@@ -90,13 +90,13 @@ impl AgentPool {
     /// Set the rate limit event sender for rate limit notifications
     /// Events will be forwarded to the frontend via Tauri events
     pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock().expect("mutex poisoned");
         manager.set_rate_limit_sender(tx);
     }
 
     /// Check if the pool can accept a new agent
     pub fn can_spawn(&self) -> Result<bool> {
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
 
         // Check max agents limit
         if running.len() >= self.limits.max_agents {
@@ -104,7 +104,7 @@ impl AgentPool {
         }
 
         // Check system resources
-        let mut system = self.system.lock().unwrap();
+        let mut system = self.system.lock().expect("mutex poisoned");
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         // Calculate total usage inline to avoid deadlock (running is already locked)
@@ -142,7 +142,7 @@ impl AgentPool {
         }
 
         // Spawn the agent
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock().expect("mutex poisoned");
         let process_id = manager.spawn_agent(agent_id, config.clone())?;
 
         // Add to running pool
@@ -154,7 +154,7 @@ impl AgentPool {
         };
 
         {
-            let mut running = self.running.lock().unwrap();
+            let mut running = self.running.lock().expect("mutex poisoned");
             running.insert(agent_id.to_string(), pooled);
         }
 
@@ -163,10 +163,10 @@ impl AgentPool {
 
     /// Stop an agent
     pub fn stop(&self, agent_id: &str) -> Result<()> {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock().expect("mutex poisoned");
         manager.stop_agent(agent_id)?;
 
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().expect("mutex poisoned");
         running.remove(agent_id);
 
         Ok(())
@@ -174,10 +174,10 @@ impl AgentPool {
 
     /// Stop all running agents
     pub fn stop_all(&self) -> Result<()> {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock().expect("mutex poisoned");
         manager.stop_all()?;
 
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().expect("mutex poisoned");
         running.clear();
 
         Ok(())
@@ -185,28 +185,28 @@ impl AgentPool {
 
     /// Get number of running agents
     pub fn running_count(&self) -> usize {
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
         running.len()
     }
 
     /// Check if an agent is running
     pub fn is_running(&self, agent_id: &str) -> bool {
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
         running.contains_key(agent_id)
     }
 
     /// Get runtime for an agent in seconds
     pub fn get_runtime(&self, agent_id: &str) -> Option<u64> {
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
         running.get(agent_id).map(|a| a.started_at.elapsed().as_secs())
     }
 
     /// Check for agents exceeding resource limits and runtime
     pub fn check_violations(&self) -> Result<Vec<String>> {
         let mut violations = Vec::new();
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
 
-        let mut system = self.system.lock().unwrap();
+        let mut system = self.system.lock().expect("mutex poisoned");
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         for (agent_id, pooled) in running.iter() {
@@ -237,7 +237,7 @@ impl AgentPool {
 
     /// Get total CPU and memory usage from all agents
     fn get_total_usage(&self, system: &System) -> Result<(f32, u64)> {
-        let running = self.running.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
         let mut total_cpu = 0.0;
         let mut total_memory_mb = 0;
 
@@ -253,8 +253,8 @@ impl AgentPool {
 
     /// Get current resource usage statistics
     pub fn get_stats(&self) -> Result<PoolStats> {
-        let running = self.running.lock().unwrap();
-        let mut system = self.system.lock().unwrap();
+        let running = self.running.lock().expect("mutex poisoned");
+        let mut system = self.system.lock().expect("mutex poisoned");
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         // Calculate total usage inline to avoid deadlock (running is already locked)

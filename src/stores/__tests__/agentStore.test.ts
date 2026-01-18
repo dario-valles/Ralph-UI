@@ -218,26 +218,32 @@ describe('agentStore', () => {
       expect(useAgentStore.getState().agents[0].status).toBe('thinking')
     })
 
-    it('should reload agent after status update', async () => {
+    it('should use optimistic update without reloading', async () => {
       vi.mocked(updateAgentStatus).mockResolvedValue(undefined)
-      vi.mocked(getAgent).mockResolvedValue(mockAgent)
 
       const store = useAgentStore.getState()
       store.agents = [mockAgent]
 
       await store.updateStatus('agent-1', 'thinking')
 
-      expect(getAgent).toHaveBeenCalledWith('agent-1')
+      // Should NOT reload - optimistic update is sufficient
+      expect(getAgent).not.toHaveBeenCalled()
+      expect(useAgentStore.getState().agents[0].status).toBe('thinking')
     })
 
-    it('should handle update error', async () => {
+    it('should handle update error and rollback optimistic update', async () => {
       const errorMessage = 'Failed to update agent status'
       vi.mocked(updateAgentStatus).mockRejectedValue(new Error(errorMessage))
 
       const store = useAgentStore.getState()
+      store.agents = [{ ...mockAgent, status: 'idle' }]
+
       await store.updateStatus('agent-1', 'thinking')
 
+      // Should set error
       expect(useAgentStore.getState().error).toBe(errorMessage)
+      // Should rollback to original status
+      expect(useAgentStore.getState().agents[0].status).toBe('idle')
     })
   })
 

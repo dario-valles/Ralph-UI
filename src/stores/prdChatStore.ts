@@ -105,9 +105,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       throw new Error('No active session')
     }
 
-    // Create optimistic user message
+    // Create optimistic user message with UUID to prevent collision
     const optimisticMessage: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${crypto.randomUUID()}`,
       sessionId: currentSession.id,
       role: 'user',
       content,

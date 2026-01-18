@@ -52,9 +52,9 @@ pub fn init_parallel_scheduler(
     let coordinator = WorktreeCoordinator::new(&repo_path);
     let detector = ConflictDetector::new(&repo_path);
 
-    *state.scheduler.lock().unwrap() = Some(scheduler);
-    *state.coordinator.lock().unwrap() = Some(coordinator);
-    *state.detector.lock().unwrap() = Some(detector);
+    *state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))? = Some(scheduler);
+    *state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))? = Some(coordinator);
+    *state.detector.lock().map_err(|e| format!("Lock error: {}", e))? = Some(detector);
 
     Ok(())
 }
@@ -65,7 +65,7 @@ pub fn parallel_add_task(
     state: State<ParallelState>,
     task: Task,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -81,7 +81,7 @@ pub fn parallel_add_tasks(
     state: State<ParallelState>,
     tasks: Vec<Task>,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -99,7 +99,7 @@ pub fn parallel_schedule_next(
     session_id: String,
     project_path: String,
 ) -> Result<Option<Agent>, String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -108,7 +108,7 @@ pub fn parallel_schedule_next(
     match scheduler.schedule_next(&session_id, &project_path) {
         Ok(Some(agent)) => {
             // Save agent to database
-            let db = db.lock().unwrap();
+            let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
             db.create_agent(&agent)
                 .map_err(|e| format!("Failed to save agent: {}", e))?;
 
@@ -125,7 +125,7 @@ pub fn parallel_complete_task(
     state: State<ParallelState>,
     task_id: String,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -142,7 +142,7 @@ pub fn parallel_fail_task(
     task_id: String,
     error: String,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -157,7 +157,7 @@ pub fn parallel_fail_task(
 pub fn parallel_stop_all(
     state: State<ParallelState>,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -172,7 +172,7 @@ pub fn parallel_stop_all(
 pub fn parallel_get_scheduler_stats(
     state: State<ParallelState>,
 ) -> Result<SchedulerStats, String> {
-    let scheduler = state.scheduler.lock().unwrap();
+    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_ref()
@@ -186,7 +186,7 @@ pub fn parallel_get_scheduler_stats(
 pub fn parallel_get_pool_stats(
     state: State<ParallelState>,
 ) -> Result<PoolStats, String> {
-    let scheduler = state.scheduler.lock().unwrap();
+    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_ref()
@@ -201,7 +201,7 @@ pub fn parallel_get_pool_stats(
 pub fn parallel_check_violations(
     state: State<ParallelState>,
 ) -> Result<Vec<String>, String> {
-    let mut scheduler = state.scheduler.lock().unwrap();
+    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let scheduler = scheduler
         .as_mut()
@@ -219,7 +219,7 @@ pub fn worktree_allocate(
     task_id: String,
     branch: String,
 ) -> Result<WorktreeAllocation, String> {
-    let mut coordinator = state.coordinator.lock().unwrap();
+    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let coordinator = coordinator
         .as_mut()
@@ -235,7 +235,7 @@ pub fn worktree_deallocate(
     state: State<ParallelState>,
     worktree_path: String,
 ) -> Result<(), String> {
-    let mut coordinator = state.coordinator.lock().unwrap();
+    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let coordinator = coordinator
         .as_mut()
@@ -251,7 +251,7 @@ pub fn worktree_deallocate_by_agent(
     state: State<ParallelState>,
     agent_id: String,
 ) -> Result<(), String> {
-    let mut coordinator = state.coordinator.lock().unwrap();
+    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let coordinator = coordinator
         .as_mut()
@@ -266,7 +266,7 @@ pub fn worktree_deallocate_by_agent(
 pub fn worktree_get_allocations(
     state: State<ParallelState>,
 ) -> Result<Vec<WorktreeAllocation>, String> {
-    let coordinator = state.coordinator.lock().unwrap();
+    let coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let coordinator = coordinator
         .as_ref()
@@ -280,7 +280,7 @@ pub fn worktree_get_allocations(
 pub fn worktree_cleanup_orphaned(
     state: State<ParallelState>,
 ) -> Result<Vec<String>, String> {
-    let mut coordinator = state.coordinator.lock().unwrap();
+    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let coordinator = coordinator
         .as_mut()
@@ -296,7 +296,7 @@ pub fn conflicts_detect(
     state: State<ParallelState>,
     branches: Vec<(String, String)>, // (branch_name, agent_id)
 ) -> Result<Vec<MergeConflict>, String> {
-    let detector = state.detector.lock().unwrap();
+    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let detector = detector
         .as_ref()
@@ -313,7 +313,7 @@ pub fn conflicts_can_merge_safely(
     branch1: String,
     branch2: String,
 ) -> Result<bool, String> {
-    let detector = state.detector.lock().unwrap();
+    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let detector = detector
         .as_ref()
@@ -329,7 +329,7 @@ pub fn conflicts_get_summary(
     state: State<ParallelState>,
     conflicts: Vec<MergeConflict>,
 ) -> Result<ConflictSummary, String> {
-    let detector = state.detector.lock().unwrap();
+    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let detector = detector
         .as_ref()
@@ -346,7 +346,7 @@ pub fn conflicts_resolve(
     strategy: ConflictResolutionStrategy,
     base_branch: String,
 ) -> Result<ConflictResolutionResult, String> {
-    let detector = state.detector.lock().unwrap();
+    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     let detector = detector
         .as_ref()

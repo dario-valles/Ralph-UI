@@ -116,22 +116,34 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   // Update agent status
   updateStatus: async (agentId, status) => {
+    // Store previous state for rollback
+    const previousAgents = get().agents
+    const previousAgent = previousAgents.find((a) => a.id === agentId)
+
+    // Optimistic update
+    set((state) => ({
+      agents: state.agents.map((agent) =>
+        agent.id === agentId ? { ...agent, status } : agent
+      ),
+    }))
+
     try {
       await updateAgentStatus(agentId, status)
-
-      // Update local state
-      set((state) => ({
-        agents: state.agents.map((agent) =>
-          agent.id === agentId ? { ...agent, status } : agent
-        ),
-      }))
-
-      // Reload the agent to get latest data
-      await get().loadAgent(agentId)
+      // No need to reload - optimistic update is sufficient
     } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to update agent status',
-      })
+      // Rollback on error
+      if (previousAgent) {
+        set((state) => ({
+          agents: state.agents.map((agent) =>
+            agent.id === agentId ? previousAgent : agent
+          ),
+          error: err instanceof Error ? err.message : 'Failed to update agent status',
+        }))
+      } else {
+        set({
+          error: err instanceof Error ? err.message : 'Failed to update agent status',
+        })
+      }
     }
   },
 
