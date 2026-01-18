@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useAgentStore } from '@/stores/agentStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { AgentList } from './AgentList'
@@ -6,7 +6,10 @@ import { AgentDetail } from './AgentDetail'
 import { AgentLogViewer } from './AgentLogViewer'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Play } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { RefreshCw, Bot, Filter, FilterX } from 'lucide-react'
+import { cleanupStaleAgents } from '@/lib/agent-api'
+import { parallelPollCompleted } from '@/lib/parallel-api'
 
 export function AgentsPage() {
   const { currentSession } = useSessionStore()
@@ -17,10 +20,11 @@ export function AgentsPage() {
     error,
     setActiveAgent,
     loadAgentsForSession,
-    loadActiveAgents,
     updateStatus,
     clearError,
   } = useAgentStore()
+
+  const [showActiveOnly, setShowActiveOnly] = useState(false)
 
   // Load agents when session changes
   useEffect(() => {
@@ -29,10 +33,78 @@ export function AgentsPage() {
     }
   }, [currentSession?.id, loadAgentsForSession])
 
+  // Poll for completed agents (detects zombie processes and updates status)
+  const pollIntervalRef = useRef<number | null>(null)
+
+  const pollCompleted = useCallback(async () => {
+    const sessionId = currentSession?.id
+    if (!sessionId) return
+
+    let needsRefresh = false
+
+    // First try poll_completed (saves logs if scheduler is running)
+    try {
+      const completed = await parallelPollCompleted()
+      if (completed.length > 0) {
+        console.log('[AgentsPage] Completed agents (with logs):', completed)
+        needsRefresh = true
+      }
+    } catch {
+      // Scheduler not initialized, try cleanup instead
+      try {
+        const cleaned = await cleanupStaleAgents()
+        if (cleaned.length > 0) {
+          console.log('[AgentsPage] Cleaned up stale agents:', cleaned)
+          needsRefresh = true
+        }
+      } catch {
+        // Cleanup may fail, which is fine
+      }
+    }
+
+    if (needsRefresh) {
+      loadAgentsForSession(sessionId)
+    }
+  }, [currentSession, loadAgentsForSession])
+
+  // Start/stop polling when we have active agents
+  useEffect(() => {
+    const hasActiveAgents = agents.some((a) => a.status !== 'idle')
+
+    if (hasActiveAgents && !pollIntervalRef.current) {
+      // Start polling every 3 seconds
+      pollIntervalRef.current = window.setInterval(pollCompleted, 3000)
+    } else if (!hasActiveAgents && pollIntervalRef.current) {
+      // Stop polling when no active agents
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [agents, pollCompleted])
+
+  // Filter agents based on toggle
+  const filteredAgents = useMemo(() => {
+    if (!showActiveOnly) return agents
+    return agents.filter((a) => a.status !== 'idle')
+  }, [agents, showActiveOnly])
+
   // Get selected agent
   const selectedAgent = useMemo(() => {
     return agents.find((a) => a.id === activeAgentId) || null
   }, [agents, activeAgentId])
+
+  // Status summary
+  const statusSummary = useMemo(() => {
+    const active = agents.filter((a) => a.status !== 'idle').length
+    const idle = agents.filter((a) => a.status === 'idle').length
+    return { active, idle, total: agents.length }
+  }, [agents])
 
   const handleRefresh = () => {
     if (currentSession?.id) {
@@ -40,10 +112,8 @@ export function AgentsPage() {
     }
   }
 
-  const handleLoadActive = () => {
-    if (currentSession?.id) {
-      loadActiveAgents(currentSession?.id)
-    }
+  const handleToggleActiveOnly = () => {
+    setShowActiveOnly(!showActiveOnly)
   }
 
   const handleStopAgent = async (agentId: string) => {
@@ -63,8 +133,11 @@ export function AgentsPage() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>No Session Selected</CardTitle>
-            <CardDescription>Please select a session to view agents</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5" />
+              No Session Selected
+            </CardTitle>
+            <CardDescription>Please select a session from the sidebar to view agents</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -73,17 +146,47 @@ export function AgentsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
+            {statusSummary.total > 0 && (
+              <div className="flex items-center gap-2">
+                {statusSummary.active > 0 && (
+                  <Badge variant="default" className="bg-green-500">
+                    {statusSummary.active} active
+                  </Badge>
+                )}
+                {statusSummary.idle > 0 && (
+                  <Badge variant="secondary">
+                    {statusSummary.idle} idle
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
           <p className="text-muted-foreground">
-            Monitor AI agents for session {currentSession?.id.slice(0, 8)}
+            Session: {currentSession?.name || currentSession?.id.slice(0, 8)}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleLoadActive} variant="outline" size="sm">
-            <Play className="h-4 w-4 mr-2" />
-            Show Active Only
+          <Button
+            onClick={handleToggleActiveOnly}
+            variant={showActiveOnly ? 'default' : 'outline'}
+            size="sm"
+          >
+            {showActiveOnly ? (
+              <>
+                <FilterX className="h-4 w-4 mr-2" />
+                Show All
+              </>
+            ) : (
+              <>
+                <Filter className="h-4 w-4 mr-2" />
+                Active Only
+              </>
+            )}
           </Button>
           <Button onClick={handleRefresh} variant="outline" size="sm" disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -92,9 +195,10 @@ export function AgentsPage() {
         </div>
       </div>
 
+      {/* Error Banner */}
       {error && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
+        <Card className="border-destructive bg-destructive/5">
+          <CardContent className="py-3">
             <div className="flex items-center justify-between">
               <p className="text-sm text-destructive">{error}</p>
               <Button onClick={clearError} variant="ghost" size="sm">
@@ -105,18 +209,21 @@ export function AgentsPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Agent List */}
-        <div className="lg:col-span-1">
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Agent List - narrower */}
+        <div className="lg:col-span-4 xl:col-span-3">
           <AgentList
-            agents={agents}
+            agents={filteredAgents}
             onSelectAgent={setActiveAgent}
             selectedAgentId={activeAgentId}
+            showActiveOnly={showActiveOnly}
+            totalAgents={agents.length}
           />
         </div>
 
-        {/* Agent Detail and Logs */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Agent Detail and Logs - wider */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-6">
           <AgentDetail
             agent={selectedAgent}
             onStop={handleStopAgent}

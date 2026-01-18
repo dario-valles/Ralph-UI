@@ -11,7 +11,12 @@ import {
   FolderTree,
   Square,
   RotateCcw,
+  Bot,
+  Copy,
+  Check,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useState } from 'react'
 
 interface AgentDetailProps {
   agent: Agent | null
@@ -19,14 +24,44 @@ interface AgentDetailProps {
   onRestart?: (agentId: string) => void
 }
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-6 w-6 p-0"
+      onClick={handleCopy}
+      title={`Copy ${label}`}
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-green-500" />
+      ) : (
+        <Copy className="h-3 w-3 text-muted-foreground" />
+      )}
+    </Button>
+  )
+}
+
 export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
   if (!agent) {
     return (
       <Card className="h-full">
-        <CardHeader>
-          <CardTitle>Agent Details</CardTitle>
-          <CardDescription>Select an agent to view details</CardDescription>
-        </CardHeader>
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+          <Bot className="h-16 w-16 text-muted-foreground/30 mb-4" />
+          <h3 className="font-semibold text-lg mb-1">No Agent Selected</h3>
+          <p className="text-sm text-muted-foreground">
+            Select an agent from the list to view details
+          </p>
+        </CardContent>
       </Card>
     )
   }
@@ -34,17 +69,22 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
   const isRunning = agent.status !== 'idle'
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              Agent {agent.id.slice(0, 8)}
-              <Badge className={getStatusColor(agent.status)}>
+    <Card>
+      <CardHeader className="pb-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-xl font-mono">
+                Agent {agent.id.slice(0, 8)}
+              </CardTitle>
+              <Badge className={cn(getStatusColor(agent.status), 'text-sm px-3')}>
                 {getStatusLabel(agent.status)}
               </Badge>
-            </CardTitle>
-            <CardDescription>Task: {agent.task_id}</CardDescription>
+            </div>
+            <CardDescription className="flex items-center gap-2">
+              Task: <code className="font-mono">{agent.taskId ? agent.taskId.slice(0, 12) : 'N/A'}</code>
+              {agent.taskId && <CopyButton text={agent.taskId} label="Task ID" />}
+            </CardDescription>
           </div>
           <div className="flex gap-2">
             {isRunning && onStop && (
@@ -70,58 +110,66 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
           </div>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-6">
-        {/* Metrics Section */}
-        <div>
-          <h3 className="font-semibold mb-3">Metrics</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>Iteration Count</span>
-              </div>
-              <div className="text-2xl font-bold">{agent.iteration_count}</div>
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Clock className="h-4 w-4" />
+              <span>Iterations</span>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Hash className="h-4 w-4" />
-                <span>Total Tokens</span>
-              </div>
-              <div className="text-2xl font-bold">{formatTokens(agent.tokens)}</div>
+            <div className="text-2xl font-bold">{agent.iterationCount}</div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Hash className="h-4 w-4" />
+              <span>Tokens</span>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <DollarSign className="h-4 w-4" />
-                <span>Total Cost</span>
-              </div>
-              <div className="text-2xl font-bold">{formatCost(agent.cost)}</div>
+            <div className="text-2xl font-bold">{formatTokens(agent.tokens)}</div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <DollarSign className="h-4 w-4" />
+              <span>Cost</span>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Activity className="h-4 w-4" />
-                <span>Process ID</span>
-              </div>
-              <div className="text-2xl font-bold">{agent.process_id || 'N/A'}</div>
+            <div className="text-2xl font-bold">{formatCost(agent.cost)}</div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Activity className="h-4 w-4" />
+              <span>Process ID</span>
             </div>
+            <div className="text-2xl font-bold font-mono">{agent.processId || 'N/A'}</div>
           </div>
         </div>
 
         {/* Git Information */}
-        <div>
-          <h3 className="font-semibold mb-3">Git Information</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Branch:</span>
-              <code className="text-sm bg-muted px-2 py-1 rounded">{agent.branch}</code>
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Git Information
+          </h3>
+          <div className="rounded-lg border divide-y">
+            <div className="flex items-center justify-between p-3">
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Branch</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{agent.branch}</code>
+                <CopyButton text={agent.branch} label="branch" />
+              </div>
             </div>
-            <div className="flex items-start gap-2">
-              <FolderTree className="h-4 w-4 text-muted-foreground mt-1" />
-              <div>
-                <span className="text-sm font-medium">Worktree Path:</span>
-                <code className="text-sm bg-muted px-2 py-1 rounded block mt-1 break-all">
-                  {agent.worktree_path}
+            <div className="flex items-start justify-between p-3">
+              <div className="flex items-center gap-2">
+                <FolderTree className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Worktree</span>
+              </div>
+              <div className="flex items-center gap-2 max-w-[60%]">
+                <code className="text-sm bg-muted px-2 py-1 rounded font-mono break-all text-right">
+                  {agent.worktreePath}
                 </code>
+                <CopyButton text={agent.worktreePath} label="worktree path" />
               </div>
             </div>
           </div>
@@ -129,13 +177,15 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
 
         {/* Subagents (if any) */}
         {agent.subagents && agent.subagents.length > 0 && (
-          <div>
-            <h3 className="font-semibold mb-3">Subagents ({agent.subagents.length})</h3>
-            <div className="space-y-2">
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Subagents ({agent.subagents.length})
+            </h3>
+            <div className="rounded-lg border divide-y">
               {agent.subagents.map((subagent) => (
                 <div
                   key={subagent.id}
-                  className="flex items-center justify-between p-2 border rounded-md"
+                  className="flex items-center justify-between p-3"
                 >
                   <span className="text-sm font-mono">{subagent.id.slice(0, 8)}</span>
                   <Badge className={getStatusColor(subagent.status)}>
@@ -147,21 +197,29 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
           </div>
         )}
 
-        {/* Session and Task Info */}
-        <div>
-          <h3 className="font-semibold mb-3">Session Information</h3>
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Session ID:</span>
-              <code className="ml-2 bg-muted px-2 py-1 rounded font-mono">
-                {agent.session_id}
-              </code>
+        {/* Session Information */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Session Information
+          </h3>
+          <div className="rounded-lg border divide-y">
+            <div className="flex items-center justify-between p-3">
+              <span className="text-sm font-medium">Session ID</span>
+              <div className="flex items-center gap-2">
+                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
+                  {agent.sessionId}
+                </code>
+                <CopyButton text={agent.sessionId} label="session ID" />
+              </div>
             </div>
-            <div>
-              <span className="text-muted-foreground">Task ID:</span>
-              <code className="ml-2 bg-muted px-2 py-1 rounded font-mono">
-                {agent.task_id}
-              </code>
+            <div className="flex items-center justify-between p-3">
+              <span className="text-sm font-medium">Task ID</span>
+              <div className="flex items-center gap-2">
+                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
+                  {agent.taskId || 'N/A'}
+                </code>
+                {agent.taskId && <CopyButton text={agent.taskId} label="task ID" />}
+              </div>
             </div>
           </div>
         </div>
