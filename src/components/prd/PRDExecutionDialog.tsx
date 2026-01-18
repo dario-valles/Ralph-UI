@@ -16,6 +16,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, Play, Eye } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import {
+  initParallelScheduler,
+  parallelAddTasks,
+  parallelScheduleNext,
+  type SchedulerConfig,
+} from '@/lib/parallel-api'
 import type { ExecutionConfig, AgentType } from '@/types'
 
 interface PRDExecutionDialogProps {
@@ -48,11 +54,57 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
   const handleExecute = async () => {
     setExecuting(true)
     try {
+      // 1. Execute PRD - creates session and tasks
       const sessionId = await executePRD(prdId, config)
-      onOpenChange(false)
 
-      // Fetch the created session (this sets currentSession in the store)
+      // 2. Fetch the created session with tasks (this sets currentSession in the store)
       await fetchSession(sessionId)
+
+      // Get the session from the store
+      const session = useSessionStore.getState().currentSession
+      if (!session) {
+        throw new Error('Failed to fetch created session')
+      }
+
+      // 3. If not dry-run, initialize scheduler and start agents
+      if (!config.dryRun && session.tasks && session.tasks.length > 0) {
+        try {
+          // Initialize the parallel scheduler
+          const schedulerConfig: SchedulerConfig = {
+            maxParallel: config.executionMode === 'parallel' ? config.maxParallel : 1,
+            maxIterations: config.maxIterations,
+            maxRetries: config.maxRetries,
+            agentType: config.agentType,
+            strategy: 'dependency_first',
+            resourceLimits: {
+              maxAgents: config.maxParallel,
+              maxCpuPerAgent: 50,
+              maxMemoryMbPerAgent: 2048,
+              maxTotalCpu: 80,
+              maxTotalMemoryMb: 8192,
+              maxRuntimeSecs: 3600,
+            },
+          }
+
+          await initParallelScheduler(schedulerConfig, session.projectPath)
+
+          // Add tasks to the scheduler
+          await parallelAddTasks(session.tasks)
+
+          // Schedule agents (up to maxParallel)
+          const maxToSpawn = config.executionMode === 'parallel' ? config.maxParallel : 1
+          for (let i = 0; i < maxToSpawn; i++) {
+            const agent = await parallelScheduleNext(sessionId, session.projectPath)
+            if (!agent) break // No more tasks to schedule
+          }
+        } catch (schedulerErr) {
+          // Log scheduler errors but don't fail the whole execution
+          // The session and tasks were created successfully
+          console.warn('Failed to start scheduler/agents:', schedulerErr)
+        }
+      }
+
+      onOpenChange(false)
 
       // Navigate to agent monitor
       navigate('/agents')
