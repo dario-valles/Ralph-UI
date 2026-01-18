@@ -1,0 +1,92 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Ralph UI is a Tauri desktop application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. The app enables multi-agent parallel development sessions where progress persists in files and git history rather than LLM context.
+
+## Development Commands
+
+```bash
+# Development
+bun run tauri dev              # Start full dev environment (Vite + Rust backend)
+bun run dev                    # Frontend only (Vite dev server on port 1420)
+
+# Testing
+bun test                       # Unit tests (Vitest)
+bun run test:run               # Run tests once
+bun run test:coverage          # With coverage report
+bun run e2e                    # E2E tests (Playwright)
+cd src-tauri && cargo test     # Rust backend tests (418+ tests)
+
+# Code Quality
+bun run lint                   # ESLint (strict, 0 warnings allowed)
+bun run lint:fix               # Auto-fix lint issues
+bun run format                 # Prettier format
+
+# Building
+bun run tauri build            # Production bundle
+```
+
+## Architecture
+
+### Frontend (src/)
+- **React 19 + TypeScript** with Vite bundler
+- **Zustand stores** (`src/stores/`): 7 feature-isolated stores (session, task, agent, prd, prdChat, project, ui, toast)
+- **Tauri API wrappers** (`src/lib/`): Centralized IPC calls to Rust backend
+- **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
+- **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
+
+### Backend (src-tauri/)
+- **Tauri 2.0 + Rust** with tokio async runtime
+- **Command handlers** (`src/commands/`): 14 modules for IPC boundaries
+- **Database** (`src/database/`): SQLite with rusqlite, schema v7 with migrations
+- **Git operations** (`src/git/`): git2-rs integration for branches, worktrees, commits
+- **Agent management** (`src/agents/`): Process spawning, rate limiting, log parsing
+- **Parallel orchestration** (`src/parallel/`): Pool, scheduler, worktree coordination
+
+### Data Flow
+1. React component → Zustand store + Tauri API wrapper
+2. `invoke()` IPC call → Rust command handler
+3. Handler accesses database/git/agents → returns typed response
+4. Store updates → React re-renders
+
+## Key Patterns
+
+### Type Sharing
+Types in `src/types/index.ts` must match Rust structs in `src-tauri/src/models/`. Keep synchronized.
+
+### State Management
+Each feature has its own Zustand store. Access via hooks, not direct imports:
+```typescript
+import { useSessionStore } from '@/stores/sessionStore'
+const { sessions, createSession } = useSessionStore()
+```
+
+### Tauri Commands
+All backend calls go through `src/lib/tauri-api.ts`:
+```typescript
+import { invoke } from '@tauri-apps/api/core'
+const result = await invoke<T>('command_name', { args })
+```
+
+### Component Organization
+- Feature folders under `src/components/` (e.g., `mission-control/`, `agents/`)
+- shadcn/ui base components in `src/components/ui/`
+- Layout components in `src/components/layout/`
+
+## Supported AI Agents
+
+Fully integrated: Claude Code, OpenCode, Cursor Agent, Codex CLI
+
+## Database
+
+SQLite with 7 tables: sessions, tasks, agents, agent_logs, prd_documents, prd_chat_sessions, projects. Schema migrations in `src-tauri/src/database/mod.rs`.
+
+## Testing
+
+- **Unit tests**: Vitest with jsdom, 80% coverage targets
+- **E2E tests**: Playwright (Chromium), 240+ tests
+- **Backend tests**: cargo test, 418+ tests
+- **Accessibility**: jest-axe integration
