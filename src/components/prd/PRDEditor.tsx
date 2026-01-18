@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,11 +14,29 @@ import {
   AlertCircle,
   CheckCircle,
   AlertTriangle,
+  MessageSquare,
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { PRDExecutionDialog } from './PRDExecutionDialog'
+import { QualityScoreCard } from './QualityScoreCard'
 import { toast } from '@/stores/toastStore'
-import type { PRDSection } from '@/types'
+import type { PRDSection, PRDDocument, QualityAssessment } from '@/types'
+
+// Helper function to convert PRD quality scores to QualityAssessment format
+function convertPRDToAssessment(prd: PRDDocument): QualityAssessment | null {
+  if (prd.qualityScoreOverall === undefined || prd.qualityScoreOverall === null) {
+    return null
+  }
+  return {
+    completeness: prd.qualityScoreCompleteness || 0,
+    clarity: prd.qualityScoreClarity || 0,
+    actionability: prd.qualityScoreActionability || 0,
+    overall: prd.qualityScoreOverall || 0,
+    missingSections: [],
+    suggestions: [],
+    readyForExport: (prd.qualityScoreOverall || 0) >= 60,
+  }
+}
 
 export function PRDEditor() {
   const { id } = useParams<{ id: string }>()
@@ -162,6 +180,13 @@ export function PRDEditor() {
           <Button variant="outline" onClick={() => navigate('/prds')}>
             Cancel
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/prds/chat?prdId=${currentPRD.id}`)}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Continue in Chat
+          </Button>
           <Button variant="outline" onClick={handleAnalyzeQuality} disabled={analyzing}>
             {analyzing ? (
               <>
@@ -197,62 +222,13 @@ export function PRDEditor() {
 
       {/* Quality Scores */}
       {currentPRD.qualityScoreOverall && (
-        <Card className="mb-6 border-primary/20 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-lg">Quality Analysis</CardTitle>
-            <CardDescription>Automated scoring of your PRD</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Completeness</Label>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-2 flex-1 rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full bg-primary"
-                      style={{ width: `${currentPRD.qualityScoreCompleteness}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium">{currentPRD.qualityScoreCompleteness}%</span>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Clarity</Label>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-2 flex-1 rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full bg-primary"
-                      style={{ width: `${currentPRD.qualityScoreClarity}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium">{currentPRD.qualityScoreClarity}%</span>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Actionability</Label>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-2 flex-1 rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full bg-primary"
-                      style={{ width: `${currentPRD.qualityScoreActionability}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium">{currentPRD.qualityScoreActionability}%</span>
-                </div>
-              </div>
-            </div>
-            {(currentPRD.qualityScoreClarity || 0) < 70 && (
-              <div className="mt-4 rounded-md bg-yellow-500/10 p-3 text-sm">
-                <p className="font-medium">💡 Suggestions:</p>
-                <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground">
-                  <li>Avoid vague terms like "simple", "fast", or "good"</li>
-                  <li>Define specific metrics and success criteria</li>
-                  <li>Be more descriptive in your requirements</li>
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="mb-6">
+          <QualityScoreCard
+            assessment={convertPRDToAssessment(currentPRD)}
+            loading={analyzing}
+            onRefresh={handleAnalyzeQuality}
+          />
+        </div>
       )}
 
       {/* Basic Info */}

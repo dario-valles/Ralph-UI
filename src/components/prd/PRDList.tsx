@@ -23,6 +23,7 @@ import {
   CheckCircle,
   AlertTriangle,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { toast } from '@/stores/toastStore'
@@ -113,10 +114,16 @@ export function PRDList() {
             Manage and execute your PRDs with AI agents
           </p>
         </div>
-        <Button onClick={() => navigate('/prds/new')} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create PRD
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/prds/chat')} className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Create with Chat
+          </Button>
+          <Button onClick={() => navigate('/prds/new')} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create PRD
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -175,7 +182,15 @@ export function PRDList() {
               {filteredPRDs.map((prd) => (
                 <TableRow key={prd.id} className="cursor-pointer hover:bg-muted/50">
                   <TableCell onClick={() => navigate(`/prds/${prd.id}`)}>
-                    <div className="font-medium">{prd.title}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{prd.title}</span>
+                      {prd.sourceChatSessionId && (
+                        <Badge variant="secondary" className="gap-1 text-xs">
+                          <MessageSquare className="h-3 w-3" />
+                          From Chat
+                        </Badge>
+                      )}
+                    </div>
                     {prd.templateId && (
                       <div className="mt-1 text-xs text-muted-foreground">
                         Template: {prd.templateId}

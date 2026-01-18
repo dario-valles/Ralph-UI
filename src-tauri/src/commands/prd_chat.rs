@@ -240,6 +240,9 @@ pub async fn export_chat_to_prd(
     let messages = db_guard.get_messages_by_session(&request.session_id)
         .map_err(|e| format!("Failed to get messages: {}", e))?;
 
+    // Calculate quality assessment before export
+    let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
+
     // Convert conversation to PRD content
     let content = convert_chat_to_prd_content(&messages);
 
@@ -250,16 +253,20 @@ pub async fn export_chat_to_prd(
         id: prd_id,
         title: request.title,
         description: Some("Generated from PRD chat conversation".to_string()),
-        template_id: None,
+        template_id: session.template_id.clone(),
         content,
-        quality_score_completeness: None,
-        quality_score_clarity: None,
-        quality_score_actionability: None,
-        quality_score_overall: None,
+        // Transfer quality scores from chat assessment
+        quality_score_completeness: Some(assessment.completeness as i32),
+        quality_score_clarity: Some(assessment.clarity as i32),
+        quality_score_actionability: Some(assessment.actionability as i32),
+        quality_score_overall: Some(assessment.overall as i32),
         created_at: now.clone(),
         updated_at: now,
         version: 1,
         project_path: session.project_path,
+        // Track the source chat session
+        source_chat_session_id: Some(request.session_id.clone()),
+        prd_type: session.prd_type.clone(),
     };
 
     db_guard.create_prd(&prd)
@@ -1942,6 +1949,8 @@ mod tests {
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             version: 1,
             project_path: None,
+            source_chat_session_id: None,
+            prd_type: None,
         };
         db.create_prd(&prd).unwrap();
 

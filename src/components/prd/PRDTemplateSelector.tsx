@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { FileText, Loader2, MessageSquare, Search, Sparkles } from 'lucide-react'
+import { FileText, Loader2, MessageSquare, Search, Sparkles, Bug, RefreshCw, Link } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
-import type { PRDTemplate } from '@/types'
+import { PRD_TYPES } from '@/config/prdTypes'
+import type { PRDTemplate, PRDTypeValue } from '@/types'
 
 // Template categories for better organization
 const TEMPLATE_CATEGORIES = {
@@ -35,10 +36,20 @@ function parseTemplateStructure(templateStructure: string | undefined): { sectio
   }
 }
 
+// Icon mapping for PRD types
+const PRD_TYPE_ICONS: Record<PRDTypeValue, React.ReactNode> = {
+  new_feature: <Sparkles className="h-4 w-4" />,
+  bug_fix: <Bug className="h-4 w-4" />,
+  refactoring: <RefreshCw className="h-4 w-4" />,
+  api_integration: <Link className="h-4 w-4" />,
+  general: <FileText className="h-4 w-4" />,
+}
+
 export function PRDTemplateSelector() {
   const navigate = useNavigate()
   const { templates, loading, error, loadTemplates, createPRD } = usePRDStore()
   const [selectedTemplate, setSelectedTemplate] = useState<PRDTemplate | null>(null)
+  const [selectedPrdType, setSelectedPrdType] = useState<PRDTypeValue | null>(null)
   const [creating, setCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [useAIChat, setUseAIChat] = useState(false)
@@ -70,6 +81,7 @@ export function PRDTemplateSelector() {
         description: selectedTemplate?.description,
         templateId: selectedTemplate?.id,
         projectPath: undefined,
+        prdType: selectedPrdType || undefined,
       })
       navigate(`/prds/${prd.id}`)
     } catch (err) {
@@ -184,6 +196,33 @@ export function PRDTemplateSelector() {
         <div className="relative flex justify-center text-xs uppercase">
           <span className="bg-background px-4 text-muted-foreground">Or choose a template</span>
         </div>
+      </div>
+
+      {/* PRD Type Selection */}
+      <div className="mb-6">
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">What are you building?</h3>
+        <div className="flex flex-wrap gap-2">
+          {PRD_TYPES.map((type) => (
+            <button
+              key={type.value}
+              onClick={() => setSelectedPrdType(selectedPrdType === type.value ? null : type.value)}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all
+                ${
+                  selectedPrdType === type.value
+                    ? 'bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2'
+                    : 'bg-muted hover:bg-muted/80'
+                }`}
+            >
+              {PRD_TYPE_ICONS[type.value]}
+              {type.label}
+            </button>
+          ))}
+        </div>
+        {selectedPrdType && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {PRD_TYPES.find((t) => t.value === selectedPrdType)?.description}
+          </p>
+        )}
       </div>
 
       {/* Search */}

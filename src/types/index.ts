@@ -138,6 +138,10 @@ export interface PRDDocument {
   updatedAt: string
   version: number
   projectPath?: string
+  /** ID of the chat session this PRD was created from (if any) */
+  sourceChatSessionId?: string
+  /** Type of PRD (new_feature, bug_fix, refactoring, api_integration, general) */
+  prdType?: PRDTypeValue
 }
 
 export interface PRDTemplate {
@@ -191,6 +195,7 @@ export interface CreatePRDRequest {
   description?: string
   templateId?: string
   projectPath?: string
+  prdType?: PRDTypeValue
 }
 
 export interface UpdatePRDRequest {

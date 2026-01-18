@@ -8,11 +8,13 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreatePRDRequest {
     pub title: String,
     pub description: Option<String>,
     pub template_id: Option<String>,
     pub project_path: Option<String>,
+    pub prd_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,6 +80,8 @@ pub async fn create_prd(
         updated_at: now,
         version: 1,
         project_path: request.project_path,
+        source_chat_session_id: None,
+        prd_type: request.prd_type,
     };
 
     db.create_prd(&prd)

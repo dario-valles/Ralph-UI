@@ -5,6 +5,7 @@ use rusqlite::{params, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PRDDocument {
     pub id: String,
     pub title: String,
@@ -19,6 +20,10 @@ pub struct PRDDocument {
     pub updated_at: String,
     pub version: i32,
     pub project_path: Option<String>,
+    /// ID of the chat session this PRD was created from (if any)
+    pub source_chat_session_id: Option<String>,
+    /// Type of PRD (new_feature, bug_fix, refactoring, api_integration, general)
+    pub prd_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,8 +61,9 @@ impl super::Database {
                 id, title, description, template_id, content,
                 quality_score_completeness, quality_score_clarity,
                 quality_score_actionability, quality_score_overall,
-                created_at, updated_at, version, project_path
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                created_at, updated_at, version, project_path,
+                source_chat_session_id, prd_type
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 prd.id,
                 prd.title,
@@ -72,6 +78,8 @@ impl super::Database {
                 prd.updated_at,
                 prd.version,
                 prd.project_path,
+                prd.source_chat_session_id,
+                prd.prd_type,
             ],
         )?;
         Ok(())
@@ -82,7 +90,8 @@ impl super::Database {
             "SELECT id, title, description, template_id, content,
                     quality_score_completeness, quality_score_clarity,
                     quality_score_actionability, quality_score_overall,
-                    created_at, updated_at, version, project_path
+                    created_at, updated_at, version, project_path,
+                    source_chat_session_id, prd_type
              FROM prd_documents WHERE id = ?1",
             params![id],
             |row| {
@@ -100,6 +109,8 @@ impl super::Database {
                     updated_at: row.get(10)?,
                     version: row.get(11)?,
                     project_path: row.get(12)?,
+                    source_chat_session_id: row.get(13)?,
+                    prd_type: row.get(14)?,
                 })
             },
         )
@@ -111,8 +122,9 @@ impl super::Database {
                 title = ?1, description = ?2, template_id = ?3, content = ?4,
                 quality_score_completeness = ?5, quality_score_clarity = ?6,
                 quality_score_actionability = ?7, quality_score_overall = ?8,
-                updated_at = ?9, version = ?10, project_path = ?11
-             WHERE id = ?12",
+                updated_at = ?9, version = ?10, project_path = ?11,
+                source_chat_session_id = ?12, prd_type = ?13
+             WHERE id = ?14",
             params![
                 prd.title,
                 prd.description,
@@ -125,6 +137,8 @@ impl super::Database {
                 prd.updated_at,
                 prd.version,
                 prd.project_path,
+                prd.source_chat_session_id,
+                prd.prd_type,
                 prd.id,
             ],
         )?;
@@ -145,7 +159,8 @@ impl super::Database {
             "SELECT id, title, description, template_id, content,
                     quality_score_completeness, quality_score_clarity,
                     quality_score_actionability, quality_score_overall,
-                    created_at, updated_at, version, project_path
+                    created_at, updated_at, version, project_path,
+                    source_chat_session_id, prd_type
              FROM prd_documents
              ORDER BY updated_at DESC",
         )?;
@@ -165,6 +180,8 @@ impl super::Database {
                 updated_at: row.get(10)?,
                 version: row.get(11)?,
                 project_path: row.get(12)?,
+                source_chat_session_id: row.get(13)?,
+                prd_type: row.get(14)?,
             })
         })?;
 
@@ -350,6 +367,8 @@ mod tests {
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             version: 1,
             project_path: Some("/test/project".to_string()),
+            source_chat_session_id: Some("chat-session-123".to_string()),
+            prd_type: Some("new_feature".to_string()),
         };
 
         db.create_prd(&prd).unwrap();
@@ -379,6 +398,8 @@ mod tests {
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             version: 1,
             project_path: None,
+            source_chat_session_id: None,
+            prd_type: None,
         };
 
         db.create_prd(&prd1).unwrap();

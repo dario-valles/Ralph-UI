@@ -539,6 +539,8 @@ mod tests {
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             version: 1,
             project_path: Some("/test/project".to_string()),
+            source_chat_session_id: None,
+            prd_type: None,
         };
         db.create_prd(&prd).unwrap();
 

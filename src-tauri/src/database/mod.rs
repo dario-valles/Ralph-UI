@@ -9,7 +9,7 @@ pub mod prd_chat;
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 pub struct Database {
     conn: Connection,
@@ -84,6 +84,9 @@ impl Database {
         }
         if from_version < 4 {
             self.migrate_to_v4()?;
+        }
+        if from_version < 5 {
+            self.migrate_to_v5()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -360,6 +363,29 @@ impl Database {
         )?;
 
         self.set_schema_version(4)?;
+        Ok(())
+    }
+
+    fn migrate_to_v5(&self) -> Result<()> {
+        // Add source_chat_session_id to track PRDs created from chat
+        self.conn.execute(
+            "ALTER TABLE prd_documents ADD COLUMN source_chat_session_id TEXT",
+            [],
+        )?;
+
+        // Add prd_type column to store the type of PRD
+        self.conn.execute(
+            "ALTER TABLE prd_documents ADD COLUMN prd_type TEXT",
+            [],
+        )?;
+
+        // Create index for source tracking
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_prd_documents_source_chat ON prd_documents(source_chat_session_id)",
+            [],
+        )?;
+
+        self.set_schema_version(5)?;
         Ok(())
     }
 

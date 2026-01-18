@@ -1,8 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { PRDChatPanel } from '../PRDChatPanel'
 import type { ChatSession, ChatMessage } from '@/types'
+
+// Wrapper component for Router context
+function renderWithRouter(ui: React.ReactElement, { route = '/' } = {}) {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      {ui}
+    </MemoryRouter>
+  )
+}
 
 // Mock scrollIntoView (not available in jsdom)
 Element.prototype.scrollIntoView = vi.fn()
@@ -114,14 +124,14 @@ describe('PRDChatPanel', () => {
 
   describe('Agent Selector', () => {
     it('renders agent selector dropdown', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       expect(agentSelector).toBeInTheDocument()
     })
 
     it('shows all available agent options', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       expect(agentSelector).toBeInTheDocument()
@@ -133,14 +143,14 @@ describe('PRDChatPanel', () => {
     })
 
     it('displays the currently selected agent', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       expect(agentSelector).toHaveValue('claude')
     })
 
     it('shows type selector when agent is changed', async () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       fireEvent.change(agentSelector, { target: { value: 'opencode' } })
@@ -157,7 +167,7 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       expect(agentSelector).toBeDisabled()
@@ -170,7 +180,7 @@ describe('PRDChatPanel', () => {
 
   describe('Message Display', () => {
     it('displays chat messages with correct content', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByText('Help me create a PRD for a todo app')).toBeInTheDocument()
       expect(
@@ -179,7 +189,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('applies user message styling', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const userMessage = screen.getByText('Help me create a PRD for a todo app')
       const messageContainer = userMessage.closest('[data-testid="message-user"]')
@@ -187,7 +197,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('applies assistant message styling', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const assistantMessage = screen.getByText(
         /I would be happy to help you create a PRD for a todo app/
@@ -202,13 +212,13 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByText(/Start a conversation/i)).toBeInTheDocument()
     })
 
     it('shows message timestamps', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // Check that timestamps are displayed (format may vary by locale)
       const timestampElements = screen.getAllByText(/\d{1,2}:\d{2}/)
@@ -222,14 +232,14 @@ describe('PRDChatPanel', () => {
 
   describe('Message Input', () => {
     it('displays message input field', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       expect(input).toBeInTheDocument()
     })
 
     it('displays send button', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const sendButton = screen.getByRole('button', { name: /send/i })
       expect(sendButton).toBeInTheDocument()
@@ -237,7 +247,7 @@ describe('PRDChatPanel', () => {
 
     it('allows typing in message input', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Hello world')
@@ -247,7 +257,7 @@ describe('PRDChatPanel', () => {
 
     it('calls sendMessage on submit', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Create a PRD for my project')
@@ -260,7 +270,7 @@ describe('PRDChatPanel', () => {
 
     it('clears input after sending message', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Test message')
@@ -273,7 +283,7 @@ describe('PRDChatPanel', () => {
 
     it('sends message on Enter key press', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Test message{enter}')
@@ -283,7 +293,7 @@ describe('PRDChatPanel', () => {
 
     it('does not send empty messages', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const sendButton = screen.getByRole('button', { name: /send/i })
       await user.click(sendButton)
@@ -292,7 +302,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('disables send button when input is empty', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const sendButton = screen.getByRole('button', { name: /send/i })
       expect(sendButton).toBeDisabled()
@@ -300,7 +310,7 @@ describe('PRDChatPanel', () => {
 
     it('enables send button when input has content', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Hello')
@@ -321,13 +331,13 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByTestId('streaming-indicator')).toBeInTheDocument()
     })
 
     it('hides streaming indicator when not streaming', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.queryByTestId('streaming-indicator')).not.toBeInTheDocument()
     })
@@ -338,7 +348,7 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       expect(input).toBeDisabled()
@@ -350,7 +360,7 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const sendButton = screen.getByRole('button', { name: /send/i })
       expect(sendButton).toBeDisabled()
@@ -362,7 +372,7 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const indicator = screen.getByTestId('streaming-indicator')
       expect(indicator).toHaveClass('animate-pulse')
@@ -381,7 +391,7 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // When no session, placeholder is different
       const input = screen.getByPlaceholderText(/Create a session to start chatting/i)
@@ -395,7 +405,7 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByText(/Create a new session/i)).toBeInTheDocument()
     })
@@ -407,7 +417,7 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const sendButton = screen.getByRole('button', { name: /send/i })
       expect(sendButton).toBeDisabled()
@@ -420,7 +430,7 @@ describe('PRDChatPanel', () => {
 
   describe('Export to PRD', () => {
     it('shows export button when messages exist', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const exportButton = screen.getByRole('button', { name: /export to prd/i })
       expect(exportButton).toBeInTheDocument()
@@ -432,7 +442,7 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.queryByRole('button', { name: /export to prd/i })).not.toBeInTheDocument()
     })
@@ -450,7 +460,7 @@ describe('PRDChatPanel', () => {
       })
 
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const exportButton = screen.getByRole('button', { name: /export to prd/i })
       await user.click(exportButton)
@@ -474,7 +484,7 @@ describe('PRDChatPanel', () => {
       })
 
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const exportButton = screen.getByRole('button', { name: /export to prd/i })
       await user.click(exportButton)
@@ -492,7 +502,7 @@ describe('PRDChatPanel', () => {
         streaming: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const exportButton = screen.getByRole('button', { name: /export to prd/i })
       expect(exportButton).toBeDisabled()
@@ -505,7 +515,7 @@ describe('PRDChatPanel', () => {
 
   describe('Session Management', () => {
     it('displays session list', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // The title appears in both sidebar and header, use getAllByText
       const todoAppPRDs = screen.getAllByText('Todo App PRD')
@@ -516,7 +526,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('highlights current session in the list', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // Find the session item in the sidebar (not the header title)
       const sessionItems = screen.getAllByTestId('session-item')
@@ -526,7 +536,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('shows create session button', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const createButton = screen.getByRole('button', { name: /new session/i })
       expect(createButton).toBeInTheDocument()
@@ -534,7 +544,7 @@ describe('PRDChatPanel', () => {
 
     it('shows type selector when create button is clicked', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const createButton = screen.getByRole('button', { name: /new session/i })
       await user.click(createButton)
@@ -547,7 +557,7 @@ describe('PRDChatPanel', () => {
 
     it('calls setCurrentSession when session is selected (useEffect handles loadHistory)', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const session2 = screen.getByText('E-commerce PRD')
       await user.click(session2)
@@ -560,7 +570,7 @@ describe('PRDChatPanel', () => {
     })
 
     it('shows delete button for each session', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
       expect(deleteButtons).toHaveLength(2)
@@ -568,7 +578,7 @@ describe('PRDChatPanel', () => {
 
     it('shows confirmation dialog when delete button is clicked and deletes on confirm', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // Click the delete button in the session list
       const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
@@ -598,7 +608,7 @@ describe('PRDChatPanel', () => {
         messages: [],
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByText(/No sessions yet/i)).toBeInTheDocument()
     })
@@ -615,7 +625,7 @@ describe('PRDChatPanel', () => {
         loading: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
@@ -626,7 +636,7 @@ describe('PRDChatPanel', () => {
         loading: true,
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       const sendButton = screen.getByRole('button', { name: /send/i })
@@ -647,7 +657,7 @@ describe('PRDChatPanel', () => {
         error: 'Failed to send message',
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByText('Failed to send message')).toBeInTheDocument()
     })
@@ -658,7 +668,7 @@ describe('PRDChatPanel', () => {
         error: 'Failed to send message',
       })
 
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // Input should still be enabled to allow retry
       const input = screen.getByPlaceholderText(/Type your message/i)
@@ -672,14 +682,14 @@ describe('PRDChatPanel', () => {
 
   describe('Accessibility', () => {
     it('has accessible labels for form controls', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(screen.getByRole('combobox', { name: /agent/i })).toBeInTheDocument()
       expect(screen.getByRole('textbox')).toHaveAttribute('aria-label')
     })
 
     it('has proper heading hierarchy', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const heading = screen.getByRole('heading', { name: /prd chat/i })
       expect(heading).toBeInTheDocument()
@@ -687,7 +697,7 @@ describe('PRDChatPanel', () => {
 
     it('supports keyboard navigation', async () => {
       const user = userEvent.setup()
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.click(input)
@@ -704,13 +714,13 @@ describe('PRDChatPanel', () => {
 
   describe('Session Loading', () => {
     it('calls loadSessions on mount', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       expect(mockLoadSessions).toHaveBeenCalled()
     })
 
     it('calls loadHistory when currentSession exists', () => {
-      render(<PRDChatPanel />)
+      renderWithRouter(<PRDChatPanel />)
 
       // loadHistory should have been called for the current session on mount
       expect(mockLoadHistory).toHaveBeenCalledWith('session-1')

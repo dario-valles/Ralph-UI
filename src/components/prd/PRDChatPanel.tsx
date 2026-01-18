@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -28,6 +29,7 @@ import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
 import { prdChatApi } from '@/lib/tauri-api'
+import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +38,10 @@ import { cn } from '@/lib/utils'
 // ============================================================================
 
 export function PRDChatPanel() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const prdIdFromUrl = searchParams.get('prdId')
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
   const [showTypeSelector, setShowTypeSelector] = useState(false)
@@ -66,6 +72,13 @@ export function PRDChatPanel() {
   useEffect(() => {
     loadSessions()
   }, [loadSessions])
+
+  // Handle prdId URL param for "Continue in Chat" functionality
+  useEffect(() => {
+    if (prdIdFromUrl && !currentSession) {
+      startSession({ agentType: 'claude', prdId: prdIdFromUrl, guidedMode: true })
+    }
+  }, [prdIdFromUrl, currentSession, startSession])
 
   // Load history when session changes
   useEffect(() => {
@@ -157,14 +170,24 @@ export function PRDChatPanel() {
         setShowQualityPanel(true)
         return
       }
-      exportToPRD(currentSession.title || 'Untitled PRD')
+      const prd = await exportToPRD(currentSession.title || 'Untitled PRD')
+      if (prd) {
+        toast.success('PRD exported successfully', 'Your PRD has been created.')
+        // Navigate to the new PRD editor
+        navigate(`/prds/${prd.id}`)
+      }
     }
   }
 
-  const handleForceExport = () => {
+  const handleForceExport = async () => {
     if (currentSession) {
-      exportToPRD(currentSession.title || 'Untitled PRD')
+      const prd = await exportToPRD(currentSession.title || 'Untitled PRD')
       setShowQualityPanel(false)
+      if (prd) {
+        toast.success('PRD exported successfully', 'Your PRD has been created.')
+        // Navigate to the new PRD editor
+        navigate(`/prds/${prd.id}`)
+      }
     }
   }
 
