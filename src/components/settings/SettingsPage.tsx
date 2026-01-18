@@ -70,6 +70,9 @@ export function SettingsPage() {
 
     try {
       const loadedConfig = await configApi.get()
+      console.log('[SettingsPage] Loaded config from backend:', loadedConfig)
+      console.log('[SettingsPage] max_parallel:', loadedConfig.execution.maxParallel)
+      console.log('[SettingsPage] agent_type:', loadedConfig.execution.agentType)
       setConfig(loadedConfig)
     } catch (err) {
       console.error('Failed to load config:', err)

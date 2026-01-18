@@ -30,22 +30,22 @@ pub struct RalphConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionConfig {
     /// Maximum parallel agents
-    #[serde(default = "default_max_parallel")]
+    #[serde(rename = "maxParallel", alias = "max_parallel", default = "default_max_parallel")]
     pub max_parallel: i32,
     /// Maximum iterations per agent
-    #[serde(default = "default_max_iterations")]
+    #[serde(rename = "maxIterations", alias = "max_iterations", default = "default_max_iterations")]
     pub max_iterations: i32,
     /// Maximum retries for failed tasks
-    #[serde(default = "default_max_retries")]
+    #[serde(rename = "maxRetries", alias = "max_retries", default = "default_max_retries")]
     pub max_retries: i32,
     /// Agent type to use
-    #[serde(default = "default_agent_type")]
+    #[serde(rename = "agentType", alias = "agent_type", default = "default_agent_type")]
     pub agent_type: String,
     /// Scheduling strategy
     #[serde(default = "default_strategy")]
     pub strategy: String,
     /// Dry-run mode: preview execution without actually spawning agents
-    #[serde(default)]
+    #[serde(rename = "dryRun", alias = "dry_run", default)]
     pub dry_run: bool,
     /// Default model to use for agents (e.g., "anthropic/claude-sonnet-4-5")
     #[serde(default)]
@@ -76,13 +76,13 @@ impl Default for ExecutionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitConfig {
     /// Automatically create PRs
-    #[serde(default = "default_true")]
+    #[serde(rename = "autoCreatePrs", alias = "auto_create_prs", default = "default_true")]
     pub auto_create_prs: bool,
     /// Create draft PRs
-    #[serde(default)]
+    #[serde(rename = "draftPrs", alias = "draft_prs", default)]
     pub draft_prs: bool,
     /// Default branch name pattern
-    #[serde(default = "default_branch_pattern")]
+    #[serde(rename = "branchPattern", alias = "branch_pattern", default = "default_branch_pattern")]
     pub branch_pattern: String,
 }
 
@@ -103,16 +103,16 @@ impl Default for GitConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationConfig {
     /// Run tests after completion
-    #[serde(default = "default_true")]
+    #[serde(rename = "runTests", alias = "run_tests", default = "default_true")]
     pub run_tests: bool,
     /// Run linter after completion
-    #[serde(default = "default_true")]
+    #[serde(rename = "runLint", alias = "run_lint", default = "default_true")]
     pub run_lint: bool,
     /// Custom test command
-    #[serde(default)]
+    #[serde(rename = "testCommand", alias = "test_command", default)]
     pub test_command: Option<String>,
     /// Custom lint command
-    #[serde(default)]
+    #[serde(rename = "lintCommand", alias = "lint_command", default)]
     pub lint_command: Option<String>,
 }
 
@@ -131,10 +131,10 @@ impl Default for ValidationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TemplateConfig {
     /// Default template for tasks
-    #[serde(default)]
+    #[serde(rename = "defaultTemplate", alias = "default_template", default)]
     pub default_template: Option<String>,
     /// Custom templates directory
-    #[serde(default)]
+    #[serde(rename = "templatesDir", alias = "templates_dir", default)]
     pub templates_dir: Option<String>,
 }
 
@@ -145,13 +145,13 @@ pub struct FallbackSettings {
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// Base backoff in milliseconds
-    #[serde(default = "default_backoff")]
+    #[serde(rename = "baseBackoffMs", alias = "base_backoff_ms", default = "default_backoff")]
     pub base_backoff_ms: u64,
     /// Maximum backoff in milliseconds
-    #[serde(default = "default_max_backoff")]
+    #[serde(rename = "maxBackoffMs", alias = "max_backoff_ms", default = "default_max_backoff")]
     pub max_backoff_ms: u64,
     /// Fallback agent type
-    #[serde(default)]
+    #[serde(rename = "fallbackAgent", alias = "fallback_agent", default)]
     pub fallback_agent: Option<String>,
 }
 
