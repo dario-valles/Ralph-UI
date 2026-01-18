@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,12 +11,10 @@ import {
   Plug,
   FileText,
   ArrowRight,
-  FolderOpen,
-  X,
   LucideIcon,
 } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-dialog'
 import { PRD_TYPES as PRD_TYPE_CONFIG, type PRDTypeConfig } from '@/config/prdTypes'
+import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -79,41 +77,13 @@ export function PRDTypeSelector({
 }: PRDTypeSelectorProps) {
   const [selectedType, setSelectedType] = useState<PRDTypeValue | null>(null)
   const [guidedMode, setGuidedMode] = useState(true)
-  const [projectPath, setProjectPath] = useState<string | undefined>(defaultProjectPath)
-
-  useEffect(() => {
-    setProjectPath(defaultProjectPath)
-  }, [defaultProjectPath])
-
-  const handleSelectFolder = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Folder',
-      })
-      if (selected && typeof selected === 'string') {
-        setProjectPath(selected)
-      }
-    } catch (error) {
-      console.error('Failed to open folder dialog:', error)
-    }
-  }
-
-  const handleClearFolder = () => {
-    setProjectPath(undefined)
-  }
+  // Use defaultProjectPath as initial value; parent should use key prop to reset if needed
+  const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
 
   const handleContinue = () => {
     if (selectedType) {
-      onSelect(selectedType, guidedMode, projectPath)
+      onSelect(selectedType, guidedMode, projectPath || undefined)
     }
-  }
-
-  // Get display name for project path
-  const getProjectDisplayName = (path: string) => {
-    const parts = path.split(/[/\\]/)
-    return parts[parts.length - 1] || path
   }
 
   return (
@@ -151,41 +121,14 @@ export function PRDTypeSelector({
         </div>
 
         {/* Project Path Selector */}
-        <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Project Context</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSelectFolder}
-              disabled={loading}
-              className="gap-2"
-            >
-              <FolderOpen className="h-4 w-4" />
-              {projectPath ? 'Change' : 'Select Folder'}
-            </Button>
-          </div>
-          {projectPath ? (
-            <div className="flex items-center gap-2 p-2 bg-background rounded border">
-              <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-sm truncate flex-1" title={projectPath}>
-                {getProjectDisplayName(projectPath)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearFolder}
-                disabled={loading}
-                className="h-6 w-6 p-0 shrink-0"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Select a project folder for better context-aware PRD generation
-            </p>
-          )}
+        <div className="p-4 bg-muted/50 rounded-lg">
+          <ProjectPicker
+            value={projectPath}
+            onChange={setProjectPath}
+            label="Project Context"
+            placeholder="Select a project folder for context"
+            disabled={loading}
+          />
         </div>
 
         {/* Guided Mode Toggle */}

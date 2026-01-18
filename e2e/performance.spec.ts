@@ -88,8 +88,6 @@ test.describe('Performance Metrics (Phase 7)', () => {
       await page.click('text=Tasks')
 
       // Measure frame rate during scroll
-      const frameRates: number[] = []
-
       await page.evaluate(() => {
         let lastTime = performance.now()
         let frameCount = 0
@@ -100,8 +98,9 @@ test.describe('Performance Metrics (Phase 7)', () => {
 
           if (delta > 0) {
             const fps = 1000 / delta
-            ;(window as any).frameRates = (window as any).frameRates || []
-            ;(window as any).frameRates.push(fps)
+            const win = window as Window & { frameRates?: number[] }
+            win.frameRates = win.frameRates || []
+            win.frameRates.push(fps)
           }
 
           lastTime = currentTime
@@ -122,7 +121,10 @@ test.describe('Performance Metrics (Phase 7)', () => {
 
       await page.waitForTimeout(1000)
 
-      const fps = await page.evaluate(() => (window as any).frameRates || [])
+      const fps = await page.evaluate(() => {
+        const win = window as Window & { frameRates?: number[] }
+        return win.frameRates || []
+      })
 
       // Should maintain 30+ fps (ideally 60)
       const avgFps = fps.reduce((a: number, b: number) => a + b, 0) / fps.length
@@ -167,8 +169,9 @@ test.describe('Performance Metrics (Phase 7)', () => {
 
       // Force garbage collection if available
       await page.evaluate(() => {
-        if ((window as any).gc) {
-          ;(window as any).gc()
+        const win = window as Window & { gc?: () => void }
+        if (win.gc) {
+          win.gc()
         }
       })
 
@@ -215,7 +218,8 @@ test.describe('Performance Metrics (Phase 7)', () => {
             message: `Log message ${j}`,
           })),
         }))
-        ;(window as any).mockAgents = mockAgents
+        const win = window as Window & { mockAgents?: typeof mockAgents }
+        win.mockAgents = mockAgents
       })
 
       await page.waitForTimeout(2000)
@@ -435,13 +439,12 @@ test.describe('Performance Metrics (Phase 7)', () => {
 
   test.describe('Long Task Performance', () => {
     test('should not have long blocking tasks', async ({ page }) => {
-      const longTasks: number[] = []
-
       await page.evaluate(() => {
         const observer = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            ;(window as any).longTasks = (window as any).longTasks || []
-            ;(window as any).longTasks.push(entry.duration)
+            const win = window as Window & { longTasks?: number[] }
+            win.longTasks = win.longTasks || []
+            win.longTasks.push(entry.duration)
           }
         })
 
@@ -451,7 +454,10 @@ test.describe('Performance Metrics (Phase 7)', () => {
       await page.click('text=Sessions')
       await page.waitForTimeout(3000)
 
-      const tasks = await page.evaluate(() => (window as any).longTasks || [])
+      const tasks = await page.evaluate(() => {
+        const win = window as Window & { longTasks?: number[] }
+        return win.longTasks || []
+      })
 
       // Should not have many long tasks (> 50ms)
       const longTaskCount = tasks.filter((duration: number) => duration > 50).length

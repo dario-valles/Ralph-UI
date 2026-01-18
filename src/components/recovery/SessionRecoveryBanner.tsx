@@ -333,6 +333,7 @@ export function SessionRecoveryModal({
     if (open && projectPath) {
       checkStaleSessions()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Check when dialog opens or projectPath changes
   }, [open, projectPath])
 
   const checkStaleSessions = async () => {
@@ -554,6 +555,7 @@ export function SessionRecoverySection({ projectPath }: { projectPath: string })
 
   useEffect(() => {
     checkStaleSessions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Check on mount and projectPath change
   }, [projectPath])
 
   const handleRecoverAll = async () => {

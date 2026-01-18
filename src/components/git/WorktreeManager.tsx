@@ -40,6 +40,7 @@ export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
     if (repoPath) {
       loadWorktrees();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and repoPath change only
   }, [repoPath]);
 
   const handleCreateWorktree = async () => {

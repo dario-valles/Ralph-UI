@@ -32,13 +32,13 @@ describe('TaskDetail', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       tasks: [mockTask],
       updateTask: mockUpdateTask,
       updateTaskStatus: mockUpdateTaskStatus,
       loading: false,
       error: null,
-    })
+    } as ReturnType<typeof useTaskStore>)
   })
 
   it('renders task details', () => {
@@ -158,13 +158,13 @@ describe('TaskDetail', () => {
 
   it('displays error message when task has error', () => {
     const taskWithError = { ...mockTask, error: 'Test error message' }
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       tasks: [taskWithError],
       updateTask: mockUpdateTask,
       updateTaskStatus: mockUpdateTaskStatus,
       loading: false,
       error: null,
-    })
+    } as ReturnType<typeof useTaskStore>)
 
     render(<TaskDetail open={true} onOpenChange={vi.fn()} taskId="task-1" />)
 

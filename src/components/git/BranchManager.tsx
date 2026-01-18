@@ -56,6 +56,7 @@ export const BranchManager: React.FC<BranchManagerProps> = ({
     if (repoPath) {
       loadBranches();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and repoPath change only
   }, [repoPath]);
 
   const handleCreateBranch = async () => {

@@ -39,6 +39,7 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
     if (repoPath) {
       loadCommits();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and prop changes only
   }, [repoPath, maxCount]);
 
   const handleCommitClick = (commit: CommitInfo) => {

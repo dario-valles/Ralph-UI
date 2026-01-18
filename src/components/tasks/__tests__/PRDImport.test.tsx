@@ -11,10 +11,15 @@ vi.mock('@/stores/taskStore', () => ({
 // Mock FileReader for tests
 let mockFileContent = ''
 
-class MockFileReader {
-  onload: ((event: any) => void) | null = null
+interface FileReaderLoadEvent {
+  target: { result: string }
+}
 
-  readAsText(file: Blob) {
+class MockFileReader {
+  onload: ((event: FileReaderLoadEvent) => void) | null = null
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  readAsText(_file: Blob) {
     // Simulate async file reading
     setTimeout(() => {
       if (this.onload) {
@@ -24,7 +29,7 @@ class MockFileReader {
   }
 }
 
-global.FileReader = MockFileReader as any
+global.FileReader = MockFileReader as unknown as typeof FileReader
 
 describe('PRDImport', () => {
   const mockImportPRD = vi.fn()
@@ -32,11 +37,11 @@ describe('PRDImport', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       importPRD: mockImportPRD,
       loading: false,
       error: null,
-    })
+    } as ReturnType<typeof useTaskStore>)
   })
 
   it('renders import dialog when open', () => {
@@ -268,11 +273,11 @@ describe('PRDImport', () => {
   })
 
   it('displays error message on import failure', () => {
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       importPRD: mockImportPRD,
       loading: false,
       error: 'Failed to parse PRD',
-    })
+    } as ReturnType<typeof useTaskStore>)
 
     render(
       <PRDImport
@@ -299,11 +304,11 @@ describe('PRDImport', () => {
   })
 
   it('shows loading state during import', () => {
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       importPRD: mockImportPRD,
       loading: true,
       error: null,
-    })
+    } as ReturnType<typeof useTaskStore>)
 
     render(
       <PRDImport

@@ -68,7 +68,7 @@ test.describe('Accessibility (WCAG 2.1 AA)', () => {
       // Navigate through menu items
       const menuItems = ['Dashboard', 'Sessions', 'Tasks', 'Agents', 'Git', 'Parallel']
 
-      for (const item of menuItems) {
+      for (let i = 0; i < menuItems.length; i++) {
         await page.keyboard.press('ArrowDown')
         const focused = await page.evaluate(() => document.activeElement?.textContent)
         expect(menuItems).toContain(focused || '')
@@ -109,8 +109,7 @@ test.describe('Accessibility (WCAG 2.1 AA)', () => {
       await page.click('text=Sessions')
       await page.click('button:has-text("New Session")')
 
-      // Tab through dialog
-      const initialFocus = await page.evaluate(() => document.activeElement?.tagName)
+      // Tab through dialog - initial focus is on the dialog
 
       // Tab multiple times
       for (let i = 0; i < 10; i++) {

@@ -1,5 +1,22 @@
 // Core domain types based on the implementation plan
 
+// ============================================================================
+// Project Types (Workspace organization)
+// ============================================================================
+
+export interface Project {
+  id: string
+  path: string
+  name: string
+  lastUsedAt: string
+  isFavorite: boolean
+  createdAt: string
+}
+
+// ============================================================================
+// Task Types
+// ============================================================================
+
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
 export interface Task {
@@ -331,8 +348,8 @@ export interface SubagentTreeSummary {
 
 export type ErrorStrategy =
   | { retry: { maxAttempts: number; backoffMs: number } }
-  | { skip: {} }
-  | { abort: {} }
+  | { skip: Record<string, never> }
+  | { abort: Record<string, never> }
 
 export interface FallbackConfig {
   enabled: boolean

@@ -44,6 +44,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     if (repoPath) {
       loadDiff();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and prop changes only
   }, [repoPath, fromCommit, toCommit, showWorkingDiff]);
 
   const toggleFileExpansion = (filePath: string) => {

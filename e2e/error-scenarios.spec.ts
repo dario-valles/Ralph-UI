@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { writeFileSync } from 'fs'
 
 test.describe('Error Scenarios & Recovery (Phase 7)', () => {
   test.beforeEach(async ({ page }) => {
@@ -357,13 +358,8 @@ test.describe('Error Scenarios & Recovery (Phase 7)', () => {
       const invalidContent = '{ invalid: "json" }'
       const testFilePath = '/tmp/invalid-prd.json'
 
-      await page.evaluate(
-        ({ path, content }) => {
-          const fs = require('fs')
-          fs.writeFileSync(path, content)
-        },
-        { path: testFilePath, content: invalidContent }
-      )
+      // Write test file from Node.js context (not browser)
+      writeFileSync(testFilePath, invalidContent)
 
       const fileInput = await page.locator('input[type="file"]')
       await fileInput.setInputFiles(testFilePath)

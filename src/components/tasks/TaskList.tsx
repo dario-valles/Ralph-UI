@@ -20,6 +20,7 @@ const statusConfig = {
 }
 
 export function TaskList({ sessionId: _sessionId, onTaskClick }: TaskListProps) {
+  void _sessionId // Mark as intentionally unused
   const { getFilteredTasks, setFilter, filter } = useTaskStore()
   const [searchQuery, setSearchQuery] = useState('')
 

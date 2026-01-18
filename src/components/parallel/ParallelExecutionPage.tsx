@@ -1,6 +1,6 @@
 // Parallel execution page with scheduler controls and monitoring
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -137,28 +137,29 @@ export function ParallelExecutionPage() {
   }
 
   // Monitoring interval
-  let monitoringInterval: number | null = null
+  const monitoringIntervalRef = useRef<number | null>(null)
 
-  const startMonitoring = () => {
-    monitoringInterval = window.setInterval(() => {
+  const stopMonitoring = useCallback(() => {
+    if (monitoringIntervalRef.current) {
+      clearInterval(monitoringIntervalRef.current)
+      monitoringIntervalRef.current = null
+    }
+  }, [])
+
+  const startMonitoring = useCallback(() => {
+    monitoringIntervalRef.current = window.setInterval(() => {
       refreshStats()
       checkHealth()
     }, 5000) // Every 5 seconds
-  }
-
-  const stopMonitoring = () => {
-    if (monitoringInterval) {
-      clearInterval(monitoringInterval)
-      monitoringInterval = null
-    }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Stable interval callback
+  }, [])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopMonitoring()
     }
-  }, [])
+  }, [stopMonitoring])
 
   // Resolve conflict
   const handleResolveConflict = async (

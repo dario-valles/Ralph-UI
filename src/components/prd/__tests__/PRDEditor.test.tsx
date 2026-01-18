@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { PRDEditor } from '../PRDEditor'
@@ -28,7 +28,7 @@ vi.mock('../PRDExecutionDialog', () => ({
 
 // Mock QualityScoreCard
 vi.mock('../QualityScoreCard', () => ({
-  QualityScoreCard: ({ assessment, onRefresh }: { assessment: unknown; onRefresh?: () => void }) => (
+  QualityScoreCard: ({ onRefresh }: { onRefresh?: () => void }) => (
     <div data-testid="quality-score-card">
       Quality Score Card
       {onRefresh && <button onClick={onRefresh}>Refresh Quality</button>}

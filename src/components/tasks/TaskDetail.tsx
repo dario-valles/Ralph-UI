@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -33,16 +33,20 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
   const [editedTask, setEditedTask] = useState<Task | null>(null)
   const [isEditing, setIsEditing] = useState(false)
 
-  const task = tasks.find((t) => t.id === taskId)
+  const task = useMemo(() => tasks.find((t) => t.id === taskId), [tasks, taskId])
 
-  useEffect(() => {
+  // Initialize editedTask when entering edit mode
+  const startEditing = () => {
     if (task) {
       setEditedTask({ ...task })
-      setIsEditing(false)
+      setIsEditing(true)
     }
-  }, [task])
+  }
 
-  if (!task || !editedTask) return null
+  // Use task data directly for display, editedTask only for editing
+  const displayTask = isEditing && editedTask ? editedTask : task
+
+  if (!task || !displayTask) return null
 
   const statusInfo = statusConfig[task.status]
   const StatusIcon = statusInfo.icon
@@ -75,7 +79,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="flex items-center gap-2">
-                {isEditing ? (
+                {isEditing && editedTask ? (
                   <Input
                     value={editedTask.title}
                     onChange={(e) =>
@@ -100,7 +104,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
           {/* Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Description</label>
-            {isEditing ? (
+            {isEditing && editedTask ? (
               <textarea
                 value={editedTask.description}
                 onChange={(e) =>
@@ -119,7 +123,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Priority</label>
-              {isEditing ? (
+              {isEditing && editedTask ? (
                 <Input
                   type="number"
                   min="1"
@@ -135,7 +139,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
-              {isEditing ? (
+              {isEditing && editedTask ? (
                 <Select
                   value={editedTask.status}
                   onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
@@ -172,7 +176,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Estimated Tokens</label>
-              {isEditing ? (
+              {isEditing && editedTask ? (
                 <Input
                   type="number"
                   min="0"
@@ -270,7 +274,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
               </Button>
             </>
           ) : (
-            <Button onClick={() => setIsEditing(true)}>Edit Task</Button>
+            <Button onClick={startEditing}>Edit Task</Button>
           )}
         </DialogFooter>
       </DialogContent>

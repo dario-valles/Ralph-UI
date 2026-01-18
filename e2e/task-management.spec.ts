@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync } from 'fs'
 import { join } from 'path'
 
 test.describe('Task Management', () => {

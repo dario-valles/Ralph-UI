@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,11 +31,15 @@ import {
   Copy,
   MoreHorizontal,
   FileText,
+  ChevronDown,
+  ChevronRight,
+  Filter,
 } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-dialog'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { sessionApi } from '@/lib/tauri-api'
-import type { SessionStatus, SessionTemplate, SessionAnalytics } from '@/types'
+import { ProjectPicker } from '@/components/projects/ProjectPicker'
+import type { SessionStatus, SessionTemplate, SessionAnalytics, Session } from '@/types'
 
 export function SessionsPage() {
   const {
@@ -49,6 +53,9 @@ export function SessionsPage() {
     setCurrentSession,
   } = useSessionStore()
 
+  const { getActiveProject, registerProject } = useProjectStore()
+  const activeProject = getActiveProject()
+
   const [templates, setTemplates] = useState<SessionTemplate[]>([])
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isTemplateOpen, setIsTemplateOpen] = useState(false)
@@ -59,12 +66,8 @@ export function SessionsPage() {
   const [templateDescription, setTemplateDescription] = useState('')
   const [selectedSessionForTemplate, setSelectedSessionForTemplate] = useState<string>('')
   const [analytics, setAnalytics] = useState<Record<string, SessionAnalytics>>({})
-
-  // Fetch sessions and templates on mount
-  useEffect(() => {
-    fetchSessions()
-    loadTemplates()
-  }, [fetchSessions])
+  const [filterByProject, setFilterByProject] = useState(true)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const loadTemplates = async () => {
     try {
@@ -76,10 +79,69 @@ export function SessionsPage() {
     }
   }
 
+  // Fetch sessions and templates on mount
+  useEffect(() => {
+    fetchSessions()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Data fetching is a valid effect pattern
+    void loadTemplates()
+  }, [fetchSessions])
+
+  // Handle opening create dialog with default project path
+  const openCreateDialog = () => {
+    if (activeProject && !newSessionPath) {
+      setNewSessionPath(activeProject.path)
+    }
+    openCreateDialog()
+  }
+
+  // Filter and group sessions
+  const filteredSessions = useMemo(() => {
+    if (filterByProject && activeProject) {
+      return sessions.filter((s) => s.projectPath === activeProject.path)
+    }
+    return sessions
+  }, [sessions, filterByProject, activeProject])
+
+  // Group sessions by project path
+  const groupedSessions = useMemo(() => {
+    const groups: Record<string, Session[]> = {}
+    filteredSessions.forEach((session) => {
+      const key = session.projectPath || 'No Project'
+      if (!groups[key]) {
+        groups[key] = []
+      }
+      groups[key].push(session)
+    })
+    return groups
+  }, [filteredSessions])
+
+  // Get project name from path
+  const getProjectName = (path: string) => {
+    if (path === 'No Project') return path
+    const parts = path.split(/[/\\]/)
+    return parts[parts.length - 1] || path
+  }
+
+  // Toggle group collapse
+  const toggleGroup = (groupKey: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupKey)) {
+        next.delete(groupKey)
+      } else {
+        next.add(groupKey)
+      }
+      return next
+    })
+  }
+
   const handleCreateSession = async () => {
     if (!newSessionName || !newSessionPath) return
 
     try {
+      // Register the project when creating a session
+      registerProject(newSessionPath)
+
       if (selectedTemplateId) {
         await sessionApi.createFromTemplate(selectedTemplateId, newSessionName, newSessionPath)
         await fetchSessions()
@@ -138,21 +200,6 @@ export function SessionsPage() {
     }
   }
 
-  const handleSelectFolder = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Directory',
-      })
-      if (selected) {
-        setNewSessionPath(selected as string)
-      }
-    } catch (err) {
-      console.error('Failed to open folder picker:', err)
-    }
-  }
-
   const getStatusBadgeVariant = (
     status: SessionStatus
   ): 'default' | 'secondary' | 'destructive' | 'outline' => {
@@ -179,14 +226,29 @@ export function SessionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Sessions</h1>
-          <p className="text-muted-foreground">Manage your work sessions</p>
+          <p className="text-muted-foreground">
+            {activeProject && filterByProject
+              ? `Sessions for ${getProjectName(activeProject.path)}`
+              : 'Manage your work sessions'}
+          </p>
         </div>
         <div className="flex gap-2">
+          {activeProject && (
+            <Button
+              variant={filterByProject ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilterByProject(!filterByProject)}
+              className="gap-2"
+            >
+              <Filter className="h-4 w-4" />
+              {filterByProject ? 'Active Project' : 'All Projects'}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsTemplateOpen(true)}>
             <Copy className="mr-2 h-4 w-4" />
             Create Template
           </Button>
-          <Button onClick={() => setIsCreateOpen(true)}>
+          <Button onClick={() => openCreateDialog()}>
             <Plus className="mr-2 h-4 w-4" />
             New Session
           </Button>
@@ -265,21 +327,12 @@ export function SessionsPage() {
                 placeholder="Feature Development"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="projectPath">Project Path</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="projectPath"
-                  value={newSessionPath}
-                  onChange={(e) => setNewSessionPath(e.target.value)}
-                  placeholder="/path/to/project"
-                  className="flex-1"
-                />
-                <Button variant="outline" size="icon" onClick={handleSelectFolder}>
-                  <FolderOpen className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            <ProjectPicker
+              value={newSessionPath}
+              onChange={setNewSessionPath}
+              label="Project Path"
+              placeholder="Select a project folder"
+            />
             {templates.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="template">Template (Optional)</Label>
@@ -331,7 +384,7 @@ export function SessionsPage() {
                   className="h-auto py-2"
                   onClick={() => {
                     setSelectedTemplateId(template.id)
-                    setIsCreateOpen(true)
+                    openCreateDialog()
                   }}
                 >
                   <FileText className="mr-2 h-4 w-4" />
@@ -350,127 +403,154 @@ export function SessionsPage() {
         </Card>
       )}
 
-      {/* Sessions List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Sessions</CardTitle>
-          <CardDescription>
-            {sessions.length === 0
-              ? 'No sessions yet'
-              : `${sessions.length} session${sessions.length === 1 ? '' : 's'}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading && <p className="text-muted-foreground">Loading sessions...</p>}
-          {!loading && sessions.length === 0 && (
-            <div className="text-center py-8">
+      {/* Sessions List - Grouped by Project */}
+      {loading && (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-center text-muted-foreground">Loading sessions...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && filteredSessions.length === 0 && (
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
               <p className="text-muted-foreground mb-4">
-                No sessions created yet. Create your first session to get started.
+                {filterByProject && activeProject
+                  ? `No sessions for ${getProjectName(activeProject.path)} yet.`
+                  : 'No sessions created yet. Create your first session to get started.'}
               </p>
-              <Button onClick={() => setIsCreateOpen(true)}>
+              <Button onClick={() => openCreateDialog()}>
                 <Plus className="mr-2 h-4 w-4" />
-                Create First Session
+                Create Session
               </Button>
             </div>
-          )}
-          {!loading && sessions.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Tasks</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((session) => (
-                  <TableRow key={session.id}>
-                    <TableCell className="font-medium">{session.name}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {session.projectPath}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadgeVariant(session.status)}>
-                        {session.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{session.tasks?.length || 0}</TableCell>
-                    <TableCell>${session.totalCost?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>
-                      {new Date(session.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {session.status === 'active' ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleStatusChange(session.id, 'paused')}
-                            title="Pause session"
-                          >
-                            <Pause className="h-4 w-4" />
-                          </Button>
-                        ) : session.status === 'paused' ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleStatusChange(session.id, 'active')}
-                            title="Resume session"
-                          >
-                            <Play className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleExportSession(session.id)}
-                          title="Export session"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedSessionForTemplate(session.id)
-                            setIsTemplateOpen(true)
-                          }}
-                          title="Save as template"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            handleLoadAnalytics(session.id)
-                            setCurrentSession(session)
-                          }}
-                          title="Set as current"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteSession(session.id)}
-                          title="Delete session"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading &&
+        Object.entries(groupedSessions).map(([projectPath, projectSessions]) => (
+          <Card key={projectPath}>
+            <CardHeader className="py-3">
+              <button
+                onClick={() => toggleGroup(projectPath)}
+                className="flex items-center gap-2 w-full text-left"
+              >
+                {collapsedGroups.has(projectPath) ? (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">{getProjectName(projectPath)}</CardTitle>
+                <Badge variant="secondary" className="ml-2">
+                  {projectSessions.length}
+                </Badge>
+              </button>
+              {!collapsedGroups.has(projectPath) && (
+                <CardDescription className="ml-6 text-xs truncate">
+                  {projectPath}
+                </CardDescription>
+              )}
+            </CardHeader>
+            {!collapsedGroups.has(projectPath) && (
+              <CardContent className="pt-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Tasks</TableHead>
+                      <TableHead>Cost</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {projectSessions.map((session) => (
+                      <TableRow key={session.id}>
+                        <TableCell className="font-medium">{session.name}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(session.status)}>
+                            {session.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{session.tasks?.length || 0}</TableCell>
+                        <TableCell>${session.totalCost?.toFixed(2) || '0.00'}</TableCell>
+                        <TableCell>
+                          {new Date(session.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {session.status === 'active' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleStatusChange(session.id, 'paused')}
+                                title="Pause session"
+                              >
+                                <Pause className="h-4 w-4" />
+                              </Button>
+                            ) : session.status === 'paused' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleStatusChange(session.id, 'active')}
+                                title="Resume session"
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleExportSession(session.id)}
+                              title="Export session"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedSessionForTemplate(session.id)
+                                setIsTemplateOpen(true)
+                              }}
+                              title="Save as template"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                handleLoadAnalytics(session.id)
+                                setCurrentSession(session)
+                              }}
+                              title="Set as current"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteSession(session.id)}
+                              title="Delete session"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            )}
+          </Card>
+        ))}
 
       {/* Analytics Preview */}
       {Object.keys(analytics).length > 0 && (

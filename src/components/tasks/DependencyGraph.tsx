@@ -10,6 +10,7 @@ interface DependencyGraphProps {
 }
 
 export function DependencyGraph({ sessionId: _sessionId, onTaskClick }: DependencyGraphProps) {
+  void _sessionId // Mark as intentionally unused
   const { tasks } = useTaskStore()
 
   // Build dependency map

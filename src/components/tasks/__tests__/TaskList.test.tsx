@@ -66,11 +66,11 @@ describe('TaskList', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(useTaskStore as any).mockReturnValue({
+    vi.mocked(useTaskStore).mockReturnValue({
       getFilteredTasks: mockGetFilteredTasks,
       setFilter: mockSetFilter,
       filter: { sortBy: 'priority', sortOrder: 'asc' },
-    })
+    } as ReturnType<typeof useTaskStore>)
   })
 
   it('renders task list with tasks', () => {
