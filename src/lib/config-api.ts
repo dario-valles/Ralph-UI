@@ -109,6 +109,14 @@ export const configApi = {
   reload: async (): Promise<RalphConfig> => {
     return await invoke('reload_config')
   },
+
+  /**
+   * Save configuration to file
+   * Saves to project config if project path is set, otherwise global config
+   */
+  save: async (): Promise<void> => {
+    return await invoke('save_config')
+  },
 }
 
 // ============================================================================

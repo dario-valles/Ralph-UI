@@ -268,6 +268,49 @@ impl ConfigLoader {
     pub fn project_config_path(&self) -> Option<&Path> {
         self.project_path.as_deref()
     }
+
+    /// Save config to global path
+    pub fn save_global(&self, config: &RalphConfig) -> Result<()> {
+        if let Some(ref path) = self.global_path {
+            self.save_to_path(path, config)
+        } else {
+            Err(anyhow!("No global config path available"))
+        }
+    }
+
+    /// Save config to project path
+    pub fn save_project(&self, config: &RalphConfig) -> Result<()> {
+        if let Some(ref path) = self.project_path {
+            self.save_to_path(path, config)
+        } else {
+            Err(anyhow!("No project config path available"))
+        }
+    }
+
+    /// Save config to a specific path
+    pub fn save_to_path(&self, path: &Path, config: &RalphConfig) -> Result<()> {
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| anyhow!("Failed to create config directory '{}': {}", parent.display(), e))?;
+            }
+        }
+
+        // Validate before saving
+        self.validate_config(config)?;
+
+        // Serialize to TOML
+        let contents = toml::to_string_pretty(config)
+            .map_err(|e| anyhow!("Failed to serialize config: {}", e))?;
+
+        // Write to file
+        fs::write(path, contents)
+            .map_err(|e| anyhow!("Failed to write config file '{}': {}", path.display(), e))?;
+
+        log::info!("Saved config to: {}", path.display());
+        Ok(())
+    }
 }
 
 impl Default for ConfigLoader {

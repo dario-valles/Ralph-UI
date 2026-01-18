@@ -153,12 +153,15 @@ export function SettingsPage() {
     try {
       // Save backend config
       if (isTauri) {
+        // Update in-memory config first
         await Promise.all([
           configApi.updateExecution(config.execution),
           configApi.updateGit(config.git),
           configApi.updateValidation(config.validation),
           configApi.updateFallback(config.fallback),
         ])
+        // Persist to disk
+        await configApi.save()
       }
 
       // Save UI settings to localStorage

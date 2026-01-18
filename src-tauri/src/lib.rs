@@ -201,6 +201,7 @@ pub fn run() {
             commands::update_validation_config,
             commands::update_fallback_config,
             commands::reload_config,
+            commands::save_config,
             // Template commands
             commands::list_templates,
             commands::list_builtin_templates,

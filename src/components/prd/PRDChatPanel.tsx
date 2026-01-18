@@ -54,7 +54,10 @@ export function PRDChatPanel() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState<string>('')
+  // Track user's explicit model selection; empty string means "use default"
+  const [userSelectedModel, setUserSelectedModel] = useState<string>('')
+  // Track the last agent type to detect changes
+  const prevAgentTypeRef = useRef<string>('')
 
   const {
     sessions,
@@ -79,19 +82,16 @@ export function PRDChatPanel() {
   const agentType = (currentSession?.agentType || 'claude') as AgentType
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
 
-  // Update selected model when default changes (e.g., agent type changed)
-  useEffect(() => {
-    if (defaultModelId && !selectedModel) {
-      setSelectedModel(defaultModelId)
+  // Reset user selection when agent type changes
+  if (prevAgentTypeRef.current !== agentType) {
+    prevAgentTypeRef.current = agentType
+    if (userSelectedModel) {
+      setUserSelectedModel('')
     }
-  }, [defaultModelId, selectedModel])
+  }
 
-  // Reset selected model when agent type changes
-  useEffect(() => {
-    if (defaultModelId) {
-      setSelectedModel(defaultModelId)
-    }
-  }, [agentType, defaultModelId])
+  // Effective model: user selection if set, otherwise default
+  const selectedModel = userSelectedModel || defaultModelId
 
   // Track the previous processing session to detect when processing completes
   const prevProcessingSessionIdRef = useRef<string | null>(null)
@@ -358,7 +358,7 @@ export function PRDChatPanel() {
                   id="model-selector"
                   aria-label="Model"
                   value={selectedModel || defaultModelId || ''}
-                  onChange={(e) => setSelectedModel(e.target.value)}
+                  onChange={(e) => setUserSelectedModel(e.target.value)}
                   disabled={streaming || modelsLoading}
                   className="w-40"
                 >

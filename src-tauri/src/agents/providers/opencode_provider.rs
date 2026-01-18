@@ -26,7 +26,7 @@ impl OpencodeProvider {
     /// Parse model list from `opencode models` output
     ///
     /// Expected format: one model ID per line, e.g.:
-    /// ```
+    /// ```text
     /// anthropic/claude-sonnet-4-5
     /// anthropic/claude-opus-4-5
     /// openai/gpt-4o

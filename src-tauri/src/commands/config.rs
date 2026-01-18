@@ -2,7 +2,7 @@
 
 use crate::config::{
     load_merged_config, get_config_paths, RalphConfig, ExecutionConfig, GitConfig, ValidationConfig,
-    FallbackSettings,
+    FallbackSettings, ConfigLoader,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -249,6 +249,36 @@ pub async fn reload_config(
     *config = new_config.clone();
 
     Ok(new_config)
+}
+
+/// Save configuration to file
+/// If a project path is set, saves to project config, otherwise saves to global config
+#[tauri::command]
+pub async fn save_config(
+    config_state: State<'_, ConfigState>,
+) -> Result<(), String> {
+    let config = config_state.config.read()
+        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+
+    let project_path = config_state.project_path.read()
+        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+
+    let loader = if let Some(ref path) = *project_path {
+        ConfigLoader::new().with_project_path(path)
+    } else {
+        ConfigLoader::new()
+    };
+
+    // Try to save to project config if available, otherwise save to global
+    if project_path.is_some() {
+        loader.save_project(&config)
+            .map_err(|e| format!("Failed to save project config: {}", e))?;
+    } else {
+        loader.save_global(&config)
+            .map_err(|e| format!("Failed to save global config: {}", e))?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
