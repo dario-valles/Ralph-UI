@@ -8,87 +8,56 @@ This document outlines the organization of the Ralph UI codebase.
 Ralph-UI/
 ├── src/                        # Frontend source code (React + TypeScript)
 │   ├── components/             # React components
-│   │   ├── ui/                 # shadcn/ui base components (Button, Card, etc.)
-│   │   ├── layout/             # Layout components (Header, Sidebar)
-│   │   ├── dashboard/          # Dashboard view components
+│   │   ├── ui/                 # shadcn/ui base components
+│   │   ├── layout/             # Layout (AppLayout, Sidebar, TitleBar)
+│   │   ├── dashboard/          # Dashboard and Sessions pages
 │   │   ├── tasks/              # Task management (TaskList, TaskDetail, PRDImport)
-│   │   ├── agents/             # Agent monitoring (AgentList, Terminal)
-│   │   ├── git/                # Git operations (BranchManager, DiffViewer)
-│   │   ├── prd/                # PRD management (PRDEditor, PRDList, Templates)
-│   │   ├── sessions/           # Session management
-│   │   └── settings/           # Settings and configuration
-│   ├── stores/                 # Zustand state management
-│   │   ├── sessionStore.ts     # Session state (26 tests)
-│   │   ├── taskStore.ts        # Task state (28 tests)
-│   │   ├── agentStore.ts       # Agent state (27 tests)
-│   │   └── prdStore.ts         # PRD state (27 tests)
-│   ├── lib/                    # Utilities and API
-│   │   ├── utils.ts            # Common utilities (cn, etc.)
-│   │   └── tauri-api.ts        # Tauri command wrappers
+│   │   ├── agents/             # Agent monitoring (AgentList, AgentDetail, SubagentTree)
+│   │   ├── git/                # Git operations (BranchManager, DiffViewer, etc.)
+│   │   ├── prd/                # PRD management and AI chat
+│   │   ├── parallel/           # Parallel execution UI
+│   │   ├── projects/           # Project management (ProjectPicker, ProjectSwitcher)
+│   │   ├── mission-control/    # Mission Control dashboard
+│   │   ├── settings/           # Settings page
+│   │   └── recovery/           # Session recovery components
+│   ├── stores/                 # Zustand state management (7 stores)
+│   ├── hooks/                  # Custom React hooks
+│   ├── lib/                    # Utilities and API wrappers
+│   ├── config/                 # Frontend configuration
 │   ├── types/                  # TypeScript type definitions
-│   │   └── index.ts            # Core domain types
 │   ├── test/                   # Test setup
-│   │   └── setup.ts            # Vitest configuration
 │   ├── App.tsx                 # Main application component
 │   ├── main.tsx                # Application entry point
 │   └── index.css               # Global styles (Tailwind)
 ├── src-tauri/                  # Tauri/Rust backend
 │   ├── src/
 │   │   ├── main.rs             # Tauri application entry
+│   │   ├── lib.rs              # Library entry point
+│   │   ├── events.rs           # Event system
 │   │   ├── commands/           # Tauri IPC command handlers
-│   │   │   ├── mod.rs          # Command exports
-│   │   │   ├── sessions.rs     # Session commands
-│   │   │   ├── tasks.rs        # Task commands
-│   │   │   ├── agents.rs       # Agent commands
-│   │   │   ├── git.rs          # Git commands (17 commands)
-│   │   │   ├── github.rs       # GitHub API commands (5 commands)
-│   │   │   └── prd.rs          # PRD commands (9 commands)
 │   │   ├── database/           # SQLite operations
-│   │   │   ├── mod.rs          # Database initialization
-│   │   │   ├── sessions.rs     # Session CRUD
-│   │   │   ├── tasks.rs        # Task CRUD
-│   │   │   ├── agents.rs       # Agent CRUD (13 tests)
-│   │   │   └── prd.rs          # PRD CRUD (470 lines)
+│   │   ├── models/             # Data models
 │   │   ├── git/                # Git operations (git2-rs)
-│   │   │   ├── mod.rs          # Git module
-│   │   │   └── operations.rs   # Branch, worktree, commit ops (16 tests)
 │   │   ├── agents/             # Agent process management
-│   │   │   ├── mod.rs          # Agent manager
-│   │   │   └── manager.rs      # Process spawn/monitor (7 tests)
 │   │   ├── parallel/           # Parallel execution
-│   │   │   ├── mod.rs          # Module exports
-│   │   │   ├── pool.rs         # Agent pool (10 tests)
-│   │   │   ├── scheduler.rs    # Task scheduler (13 tests)
-│   │   │   ├── worktree.rs     # Worktree coordinator (10 tests)
-│   │   │   └── conflict.rs     # Conflict detection (8 tests)
-│   │   ├── parsers/            # PRD parsers
-│   │   │   ├── mod.rs          # Parser exports
-│   │   │   ├── json.rs         # JSON parser
-│   │   │   ├── yaml.rs         # YAML parser
-│   │   │   └── markdown.rs     # Markdown parser
-│   │   └── github/             # GitHub API integration
-│   │       └── client.rs       # REST client (2 tests)
+│   │   ├── session/            # Session management
+│   │   ├── parsers/            # PRD parsers (JSON, YAML, Markdown)
+│   │   ├── templates/          # Template system
+│   │   ├── config/             # Configuration management
+│   │   ├── github/             # GitHub API integration
+│   │   └── utils/              # Utility functions
 │   ├── tests/                  # Backend integration tests
 │   ├── Cargo.toml              # Rust dependencies
 │   └── tauri.conf.json         # Tauri configuration
 ├── e2e/                        # End-to-end tests (Playwright)
-│   ├── agent-workflows.spec.ts # Agent lifecycle tests (50+)
-│   ├── git-operations.spec.ts  # Git workflow tests (60+)
-│   ├── parallel-execution.spec.ts # Multi-agent tests (50+)
-│   ├── error-scenarios.spec.ts # Error handling tests (60+)
-│   ├── accessibility.spec.ts   # WCAG 2.1 AA tests (40+)
-│   └── performance.spec.ts     # Performance tests (30+)
 ├── public/                     # Static assets
-├── .github/                    # GitHub Actions workflows
-│   └── workflows/              # CI/CD pipelines
 ├── package.json                # Node.js dependencies
 ├── tsconfig.json               # TypeScript configuration
 ├── tailwind.config.js          # Tailwind CSS configuration
 ├── vite.config.ts              # Vite build configuration
 ├── vitest.config.ts            # Vitest test configuration
 ├── playwright.config.ts        # Playwright E2E configuration
-├── eslint.config.js            # ESLint configuration
-└── .prettierrc                 # Prettier configuration
+└── eslint.config.js            # ESLint configuration
 ```
 
 ## Frontend Architecture
@@ -96,102 +65,156 @@ Ralph-UI/
 ### Components (`src/components/`)
 
 **UI Components (`ui/`):**
-- shadcn/ui base components (Button, Card, Input, Dialog, etc.)
+- shadcn/ui base components (Button, Card, Dialog, Input, etc.)
 - Fully customizable with Tailwind CSS
 
+**Layout Components (`layout/`):**
+- `AppLayout.tsx` - Main application layout with sidebar
+- `Sidebar.tsx` - Navigation sidebar
+- `TitleBar.tsx` - VS Code-style title bar with project selector
+
 **Feature Components:**
+- `dashboard/` - DashboardPage, SessionsPage
 - `tasks/` - TaskList, TaskDetail, DependencyGraph, PRDImport
-- `agents/` - AgentList, AgentMonitor, Terminal output
+- `agents/` - AgentList, AgentDetail, AgentLogViewer, SubagentTree
 - `git/` - BranchManager, WorktreeManager, CommitHistory, DiffViewer
-- `prd/` - PRDEditor, PRDList, PRDTemplateSelector, PRDExecutionDialog
-- `sessions/` - SessionList, SessionDetail, SessionExport
-- `dashboard/` - Overview, metrics, quick actions
+- `prd/` - PRDEditor, PRDList, PRDChatPanel, PRDTemplateSelector, PRDExecutionDialog
+- `parallel/` - ParallelExecutionPage, AgentComparison, ConflictResolution
+- `projects/` - ProjectPicker, ProjectSwitcher
+- `mission-control/` - MissionControlPage, ProjectStatusCard, ActiveAgentsGrid, ActivityTimeline
+- `settings/` - SettingsPage
+- `recovery/` - SessionRecoveryBanner
 
 ### State Management (`src/stores/`)
 
-Four Zustand stores with 108 unit tests total:
+Seven Zustand stores:
 
-| Store | Purpose | Tests |
-|-------|---------|-------|
-| `sessionStore.ts` | Session lifecycle, config | 26 |
-| `taskStore.ts` | Task CRUD, filtering | 28 |
-| `agentStore.ts` | Agent status, logs | 27 |
-| `prdStore.ts` | PRD management | 27 |
+| Store | Purpose |
+|-------|---------|
+| `sessionStore.ts` | Session lifecycle, configuration |
+| `taskStore.ts` | Task CRUD, filtering, status |
+| `agentStore.ts` | Agent status, logs, monitoring |
+| `prdStore.ts` | PRD management, templates |
+| `prdChatStore.ts` | AI chat state for PRD creation |
+| `projectStore.ts` | Multi-project management |
+| `uiStore.ts` | UI state (sidebars, modals) |
+| `toastStore.ts` | Toast notifications |
+
+### Hooks (`src/hooks/`)
+
+- `useMissionControlData.ts` - Mission Control data fetching
+
+### API Layer (`src/lib/`)
+
+- `tauri-api.ts` - Main Tauri command wrappers
+- `agent-api.ts` - Agent-specific API calls
+- `git-api.ts` - Git operation wrappers
+- `parallel-api.ts` - Parallel execution API
+- `config-api.ts` - Configuration API
+- `utils.ts` - Common utilities
 
 ### Type System (`src/types/`)
 
 Centralized TypeScript definitions:
-- `Task`, `Session`, `Agent`, `PRDDocument` interfaces
-- Status enums, configuration types
+- `index.ts` - Core domain types (Task, Session, Agent, PRD, Project)
 - Matches backend Rust types for consistency
 
 ## Backend Architecture
 
 ### Tauri Commands (`src-tauri/src/commands/`)
 
-82 total commands across modules:
-
-| Module | Commands | Purpose |
-|--------|----------|---------|
-| `sessions.rs` | 8 | Session CRUD, resume, export |
-| `tasks.rs` | 10 | Task CRUD, filtering, status |
-| `agents.rs` | 11 | Agent spawn, monitor, logs |
-| `git.rs` | 17 | Branch, worktree, commit ops |
-| `github.rs` | 5 | PR creation, issue management |
-| `prd.rs` | 9 | PRD CRUD, templates, execution |
-| `parallel.rs` | 22 | Pool, scheduler, conflict detection |
+| Module | Purpose |
+|--------|---------|
+| `sessions.rs` | Session CRUD, resume, export |
+| `tasks.rs` | Task CRUD, filtering, status |
+| `agents.rs` | Agent spawn, monitor, logs |
+| `git.rs` | Branch, worktree, commit operations |
+| `github.rs` | GitHub API (PRs, Issues) |
+| `prd.rs` | PRD CRUD, templates, execution |
+| `prd_chat.rs` | AI chat for PRD creation |
+| `projects.rs` | Project management |
+| `parallel.rs` | Pool, scheduler, conflict detection |
+| `config.rs` | Configuration management |
+| `recovery.rs` | Session recovery |
+| `templates.rs` | Template operations |
+| `traces.rs` | Agent trace parsing |
+| `mission_control.rs` | Mission Control data |
 
 ### Database (`src-tauri/src/database/`)
 
-SQLite with 8 tables:
-- `sessions` - Session state and config
-- `tasks` - Task definitions and status
-- `agents` - Agent instances and logs
-- `prd_documents` - PRD content and quality scores
-- `prd_templates` - Built-in and custom templates
-- `prd_executions` - Execution tracking
-- `agent_logs` - Log entries
-- `schema_version` - Migration tracking
+SQLite operations:
+- `mod.rs` - Database initialization and migrations
+- `sessions.rs` - Session CRUD
+- `tasks.rs` - Task CRUD
+- `agents.rs` - Agent CRUD and logs
+- `prd.rs` - PRD documents and templates
+- `prd_chat.rs` - PRD chat sessions
+- `projects.rs` - Project management
+
+### Models (`src-tauri/src/models/`)
+
+- `mod.rs` - Core data structures
+- `state_machine.rs` - Task/Session state machines
+- `prd_chat.rs` - PRD chat models
 
 ### Git Operations (`src-tauri/src/git/`)
 
-Full git2-rs integration (16 tests):
+Full git2-rs integration:
 - Branch management (create, delete, list, checkout)
 - Worktree operations (create, list, remove)
 - Commit operations (create, history, diff)
 - File staging and status
 
+### Agent Management (`src-tauri/src/agents/`)
+
+- `manager.rs` - Process spawn/monitor
+- `rate_limiter.rs` - API rate limiting
+- `fallback.rs` - Fallback strategies
+- `trace_parser.rs` - Agent output parsing
+
 ### Parallel Execution (`src-tauri/src/parallel/`)
 
-Multi-agent orchestration (41 tests):
-- `pool.rs` - Resource limits (CPU, memory, runtime)
-- `scheduler.rs` - 4 strategies (priority, dependency-first, FIFO, cost-first)
-- `worktree.rs` - Worktree allocation and cleanup
-- `conflict.rs` - Merge conflict detection
+Multi-agent orchestration:
+- `pool.rs` - Agent pool with resource limits
+- `scheduler.rs` - Task scheduling strategies
+- `coordinator.rs` - Worktree coordination
+- `conflicts.rs` - Merge conflict detection
+
+### Other Backend Modules
+
+- `session/` - Session locking and recovery
+- `parsers/` - PRD parsers (JSON, YAML, Markdown)
+- `templates/` - Template engine and built-in templates
+- `config/` - Configuration loading and merging
+- `github/` - GitHub API client
+- `events.rs` - Event system for real-time updates
 
 ## Testing
-
-### Test Coverage
-
-| Layer | Tests | Framework |
-|-------|-------|-----------|
-| Unit (Frontend) | 139 | Vitest |
-| E2E | 240+ | Playwright |
-| Backend | 150+ | Rust cargo test |
-| **Total** | **500+** | |
 
 ### Running Tests
 
 ```bash
-# Unit tests
+# Unit tests (Frontend)
 bun test
 
-# E2E tests
+# E2E tests (Playwright)
 bun run e2e
 
-# Backend tests
+# Backend tests (Rust)
 cd src-tauri && cargo test
 ```
+
+### E2E Test Files
+
+- `app.spec.ts` - Basic app functionality
+- `agent-workflows.spec.ts` - Agent lifecycle tests
+- `git-operations.spec.ts` - Git workflow tests
+- `parallel-execution.spec.ts` - Multi-agent tests
+- `session-management.spec.ts` - Session tests
+- `task-management.spec.ts` - Task operation tests
+- `error-scenarios.spec.ts` - Error handling tests
+- `accessibility.spec.ts` - WCAG compliance tests
+- `performance.spec.ts` - Performance tests
 
 ## Build System
 
@@ -246,8 +269,5 @@ import './Component.css'
 |----------|---------|
 | [README.md](./README.md) | Project overview |
 | [QUICK_START.md](./QUICK_START.md) | Developer setup |
-| [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | Full roadmap |
-| [PHASES_COMPLETION.md](./PHASES_COMPLETION.md) | Implementation status |
-| [PHASE_7.5_COMPLETION.md](./PHASE_7.5_COMPLETION.md) | PRD feature details |
-| [FRAMEWORK_DECISION.md](./FRAMEWORK_DECISION.md) | Why Tauri 2.0 |
-| [SUMMARY.md](./SUMMARY.md) | Executive summary |
+| [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | Historical roadmap |
+| [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) | This file |

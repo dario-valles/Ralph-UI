@@ -203,9 +203,7 @@ sudo apt install libwebkit2gtk-4.1-dev
 ## Next Steps
 
 - **Understand the codebase:** Read [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
-- **See what's built:** Read [PHASES_COMPLETION.md](./PHASES_COMPLETION.md)
-- **Architecture details:** Read [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
-- **Framework rationale:** Read [FRAMEWORK_DECISION.md](./FRAMEWORK_DECISION.md)
+- **Historical roadmap:** Read [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
 
 ---
 
