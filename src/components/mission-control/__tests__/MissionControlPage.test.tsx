@@ -36,8 +36,8 @@ vi.mock('@/hooks/useMissionControlData', () => ({
     activeAgents: [
       {
         id: 'agent-1',
-        session_id: 'session-1',
-        task_id: 'task-1',
+        sessionId: 'session-1',
+        taskId: 'task-1',
         status: 'thinking',
         projectPath: '/path/to/project1',
         projectName: 'Project 1',
@@ -74,14 +74,14 @@ vi.mock('@/hooks/useMissionControlData', () => ({
 }))
 
 vi.mock('@/stores/projectStore', () => ({
-  useProjectStore: (selector: any) => {
+  useProjectStore: (selector: ((state: { loadProjects: ReturnType<typeof vi.fn> }) => unknown) | undefined) => {
     const state = { loadProjects: vi.fn() }
     return typeof selector === 'function' ? selector(state) : state
   },
 }))
 
 vi.mock('@/stores/sessionStore', () => ({
-  useSessionStore: (selector: any) => {
+  useSessionStore: (selector: ((state: { fetchSessions: ReturnType<typeof vi.fn> }) => unknown) | undefined) => {
     const state = { fetchSessions: vi.fn() }
     return typeof selector === 'function' ? selector(state) : state
   },
@@ -89,7 +89,7 @@ vi.mock('@/stores/sessionStore', () => ({
 
 // Mock child components to simplify testing
 vi.mock('../GlobalStatsBar', () => ({
-  GlobalStatsBar: ({ stats, loading }: any) => (
+  GlobalStatsBar: ({ stats, loading }: { stats: { activeAgentsCount: number }; loading: boolean }) => (
     <div data-testid="global-stats-bar">
       {loading ? 'Loading...' : `Active: ${stats.activeAgentsCount}`}
     </div>
@@ -97,7 +97,7 @@ vi.mock('../GlobalStatsBar', () => ({
 }))
 
 vi.mock('../ProjectsOverview', () => ({
-  ProjectsOverview: ({ projectStatuses, loading, collapsed, onToggleCollapse }: any) => (
+  ProjectsOverview: ({ projectStatuses, collapsed, onToggleCollapse }: { projectStatuses: unknown[]; collapsed: boolean; onToggleCollapse: () => void }) => (
     <div data-testid="projects-overview">
       <button onClick={onToggleCollapse}>Toggle Projects</button>
       {collapsed ? 'Collapsed' : `Projects: ${projectStatuses.length}`}
@@ -106,7 +106,7 @@ vi.mock('../ProjectsOverview', () => ({
 }))
 
 vi.mock('../ActiveAgentsGrid', () => ({
-  ActiveAgentsGrid: ({ agents, loading, collapsed, onToggleCollapse }: any) => (
+  ActiveAgentsGrid: ({ agents, collapsed, onToggleCollapse }: { agents: unknown[]; collapsed: boolean; onToggleCollapse: () => void }) => (
     <div data-testid="active-agents-grid">
       <button onClick={onToggleCollapse}>Toggle Agents</button>
       {collapsed ? 'Collapsed' : `Agents: ${agents.length}`}
@@ -115,7 +115,7 @@ vi.mock('../ActiveAgentsGrid', () => ({
 }))
 
 vi.mock('../ActivityTimeline', () => ({
-  ActivityTimeline: ({ events, loading, collapsed, onToggleCollapse }: any) => (
+  ActivityTimeline: ({ events, collapsed, onToggleCollapse }: { events: unknown[]; collapsed: boolean; onToggleCollapse: () => void }) => (
     <div data-testid="activity-timeline">
       <button onClick={onToggleCollapse}>Toggle Activity</button>
       {collapsed ? 'Collapsed' : `Events: ${events.length}`}
@@ -124,7 +124,7 @@ vi.mock('../ActivityTimeline', () => ({
 }))
 
 vi.mock('../QuickActionsBar', () => ({
-  QuickActionsBar: ({ onRefreshAll, isRefreshing }: any) => (
+  QuickActionsBar: ({ onRefreshAll, isRefreshing }: { onRefreshAll: () => void; isRefreshing: boolean }) => (
     <div data-testid="quick-actions-bar">
       <button onClick={onRefreshAll} disabled={isRefreshing}>
         {isRefreshing ? 'Refreshing...' : 'Refresh'}

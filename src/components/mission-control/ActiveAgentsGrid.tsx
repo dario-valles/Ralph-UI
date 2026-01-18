@@ -88,7 +88,7 @@ export function ActiveAgentsGrid({
 
   const handleAgentClick = (agent: ActiveAgentWithContext) => {
     // Set session and project context before navigating
-    const session = sessions.find((s) => s.id === agent.session_id)
+    const session = sessions.find((s) => s.id === agent.sessionId)
     if (session) {
       setCurrentSession(session)
       const project = projects.find((p) => p.path === session.projectPath)
@@ -97,7 +97,7 @@ export function ActiveAgentsGrid({
       }
     }
     // Navigate to the agents page with the agent selected
-    navigate('/agents', { state: { agentId: agent.id, sessionId: agent.session_id } })
+    navigate('/agents', { state: { agentId: agent.id, sessionId: agent.sessionId } })
   }
 
   // Sort agents by status (active states first) then by cost (higher first)

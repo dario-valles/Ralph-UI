@@ -13,6 +13,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { missionControlApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
+import { cleanupStaleAgents } from '@/lib/agent-api'
+import { parallelPollCompleted } from '@/lib/parallel-api'
 
 // Check if we're running inside Tauri
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -188,7 +190,7 @@ export function useProjectStatuses(): {
       const sessionIds = new Set(projectSessions.map(s => s.id))
 
       // Get agents for this project's sessions
-      const projectAgents = agents.filter(a => sessionIds.has(a.session_id))
+      const projectAgents = agents.filter(a => sessionIds.has(a.sessionId))
       const runningAgentsCount = projectAgents.filter(a => a.status !== 'idle').length
 
       // Calculate task stats from sessions
@@ -262,9 +264,9 @@ export function useAllActiveAgents(): {
 
       // Enrich with context
       const enrichedAgents: ActiveAgentWithContext[] = agents.map(agent => {
-        const session = sessions.find(s => s.id === agent.session_id)
+        const session = sessions.find(s => s.id === agent.sessionId)
         const project = projects.find(p => p.path === session?.projectPath)
-        const task = tasks.find(t => t.id === agent.task_id)
+        const task = tasks.find(t => t.id === agent.taskId)
 
         return {
           ...agent,
@@ -283,19 +285,19 @@ export function useAllActiveAgents(): {
       const storeAgents = useAgentStore.getState().agents
       const activeFromStore = storeAgents.filter(a => a.status !== 'idle')
       const enrichedAgents: ActiveAgentWithContext[] = activeFromStore.map(agent => {
-        const session = sessions.find(s => s.id === agent.session_id)
+        const session = sessions.find(s => s.id === agent.sessionId)
         const project = projects.find(p => p.path === session?.projectPath)
-        const task = tasks.find(t => t.id === agent.task_id)
+        const task = tasks.find(t => t.id === agent.taskId)
 
         return {
           id: agent.id,
-          session_id: agent.session_id,
-          task_id: agent.task_id,
+          sessionId: agent.sessionId,
+          taskId: agent.taskId,
           status: agent.status as AgentStatus,
-          process_id: agent.process_id || null,
-          worktree_path: agent.worktree_path,
+          processId: agent.processId || null,
+          worktreePath: agent.worktreePath,
           branch: agent.branch,
-          iteration_count: agent.iteration_count,
+          iterationCount: agent.iterationCount,
           tokens: agent.tokens,
           cost: agent.cost,
           logs: agent.logs.map(l => ({
@@ -407,15 +409,15 @@ export function useTauriEventListeners(onRefresh: () => void) {
   useEffect(() => {
     if (!isTauri) return
 
-    // Track pending listener promises and resolved unlisten functions
-    const pendingListeners: Promise<UnlistenFn | null>[] = []
+    // Store resolved unlisten functions for cleanup
+    const unlistenFns: (UnlistenFn | null)[] = []
     let isMounted = true
 
-    // Helper to register a listener and return its unlisten function
+    // Helper to register a listener and store its unlisten function
     const registerListener = async (
       eventName: string,
       handler?: (event: unknown) => void
-    ): Promise<UnlistenFn | null> => {
+    ): Promise<void> => {
       try {
         const unlisten = await listen(eventName, (event) => {
           if (isMounted) {
@@ -426,43 +428,48 @@ export function useTauriEventListeners(onRefresh: () => void) {
             }
           }
         })
-        return unlisten
+        // Only store if still mounted
+        if (isMounted) {
+          unlistenFns.push(unlisten)
+        } else {
+          // Already unmounted, cleanup immediately
+          try {
+            unlisten()
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
       } catch {
         // Ignore errors if listen fails (e.g., not in Tauri environment)
-        return null
       }
     }
 
-    // Register all listeners and track their promises
-    pendingListeners.push(registerListener(TAURI_EVENTS.AGENT_STATUS_CHANGED))
-    pendingListeners.push(registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED))
-    pendingListeners.push(registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED))
-    pendingListeners.push(registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH))
+    // Register all listeners
+    registerListener(TAURI_EVENTS.AGENT_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH)
 
     // Register rate limit listener with custom handler for toast notification
-    pendingListeners.push(
-      registerListener(TAURI_EVENTS.RATE_LIMIT_DETECTED, (payload) => {
-        const event = payload as RateLimitEvent
-        toast.rateLimitWarning(event)
-        // Also trigger refresh to update UI
-        onRefresh()
-      })
-    )
+    registerListener(TAURI_EVENTS.RATE_LIMIT_DETECTED, (payload) => {
+      const event = payload as RateLimitEvent
+      toast.rateLimitWarning(event)
+      // Also trigger refresh to update UI
+      onRefresh()
+    })
 
     // Cleanup listeners on unmount
     return () => {
       isMounted = false
-      // Wait for all listeners to resolve, then cleanup
-      Promise.allSettled(pendingListeners).then((results) => {
-        results.forEach((result) => {
-          if (result.status === 'fulfilled' && result.value) {
-            try {
-              result.value()
-            } catch {
-              // Ignore errors during cleanup - listener may already be removed
-            }
+      // Cleanup all registered listeners
+      unlistenFns.forEach((unlisten) => {
+        if (unlisten && typeof unlisten === 'function') {
+          try {
+            unlisten()
+          } catch {
+            // Ignore errors during cleanup - listener may already be removed
           }
-        })
+        }
       })
     }
   }, [onRefresh])
@@ -477,6 +484,27 @@ export function useMissionControlRefresh(refreshAgents: () => Promise<void>) {
   const fetchSessions = useSessionStore(s => s.fetchSessions)
 
   const refreshAll = useCallback(async () => {
+    // First try to poll completed agents via scheduler (saves logs to DB)
+    // This only works if the scheduler is initialized
+    try {
+      const completed = await parallelPollCompleted()
+      if (completed.length > 0) {
+        console.log('[MissionControl] Completed agents (with logs):', completed)
+      }
+    } catch {
+      // Scheduler not initialized, fall back to direct cleanup
+      try {
+        const cleaned = await cleanupStaleAgents()
+        if (cleaned.length > 0) {
+          console.log('[MissionControl] Cleaned up stale agents:', cleaned)
+        }
+      } catch (err) {
+        // Log but don't fail - cleanup is best-effort
+        console.debug('[MissionControl] Cleanup check:', err)
+      }
+    }
+
+    // Then refresh all data from stores
     await Promise.all([
       loadProjects(),
       fetchSessions(),

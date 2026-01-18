@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import {
   useGlobalStats,
   useProjectStatuses,
@@ -9,10 +9,6 @@ import {
   useTauriEventListeners,
   useMissionControlRefresh,
   useAdaptivePolling,
-  type GlobalStats,
-  type ProjectStatus,
-  type ActiveAgentWithContext,
-  type ActivityEvent,
 } from '../useMissionControlData'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -114,8 +110,8 @@ describe('useMissionControlData hooks', () => {
   const mockAgents = [
     {
       id: 'agent-1',
-      session_id: 'session-1',
-      task_id: 'task-1',
+      sessionId: 'session-1',
+      taskId: 'task-1',
       status: 'thinking',
       tokens: 100,
       cost: 0.05,
@@ -124,8 +120,8 @@ describe('useMissionControlData hooks', () => {
     },
     {
       id: 'agent-2',
-      session_id: 'session-1',
-      task_id: 'task-2',
+      sessionId: 'session-1',
+      taskId: 'task-2',
       status: 'idle',
       tokens: 50,
       cost: 0.02,
@@ -170,7 +166,7 @@ describe('useMissionControlData hooks', () => {
       ...overrides,
     }
 
-    vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+    vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
       if (typeof selector === 'function') {
         return selector(defaultProjectState)
       }
@@ -178,7 +174,7 @@ describe('useMissionControlData hooks', () => {
     })
     mockUseProjectStore.getState.mockReturnValue(defaultProjectState)
 
-    vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+    vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
       if (typeof selector === 'function') {
         return selector(defaultSessionState)
       }
@@ -186,7 +182,7 @@ describe('useMissionControlData hooks', () => {
     })
     mockUseSessionStore.getState.mockReturnValue(defaultSessionState)
 
-    vi.mocked(useAgentStore).mockImplementation((selector: any) => {
+    vi.mocked(useAgentStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
       if (typeof selector === 'function') {
         return selector(defaultAgentState)
       }
@@ -194,7 +190,7 @@ describe('useMissionControlData hooks', () => {
     })
     mockUseAgentStore.getState.mockReturnValue(defaultAgentState)
 
-    vi.mocked(useTaskStore).mockImplementation((selector: any) => {
+    vi.mocked(useTaskStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
       if (typeof selector === 'function') {
         return selector(defaultTaskState)
       }
@@ -277,19 +273,19 @@ describe('useMissionControlData hooks', () => {
         tasks: [],
       })
 
-      vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+      vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { projects: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+      vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { sessions: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useAgentStore).mockImplementation((selector: any) => {
+      vi.mocked(useAgentStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { agents: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useTaskStore).mockImplementation((selector: any) => {
+      vi.mocked(useTaskStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { tasks: [] }
         return typeof selector === 'function' ? selector(state) : state
       })
@@ -479,11 +475,11 @@ describe('useMissionControlData hooks', () => {
       const mockFetchSessions = vi.fn().mockResolvedValue(undefined)
       const mockRefreshAgents = vi.fn().mockResolvedValue(undefined)
 
-      vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+      vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { loadProjects: mockLoadProjects }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+      vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { fetchSessions: mockFetchSessions }
         return typeof selector === 'function' ? selector(state) : state
       })
@@ -498,11 +494,11 @@ describe('useMissionControlData hooks', () => {
       const mockFetchSessions = vi.fn().mockResolvedValue(undefined)
       const mockRefreshAgents = vi.fn().mockResolvedValue(undefined)
 
-      vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+      vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { loadProjects: mockLoadProjects }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+      vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { fetchSessions: mockFetchSessions }
         return typeof selector === 'function' ? selector(state) : state
       })
@@ -532,8 +528,8 @@ describe('useMissionControlData hooks', () => {
       // Setup with 6 active agents
       const manyActiveAgents = Array.from({ length: 6 }, (_, i) => ({
         id: `agent-${i}`,
-        session_id: 'session-1',
-        task_id: `task-${i}`,
+        sessionId: 'session-1',
+        taskId: `task-${i}`,
         status: 'thinking',
         tokens: 100,
         cost: 0.01,
@@ -541,19 +537,19 @@ describe('useMissionControlData hooks', () => {
         subagents: [],
       }))
 
-      vi.mocked(useAgentStore).mockImplementation((selector: any) => {
+      vi.mocked(useAgentStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { agents: manyActiveAgents, loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+      vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { projects: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+      vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { sessions: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useTaskStore).mockImplementation((selector: any) => {
+      vi.mocked(useTaskStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { tasks: [] }
         return typeof selector === 'function' ? selector(state) : state
       })
@@ -569,19 +565,19 @@ describe('useMissionControlData hooks', () => {
     })
 
     it('should use longer interval when idle', () => {
-      vi.mocked(useAgentStore).mockImplementation((selector: any) => {
+      vi.mocked(useAgentStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { agents: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+      vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { projects: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+      vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { sessions: [], loading: false, error: null }
         return typeof selector === 'function' ? selector(state) : state
       })
-      vi.mocked(useTaskStore).mockImplementation((selector: any) => {
+      vi.mocked(useTaskStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
         const state = { tasks: [] }
         return typeof selector === 'function' ? selector(state) : state
       })
@@ -633,23 +629,23 @@ function setupStoreMocks(overrides = {}) {
     { id: 'session-1', projectPath: '/path/to/project1', status: 'active', tasks: [] },
   ]
   const mockAgents = [
-    { id: 'agent-1', session_id: 'session-1', status: 'thinking', cost: 0.05, logs: [], subagents: [] },
+    { id: 'agent-1', sessionId: 'session-1', status: 'thinking', cost: 0.05, logs: [], subagents: [] },
   ]
   const mockTasks = [{ id: 'task-1', status: 'in_progress' }]
 
-  vi.mocked(useProjectStore).mockImplementation((selector: any) => {
+  vi.mocked(useProjectStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
     const state = { projects: mockProjects, loading: false, error: null, ...overrides }
     return typeof selector === 'function' ? selector(state) : state
   })
-  vi.mocked(useSessionStore).mockImplementation((selector: any) => {
+  vi.mocked(useSessionStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
     const state = { sessions: mockSessions, loading: false, error: null, ...overrides }
     return typeof selector === 'function' ? selector(state) : state
   })
-  vi.mocked(useAgentStore).mockImplementation((selector: any) => {
+  vi.mocked(useAgentStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
     const state = { agents: mockAgents, loading: false, error: null, ...overrides }
     return typeof selector === 'function' ? selector(state) : state
   })
-  vi.mocked(useTaskStore).mockImplementation((selector: any) => {
+  vi.mocked(useTaskStore).mockImplementation((selector: ((state: unknown) => unknown) | undefined) => {
     const state = { tasks: mockTasks, ...overrides }
     return typeof selector === 'function' ? selector(state) : state
   })

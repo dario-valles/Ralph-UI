@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ActiveAgentsGrid } from '../ActiveAgentsGrid'
 import type { ActiveAgentWithContext } from '@/hooks/useMissionControlData'
@@ -8,13 +8,13 @@ describe('ActiveAgentsGrid', () => {
   const mockAgents: ActiveAgentWithContext[] = [
     {
       id: 'agent-1',
-      session_id: 'session-1',
-      task_id: 'task-1',
+      sessionId: 'session-1',
+      taskId: 'task-1',
       status: 'thinking',
-      process_id: 12345,
-      worktree_path: '/path/to/worktree',
+      processId: 12345,
+      worktreePath: '/path/to/worktree',
       branch: 'feature/test',
-      iteration_count: 5,
+      iterationCount: 5,
       tokens: 1500,
       cost: 0.05,
       logs: [],
@@ -27,13 +27,13 @@ describe('ActiveAgentsGrid', () => {
     },
     {
       id: 'agent-2',
-      session_id: 'session-2',
-      task_id: 'task-2',
+      sessionId: 'session-2',
+      taskId: 'task-2',
       status: 'implementing',
-      process_id: 12346,
-      worktree_path: '/path/to/worktree2',
+      processId: 12346,
+      worktreePath: '/path/to/worktree2',
       branch: 'feature/test2',
-      iteration_count: 10,
+      iterationCount: 10,
       tokens: 3000,
       cost: 0.10,
       logs: [],
