@@ -2946,4 +2946,228 @@ mod tests {
         let result = "invalid_type".parse::<PRDType>();
         assert!(result.is_err());
     }
+
+    // -------------------------------------------------------------------------
+    // Structured Mode Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_create_session_with_structured_mode() {
+        let db = create_test_db();
+
+        let mut session = make_test_session("structured-session");
+        session.structured_mode = true;
+        db.create_chat_session(&session).unwrap();
+
+        let retrieved = db.get_chat_session("structured-session").unwrap();
+        assert!(retrieved.structured_mode);
+        assert!(retrieved.extracted_structure.is_none());
+    }
+
+    #[test]
+    fn test_update_structured_mode() {
+        let db = create_test_db();
+
+        let session = make_test_session("mode-test");
+        db.create_chat_session(&session).unwrap();
+
+        // Initially false
+        let retrieved = db.get_chat_session("mode-test").unwrap();
+        assert!(!retrieved.structured_mode);
+
+        // Update to true
+        db.update_chat_session_structured_mode("mode-test", true).unwrap();
+        let retrieved = db.get_chat_session("mode-test").unwrap();
+        assert!(retrieved.structured_mode);
+
+        // Update back to false
+        db.update_chat_session_structured_mode("mode-test", false).unwrap();
+        let retrieved = db.get_chat_session("mode-test").unwrap();
+        assert!(!retrieved.structured_mode);
+    }
+
+    #[test]
+    fn test_update_extracted_structure() {
+        let db = create_test_db();
+
+        let mut session = make_test_session("structure-test");
+        session.structured_mode = true;
+        db.create_chat_session(&session).unwrap();
+
+        // Set extracted structure
+        let structure_json = r#"{"epics":[{"type":"epic","id":"EP-1","title":"Auth","description":"Auth system"}],"userStories":[],"tasks":[],"acceptanceCriteria":[]}"#;
+        db.update_chat_session_extracted_structure("structure-test", Some(structure_json)).unwrap();
+
+        let retrieved = db.get_chat_session("structure-test").unwrap();
+        assert!(retrieved.extracted_structure.is_some());
+        assert!(retrieved.extracted_structure.as_ref().unwrap().contains("EP-1"));
+    }
+
+    #[test]
+    fn test_clear_extracted_structure() {
+        let db = create_test_db();
+
+        let mut session = make_test_session("clear-structure");
+        session.structured_mode = true;
+        session.extracted_structure = Some(r#"{"epics":[],"userStories":[],"tasks":[],"acceptanceCriteria":[]}"#.to_string());
+        db.create_chat_session(&session).unwrap();
+
+        // Clear structure
+        db.update_chat_session_extracted_structure("clear-structure", None).unwrap();
+
+        let retrieved = db.get_chat_session("clear-structure").unwrap();
+        assert!(retrieved.extracted_structure.is_none());
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_structured_mode() {
+        let mut session = make_test_session("test");
+        session.structured_mode = true;
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(&session, &history, "Create epics for an auth system");
+
+        // Should include structured output instructions
+        assert!(prompt.contains("STRUCTURED OUTPUT MODE"));
+        assert!(prompt.contains("JSON code block"));
+        assert!(prompt.contains("\"type\": \"epic\""));
+        assert!(prompt.contains("\"type\": \"user_story\""));
+        assert!(prompt.contains("\"type\": \"task\""));
+        assert!(prompt.contains("estimatedEffort"));
+        assert!(prompt.contains("EP-1"));
+        assert!(prompt.contains("US-1.1"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_without_structured_mode() {
+        let session = make_test_session("test"); // structured_mode: false
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD");
+
+        // Should NOT include structured output instructions
+        assert!(!prompt.contains("STRUCTURED OUTPUT MODE"));
+        assert!(!prompt.contains("JSON code block"));
+    }
+
+    #[test]
+    fn test_convert_structure_to_prd_content() {
+        let structure = ExtractedPRDStructure {
+            epics: vec![
+                crate::models::StructuredPRDItem {
+                    item_type: crate::models::PRDItemType::Epic,
+                    id: "EP-1".to_string(),
+                    parent_id: None,
+                    title: "User Auth".to_string(),
+                    description: "Complete authentication system".to_string(),
+                    acceptance_criteria: None,
+                    priority: Some(1),
+                    dependencies: None,
+                    estimated_effort: Some(crate::models::EffortSize::Large),
+                    tags: None,
+                },
+            ],
+            user_stories: vec![
+                crate::models::StructuredPRDItem {
+                    item_type: crate::models::PRDItemType::UserStory,
+                    id: "US-1.1".to_string(),
+                    parent_id: Some("EP-1".to_string()),
+                    title: "User Login".to_string(),
+                    description: "As a user, I want to log in".to_string(),
+                    acceptance_criteria: Some(vec!["Email validation".to_string(), "Password validation".to_string()]),
+                    priority: Some(1),
+                    dependencies: None,
+                    estimated_effort: Some(crate::models::EffortSize::Medium),
+                    tags: None,
+                },
+            ],
+            tasks: vec![
+                crate::models::StructuredPRDItem {
+                    item_type: crate::models::PRDItemType::Task,
+                    id: "T-1.1.1".to_string(),
+                    parent_id: Some("US-1.1".to_string()),
+                    title: "Create login form".to_string(),
+                    description: "Build React login component".to_string(),
+                    acceptance_criteria: None,
+                    priority: None,
+                    dependencies: None,
+                    estimated_effort: Some(crate::models::EffortSize::Small),
+                    tags: None,
+                },
+            ],
+            acceptance_criteria: vec![],
+        };
+
+        let messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "Let me help you create an authentication system.".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+            },
+        ];
+
+        let content = convert_structure_to_prd_content(&structure, &messages);
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("sections").is_some());
+
+        let sections = parsed["sections"].as_array().unwrap();
+
+        // Find section IDs
+        let section_ids: Vec<_> = sections
+            .iter()
+            .filter_map(|s| s["id"].as_str())
+            .collect();
+
+        // Should have epics, user_stories, tasks sections
+        assert!(section_ids.contains(&"epics"));
+        assert!(section_ids.contains(&"user_stories"));
+        assert!(section_ids.contains(&"tasks"));
+
+        // Verify content includes our items
+        let epics_section = sections.iter().find(|s| s["id"] == "epics").unwrap();
+        assert!(epics_section["content"].as_str().unwrap().contains("EP-1"));
+        assert!(epics_section["content"].as_str().unwrap().contains("User Auth"));
+
+        let stories_section = sections.iter().find(|s| s["id"] == "user_stories").unwrap();
+        assert!(stories_section["content"].as_str().unwrap().contains("US-1.1"));
+        assert!(stories_section["content"].as_str().unwrap().contains("Email validation"));
+
+        let tasks_section = sections.iter().find(|s| s["id"] == "tasks").unwrap();
+        assert!(tasks_section["content"].as_str().unwrap().contains("T-1.1.1"));
+    }
+
+    #[test]
+    fn test_session_structured_mode_persists_across_operations() {
+        let db = create_test_db();
+
+        // Create session with structured mode
+        let mut session = make_test_session("persist-test");
+        session.structured_mode = true;
+        db.create_chat_session(&session).unwrap();
+
+        // Add some messages
+        let msg = ChatMessage {
+            id: "msg-1".to_string(),
+            session_id: "persist-test".to_string(),
+            role: MessageRole::User,
+            content: "Test message".to_string(),
+            created_at: "2026-01-17T00:01:00Z".to_string(),
+        };
+        db.create_chat_message(&msg).unwrap();
+
+        // Update timestamp
+        update_chat_session_timestamp(db.get_connection(), "persist-test", "2026-01-17T12:00:00Z").unwrap();
+
+        // Update quality score
+        update_chat_session_quality_score(db.get_connection(), "persist-test", 75).unwrap();
+
+        // Verify structured_mode is still true
+        let retrieved = db.get_chat_session("persist-test").unwrap();
+        assert!(retrieved.structured_mode);
+        assert_eq!(retrieved.quality_score, Some(75));
+    }
 }
