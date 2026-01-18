@@ -83,12 +83,46 @@ impl GitManager {
 
     /// Create a new branch from the current HEAD
     pub fn create_branch(&self, name: &str, force: bool) -> Result<BranchInfo, GitError> {
-        let head = self.repo.head()?;
-        let head_commit = head.peel_to_commit()?;
+        // Try to get HEAD, handle unborn branch case
+        let head = match self.repo.head() {
+            Ok(head) => head,
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => {
+                // Repository has no commits yet - create an initial commit
+                log::info!("[GitManager] No commits found, creating initial commit");
+                self.create_initial_commit()?;
+                self.repo.head()?
+            }
+            Err(e) => return Err(e.into()),
+        };
 
+        let head_commit = head.peel_to_commit()?;
         let branch = self.repo.branch(name, &head_commit, force)?;
 
         Ok(self.branch_to_info(&branch)?)
+    }
+
+    /// Create an initial empty commit for a new repository
+    fn create_initial_commit(&self) -> Result<(), GitError> {
+        // Create an empty tree
+        let tree_id = self.repo.index()?.write_tree()?;
+        let tree = self.repo.find_tree(tree_id)?;
+
+        // Create a signature
+        let signature = self.repo.signature()
+            .or_else(|_| git2::Signature::now("Ralph UI", "ralph@example.com"))?;
+
+        // Create the initial commit
+        self.repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit (created by Ralph UI)",
+            &tree,
+            &[], // No parents for initial commit
+        )?;
+
+        log::info!("[GitManager] Created initial commit");
+        Ok(())
     }
 
     /// Create a new branch from a specific commit
@@ -165,9 +199,13 @@ impl GitManager {
         let mut opts = WorktreeAddOptions::new();
         opts.reference(Some(branch_ref.get()));
 
+        // Sanitize the worktree name to avoid nested directories in .git/worktrees/
+        // Branch names like "task/uuid" would create ".git/worktrees/task/uuid" which fails
+        let worktree_name = branch.replace('/', "-");
+
         // Create the worktree with the branch reference
         let worktree = self.repo.worktree(
-            branch,
+            &worktree_name,
             Path::new(path),
             Some(&opts),
         )?;
@@ -191,14 +229,32 @@ impl GitManager {
         Ok(result)
     }
 
-    /// Remove a worktree
-    pub fn remove_worktree(&self, name: &str) -> Result<(), GitError> {
-        let worktree = self.repo.find_worktree(name)?;
+    /// Remove a worktree by path
+    /// Searches all worktrees to find one matching the given path
+    pub fn remove_worktree(&self, path: &str) -> Result<(), GitError> {
+        let worktrees = self.repo.worktrees()?;
 
-        // Prune the worktree
-        worktree.prune(None)?;
+        // Find the worktree with matching path
+        for name in worktrees.iter() {
+            if let Some(name_str) = name {
+                if let Ok(worktree) = self.repo.find_worktree(name_str) {
+                    let worktree_path = worktree.path().to_string_lossy();
+                    if worktree_path == path || worktree_path.trim_end_matches('/') == path.trim_end_matches('/') {
+                        // Found the worktree, prune it
+                        worktree.prune(None)?;
+                        return Ok(());
+                    }
+                }
+            }
+        }
 
-        Ok(())
+        // If no worktree found by path, try using the path as a name directly (fallback)
+        if let Ok(worktree) = self.repo.find_worktree(path) {
+            worktree.prune(None)?;
+            return Ok(());
+        }
+
+        Err(GitError::from_str(&format!("Worktree not found: {}", path)))
     }
 
     /// Get git status
