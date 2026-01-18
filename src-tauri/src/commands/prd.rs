@@ -18,6 +18,7 @@ pub struct CreatePRDRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdatePRDRequest {
     pub id: String,
     pub title: Option<String>,
@@ -26,6 +27,7 @@ pub struct UpdatePRDRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecutionConfig {
     pub session_name: Option<String>,
     pub agent_type: String,
@@ -37,6 +39,8 @@ pub struct ExecutionConfig {
     pub draft_prs: bool,
     pub run_tests: bool,
     pub run_lint: bool,
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 /// Create a new PRD document
