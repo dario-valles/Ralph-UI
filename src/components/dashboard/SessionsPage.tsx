@@ -69,6 +69,7 @@ export function SessionsPage() {
   const [analytics, setAnalytics] = useState<Record<string, SessionAnalytics>>({})
   const [filterByProject, setFilterByProject] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [showProjectPicker, setShowProjectPicker] = useState(false)
 
   const loadTemplates = async () => {
     try {
@@ -89,8 +90,11 @@ export function SessionsPage() {
 
   // Handle opening create dialog with default project path
   const openCreateDialog = () => {
-    if (activeProject && !newSessionPath) {
+    if (activeProject) {
       setNewSessionPath(activeProject.path)
+      setShowProjectPicker(false)
+    } else {
+      setShowProjectPicker(true)
     }
     setIsCreateOpen(true)
   }
@@ -153,6 +157,7 @@ export function SessionsPage() {
       setNewSessionName('')
       setNewSessionPath('')
       setSelectedTemplateId('')
+      setShowProjectPicker(false)
     } catch (err) {
       console.error('Failed to create session:', err)
     }
@@ -328,12 +333,35 @@ export function SessionsPage() {
                 placeholder="Feature Development"
               />
             </div>
-            <ProjectPicker
-              value={newSessionPath}
-              onChange={setNewSessionPath}
-              label="Project Path"
-              placeholder="Select a project folder"
-            />
+            {/* Project Selection - Simplified when workspace is active */}
+            {newSessionPath && !showProjectPicker ? (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Project</Label>
+                <button
+                  onClick={() => setShowProjectPicker(true)}
+                  className="flex items-center justify-between w-full px-3 py-2 rounded-md border bg-background text-left hover:bg-accent transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="truncate font-medium">{getProjectName(newSessionPath)}</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+                <p className="text-xs text-muted-foreground">
+                  Using active workspace. Click to change.
+                </p>
+              </div>
+            ) : (
+              <ProjectPicker
+                value={newSessionPath}
+                onChange={(path) => {
+                  setNewSessionPath(path)
+                  if (path) setShowProjectPicker(false)
+                }}
+                label="Project Path"
+                placeholder="Select a project folder"
+              />
+            )}
             {templates.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="template">Template (Optional)</Label>
