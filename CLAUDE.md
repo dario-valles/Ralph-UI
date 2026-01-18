@@ -72,9 +72,30 @@ const result = await invoke<T>('command_name', { args })
 ```
 
 ### Component Organization
-- Feature folders under `src/components/` (e.g., `mission-control/`, `agents/`)
+- Feature folders under `src/components/` (e.g., `mission-control/`, `agents/`, `sessions/`)
 - shadcn/ui base components in `src/components/ui/`
 - Layout components in `src/components/layout/`
+
+### Navigation Context Pattern
+**IMPORTANT**: When navigating between pages, always set the appropriate Zustand store context before navigating. Many pages require `currentSession` or `activeProject` to be set:
+
+```typescript
+// Before navigating to session-related pages
+const { setCurrentSession } = useSessionStore()
+const { setActiveProject } = useProjectStore()
+
+// Set context before navigate()
+setCurrentSession(session)
+const project = projects.find(p => p.path === session.projectPath)
+if (project) setActiveProject(project.id)
+navigate(`/sessions/${session.id}`)
+```
+
+Pages and their context requirements:
+- `/tasks` - Requires `currentSession` (shows "No Session Selected" without it)
+- `/agents` - Requires `currentSession` (shows "No Session Selected" without it)
+- `/sessions/:id` - Fetches session by ID, but should also set `currentSession` for consistency
+- `/sessions` - Works without context, but filters by `activeProject` if set
 
 ## Supported AI Agents
 
