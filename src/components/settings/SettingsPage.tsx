@@ -78,9 +78,6 @@ export function SettingsPage() {
 
     try {
       const loadedConfig = await configApi.get()
-      console.log('[SettingsPage] Loaded config from backend:', loadedConfig)
-      console.log('[SettingsPage] max_parallel:', loadedConfig.execution.maxParallel)
-      console.log('[SettingsPage] agent_type:', loadedConfig.execution.agentType)
       setConfig(loadedConfig)
     } catch (err) {
       console.error('Failed to load config:', err)
@@ -164,7 +161,6 @@ export function SettingsPage() {
     try {
       // Save backend config
       if (isTauri) {
-        console.log('[SettingsPage] Saving config...', config)
         // Update in-memory config first
         await Promise.all([
           configApi.updateExecution(config.execution),
@@ -172,10 +168,8 @@ export function SettingsPage() {
           configApi.updateValidation(config.validation),
           configApi.updateFallback(config.fallback),
         ])
-        console.log('[SettingsPage] In-memory update done, persisting to disk...')
         // Persist to disk
         await configApi.save()
-        console.log('[SettingsPage] Persist to disk completed')
       }
 
       // Save UI settings to localStorage
