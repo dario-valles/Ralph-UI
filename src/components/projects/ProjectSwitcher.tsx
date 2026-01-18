@@ -1,0 +1,367 @@
+import { useState, useRef, useEffect } from 'react'
+import { cn } from '@/lib/utils'
+import { useProjectStore } from '@/stores/projectStore'
+import type { Project } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  FolderOpen,
+  ChevronDown,
+  Star,
+  Clock,
+  Plus,
+  Check,
+  X,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
+import { open } from '@tauri-apps/plugin-dialog'
+
+interface ProjectSwitcherProps {
+  collapsed?: boolean
+  className?: string
+}
+
+export function ProjectSwitcher({ collapsed = false, className }: ProjectSwitcherProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const {
+    projects,
+    activeProjectId,
+    setActiveProject,
+    registerProject,
+    toggleFavorite,
+    updateProjectName,
+    deleteProject,
+    getRecentProjects,
+    getFavoriteProjects,
+  } = useProjectStore()
+
+  const activeProject = projects.find((p) => p.id === activeProjectId)
+  const favoriteProjects = getFavoriteProjects()
+  const recentProjects = getRecentProjects(5)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+        setEditingProjectId(null)
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  const handleSelectFolder = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Project Folder',
+      })
+      if (selected && typeof selected === 'string') {
+        const project = await registerProject(selected)
+        setActiveProject(project.id)
+        setIsOpen(false)
+      }
+    } catch (error) {
+      console.error('Failed to open folder dialog:', error)
+    }
+  }
+
+  const handleSelectProject = (project: Project) => {
+    setActiveProject(project.id)
+    setIsOpen(false)
+  }
+
+  const handleClearProject = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setActiveProject(null)
+  }
+
+  const handleStartEdit = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation()
+    setEditingProjectId(project.id)
+    setEditingName(project.name)
+  }
+
+  const handleSaveEdit = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    if (editingProjectId && editingName.trim()) {
+      updateProjectName(editingProjectId, editingName.trim())
+    }
+    setEditingProjectId(null)
+  }
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingProjectId(null)
+  }
+
+  const handleDeleteProject = (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation()
+    if (confirm('Remove this project from the list?')) {
+      deleteProject(projectId)
+    }
+  }
+
+  const handleToggleFavorite = (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation()
+    toggleFavorite(projectId)
+  }
+
+  // Get display name
+  const getDisplayName = (project: Project) => {
+    return project.name
+  }
+
+  // Collapsed view - just show folder icon with tooltip behavior handled by parent
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'flex items-center justify-center w-full p-2 rounded-lg transition-colors',
+          activeProject
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-accent',
+          className
+        )}
+      >
+        <FolderOpen className="h-5 w-5" />
+      </button>
+    )
+  }
+
+  return (
+    <div className={cn('relative', className)} ref={dropdownRef}>
+      {/* Trigger Button */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsOpen(!isOpen)
+          }
+        }}
+        className={cn(
+          'flex items-center w-full gap-2 px-3 py-2 rounded-lg border transition-colors cursor-pointer',
+          'hover:bg-accent text-left',
+          activeProject ? 'bg-accent/50' : 'bg-background'
+        )}
+      >
+        <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate text-sm">
+          {activeProject ? getDisplayName(activeProject) : 'Select Project'}
+        </span>
+        {activeProject && (
+          <button
+            onClick={handleClearProject}
+            className="p-0.5 rounded hover:bg-background"
+          >
+            <X className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )}
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            isOpen && 'rotate-180'
+          )}
+        />
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden">
+          {/* Add Project Button */}
+          <button
+            onClick={handleSelectFolder}
+            className="flex items-center w-full gap-2 px-3 py-2 hover:bg-accent transition-colors border-b"
+          >
+            <Plus className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">Add Project Folder</span>
+          </button>
+
+          <div className="max-h-64 overflow-y-auto">
+            {/* Favorites Section */}
+            {favoriteProjects.length > 0 && (
+              <div className="p-1">
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Star className="h-3 w-3" />
+                  Favorites
+                </div>
+                {favoriteProjects.map((project) => (
+                  <ProjectItem
+                    key={project.id}
+                    project={project}
+                    isActive={project.id === activeProjectId}
+                    isEditing={editingProjectId === project.id}
+                    editingName={editingName}
+                    onSelect={() => handleSelectProject(project)}
+                    onToggleFavorite={(e) => handleToggleFavorite(e, project.id)}
+                    onStartEdit={(e) => handleStartEdit(e, project)}
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={handleCancelEdit}
+                    onDelete={(e) => handleDeleteProject(e, project.id)}
+                    onEditNameChange={setEditingName}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Recent Section */}
+            {recentProjects.length > 0 && (
+              <div className="p-1">
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Recent
+                </div>
+                {recentProjects
+                  .filter((p) => !p.isFavorite)
+                  .map((project) => (
+                    <ProjectItem
+                      key={project.id}
+                      project={project}
+                      isActive={project.id === activeProjectId}
+                      isEditing={editingProjectId === project.id}
+                      editingName={editingName}
+                      onSelect={() => handleSelectProject(project)}
+                      onToggleFavorite={(e) => handleToggleFavorite(e, project.id)}
+                      onStartEdit={(e) => handleStartEdit(e, project)}
+                      onSaveEdit={handleSaveEdit}
+                      onCancelEdit={handleCancelEdit}
+                      onDelete={(e) => handleDeleteProject(e, project.id)}
+                      onEditNameChange={setEditingName}
+                    />
+                  ))}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {projects.length === 0 && (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No projects yet. Add a folder to get started.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ProjectItemProps {
+  project: Project
+  isActive: boolean
+  isEditing: boolean
+  editingName: string
+  onSelect: () => void
+  onToggleFavorite: (e: React.MouseEvent) => void
+  onStartEdit: (e: React.MouseEvent) => void
+  onSaveEdit: (e: React.MouseEvent | React.KeyboardEvent) => void
+  onCancelEdit: (e: React.MouseEvent) => void
+  onDelete: (e: React.MouseEvent) => void
+  onEditNameChange: (name: string) => void
+}
+
+function ProjectItem({
+  project,
+  isActive,
+  isEditing,
+  editingName,
+  onSelect,
+  onToggleFavorite,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onDelete,
+  onEditNameChange,
+}: ProjectItemProps) {
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1">
+        <Input
+          value={editingName}
+          onChange={(e) => onEditNameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSaveEdit(e)
+            if (e.key === 'Escape') onCancelEdit(e as unknown as React.MouseEvent)
+          }}
+          className="h-7 text-sm flex-1"
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+        />
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSaveEdit}>
+          <Check className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCancelEdit}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={cn(
+        'group flex items-center w-full gap-2 px-2 py-1.5 rounded-md transition-colors text-left cursor-pointer',
+        isActive ? 'bg-accent' : 'hover:bg-accent/50'
+      )}
+    >
+      <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm truncate">{project.name}</div>
+        <div className="text-xs text-muted-foreground truncate">{project.path}</div>
+      </div>
+      {isActive && <Check className="h-4 w-4 shrink-0 text-primary" />}
+
+      {/* Actions (shown on hover) */}
+      <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={onToggleFavorite}
+          className="p-1 rounded hover:bg-background"
+          title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Star
+            className={cn(
+              'h-3 w-3',
+              project.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'
+            )}
+          />
+        </button>
+        <button
+          onClick={onStartEdit}
+          className="p-1 rounded hover:bg-background"
+          title="Rename"
+        >
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1 rounded hover:bg-background"
+          title="Remove"
+        >
+          <Trash2 className="h-3 w-3 text-destructive" />
+        </button>
+      </div>
+    </div>
+  )
+}
