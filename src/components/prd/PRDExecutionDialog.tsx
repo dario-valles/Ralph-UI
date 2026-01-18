@@ -229,18 +229,28 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
       })
 
       if (!config.dryRun && session.tasks && session.tasks.length > 0) {
+        // Check if path is a git repository FIRST (outside the scheduler try-catch)
+        // If this fails or returns false, we need to show the git init dialog
+        let isGitRepo = false
         try {
-          // Check if path is a git repository
-          const isGitRepo = await isGitRepository(session.projectPath)
-          if (!isGitRepo) {
-            // Pause execution and show dialog
-            console.log('[PRD Execution] Project is not a git repository, prompting user...')
-            setPendingSession({ id: sessionId, projectPath: session.projectPath })
-            setShowGitInitDialog(true)
-            setExecuting(false)
-            return // Don't close dialog or navigate yet
-          }
+          isGitRepo = await isGitRepository(session.projectPath)
+          console.log('[PRD Execution] Git repository check:', { isGitRepo, projectPath: session.projectPath })
+        } catch (gitCheckErr) {
+          console.error('[PRD Execution] Failed to check git repository, treating as non-git:', gitCheckErr)
+          // Treat errors as "not a git repo"
+          isGitRepo = false
+        }
 
+        if (!isGitRepo) {
+          // Pause execution and show dialog
+          console.log('[PRD Execution] Project is not a git repository, prompting user...')
+          setPendingSession({ id: sessionId, projectPath: session.projectPath })
+          setShowGitInitDialog(true)
+          setExecuting(false)
+          return // Don't close dialog or navigate yet
+        }
+
+        try {
           await startSchedulerAndAgents(sessionId, session.projectPath, session.tasks)
         } catch (schedulerErr) {
           // Log scheduler errors but don't fail the whole execution
@@ -511,21 +521,25 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
       </DialogContent>
     </Dialog>
 
-    {/* Git Initialization Dialog - must be outside the main dialog to avoid conflicts */}
-    <ConfirmDialog
-      open={showGitInitDialog}
-      onOpenChange={(open) => {
-        if (!open) handleSkipGitInit()
-      }}
-      title="Git Repository Required"
-      description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
-      confirmLabel="Initialize Git"
-      cancelLabel="Skip"
-      variant="default"
-      loading={gitInitLoading}
-      onConfirm={handleGitInit}
-      onCancel={handleSkipGitInit}
-    />
+    {/* Git Initialization Dialog - rendered with higher z-index to appear above main dialog */}
+    {showGitInitDialog && (
+      <div className="fixed inset-0 z-[60]">
+        <ConfirmDialog
+          open={showGitInitDialog}
+          onOpenChange={(open) => {
+            if (!open) handleSkipGitInit()
+          }}
+          title="Git Repository Required"
+          description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
+          confirmLabel="Initialize Git"
+          cancelLabel="Skip"
+          variant="default"
+          loading={gitInitLoading}
+          onConfirm={handleGitInit}
+          onCancel={handleSkipGitInit}
+        />
+      </div>
+    )}
   </>
   )
 }
