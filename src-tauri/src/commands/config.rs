@@ -23,8 +23,12 @@ pub struct ConfigState {
 impl ConfigState {
     /// Create new config state with defaults
     pub fn new() -> Self {
+        log::info!("[ConfigState::new] Loading config on startup...");
         let config = load_merged_config(None, None).unwrap_or_default();
         let (global_path, _) = get_config_paths(None);
+        log::info!("[ConfigState::new] Global path: {:?}", global_path);
+        log::info!("[ConfigState::new] Loaded config: max_parallel={}, agent_type={}",
+            config.execution.max_parallel, config.execution.agent_type);
 
         Self {
             config: RwLock::new(config),
@@ -251,33 +255,33 @@ pub async fn reload_config(
     Ok(new_config)
 }
 
-/// Save configuration to file
-/// If a project path is set, saves to project config, otherwise saves to global config
+/// Save configuration to global config file
+/// Settings from the Settings page are app-level defaults, so always save to global config
 #[tauri::command]
 pub async fn save_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<(), String> {
+    log::info!("[save_config] Starting save to global config...");
+
     let config = config_state.config.read()
         .map_err(|e| format!("Failed to acquire lock: {}", e))?;
 
-    let project_path = config_state.project_path.read()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+    log::info!("[save_config] Config to save: max_parallel={}, agent_type={}, model={:?}",
+        config.execution.max_parallel,
+        config.execution.agent_type,
+        config.execution.model);
 
-    let loader = if let Some(ref path) = *project_path {
-        ConfigLoader::new().with_project_path(path)
-    } else {
-        ConfigLoader::new()
-    };
+    let loader = ConfigLoader::new();
 
-    // Try to save to project config if available, otherwise save to global
-    if project_path.is_some() {
-        loader.save_project(&config)
-            .map_err(|e| format!("Failed to save project config: {}", e))?;
-    } else {
-        loader.save_global(&config)
-            .map_err(|e| format!("Failed to save global config: {}", e))?;
-    }
+    log::info!("[save_config] Global config path: {:?}", loader.global_config_path());
 
+    loader.save_global(&config)
+        .map_err(|e| {
+            log::error!("[save_config] Failed to save global config: {}", e);
+            format!("Failed to save global config: {}", e)
+        })?;
+
+    log::info!("[save_config] Save completed successfully");
     Ok(())
 }
 
@@ -290,8 +294,8 @@ mod tests {
         let state = ConfigState::new();
         let config = state.get_config().unwrap();
 
-        // Should have default values
-        assert_eq!(config.execution.max_parallel, 3);
-        assert!(config.fallback.enabled);
+        // Should have valid values (may load from global config if it exists)
+        assert!(config.execution.max_parallel > 0);
+        assert!(config.execution.max_iterations > 0);
     }
 }
