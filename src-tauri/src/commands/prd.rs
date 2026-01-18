@@ -296,15 +296,40 @@ pub async fn execute_prd(
     crate::database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
-    // 5. Create tasks in database with PRD reference
+    // 5. Validate and create tasks in database with PRD reference
     let mut task_ids = vec![];
+    let mut warnings: Vec<String> = vec![];
+
+    // Validate tasks before creation
+    if parsed_prd.tasks.is_empty() {
+        return Err("No tasks found in PRD. Please add tasks with descriptions before executing.".to_string());
+    }
+
     for prd_task in parsed_prd.tasks {
         let task_id = Uuid::new_v4().to_string();
 
+        // Validate and potentially fix the description
+        let description = if prd_task.description.trim().is_empty() {
+            // Use title as fallback description with a clear instruction
+            warnings.push(format!("Task '{}' has no description, using title as prompt", prd_task.title));
+            log::warn!("[PRD Execute] Task '{}' has empty description, using title", prd_task.title);
+            format!("Implement the following task: {}", prd_task.title)
+        } else {
+            prd_task.description
+        };
+
+        // Validate title
+        let title = if prd_task.title.trim().is_empty() {
+            warnings.push("Found task with empty title, using 'Untitled Task'".to_string());
+            "Untitled Task".to_string()
+        } else {
+            prd_task.title
+        };
+
         let task = crate::models::Task {
             id: task_id.clone(),
-            title: prd_task.title,
-            description: prd_task.description,
+            title,
+            description,
             status: crate::models::TaskStatus::Pending,
             priority: prd_task.priority.unwrap_or(0),
             dependencies: prd_task.dependencies,
@@ -322,6 +347,11 @@ pub async fn execute_prd(
             .map_err(|e| format!("Failed to create task: {}", e))?;
 
         task_ids.push(task_id);
+    }
+
+    // Log warnings if any
+    if !warnings.is_empty() {
+        log::warn!("[PRD Execute] Task validation warnings:\n{}", warnings.join("\n"));
     }
 
     // 6. Create PRD execution record
@@ -363,16 +393,68 @@ fn convert_prd_to_markdown(prd: &PRDDocument) -> Result<String, String> {
         markdown.push_str(&format!("{}\n\n", desc));
     }
 
+    // Context section titles - these provide background, not tasks
+    let context_sections = [
+        "overview", "requirements", "goals", "scope", "background",
+        "visual style", "audio", "game overview", "core features",
+        "development phases", "architecture", "design", "introduction",
+        "summary", "description", "context", "notes", "references",
+        "technical requirements", "non-functional requirements",
+    ];
+
+    // Task section indicators - these are actual implementation items
+    let task_indicators = [
+        "epic", "story", "task", "feature", "implement", "create",
+        "build", "develop", "add", "update", "fix", "refactor",
+        "milestone", "sprint", "user story", "acceptance criteria",
+    ];
+
     if let Some(sections) = content.get("sections").and_then(|s| s.as_array()) {
-        markdown.push_str("## Tasks\n\n");
+        let mut context_content = String::new();
+        let mut task_sections: Vec<(String, String)> = Vec::new();
 
         for section in sections {
             if let Some(title) = section.get("title").and_then(|t| t.as_str()) {
-                if let Some(content_text) = section.get("content").and_then(|c| c.as_str()) {
+                let content_text = section.get("content")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+                    .trim();
+
+                let title_lower = title.to_lowercase();
+
+                // Determine if this is a context section or a task section
+                let is_context = context_sections.iter().any(|cs| title_lower.contains(cs));
+                let is_task = task_indicators.iter().any(|ti| title_lower.contains(ti))
+                    || title_lower.starts_with("epic ")
+                    || title_lower.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+
+                if is_context && !is_task {
+                    // Add to context/background
                     if !content_text.is_empty() {
-                        markdown.push_str(&format!("### {}\n\n{}\n\n", title, content_text));
+                        context_content.push_str(&format!("## {}\n\n{}\n\n", title, content_text));
                     }
+                } else if !content_text.is_empty() || is_task {
+                    // This is a task section
+                    let description = if content_text.is_empty() {
+                        format!("Implement: {}", title)
+                    } else {
+                        content_text.to_string()
+                    };
+                    task_sections.push((title.to_string(), description));
                 }
+            }
+        }
+
+        // Add context first (as background info)
+        if !context_content.is_empty() {
+            markdown.push_str(&context_content);
+        }
+
+        // Then add tasks section
+        if !task_sections.is_empty() {
+            markdown.push_str("## Tasks\n\n");
+            for (title, description) in task_sections {
+                markdown.push_str(&format!("### {}\n\n{}\n\n", title, description));
             }
         }
     }

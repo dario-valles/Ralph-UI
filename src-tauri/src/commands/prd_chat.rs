@@ -1522,37 +1522,146 @@ fn extract_requirements_from_messages(messages: &[ChatMessage]) -> String {
     // Look for messages that contain requirement-like content
     let requirement_keywords = ["must", "should", "need", "require", "feature", "functionality"];
 
-    messages
-        .iter()
-        .filter(|m| {
-            let content_lower = m.content.to_lowercase();
-            requirement_keywords.iter().any(|kw| content_lower.contains(kw))
-        })
-        .map(|m| format!("- {}", m.content.lines().next().unwrap_or(&m.content)))
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut requirements: Vec<String> = Vec::new();
+
+    for message in messages.iter() {
+        let content_lower = message.content.to_lowercase();
+        if !requirement_keywords.iter().any(|kw| content_lower.contains(kw)) {
+            continue;
+        }
+
+        // Extract full content, preserving bullet points and structure
+        for line in message.content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Check if this line contains a requirement keyword
+            let line_lower = trimmed.to_lowercase();
+            if requirement_keywords.iter().any(|kw| line_lower.contains(kw)) {
+                // Clean up bullet points for consistent formatting
+                let cleaned = trimmed
+                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')')
+                    .trim();
+                if !cleaned.is_empty() {
+                    requirements.push(format!("- {}", cleaned));
+                }
+            }
+        }
+    }
+
+    requirements.dedup();
+    requirements.truncate(20);
+    requirements.join("\n")
 }
 
 fn extract_tasks_from_messages(messages: &[ChatMessage]) -> String {
     // Look for task-like content in assistant messages
-    let task_indicators = ["implement", "create", "build", "add", "update", "fix", "refactor"];
+    let task_indicators = ["implement", "create", "build", "add", "update", "fix", "refactor", "design", "set up", "configure", "develop", "write"];
 
-    messages
-        .iter()
-        .filter(|m| m.role == MessageRole::Assistant)
-        .filter(|m| {
-            let content_lower = m.content.to_lowercase();
-            task_indicators.iter().any(|ind| content_lower.contains(ind))
-        })
-        .map(|m| {
-            // Extract first line or sentence as task summary
-            m.content.lines().next().unwrap_or(&m.content).to_string()
-        })
-        .take(10) // Limit to 10 tasks
+    let mut tasks: Vec<String> = Vec::new();
+
+    for message in messages.iter().filter(|m| m.role == MessageRole::Assistant) {
+        let content_lower = message.content.to_lowercase();
+
+        // Check if this message contains task-like content
+        if !task_indicators.iter().any(|ind| content_lower.contains(ind)) {
+            continue;
+        }
+
+        // Track initial task count to know if we found structured tasks in this message
+        let initial_task_count = tasks.len();
+
+        // Try to extract structured tasks from the message
+        let lines: Vec<&str> = message.content.lines().collect();
+
+        let mut current_task_title: Option<String> = None;
+        let mut current_task_content = String::new();
+
+        for line in &lines {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Check if this is a new numbered task (e.g., "1.", "2.", "1)", "2)")
+            let is_numbered = trimmed.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                && (trimmed.contains('.') || trimmed.contains(')'));
+
+            // Check if this is a bullet point
+            let is_bullet = trimmed.starts_with('-') || trimmed.starts_with('*') || trimmed.starts_with('•');
+
+            // Check if this looks like a task (contains task indicator)
+            let has_indicator = task_indicators.iter().any(|ind| trimmed.to_lowercase().contains(ind));
+
+            if (is_numbered || is_bullet) && has_indicator {
+                // Save previous task if exists
+                if let Some(title) = current_task_title.take() {
+                    let full_task = if current_task_content.trim().is_empty() {
+                        title
+                    } else {
+                        format!("{}\n{}", title, current_task_content.trim())
+                    };
+                    if !full_task.trim().is_empty() {
+                        tasks.push(full_task);
+                    }
+                    current_task_content.clear();
+                }
+
+                // Start new task - strip the number/bullet prefix
+                let task_title = trimmed
+                    .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c == '-' || c == '*' || c == '•' || c.is_whitespace())
+                    .trim()
+                    .to_string();
+
+                if !task_title.is_empty() {
+                    current_task_title = Some(task_title);
+                }
+            } else if current_task_title.is_some() {
+                // Continuation of current task - add as description (sub-bullets, details)
+                if !current_task_content.is_empty() {
+                    current_task_content.push('\n');
+                }
+                current_task_content.push_str(trimmed);
+            }
+        }
+
+        // Save last task from structured parsing
+        if let Some(title) = current_task_title.take() {
+            let full_task = if current_task_content.trim().is_empty() {
+                title
+            } else {
+                format!("{}\n{}", title, current_task_content.trim())
+            };
+            if !full_task.trim().is_empty() {
+                tasks.push(full_task);
+            }
+        }
+
+        // If no structured tasks found in THIS message, use the entire message content
+        if tasks.len() == initial_task_count && !message.content.trim().is_empty() {
+            // Take meaningful content, preserving structure
+            let content = message.content.trim();
+            if content.len() > 1000 {
+                // Truncate long messages but keep structure
+                tasks.push(format!("{}...", &content[..1000]));
+            } else {
+                tasks.push(content.to_string());
+            }
+        }
+    }
+
+    // Deduplicate and limit
+    tasks.dedup();
+    tasks.truncate(15);
+
+    tasks
+        .into_iter()
         .enumerate()
         .map(|(i, task)| format!("{}. {}", i + 1, task))
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n\n")
 }
 
 // ============================================================================
