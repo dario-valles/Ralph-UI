@@ -2,9 +2,10 @@
 
 use crate::database::Database;
 use crate::models::{
-    AgentType, ChatMessage, ChatSession, ExtractedPRDContent, GuidedQuestion,
-    MessageRole, PRDType, QualityAssessment, QuestionType,
+    AgentType, ChatMessage, ChatSession, ExtractedPRDContent, ExtractedPRDStructure,
+    GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
 };
+use crate::parsers::structured_output;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -27,6 +28,8 @@ pub struct StartChatSessionRequest {
     pub guided_mode: Option<bool>,
     /// Template ID to use for structure
     pub template_id: Option<String>,
+    /// Whether to use structured output mode (JSON blocks)
+    pub structured_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +79,7 @@ pub async fn start_prd_chat_session(
     let now = chrono::Utc::now().to_rfc3339();
     let session_id = Uuid::new_v4().to_string();
     let guided_mode = request.guided_mode.unwrap_or(true);
+    let structured_mode = request.structured_mode.unwrap_or(false);
 
     // Set default title based on PRD type
     let default_title = prd_type_enum.as_ref().map(|pt| get_prd_type_title(pt));
@@ -90,6 +94,8 @@ pub async fn start_prd_chat_session(
         guided_mode,
         quality_score: None,
         template_id: request.template_id,
+        structured_mode,
+        extracted_structure: None,
         created_at: now.clone(),
         updated_at: now.clone(),
         message_count: Some(0),
@@ -215,7 +221,7 @@ pub async fn send_prd_chat_message(
         .await
         .map_err(|e| format!("Agent execution failed: {}", e))?;
 
-    // Second phase: store response (hold mutex briefly)
+    // Second phase: store response and parse structured output (hold mutex briefly)
     let assistant_message = {
         let db_guard = db.lock().map_err(|e| e.to_string())?;
 
@@ -226,7 +232,7 @@ pub async fn send_prd_chat_message(
             id: Uuid::new_v4().to_string(),
             session_id: request.session_id.clone(),
             role: MessageRole::Assistant,
-            content: response_content,
+            content: response_content.clone(),
             created_at: response_now.clone(),
         };
 
@@ -242,6 +248,27 @@ pub async fn send_prd_chat_message(
             let title = generate_session_title(&request.content, session.prd_type.as_deref());
             update_chat_session_title(db_guard.get_connection(), &request.session_id, &title)
                 .ok(); // Ignore title update errors
+        }
+
+        // If structured mode is enabled, parse JSON blocks from response
+        if session.structured_mode {
+            let new_items = structured_output::extract_items(&response_content);
+            if !new_items.is_empty() {
+                // Load existing structure or create new
+                let mut structure: ExtractedPRDStructure = session.extracted_structure
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default();
+
+                // Merge new items
+                structured_output::merge_items(&mut structure, new_items);
+
+                // Store updated structure
+                let structure_json = serde_json::to_string(&structure)
+                    .map_err(|e| format!("Failed to serialize structure: {}", e))?;
+                db_guard.update_chat_session_extracted_structure(&request.session_id, Some(&structure_json))
+                    .map_err(|e| format!("Failed to update structure: {}", e))?;
+            }
         }
 
         assistant_message
@@ -317,7 +344,20 @@ pub async fn export_chat_to_prd(
     let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
 
     // Convert conversation to PRD content
-    let content = convert_chat_to_prd_content(&messages);
+    // Use extracted structure if available for structured mode sessions
+    let content = if session.structured_mode {
+        if let Some(ref structure_json) = session.extracted_structure {
+            if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
+                convert_structure_to_prd_content(&structure, &messages)
+            } else {
+                convert_chat_to_prd_content(&messages)
+            }
+        } else {
+            convert_chat_to_prd_content(&messages)
+        }
+    } else {
+        convert_chat_to_prd_content(&messages)
+    };
 
     let now = chrono::Utc::now().to_rfc3339();
     let prd_id = Uuid::new_v4().to_string();
@@ -450,6 +490,55 @@ pub async fn check_agent_availability(
             })
         }
     }
+}
+
+/// Get the extracted PRD structure for a session
+#[tauri::command]
+pub async fn get_extracted_structure(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<ExtractedPRDStructure, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+
+    let session = db.get_chat_session(&session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    // Parse the stored structure or return empty
+    let structure: ExtractedPRDStructure = session.extracted_structure
+        .as_ref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
+    Ok(structure)
+}
+
+/// Set structured output mode for a session
+#[tauri::command]
+pub async fn set_structured_mode(
+    session_id: String,
+    enabled: bool,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+
+    db.update_chat_session_structured_mode(&session_id, enabled)
+        .map_err(|e| format!("Failed to update structured mode: {}", e))?;
+
+    Ok(())
+}
+
+/// Clear extracted structure for a session
+#[tauri::command]
+pub async fn clear_extracted_structure(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+
+    db.update_chat_session_extracted_structure(&session_id, None)
+        .map_err(|e| format!("Failed to clear structure: {}", e))?;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1369,6 +1458,57 @@ fn build_prd_chat_prompt(
     prompt.push_str("- Identifying technical requirements and constraints\n");
     prompt.push_str("- Suggesting success metrics and validation criteria\n\n");
 
+    // Add structured output instructions if enabled
+    if session.structured_mode {
+        prompt.push_str("=== STRUCTURED OUTPUT MODE ===\n\n");
+        prompt.push_str("When defining PRD items, output them as JSON code blocks. This enables real-time tracking and organization.\n\n");
+        prompt.push_str("Output format examples:\n\n");
+        prompt.push_str("For epics:\n");
+        prompt.push_str("```json\n");
+        prompt.push_str("{\n");
+        prompt.push_str("  \"type\": \"epic\",\n");
+        prompt.push_str("  \"id\": \"EP-1\",\n");
+        prompt.push_str("  \"title\": \"User Authentication System\",\n");
+        prompt.push_str("  \"description\": \"Complete authentication flow with login, signup, and password reset\"\n");
+        prompt.push_str("}\n");
+        prompt.push_str("```\n\n");
+        prompt.push_str("For user stories:\n");
+        prompt.push_str("```json\n");
+        prompt.push_str("{\n");
+        prompt.push_str("  \"type\": \"user_story\",\n");
+        prompt.push_str("  \"id\": \"US-1.1\",\n");
+        prompt.push_str("  \"parentId\": \"EP-1\",\n");
+        prompt.push_str("  \"title\": \"User Login\",\n");
+        prompt.push_str("  \"description\": \"As a user, I want to log in with email and password so that I can access my account\",\n");
+        prompt.push_str("  \"acceptanceCriteria\": [\n");
+        prompt.push_str("    \"User can enter email and password\",\n");
+        prompt.push_str("    \"Invalid credentials show error message\",\n");
+        prompt.push_str("    \"Successful login redirects to dashboard\"\n");
+        prompt.push_str("  ],\n");
+        prompt.push_str("  \"priority\": 1,\n");
+        prompt.push_str("  \"estimatedEffort\": \"medium\"\n");
+        prompt.push_str("}\n");
+        prompt.push_str("```\n\n");
+        prompt.push_str("For tasks:\n");
+        prompt.push_str("```json\n");
+        prompt.push_str("{\n");
+        prompt.push_str("  \"type\": \"task\",\n");
+        prompt.push_str("  \"id\": \"T-1.1.1\",\n");
+        prompt.push_str("  \"parentId\": \"US-1.1\",\n");
+        prompt.push_str("  \"title\": \"Create login form component\",\n");
+        prompt.push_str("  \"description\": \"Build React component with email/password inputs and validation\",\n");
+        prompt.push_str("  \"estimatedEffort\": \"small\"\n");
+        prompt.push_str("}\n");
+        prompt.push_str("```\n\n");
+        prompt.push_str("Guidelines:\n");
+        prompt.push_str("- Use sequential IDs: EP-1, EP-2 for epics; US-1.1, US-1.2 for stories under EP-1; T-1.1.1 for tasks under US-1.1\n");
+        prompt.push_str("- Link items using parentId to maintain hierarchy\n");
+        prompt.push_str("- Priority is 1-5 (1 = highest priority)\n");
+        prompt.push_str("- estimatedEffort is 'small', 'medium', or 'large'\n");
+        prompt.push_str("- Continue conversation naturally, outputting JSON blocks when defining new PRD items\n\n");
+        prompt.push_str("=== END STRUCTURED OUTPUT MODE ===\n\n");
+    }
+
     // Include project context if available
     if let Some(ref project_path) = session.project_path {
         prompt.push_str(&format!("Project path: {}\n\n", project_path));
@@ -1475,6 +1615,152 @@ fn convert_chat_to_prd_content(messages: &[ChatMessage]) -> String {
         "title": "Tasks",
         "content": tasks,
         "required": true
+    }));
+
+    // Full conversation for reference
+    let conversation = messages
+        .iter()
+        .map(|m| {
+            let role_label = match m.role {
+                MessageRole::User => "User",
+                MessageRole::Assistant => "Assistant",
+                MessageRole::System => "System",
+            };
+            format!("**{}**: {}", role_label, m.content)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    sections.push(serde_json::json!({
+        "id": "conversation",
+        "title": "Original Conversation",
+        "content": conversation,
+        "required": false
+    }));
+
+    serde_json::json!({ "sections": sections }).to_string()
+}
+
+/// Convert extracted structure to PRD content (used when structured mode enabled)
+fn convert_structure_to_prd_content(structure: &ExtractedPRDStructure, messages: &[ChatMessage]) -> String {
+    let mut sections = vec![];
+
+    // Overview from first assistant messages
+    let overview = extract_overview_from_messages(messages);
+    sections.push(serde_json::json!({
+        "id": "overview",
+        "title": "Overview",
+        "content": overview,
+        "required": true
+    }));
+
+    // Epics section
+    if !structure.epics.is_empty() {
+        let epics_content = structure.epics.iter()
+            .map(|epic| {
+                let mut content = format!("## {} - {}\n\n{}", epic.id, epic.title, epic.description);
+                if let Some(ref deps) = epic.dependencies {
+                    if !deps.is_empty() {
+                        content.push_str(&format!("\n\n**Dependencies:** {}", deps.join(", ")));
+                    }
+                }
+                content
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n");
+
+        sections.push(serde_json::json!({
+            "id": "epics",
+            "title": "Epics",
+            "content": epics_content,
+            "required": true
+        }));
+    }
+
+    // User Stories section
+    if !structure.user_stories.is_empty() {
+        let stories_content = structure.user_stories.iter()
+            .map(|story| {
+                let mut content = format!("### {} - {}\n\n{}", story.id, story.title, story.description);
+
+                if let Some(ref parent) = story.parent_id {
+                    content.push_str(&format!("\n\n**Epic:** {}", parent));
+                }
+
+                if let Some(priority) = story.priority {
+                    content.push_str(&format!("\n**Priority:** P{}", priority));
+                }
+
+                if let Some(ref effort) = story.estimated_effort {
+                    content.push_str(&format!("\n**Estimated Effort:** {:?}", effort));
+                }
+
+                if let Some(ref criteria) = story.acceptance_criteria {
+                    if !criteria.is_empty() {
+                        content.push_str("\n\n**Acceptance Criteria:**\n");
+                        for (i, ac) in criteria.iter().enumerate() {
+                            content.push_str(&format!("{}. {}\n", i + 1, ac));
+                        }
+                    }
+                }
+
+                content
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n");
+
+        sections.push(serde_json::json!({
+            "id": "user_stories",
+            "title": "User Stories",
+            "content": stories_content,
+            "required": true
+        }));
+    }
+
+    // Tasks section
+    if !structure.tasks.is_empty() {
+        let tasks_content = structure.tasks.iter()
+            .map(|task| {
+                let mut content = format!("- **{}**: {}", task.id, task.title);
+
+                if !task.description.is_empty() {
+                    content.push_str(&format!("\n  {}", task.description));
+                }
+
+                if let Some(ref parent) = task.parent_id {
+                    content.push_str(&format!("\n  *User Story: {}*", parent));
+                }
+
+                if let Some(ref effort) = task.estimated_effort {
+                    content.push_str(&format!(" [{:?}]", effort));
+                }
+
+                content
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        sections.push(serde_json::json!({
+            "id": "tasks",
+            "title": "Tasks",
+            "content": tasks_content,
+            "required": true
+        }));
+    }
+
+    // Summary statistics
+    let summary = format!(
+        "**PRD Summary:**\n- {} Epics\n- {} User Stories\n- {} Tasks\n- {} Acceptance Criteria",
+        structure.epics.len(),
+        structure.user_stories.len(),
+        structure.tasks.len(),
+        structure.acceptance_criteria.len()
+    );
+    sections.push(serde_json::json!({
+        "id": "summary",
+        "title": "Summary",
+        "content": summary,
+        "required": false
     }));
 
     // Full conversation for reference
@@ -1754,6 +2040,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,
@@ -2184,6 +2472,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,

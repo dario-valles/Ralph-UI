@@ -67,6 +67,10 @@ pub struct ChatSession {
     pub quality_score: Option<i32>,
     /// Template ID if using a template
     pub template_id: Option<String>,
+    /// Whether structured output mode is enabled
+    pub structured_mode: bool,
+    /// Extracted PRD structure (JSON-serialized ExtractedPRDStructure)
+    pub extracted_structure: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_deserializing)]

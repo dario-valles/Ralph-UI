@@ -4,6 +4,7 @@ pub mod types;
 pub mod json;
 pub mod yaml;
 pub mod markdown;
+pub mod structured_output;
 
 use anyhow::{anyhow, Result};
 pub use types::{PRDDocument, PRDTask};

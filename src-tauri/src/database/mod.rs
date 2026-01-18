@@ -10,7 +10,7 @@ pub mod projects;
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 
 pub struct Database {
     conn: Connection,
@@ -102,6 +102,9 @@ impl Database {
         }
         if from_version < 7 {
             self.migrate_to_v7()?;
+        }
+        if from_version < 8 {
+            self.migrate_to_v8()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -469,6 +472,25 @@ impl Database {
         )?;
 
         self.set_schema_version(7)?;
+        Ok(())
+    }
+
+    fn migrate_to_v8(&self) -> Result<()> {
+        // Structured PRD Output: Add columns to chat_sessions for structured output mode
+
+        // Add structured_mode column to chat_sessions (default false)
+        self.conn.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN structured_mode INTEGER DEFAULT 0",
+            [],
+        )?;
+
+        // Add extracted_structure column to store JSON of ExtractedPRDStructure
+        self.conn.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN extracted_structure TEXT",
+            [],
+        )?;
+
+        self.set_schema_version(8)?;
         Ok(())
     }
 

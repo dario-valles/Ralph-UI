@@ -8,6 +8,7 @@ import type {
   QualityAssessment,
   GuidedQuestion,
   ExtractedPRDContent,
+  ExtractedPRDStructure,
   PRDTypeValue,
 } from '@/types'
 
@@ -18,6 +19,7 @@ interface StartSessionOptions {
   prdType?: PRDTypeValue
   guidedMode?: boolean
   templateId?: string
+  structuredMode?: boolean
 }
 
 interface PRDChatStore {
@@ -32,6 +34,8 @@ interface PRDChatStore {
   guidedQuestions: GuidedQuestion[]
   extractedContent: ExtractedPRDContent | null
   processingSessionId: string | null
+  // Structured output state
+  extractedStructure: ExtractedPRDStructure | null
 
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
@@ -45,6 +49,10 @@ interface PRDChatStore {
   assessQuality: () => Promise<QualityAssessment | null>
   loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
   previewExtraction: () => Promise<ExtractedPRDContent | null>
+  // Structured output actions
+  setStructuredMode: (enabled: boolean) => Promise<void>
+  loadExtractedStructure: () => Promise<void>
+  clearExtractedStructure: () => Promise<void>
 }
 
 export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
@@ -59,10 +67,11 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   guidedQuestions: [],
   extractedContent: null,
   processingSessionId: null,
+  extractedStructure: null,
 
   // Start a new chat session
   startSession: async (options: StartSessionOptions) => {
-    set({ loading: true, error: null, qualityAssessment: null, guidedQuestions: [], extractedContent: null })
+    set({ loading: true, error: null, qualityAssessment: null, guidedQuestions: [], extractedContent: null, extractedStructure: null })
     try {
       const session = await prdChatApi.startSession(
         options.agentType,
@@ -70,7 +79,8 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         options.prdId,
         options.prdType,
         options.guidedMode,
-        options.templateId
+        options.templateId,
+        options.structuredMode
       )
       set((state) => ({
         sessions: [session, ...state.sessions],
@@ -152,6 +162,16 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
           sessions: updatedSessions,
         }
       })
+
+      // If structured mode is enabled, reload extracted structure
+      if (currentSession.structuredMode) {
+        try {
+          const structure = await prdChatApi.getExtractedStructure(currentSession.id)
+          set({ extractedStructure: structure })
+        } catch {
+          // Ignore errors reloading structure
+        }
+      }
     } catch (error) {
       // Remove optimistic message on error
       set((state) => ({
@@ -297,6 +317,69 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         loading: false,
       })
       return null
+    }
+  },
+
+  // Set structured output mode for current session
+  setStructuredMode: async (enabled: boolean) => {
+    const { currentSession } = get()
+    if (!currentSession) {
+      return
+    }
+
+    try {
+      await prdChatApi.setStructuredMode(currentSession.id, enabled)
+      // Update local state
+      set((state) => {
+        const updatedSession = state.currentSession
+          ? { ...state.currentSession, structuredMode: enabled }
+          : null
+        const updatedSessions = state.sessions.map((s) =>
+          s.id === currentSession.id ? { ...s, structuredMode: enabled } : s
+        )
+        return {
+          currentSession: updatedSession,
+          sessions: updatedSessions,
+        }
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to set structured mode',
+      })
+    }
+  },
+
+  // Load extracted structure for current session
+  loadExtractedStructure: async () => {
+    const { currentSession } = get()
+    if (!currentSession) {
+      return
+    }
+
+    try {
+      const structure = await prdChatApi.getExtractedStructure(currentSession.id)
+      set({ extractedStructure: structure })
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to load extracted structure',
+      })
+    }
+  },
+
+  // Clear extracted structure for current session
+  clearExtractedStructure: async () => {
+    const { currentSession } = get()
+    if (!currentSession) {
+      return
+    }
+
+    try {
+      await prdChatApi.clearExtractedStructure(currentSession.id)
+      set({ extractedStructure: null })
+    } catch (error) {
+      set({
+        error: error instanceof Error && error.message ? error.message : 'Failed to clear extracted structure',
+      })
     }
   },
 }))

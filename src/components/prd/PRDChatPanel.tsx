@@ -20,6 +20,7 @@ import {
   Bot,
   BarChart3,
   AlertTriangle,
+  LayoutList,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -29,6 +30,7 @@ import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
+import { StructuredPRDSidebar } from './StructuredPRDSidebar'
 import { prdChatApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
@@ -68,6 +70,7 @@ export function PRDChatPanel() {
     error,
     qualityAssessment,
     processingSessionId,
+    extractedStructure,
     sendMessage,
     startSession,
     deleteSession,
@@ -76,6 +79,9 @@ export function PRDChatPanel() {
     loadSessions,
     exportToPRD,
     assessQuality,
+    setStructuredMode,
+    loadExtractedStructure,
+    clearExtractedStructure,
   } = usePRDChatStore()
 
   // Load available models for the current agent type
@@ -126,8 +132,12 @@ export function PRDChatPanel() {
     if (currentSession && currentSession.id !== prevSessionIdRef.current) {
       loadHistory(currentSession.id)
       prevSessionIdRef.current = currentSession.id
+      // Load extracted structure if structured mode is enabled
+      if (currentSession.structuredMode) {
+        loadExtractedStructure()
+      }
     }
-  }, [currentSession, loadHistory])
+  }, [currentSession, loadHistory, loadExtractedStructure])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -240,6 +250,19 @@ export function PRDChatPanel() {
     assessQuality()
   }
 
+  const handleToggleStructuredMode = async () => {
+    if (!currentSession) return
+    const newMode = !currentSession.structuredMode
+    await setStructuredMode(newMode)
+    if (newMode) {
+      loadExtractedStructure()
+    }
+  }
+
+  const handleClearStructure = () => {
+    clearExtractedStructure()
+  }
+
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
@@ -320,7 +343,7 @@ export function PRDChatPanel() {
       </Card>
 
       {/* Chat Panel */}
-      <Card className="flex-1 flex flex-col">
+      <Card className={cn('flex-1 flex flex-col', currentSession?.structuredMode && 'min-w-0')}>
         <CardHeader className="pb-3 border-b">
           <div className="flex items-center justify-between">
             <div>
@@ -373,6 +396,22 @@ export function PRDChatPanel() {
                   )}
                 </Select>
               </div>
+
+              {/* Structured Mode Toggle */}
+              {currentSession && (
+                <Button
+                  variant={currentSession.structuredMode ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={handleToggleStructuredMode}
+                  disabled={streaming}
+                  aria-label="Toggle structured mode"
+                  className="gap-1"
+                  title={currentSession.structuredMode ? 'Structured mode enabled' : 'Enable structured output mode'}
+                >
+                  <LayoutList className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs">Structured</span>
+                </Button>
+              )}
 
               {/* Quality Score Button */}
               {hasMessages && (
@@ -524,6 +563,15 @@ export function PRDChatPanel() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Structured Output Sidebar */}
+      {currentSession?.structuredMode && (
+        <StructuredPRDSidebar
+          structure={extractedStructure}
+          onClear={handleClearStructure}
+          className="w-72 shrink-0"
+        />
+      )}
 
       {/* Quality Warning Dialog */}
       <Dialog open={showQualityPanel} onOpenChange={setShowQualityPanel}>

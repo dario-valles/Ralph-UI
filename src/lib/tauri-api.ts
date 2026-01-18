@@ -21,6 +21,7 @@ import type {
   QualityAssessment,
   GuidedQuestion,
   ExtractedPRDContent,
+  ExtractedPRDStructure,
   PRDTypeValue,
   Project,
 } from '@/types'
@@ -189,10 +190,11 @@ export const prdChatApi = {
     prdId?: string,
     prdType?: PRDTypeValue,
     guidedMode?: boolean,
-    templateId?: string
+    templateId?: string,
+    structuredMode?: boolean
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
-      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId }
+      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode }
     })
   },
 
@@ -241,6 +243,21 @@ export const prdChatApi = {
   /** Check if an agent CLI is available in the system PATH */
   checkAgentAvailability: async (agentType: string): Promise<AgentAvailabilityResult> => {
     return await invoke('check_agent_availability', { agentType })
+  },
+
+  /** Get extracted PRD structure for a session */
+  getExtractedStructure: async (sessionId: string): Promise<ExtractedPRDStructure> => {
+    return await invoke('get_extracted_structure', { sessionId })
+  },
+
+  /** Set structured output mode for a session */
+  setStructuredMode: async (sessionId: string, enabled: boolean): Promise<void> => {
+    return await invoke('set_structured_mode', { sessionId, enabled })
+  },
+
+  /** Clear extracted structure for a session */
+  clearExtractedStructure: async (sessionId: string): Promise<void> => {
+    return await invoke('clear_extracted_structure', { sessionId })
   },
 }
 

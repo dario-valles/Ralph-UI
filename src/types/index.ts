@@ -413,6 +413,10 @@ export interface ChatSession {
   qualityScore?: number
   /** Template ID if using a template */
   templateId?: string
+  /** Whether structured output mode is enabled */
+  structuredMode: boolean
+  /** Extracted PRD structure (JSON string) */
+  extractedStructure?: string
   createdAt: string
   updatedAt: string
   messageCount?: number
@@ -494,4 +498,31 @@ export interface RateLimitEvent {
   limitType: RateLimitType
   retryAfterMs?: number
   matchedPattern?: string
+}
+
+// ============================================================================
+// Structured PRD Output Types
+// ============================================================================
+
+export type PRDItemType = 'epic' | 'user_story' | 'task' | 'acceptance_criteria'
+export type EffortSize = 'small' | 'medium' | 'large'
+
+export interface StructuredPRDItem {
+  type: PRDItemType
+  id: string // e.g., "EP-1", "US-1.1", "AC-1.1.1"
+  parentId?: string // Link to parent epic/story
+  title: string
+  description: string
+  acceptanceCriteria?: string[] // For user stories
+  priority?: number // 1-5
+  dependencies?: string[] // Item IDs
+  estimatedEffort?: EffortSize
+  tags?: string[]
+}
+
+export interface ExtractedPRDStructure {
+  epics: StructuredPRDItem[]
+  userStories: StructuredPRDItem[]
+  tasks: StructuredPRDItem[]
+  acceptanceCriteria: StructuredPRDItem[]
 }

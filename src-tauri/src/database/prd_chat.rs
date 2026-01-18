@@ -10,8 +10,8 @@ impl super::Database {
     pub fn create_chat_session(&self, session: &ChatSession) -> Result<()> {
         self.get_connection().execute(
             "INSERT INTO chat_sessions (
-                id, prd_id, agent_type, project_path, title, prd_type, guided_mode, quality_score, template_id, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                id, prd_id, agent_type, project_path, title, prd_type, guided_mode, quality_score, template_id, structured_mode, extracted_structure, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 session.id,
                 session.prd_id,
@@ -22,6 +22,8 @@ impl super::Database {
                 session.guided_mode as i32,
                 session.quality_score,
                 session.template_id,
+                session.structured_mode as i32,
+                session.extracted_structure,
                 session.created_at,
                 session.updated_at,
             ],
@@ -31,12 +33,13 @@ impl super::Database {
 
     pub fn get_chat_session(&self, id: &str) -> Result<ChatSession> {
         self.get_connection().query_row(
-            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.structured_mode, s.extracted_structure, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s WHERE s.id = ?1",
             params![id],
             |row| {
                 let guided_mode_int: i32 = row.get::<_, Option<i32>>(6)?.unwrap_or(1);
+                let structured_mode_int: i32 = row.get::<_, Option<i32>>(9)?.unwrap_or(0);
                 Ok(ChatSession {
                     id: row.get(0)?,
                     agent_type: row.get(1)?,
@@ -47,9 +50,11 @@ impl super::Database {
                     guided_mode: guided_mode_int != 0,
                     quality_score: row.get(7)?,
                     template_id: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                    message_count: row.get(11)?,
+                    structured_mode: structured_mode_int != 0,
+                    extracted_structure: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
+                    message_count: row.get(13)?,
                 })
             },
         )
@@ -58,7 +63,7 @@ impl super::Database {
     pub fn list_chat_sessions(&self) -> Result<Vec<ChatSession>> {
         let conn = self.get_connection();
         let mut stmt = conn.prepare(
-            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.created_at, s.updated_at,
+            "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.structured_mode, s.extracted_structure, s.created_at, s.updated_at,
                     (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
              FROM chat_sessions s
              ORDER BY s.updated_at DESC",
@@ -66,6 +71,7 @@ impl super::Database {
 
         let sessions = stmt.query_map([], |row| {
             let guided_mode_int: i32 = row.get::<_, Option<i32>>(6)?.unwrap_or(1);
+            let structured_mode_int: i32 = row.get::<_, Option<i32>>(9)?.unwrap_or(0);
             Ok(ChatSession {
                 id: row.get(0)?,
                 agent_type: row.get(1)?,
@@ -76,9 +82,11 @@ impl super::Database {
                 guided_mode: guided_mode_int != 0,
                 quality_score: row.get(7)?,
                 template_id: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
-                message_count: row.get(11)?,
+                structured_mode: structured_mode_int != 0,
+                extracted_structure: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+                message_count: row.get(13)?,
             })
         })?;
 
@@ -106,6 +114,24 @@ impl super::Database {
         self.get_connection().execute(
             "DELETE FROM chat_sessions WHERE id = ?1",
             params![id],
+        )?;
+        Ok(())
+    }
+
+    /// Update structured mode for a chat session
+    pub fn update_chat_session_structured_mode(&self, session_id: &str, structured_mode: bool) -> Result<()> {
+        self.get_connection().execute(
+            "UPDATE chat_sessions SET structured_mode = ?1 WHERE id = ?2",
+            params![structured_mode as i32, session_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update extracted structure for a chat session
+    pub fn update_chat_session_extracted_structure(&self, session_id: &str, extracted_structure: Option<&str>) -> Result<()> {
+        self.get_connection().execute(
+            "UPDATE chat_sessions SET extracted_structure = ?1 WHERE id = ?2",
+            params![extracted_structure, session_id],
         )?;
         Ok(())
     }
@@ -191,6 +217,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -232,6 +260,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -322,6 +352,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: session.created_at.clone(),
             updated_at: "2026-01-17T12:00:00Z".to_string(),
             message_count: None,
@@ -555,6 +587,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -582,6 +616,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
@@ -608,6 +644,8 @@ mod tests {
             guided_mode: true,
             quality_score: None,
             template_id: None,
+            structured_mode: false,
+            extracted_structure: None,
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,

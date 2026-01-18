@@ -239,6 +239,9 @@ pub fn run() {
             commands::get_guided_questions,
             commands::preview_prd_extraction,
             commands::check_agent_availability,
+            commands::get_extracted_structure,
+            commands::set_structured_mode,
+            commands::clear_extracted_structure,
             // Project commands
             commands::register_project,
             commands::get_project,
