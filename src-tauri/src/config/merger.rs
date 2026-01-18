@@ -59,6 +59,7 @@ pub struct PartialFallbackSettings {
     pub base_backoff_ms: Option<u64>,
     pub max_backoff_ms: Option<u64>,
     pub fallback_agent: Option<String>,
+    pub fallback_model: Option<String>,
 }
 
 /// Configuration merger
@@ -207,6 +208,7 @@ impl ConfigMerger {
             base_backoff_ms: over.base_backoff_ms,
             max_backoff_ms: over.max_backoff_ms,
             fallback_agent: over.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
+            fallback_model: over.fallback_model.clone().or_else(|| base.fallback_model.clone()),
         }
     }
 
@@ -270,6 +272,7 @@ impl ConfigMerger {
             base_backoff_ms: partial.base_backoff_ms.unwrap_or(base.base_backoff_ms),
             max_backoff_ms: partial.max_backoff_ms.unwrap_or(base.max_backoff_ms),
             fallback_agent: partial.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
+            fallback_model: partial.fallback_model.clone().or_else(|| base.fallback_model.clone()),
         }
     }
 }

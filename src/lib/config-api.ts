@@ -100,6 +100,7 @@ export const configApi = {
       baseBackoffMs: config.baseBackoffMs,
       maxBackoffMs: config.maxBackoffMs,
       fallbackAgent: config.fallbackAgent,
+      fallbackModel: config.fallbackModel,
     })
   },
 

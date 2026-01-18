@@ -216,6 +216,7 @@ pub async fn update_fallback_config(
     base_backoff_ms: Option<u64>,
     max_backoff_ms: Option<u64>,
     fallback_agent: Option<String>,
+    fallback_model: Option<String>,
     config_state: State<'_, ConfigState>,
 ) -> Result<FallbackSettings, String> {
     let mut config = config_state.config.write()
@@ -232,6 +233,9 @@ pub async fn update_fallback_config(
     }
     if fallback_agent.is_some() {
         config.fallback.fallback_agent = fallback_agent;
+    }
+    if fallback_model.is_some() {
+        config.fallback.fallback_model = fallback_model;
     }
 
     Ok(config.fallback.clone())

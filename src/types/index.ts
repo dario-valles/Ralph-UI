@@ -283,6 +283,8 @@ export interface RalphFallbackSettings {
   baseBackoffMs: number
   maxBackoffMs: number
   fallbackAgent?: string
+  /** Model to use for the fallback agent */
+  fallbackModel?: string
 }
 
 export interface ConfigPaths {

@@ -153,6 +153,9 @@ pub struct FallbackSettings {
     /// Fallback agent type
     #[serde(rename = "fallbackAgent", alias = "fallback_agent", default)]
     pub fallback_agent: Option<String>,
+    /// Fallback model to use (e.g., "claude-sonnet-4-5")
+    #[serde(rename = "fallbackModel", alias = "fallback_model", default)]
+    pub fallback_model: Option<String>,
 }
 
 fn default_backoff() -> u64 { 5000 }
@@ -165,6 +168,7 @@ impl Default for FallbackSettings {
             base_backoff_ms: default_backoff(),
             max_backoff_ms: default_max_backoff(),
             fallback_agent: None,
+            fallback_model: None,
         }
     }
 }

@@ -57,6 +57,14 @@ export function SettingsPage() {
   const currentAgentType = (config?.execution?.agentType || 'claude') as AgentType
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(currentAgentType)
 
+  // Load available models for the fallback agent type
+  const fallbackAgentType = (config?.fallback?.fallbackAgent || 'claude') as AgentType
+  const {
+    models: fallbackModels,
+    loading: fallbackModelsLoading,
+    defaultModelId: fallbackDefaultModelId,
+  } = useAvailableModels(fallbackAgentType)
+
   // Load config from backend on mount
   const loadConfig = useCallback(async () => {
     if (!isTauri) {
@@ -568,6 +576,8 @@ export function SettingsPage() {
                         onChange={(e) =>
                           updateFallbackConfig({
                             fallbackAgent: e.target.value || undefined,
+                            // Reset model when agent changes
+                            fallbackModel: undefined,
                           })
                         }
                         disabled={!config.fallback.enabled}
@@ -579,6 +589,33 @@ export function SettingsPage() {
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         Agent to use when the primary agent fails.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="fallbackModel">Fallback Model (Optional)</Label>
+                      <Select
+                        id="fallbackModel"
+                        value={config.fallback.fallbackModel || fallbackDefaultModelId || ''}
+                        onChange={(e) =>
+                          updateFallbackConfig({
+                            fallbackModel: e.target.value || undefined,
+                          })
+                        }
+                        disabled={!config.fallback.enabled || !config.fallback.fallbackAgent || fallbackModelsLoading}
+                      >
+                        {fallbackModelsLoading ? (
+                          <option>Loading models...</option>
+                        ) : (
+                          fallbackModels.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))
+                        )}
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Model to use for the fallback agent.
                       </p>
                     </div>
 
