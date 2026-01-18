@@ -11,6 +11,7 @@ mod parallel;
 mod session;
 mod templates;
 mod config;
+pub mod events;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -92,6 +93,7 @@ pub fn run() {
             commands::get_agents_for_session,
             commands::get_agents_for_task,
             commands::get_active_agents,
+            commands::get_all_active_agents,
             commands::update_agent_status,
             commands::update_agent_metrics,
             commands::update_agent_process_id,
@@ -201,6 +203,9 @@ pub fn run() {
             commands::set_project_favorite,
             commands::touch_project,
             commands::delete_project,
+            // Mission Control commands
+            commands::get_activity_feed,
+            commands::get_global_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -207,7 +207,33 @@ impl super::Database {
         Ok(Vec::new())
     }
 
-    /// Get active agents (not idle or completed)
+    /// Get ALL active agents across all sessions (for Mission Control)
+    pub fn get_all_active_agents(&self) -> Result<Vec<Agent>> {
+        let conn = self.get_connection();
+
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, task_id, status, process_id,
+                    worktree_path, branch, iteration_count, tokens, cost
+             FROM agents
+             WHERE status NOT IN ('idle')
+             ORDER BY session_id, id"
+        )?;
+
+        let agents = stmt
+            .query_map([], |row| Ok(row_to_agent(row)))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut agents_with_logs = Vec::new();
+        for mut agent in agents {
+            agent.logs = self.get_logs_for_agent(&agent.id)?;
+            agent.subagents = self.get_subagents(&agent.id)?;
+            agents_with_logs.push(agent);
+        }
+
+        Ok(agents_with_logs)
+    }
+
+    /// Get active agents for a specific session (not idle or completed)
     pub fn get_active_agents(&self, session_id: &str) -> Result<Vec<Agent>> {
         let conn = self.get_connection();
 

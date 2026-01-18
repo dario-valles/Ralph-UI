@@ -127,3 +127,39 @@ pub struct Agent {
     pub logs: Vec<LogEntry>,
     pub subagents: Vec<Agent>,
 }
+
+// Activity Feed types for Mission Control
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityEventType {
+    TaskCompleted,
+    TaskStarted,
+    TaskFailed,
+    SessionStarted,
+    SessionCompleted,
+    AgentSpawned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityEvent {
+    pub id: String,
+    pub timestamp: DateTime<Utc>,
+    pub event_type: ActivityEventType,
+    pub project_path: String,
+    pub project_name: String,
+    pub session_name: String,
+    pub description: String,
+}
+
+// Project type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub id: String,
+    pub path: String,
+    pub name: String,
+    pub last_used_at: DateTime<Utc>,
+    pub is_favorite: bool,
+    pub created_at: DateTime<Utc>,
+}

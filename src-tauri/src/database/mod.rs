@@ -10,7 +10,7 @@ pub mod projects;
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 
 pub struct Database {
     conn: Connection,
@@ -91,6 +91,9 @@ impl Database {
         }
         if from_version < 6 {
             self.migrate_to_v6()?;
+        }
+        if from_version < 7 {
+            self.migrate_to_v7()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -421,6 +424,43 @@ impl Database {
         )?;
 
         self.set_schema_version(6)?;
+        Ok(())
+    }
+
+    fn migrate_to_v7(&self) -> Result<()> {
+        // Mission Control: Add indexes for cross-project queries
+
+        // Index for agent status queries (get all active agents)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)",
+            [],
+        )?;
+
+        // Index for session status queries (get active sessions)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)",
+            [],
+        )?;
+
+        // Index for session project path queries (group sessions by project)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)",
+            [],
+        )?;
+
+        // Index for task status queries
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+            [],
+        )?;
+
+        // Index for task completion time (for activity feed)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_completed_at ON tasks(completed_at)",
+            [],
+        )?;
+
+        self.set_schema_version(7)?;
         Ok(())
     }
 

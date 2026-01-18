@@ -159,6 +159,15 @@ pub fn delete_task(conn: &Connection, task_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Get the session ID for a task
+pub fn get_session_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
+    conn.query_row(
+        "SELECT session_id FROM tasks WHERE id = ?1",
+        params![task_id],
+        |row| row.get(0),
+    )
+}
+
 /// Update task status
 pub fn update_task_status(
     conn: &Connection,

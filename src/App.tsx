@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
-import { DashboardPage } from './components/dashboard/DashboardPage'
+import { MissionControlPage } from './components/mission-control'
 import { TasksPage } from './components/tasks/TasksPage'
 import { AgentsPage } from './components/agents/AgentsPage'
 import { SessionsPage } from './components/dashboard/SessionsPage'
@@ -23,7 +23,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<AppLayout />}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<MissionControlPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="agents" element={<AgentsPage />} />
           <Route path="sessions" element={<SessionsPage />} />

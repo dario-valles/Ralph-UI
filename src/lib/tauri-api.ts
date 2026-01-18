@@ -308,3 +308,36 @@ export interface AgentAvailabilityResult {
   path: string | null
   error: string | null
 }
+
+// Mission Control types and API
+export interface ActivityEvent {
+  id: string
+  timestamp: string
+  eventType: 'task_completed' | 'task_started' | 'task_failed' | 'agent_spawned' | 'session_started' | 'session_completed'
+  projectPath: string
+  projectName: string
+  sessionName: string
+  description: string
+}
+
+export interface GlobalStats {
+  activeAgentsCount: number
+  tasksInProgress: number
+  tasksCompletedToday: number
+  totalCostToday: number
+  activeProjectsCount: number
+  totalProjects: number
+}
+
+// Mission Control API
+export const missionControlApi = {
+  /** Get activity feed for Mission Control dashboard */
+  getActivityFeed: async (limit?: number, offset?: number): Promise<ActivityEvent[]> => {
+    return await invoke('get_activity_feed', { limit, offset })
+  },
+
+  /** Get global statistics for Mission Control dashboard */
+  getGlobalStats: async (): Promise<GlobalStats> => {
+    return await invoke('get_global_stats')
+  },
+}

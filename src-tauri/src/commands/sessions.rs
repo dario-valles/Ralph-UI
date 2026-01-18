@@ -1,6 +1,7 @@
 // Session-related Tauri commands
 
 use crate::database::{self, Database};
+use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::models::{AgentType, Session, SessionConfig, SessionStatus};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,7 @@ pub async fn delete_session(
 
 #[tauri::command]
 pub async fn update_session_status(
+    app_handle: tauri::AppHandle,
     session_id: String,
     status: SessionStatus,
     db: State<'_, std::sync::Mutex<Database>>,
@@ -102,8 +104,29 @@ pub async fn update_session_status(
     let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
     let conn = db.get_connection();
 
+    // Get the current session to capture the old status
+    let current_session = database::sessions::get_session(conn, &session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+
+    let old_status = format!("{:?}", current_session.status).to_lowercase();
+    let new_status = format!("{:?}", status).to_lowercase();
+
     database::sessions::update_session_status(conn, &session_id, status)
-        .map_err(|e| format!("Failed to update session status: {}", e))
+        .map_err(|e| format!("Failed to update session status: {}", e))?;
+
+    // Emit the status changed event
+    let payload = SessionStatusChangedPayload {
+        session_id: session_id.clone(),
+        old_status,
+        new_status,
+    };
+
+    // Log any event emission errors but don't fail the command
+    if let Err(e) = emit_session_status_changed(&app_handle, payload) {
+        log::warn!("Failed to emit session status changed event: {}", e);
+    }
+
+    Ok(())
 }
 
 // ============================================================================

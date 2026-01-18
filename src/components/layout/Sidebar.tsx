@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard,
+  Gauge,
   ListTodo,
   Bot,
   FolderGit2,
@@ -12,7 +12,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 
 const navigation = [
-  { name: 'Dashboard', to: '/', icon: LayoutDashboard },
+  { name: 'Mission Control', to: '/', icon: Gauge },
   { name: 'PRDs', to: '/prds', icon: FileText },
   { name: 'PRD Chat', to: '/prds/chat', icon: MessageSquare },
   { name: 'Tasks', to: '/tasks', icon: ListTodo },

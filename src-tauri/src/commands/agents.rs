@@ -1,6 +1,7 @@
 // Tauri commands for agent management
 
 use crate::database::Database;
+use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
 use crate::models::{Agent, AgentStatus, LogEntry};
 use std::sync::Mutex;
 use tauri::State;
@@ -60,16 +61,53 @@ pub fn get_active_agents(
         .map_err(|e| format!("Failed to get active agents: {}", e))
 }
 
+/// Get ALL active agents across all sessions (for Mission Control dashboard)
+#[tauri::command]
+pub fn get_all_active_agents(
+    db: State<Mutex<Database>>,
+) -> Result<Vec<Agent>, String> {
+    let db = db.lock().unwrap();
+    db.get_all_active_agents()
+        .map_err(|e| format!("Failed to get all active agents: {}", e))
+}
+
 /// Update agent status
 #[tauri::command]
 pub fn update_agent_status(
+    app_handle: tauri::AppHandle,
     db: State<Mutex<Database>>,
     agent_id: String,
     status: AgentStatus,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
+
+    // Get the current agent to capture old status and session_id
+    let agent = db
+        .get_agent(&agent_id)
+        .map_err(|e| format!("Failed to get agent: {}", e))?
+        .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
+
+    let old_status = format!("{:?}", agent.status).to_lowercase();
+    let new_status = format!("{:?}", status).to_lowercase();
+
+    // Update the status in the database
     db.update_agent_status(&agent_id, &status)
-        .map_err(|e| format!("Failed to update agent status: {}", e))
+        .map_err(|e| format!("Failed to update agent status: {}", e))?;
+
+    // Emit the status changed event
+    let payload = AgentStatusChangedPayload {
+        agent_id: agent_id.clone(),
+        session_id: agent.session_id.clone(),
+        old_status,
+        new_status,
+    };
+
+    // Log any event emission errors but don't fail the command
+    if let Err(e) = emit_agent_status_changed(&app_handle, payload) {
+        log::warn!("Failed to emit agent status changed event: {}", e);
+    }
+
+    Ok(())
 }
 
 /// Update agent metrics (tokens, cost, iterations)

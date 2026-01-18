@@ -1,6 +1,7 @@
 // Task-related Tauri commands
 
 use crate::database::{self, Database};
+use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::models::{Task, TaskStatus};
 use tauri::State;
 use uuid::Uuid;
@@ -72,6 +73,7 @@ pub async fn delete_task(
 
 #[tauri::command]
 pub async fn update_task_status(
+    app_handle: tauri::AppHandle,
     task_id: String,
     status: TaskStatus,
     db: State<'_, std::sync::Mutex<Database>>,
@@ -83,12 +85,34 @@ pub async fn update_task_status(
     let current_task = database::tasks::get_task(conn, &task_id)
         .map_err(|e| format!("Failed to get task: {}", e))?;
 
+    let old_status = format!("{:?}", current_task.status).to_lowercase();
+    let new_status = format!("{:?}", status).to_lowercase();
+
     // Validate state transition
     crate::models::state_machine::transition_state(current_task.status, status)
         .map_err(|e| format!("Invalid state transition: {}", e))?;
 
     database::tasks::update_task_status(conn, &task_id, status)
-        .map_err(|e| format!("Failed to update task status: {}", e))
+        .map_err(|e| format!("Failed to update task status: {}", e))?;
+
+    // Get the session_id for this task
+    let session_id = database::tasks::get_session_id_for_task(conn, &task_id)
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // Emit the status changed event
+    let payload = TaskStatusChangedPayload {
+        task_id: task_id.clone(),
+        session_id,
+        old_status,
+        new_status,
+    };
+
+    // Log any event emission errors but don't fail the command
+    if let Err(e) = emit_task_status_changed(&app_handle, payload) {
+        log::warn!("Failed to emit task status changed event: {}", e);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
