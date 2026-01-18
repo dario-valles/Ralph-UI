@@ -42,7 +42,7 @@ export function AgentList({ agents, onSelectAgent, selectedAgentId }: AgentListP
                 <CardTitle className="text-lg">Agent {agent.id.slice(0, 8)}</CardTitle>
                 <Badge className={getStatusColor(agent.status)}>{getStatusLabel(agent.status)}</Badge>
               </div>
-              <CardDescription>Task: {agent.task_id.slice(0, 8)}</CardDescription>
+              <CardDescription>Task: {agent.task_id ? agent.task_id.slice(0, 8) : 'N/A'}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
