@@ -138,7 +138,9 @@ export function PRDEditor() {
     }
   }
 
-  if (loading) {
+  if (loading && !showExecutionDialog) {
+    // Only show loading spinner if the execution dialog is NOT open
+    // This prevents unmounting the dialog when executePRD sets loading: true
     return (
       <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
