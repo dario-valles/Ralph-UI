@@ -31,7 +31,8 @@ pub struct UpdatePRDRequest {
 pub struct ExecutionConfig {
     pub session_name: Option<String>,
     pub agent_type: String,
-    pub execution_mode: String,
+    /// Execution strategy: sequential, dependency_first, priority, fifo, cost_first
+    pub strategy: String,
     pub max_parallel: u8,
     pub max_iterations: u32,
     pub max_retries: u32,
@@ -43,6 +44,9 @@ pub struct ExecutionConfig {
     pub run_lint: bool,
     #[serde(default)]
     pub dry_run: bool,
+    /// Optional model to use for agents
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// Create a new PRD document
