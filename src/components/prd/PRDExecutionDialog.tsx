@@ -20,9 +20,13 @@ import {
   initParallelScheduler,
   parallelAddTasks,
   parallelScheduleNext,
+  isGitRepository,
+  initGitRepository,
   type SchedulerConfig,
 } from '@/lib/parallel-api'
-import type { ExecutionConfig, AgentType } from '@/types'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { configApi } from '@/lib/config-api'
+import type { ExecutionConfig, ExecutionStrategy, AgentType, RalphConfig } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getModelName } from '@/lib/model-api'
 
@@ -37,12 +41,18 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
   const { executePRD } = usePRDStore()
   const { fetchSession } = useSessionStore()
   const [executing, setExecuting] = useState(false)
+  const [configLoading, setConfigLoading] = useState(true)
 
-  // Execution configuration state
+  // Git initialization dialog state
+  const [showGitInitDialog, setShowGitInitDialog] = useState(false)
+  const [gitInitLoading, setGitInitLoading] = useState(false)
+  const [pendingSession, setPendingSession] = useState<{ id: string; projectPath: string } | null>(null)
+
+  // Execution configuration state - will be populated from saved config
   const [config, setConfig] = useState<ExecutionConfig>({
     sessionName: undefined,
     agentType: 'claude' as AgentType,
-    executionMode: 'parallel',
+    strategy: 'dependency_first',
     maxParallel: 3,
     maxIterations: 10,
     maxRetries: 3,
@@ -51,18 +61,48 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     runTests: true,
     runLint: true,
     dryRun: false,
-    model: 'claude-sonnet-4-5',
+    model: undefined,
   })
+
+  // Load saved config when dialog opens
+  useEffect(() => {
+    if (open) {
+      setConfigLoading(true)
+      configApi.get()
+        .then((savedConfig: RalphConfig) => {
+          setConfig((prev) => ({
+            ...prev,
+            agentType: (savedConfig.execution.agentType as AgentType) || prev.agentType,
+            strategy: (savedConfig.execution.strategy as ExecutionStrategy) || prev.strategy,
+            maxParallel: savedConfig.execution.maxParallel || prev.maxParallel,
+            maxIterations: savedConfig.execution.maxIterations || prev.maxIterations,
+            maxRetries: savedConfig.execution.maxRetries || prev.maxRetries,
+            model: savedConfig.execution.model, // Don't fallback to prev - let useAvailableModels handle default
+            autoCreatePRs: savedConfig.git.autoCreatePrs ?? prev.autoCreatePRs,
+            draftPRs: savedConfig.git.draftPrs ?? prev.draftPRs,
+            runTests: savedConfig.validation.runTests ?? prev.runTests,
+            runLint: savedConfig.validation.runLint ?? prev.runLint,
+          }))
+        })
+        .catch((err) => {
+          console.error('Failed to load config:', err)
+        })
+        .finally(() => {
+          setConfigLoading(false)
+        })
+    }
+  }, [open])
 
   // Load available models dynamically
   const { models, loading: modelsLoading, refresh: refreshModels, defaultModelId } = useAvailableModels(config.agentType)
 
-  // Update model to default when models load or change
+  // Update model to default when models load - only if no model is set AND config is done loading
+  // This ensures saved config model is respected (avoid race condition)
   useEffect(() => {
-    if (defaultModelId && (!config.model || !models.some(m => m.id === config.model))) {
+    if (!configLoading && defaultModelId && !config.model) {
       setConfig((prev) => ({ ...prev, model: defaultModelId }))
     }
-  }, [defaultModelId, models, config.model])
+  }, [configLoading, defaultModelId, config.model])
 
   // Update model when agent type changes
   const handleAgentTypeChange = (newAgentType: AgentType) => {
@@ -74,6 +114,89 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     })
   }
 
+
+  // Helper function to start the scheduler and agents
+  const startSchedulerAndAgents = async (sessionId: string, projectPath: string, tasks: typeof useSessionStore.getState extends () => infer S ? S extends { currentSession: infer CS } ? CS extends { tasks: infer T } ? T : never : never : never) => {
+    const isParallel = config.strategy !== 'sequential'
+    const schedulerConfig: SchedulerConfig = {
+      maxParallel: isParallel ? config.maxParallel : 1,
+      maxIterations: config.maxIterations,
+      maxRetries: config.maxRetries,
+      agentType: config.agentType,
+      strategy: config.strategy,
+      resourceLimits: {
+        maxAgents: config.maxParallel,
+        maxCpuPerAgent: 50,
+        maxMemoryMbPerAgent: 2048,
+        maxTotalCpu: 80,
+        maxTotalMemoryMb: 8192,
+        maxRuntimeSecs: 3600,
+      },
+      model: config.model,
+    }
+
+    console.log('[PRD Execution] Initializing scheduler...', {
+      schedulerConfig,
+      projectPath,
+    })
+    await initParallelScheduler(schedulerConfig, projectPath)
+    console.log('[PRD Execution] Scheduler initialized')
+
+    // Add tasks to the scheduler
+    console.log('[PRD Execution] Adding tasks to scheduler...', { tasks })
+    await parallelAddTasks(tasks)
+    console.log('[PRD Execution] Tasks added')
+
+    // Schedule agents (up to maxParallel)
+    const maxToSpawn = isParallel ? config.maxParallel : 1
+    console.log('[PRD Execution] Scheduling agents...', { maxToSpawn })
+
+    for (let i = 0; i < maxToSpawn; i++) {
+      console.log(`[PRD Execution] Scheduling agent ${i + 1}/${maxToSpawn}...`)
+      const agent = await parallelScheduleNext(sessionId, projectPath)
+      console.log(`[PRD Execution] Schedule result:`, { agent })
+      if (!agent) {
+        console.log('[PRD Execution] No more tasks to schedule')
+        break
+      }
+    }
+    console.log('[PRD Execution] Agents scheduled')
+  }
+
+  // Handle git initialization and continue execution
+  const handleGitInit = async () => {
+    if (!pendingSession) return
+
+    setGitInitLoading(true)
+    try {
+      await initGitRepository(pendingSession.projectPath)
+      console.log('[PRD Execution] Git repository initialized')
+
+      // Get session from store to access tasks
+      const session = useSessionStore.getState().currentSession
+      if (session?.tasks && session.tasks.length > 0) {
+        await startSchedulerAndAgents(pendingSession.id, pendingSession.projectPath, session.tasks)
+      }
+
+      setShowGitInitDialog(false)
+      setPendingSession(null)
+      onOpenChange(false)
+      navigate('/agents')
+    } catch (err) {
+      console.error('[PRD Execution] Failed to initialize git:', err)
+    } finally {
+      setGitInitLoading(false)
+    }
+  }
+
+  // Handle skipping git init (just navigate without agents)
+  const handleSkipGitInit = () => {
+    setShowGitInitDialog(false)
+    setPendingSession(null)
+    onOpenChange(false)
+    // Still navigate - session and tasks were created, just no agents
+    navigate('/agents')
+  }
 
   const handleExecute = async () => {
     setExecuting(true)
@@ -107,52 +230,18 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
 
       if (!config.dryRun && session.tasks && session.tasks.length > 0) {
         try {
-          // Initialize the parallel scheduler
-          const schedulerConfig: SchedulerConfig = {
-            maxParallel: config.executionMode === 'parallel' ? config.maxParallel : 1,
-            maxIterations: config.maxIterations,
-            maxRetries: config.maxRetries,
-            agentType: config.agentType,
-            strategy: 'dependency_first',
-            resourceLimits: {
-              maxAgents: config.maxParallel,
-              maxCpuPerAgent: 50,
-              maxMemoryMbPerAgent: 2048,
-              maxTotalCpu: 80,
-              maxTotalMemoryMb: 8192,
-              maxRuntimeSecs: 3600,
-            },
-            model: config.model,
+          // Check if path is a git repository
+          const isGitRepo = await isGitRepository(session.projectPath)
+          if (!isGitRepo) {
+            // Pause execution and show dialog
+            console.log('[PRD Execution] Project is not a git repository, prompting user...')
+            setPendingSession({ id: sessionId, projectPath: session.projectPath })
+            setShowGitInitDialog(true)
+            setExecuting(false)
+            return // Don't close dialog or navigate yet
           }
 
-          console.log('[PRD Execution] Step 3a: Initializing scheduler...', {
-            schedulerConfig,
-            projectPath: session.projectPath,
-          })
-          await initParallelScheduler(schedulerConfig, session.projectPath)
-          console.log('[PRD Execution] Step 3a complete: Scheduler initialized')
-
-          // Add tasks to the scheduler
-          console.log('[PRD Execution] Step 3b: Adding tasks to scheduler...', {
-            tasks: session.tasks,
-          })
-          await parallelAddTasks(session.tasks)
-          console.log('[PRD Execution] Step 3b complete: Tasks added')
-
-          // Schedule agents (up to maxParallel)
-          const maxToSpawn = config.executionMode === 'parallel' ? config.maxParallel : 1
-          console.log('[PRD Execution] Step 3c: Scheduling agents...', { maxToSpawn })
-
-          for (let i = 0; i < maxToSpawn; i++) {
-            console.log(`[PRD Execution] Scheduling agent ${i + 1}/${maxToSpawn}...`)
-            const agent = await parallelScheduleNext(sessionId, session.projectPath)
-            console.log(`[PRD Execution] Schedule result:`, { agent })
-            if (!agent) {
-              console.log('[PRD Execution] No more tasks to schedule')
-              break
-            }
-          }
-          console.log('[PRD Execution] Step 3c complete: Agents scheduled')
+          await startSchedulerAndAgents(sessionId, session.projectPath, session.tasks)
         } catch (schedulerErr) {
           // Log scheduler errors but don't fail the whole execution
           // The session and tasks were created successfully
@@ -233,35 +322,24 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             </div>
           </div>
 
-          {/* Execution Mode */}
+          {/* Execution Strategy */}
           <div className="space-y-2">
-            <Label>Execution Mode</Label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="execution-mode"
-                  value="sequential"
-                  checked={config.executionMode === 'sequential'}
-                  onChange={() => setConfig({ ...config, executionMode: 'sequential' })}
-                />
-                <span>Sequential (One task at a time)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="execution-mode"
-                  value="parallel"
-                  checked={config.executionMode === 'parallel'}
-                  onChange={() => setConfig({ ...config, executionMode: 'parallel' })}
-                />
-                <span>Parallel (Multiple agents)</span>
-              </label>
-            </div>
+            <Label htmlFor="strategy">Execution Strategy</Label>
+            <Select
+              id="strategy"
+              value={config.strategy}
+              onChange={(e) => setConfig({ ...config, strategy: e.target.value as ExecutionStrategy })}
+            >
+              <option value="sequential">Sequential (One at a time)</option>
+              <option value="dependency_first">Dependency First (Parallel)</option>
+              <option value="priority">Priority Order (Parallel)</option>
+              <option value="fifo">FIFO (Parallel)</option>
+              <option value="cost_first">Highest Cost First (Parallel)</option>
+            </Select>
           </div>
 
-          {/* Max Parallel (only for parallel mode) */}
-          {config.executionMode === 'parallel' && (
+          {/* Max Parallel (only for parallel strategies) */}
+          {config.strategy !== 'sequential' && (
             <div className="space-y-2">
               <Label>Max Parallel Agents: {config.maxParallel}</Label>
               <Slider
@@ -378,8 +456,11 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               <li>• Agent: {config.agentType}</li>
               <li>• Model: {getModelName(models, config.model || '')}</li>
-              <li>• Mode: {config.executionMode}</li>
-              {config.executionMode === 'parallel' && (
+              <li>• Strategy: {config.strategy === 'sequential' ? 'Sequential' :
+                config.strategy === 'dependency_first' ? 'Dependency First' :
+                config.strategy === 'priority' ? 'Priority Order' :
+                config.strategy === 'fifo' ? 'FIFO' : 'Highest Cost First'}</li>
+              {config.strategy !== 'sequential' && (
                 <li>• Max parallel agents: {config.maxParallel}</li>
               )}
               <li>• Max iterations: {config.maxIterations} per task</li>
@@ -399,11 +480,16 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={executing}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={executing || configLoading}>
             Cancel
           </Button>
-          <Button onClick={handleExecute} disabled={executing}>
-            {executing ? (
+          <Button onClick={handleExecute} disabled={executing || configLoading}>
+            {configLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : executing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 {config.dryRun ? 'Previewing...' : 'Starting...'}
@@ -422,6 +508,22 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Git Initialization Dialog */}
+      <ConfirmDialog
+        open={showGitInitDialog}
+        onOpenChange={(open) => {
+          if (!open) handleSkipGitInit()
+        }}
+        title="Git Repository Required"
+        description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
+        confirmLabel="Initialize Git"
+        cancelLabel="Skip"
+        variant="default"
+        loading={gitInitLoading}
+        onConfirm={handleGitInit}
+        onCancel={handleSkipGitInit}
+      />
     </Dialog>
   )
 }

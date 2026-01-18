@@ -248,6 +248,32 @@ pub fn git_get_working_diff(
     })
 }
 
+/// Check if a path is a git repository
+#[tauri::command]
+pub fn git_is_repository(path: String) -> Result<bool, String> {
+    use std::path::Path;
+    let git_path = Path::new(&path).join(".git");
+    Ok(git_path.exists())
+}
+
+/// Initialize a new git repository
+#[tauri::command]
+pub fn git_init_repository(path: String) -> Result<(), String> {
+    use git2::Repository;
+    use std::path::Path;
+
+    let repo_path = Path::new(&path);
+    if !repo_path.exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+
+    Repository::init(repo_path)
+        .map_err(|e| format!("Failed to initialize git repository: {}", e))?;
+
+    log::info!("[Git] Initialized new repository at: {}", path);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -338,9 +338,11 @@ export function SettingsPage() {
                       value={config.execution.strategy}
                       onChange={(e) => updateExecutionConfig({ strategy: e.target.value })}
                     >
-                      <option value="sequential">Sequential</option>
-                      <option value="parallel">Parallel</option>
-                      <option value="adaptive">Adaptive</option>
+                      <option value="sequential">Sequential (One at a time)</option>
+                      <option value="dependency_first">Dependency First (Parallel)</option>
+                      <option value="priority">Priority Order (Parallel)</option>
+                      <option value="fifo">FIFO (Parallel)</option>
+                      <option value="cost_first">Highest Cost First (Parallel)</option>
                     </Select>
                   </div>
 

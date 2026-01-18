@@ -29,7 +29,10 @@ import {
   createDefaultSchedulerConfig,
   calculateUtilization,
   getSchedulingStrategyLabel,
+  isGitRepository,
+  initGitRepository,
 } from '../../lib/parallel-api'
+import { ConfirmDialog } from '../ui/confirm-dialog'
 
 export function ParallelExecutionPage() {
   const [initialized, setInitialized] = useState(false)
@@ -50,17 +53,52 @@ export function ParallelExecutionPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Git initialization dialog state
+  const [showGitInitDialog, setShowGitInitDialog] = useState(false)
+  const [gitInitLoading, setGitInitLoading] = useState(false)
+
   // Load available models for the current agent type
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(config.agentType)
 
   // Initialize scheduler
   const handleInitialize = async () => {
+    if (!projectPath.trim()) {
+      setError('Please enter a project path')
+      return
+    }
+
     try {
+      // Check if the path is a git repository
+      const isGitRepo = await isGitRepository(projectPath)
+      if (!isGitRepo) {
+        // Show dialog asking user to initialize git
+        setShowGitInitDialog(true)
+        return
+      }
+
+      // Proceed with scheduler initialization
       await initParallelScheduler(config, projectPath)
       setInitialized(true)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initialize')
+    }
+  }
+
+  // Handle git repository initialization
+  const handleGitInit = async () => {
+    setGitInitLoading(true)
+    try {
+      await initGitRepository(projectPath)
+      // Now proceed with scheduler initialization
+      await initParallelScheduler(config, projectPath)
+      setInitialized(true)
+      setError(null)
+      setShowGitInitDialog(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initialize git repository')
+    } finally {
+      setGitInitLoading(false)
     }
   }
 
@@ -427,6 +465,19 @@ export function ParallelExecutionPage() {
           )}
         </>
       )}
+
+      {/* Git Initialization Dialog */}
+      <ConfirmDialog
+        open={showGitInitDialog}
+        onOpenChange={setShowGitInitDialog}
+        title="Git Repository Required"
+        description="This directory is not a git repository. Parallel execution requires git for worktree management. Would you like to initialize a git repository?"
+        confirmLabel="Initialize Git"
+        cancelLabel="Cancel"
+        variant="default"
+        loading={gitInitLoading}
+        onConfirm={handleGitInit}
+      />
     </div>
   )
 }

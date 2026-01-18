@@ -17,6 +17,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 // ===== Scheduler Types =====
 
 export type SchedulingStrategy =
+  | 'sequential'
   | 'priority'
   | 'dependency_first'
   | 'fifo'
@@ -394,6 +395,8 @@ export function getSchedulingStrategyLabel(
   strategy: SchedulingStrategy
 ): string {
   switch (strategy) {
+    case 'sequential':
+      return 'Sequential'
     case 'priority':
       return 'Priority Order'
     case 'dependency_first':
@@ -403,4 +406,20 @@ export function getSchedulingStrategyLabel(
     case 'cost_first':
       return 'Highest Cost First'
   }
+}
+
+// ===== Git Repository Utilities =====
+
+/**
+ * Check if a path is a git repository
+ */
+export async function isGitRepository(path: string): Promise<boolean> {
+  return invoke('git_is_repository', { path })
+}
+
+/**
+ * Initialize a new git repository at the given path
+ */
+export async function initGitRepository(path: string): Promise<void> {
+  return invoke('git_init_repository', { path })
 }

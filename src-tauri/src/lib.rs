@@ -160,6 +160,8 @@ pub fn run() {
             commands::git_stage_all,
             commands::git_get_diff,
             commands::git_get_working_diff,
+            commands::git_is_repository,
+            commands::git_init_repository,
             commands::github_create_pull_request,
             commands::github_get_pull_request,
             commands::github_list_pull_requests,
