@@ -56,6 +56,7 @@ impl Default for ErrorStrategy {
 
 /// Configuration for parallel scheduler
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SchedulerConfig {
     /// Maximum number of parallel agents
     pub max_parallel: usize,
@@ -70,8 +71,10 @@ pub struct SchedulerConfig {
     /// Resource limits
     pub resource_limits: ResourceLimits,
     /// Error handling strategy
+    #[serde(default)]
     pub error_strategy: ErrorStrategy,
     /// Fallback configuration for rate limiting
+    #[serde(default)]
     pub fallback_config: FallbackConfig,
     /// Dry-run mode: preview execution without spawning agents
     #[serde(default)]

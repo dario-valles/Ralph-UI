@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Configuration for fallback behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FallbackConfig {
     /// Base backoff time in milliseconds (default: 5000)
     pub base_backoff_ms: u64,

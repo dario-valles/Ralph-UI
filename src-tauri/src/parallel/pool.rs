@@ -12,6 +12,7 @@ use tokio::sync::mpsc;
 
 /// Resource limits for agent execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceLimits {
     /// Maximum number of concurrent agents
     pub max_agents: usize,
