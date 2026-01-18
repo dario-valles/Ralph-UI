@@ -2,11 +2,12 @@
 #![allow(dead_code)]
 
 use crate::models::{Task, TaskStatus, Agent, AgentStatus, AgentType};
-use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig};
+use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig, RateLimitEvent};
 use crate::parallel::pool::{AgentPool, ResourceLimits};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Scheduling strategy for task assignment
@@ -164,6 +165,12 @@ impl ParallelScheduler {
     /// Get mutable reference to fallback manager
     pub fn fallback_manager_mut(&mut self) -> &mut AgentFallbackManager {
         &mut self.fallback_manager
+    }
+
+    /// Set the rate limit event sender for rate limit notifications
+    /// Events will be forwarded to the frontend via Tauri events
+    pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
+        self.pool.set_rate_limit_sender(tx);
     }
 
     /// Handle rate limit error for a task

@@ -7,6 +7,6 @@ pub mod trace_parser;
 
 // Re-export for convenience
 pub use manager::{AgentManager, AgentSpawnConfig, RateLimitEvent};
-pub use rate_limiter::{RateLimitDetector, RateLimitInfo, RateLimitType};
+// Note: RateLimitDetector, RateLimitInfo, RateLimitType accessible via full path (agents::rate_limiter::*)
 pub use fallback::{AgentFallbackManager, FallbackConfig};
 pub use trace_parser::{SubagentTraceParser, SubagentEvent, SubagentEventType, SubagentTree};

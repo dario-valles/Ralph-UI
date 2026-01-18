@@ -1,13 +1,14 @@
 // Agent pool management with resource limits
 #![allow(dead_code)]
 
-use crate::agents::{AgentManager, AgentSpawnConfig};
+use crate::agents::{AgentManager, AgentSpawnConfig, RateLimitEvent};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use sysinfo::{System, Pid};
+use tokio::sync::mpsc;
 
 /// Resource limits for agent execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +85,13 @@ impl AgentPool {
     /// Update resource limits
     pub fn set_limits(&mut self, limits: ResourceLimits) {
         self.limits = limits;
+    }
+
+    /// Set the rate limit event sender for rate limit notifications
+    /// Events will be forwarded to the frontend via Tauri events
+    pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.set_rate_limit_sender(tx);
     }
 
     /// Check if the pool can accept a new agent

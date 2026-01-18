@@ -1,5 +1,6 @@
 // Toast notification store using Zustand
 import { create } from 'zustand'
+import type { RateLimitEvent } from '@/types'
 
 export type ToastVariant = 'default' | 'success' | 'error' | 'warning'
 
@@ -69,5 +70,19 @@ export const toast = {
   },
   default: (title: string, description?: string) => {
     useToastStore.getState().addToast({ title, description, variant: 'default' })
+  },
+  /** Show a rate limit warning toast for an agent */
+  rateLimitWarning: (event: RateLimitEvent) => {
+    const retryInfo = event.retryAfterMs
+      ? `. Retry in ${Math.round(event.retryAfterMs / 1000)}s`
+      : ''
+    const limitTypeDisplay = event.limitType.replace(/_/g, ' ')
+
+    useToastStore.getState().addToast({
+      title: `Rate Limit: ${limitTypeDisplay}`,
+      description: `Agent ${event.agentId.slice(0, 8)}... hit rate limit${retryInfo}`,
+      variant: 'warning',
+      duration: 8000, // Show for 8 seconds since rate limits are important
+    })
   },
 }

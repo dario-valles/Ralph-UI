@@ -8,6 +8,7 @@ use crate::parallel::{
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
+use crate::RateLimitEventState;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -38,10 +39,16 @@ impl Default for ParallelState {
 #[tauri::command]
 pub fn init_parallel_scheduler(
     state: State<ParallelState>,
+    rate_limit_state: State<RateLimitEventState>,
     config: SchedulerConfig,
     repo_path: String,
 ) -> Result<(), String> {
     let scheduler = ParallelScheduler::new(config);
+
+    // Wire up rate limit event sender so agents can report rate limits to frontend
+    let rate_limit_sender = rate_limit_state.get_sender();
+    scheduler.set_rate_limit_sender(rate_limit_sender);
+
     let coordinator = WorktreeCoordinator::new(&repo_path);
     let detector = ConflictDetector::new(&repo_path);
 

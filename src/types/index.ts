@@ -463,3 +463,24 @@ export interface ExtractedPRDContent {
   acceptanceCriteria: string[]
   outOfScope: string[]
 }
+
+// ============================================================================
+// Rate Limiting Types
+// ============================================================================
+
+export type RateLimitType =
+  | 'http_429'
+  | 'rate_limit'
+  | 'quota_exceeded'
+  | 'overloaded'
+  | 'claude_rate_limit'
+  | 'openai_rate_limit'
+  | 'unknown'
+
+export interface RateLimitEvent {
+  agentId: string
+  sessionId: string
+  limitType: RateLimitType
+  retryAfterMs?: number
+  matchedPattern?: string
+}

@@ -5,5 +5,6 @@ pub mod progress;
 pub mod recovery;
 
 // Re-export main types
-pub use progress::{ProgressEntry, ProgressStatus, ProgressTracker};
-pub use recovery::{auto_recover_on_startup, RecoveryResult};
+// Note: ProgressEntry and RecoveryResult are accessible via full path when needed
+pub use progress::{ProgressStatus, ProgressTracker};
+pub use recovery::auto_recover_on_startup;

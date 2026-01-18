@@ -7,11 +7,12 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore } from '@/stores/taskStore'
-import type { Project, Session, AgentStatus } from '@/types'
+import type { Project, Session, AgentStatus, RateLimitEvent } from '@/types'
 import type { Agent } from '@/lib/agent-api'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { missionControlApi } from '@/lib/tauri-api'
+import { toast } from '@/stores/toastStore'
 
 // Check if we're running inside Tauri
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -395,6 +396,7 @@ const TAURI_EVENTS = {
   TASK_STATUS_CHANGED: 'task:status_changed',
   SESSION_STATUS_CHANGED: 'session:status_changed',
   MISSION_CONTROL_REFRESH: 'mission_control:refresh',
+  RATE_LIMIT_DETECTED: 'agent:rate_limit_detected',
 } as const
 
 /**
@@ -410,11 +412,15 @@ export function useTauriEventListeners(onRefresh: () => void) {
     let isMounted = true
 
     // Helper to register a listener and store its unlisten function
-    const registerListener = async (eventName: string) => {
+    const registerListener = async (eventName: string, handler?: (event: unknown) => void) => {
       try {
-        const unlisten = await listen(eventName, () => {
+        const unlisten = await listen(eventName, (event) => {
           if (isMounted) {
-            onRefresh()
+            if (handler) {
+              handler(event.payload)
+            } else {
+              onRefresh()
+            }
           }
         })
         // Only store if still mounted
@@ -438,6 +444,14 @@ export function useTauriEventListeners(onRefresh: () => void) {
     registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED)
     registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED)
     registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH)
+
+    // Register rate limit listener with custom handler for toast notification
+    registerListener(TAURI_EVENTS.RATE_LIMIT_DETECTED, (payload) => {
+      const event = payload as RateLimitEvent
+      toast.rateLimitWarning(event)
+      // Also trigger refresh to update UI
+      onRefresh()
+    })
 
     // Cleanup listeners on unmount
     return () => {

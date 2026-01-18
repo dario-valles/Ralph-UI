@@ -9,6 +9,7 @@ pub const EVENT_AGENT_STATUS_CHANGED: &str = "agent:status_changed";
 pub const EVENT_TASK_STATUS_CHANGED: &str = "task:status_changed";
 pub const EVENT_SESSION_STATUS_CHANGED: &str = "session:status_changed";
 pub const EVENT_MISSION_CONTROL_REFRESH: &str = "mission_control:refresh";
+pub const EVENT_RATE_LIMIT_DETECTED: &str = "agent:rate_limit_detected";
 
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +38,17 @@ pub struct SessionStatusChangedPayload {
     pub session_id: String,
     pub old_status: String,
     pub new_status: String,
+}
+
+/// Payload for rate limit detected events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitDetectedPayload {
+    pub agent_id: String,
+    pub session_id: String,
+    pub limit_type: String, // "claude_rate_limit", "http_429", etc.
+    pub retry_after_ms: Option<u64>,
+    pub matched_pattern: Option<String>,
 }
 
 /// Emit an agent status changed event
@@ -76,6 +88,16 @@ pub fn emit_mission_control_refresh(app_handle: &tauri::AppHandle) -> Result<(),
         .map_err(|e| format!("Failed to emit mission control refresh event: {}", e))
 }
 
+/// Emit a rate limit detected event
+pub fn emit_rate_limit_detected(
+    app_handle: &tauri::AppHandle,
+    payload: RateLimitDetectedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RATE_LIMIT_DETECTED, payload)
+        .map_err(|e| format!("Failed to emit rate limit detected event: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +112,7 @@ mod tests {
         assert_eq!(EVENT_TASK_STATUS_CHANGED, "task:status_changed");
         assert_eq!(EVENT_SESSION_STATUS_CHANGED, "session:status_changed");
         assert_eq!(EVENT_MISSION_CONTROL_REFRESH, "mission_control:refresh");
+        assert_eq!(EVENT_RATE_LIMIT_DETECTED, "agent:rate_limit_detected");
     }
 
     // =========================================================================
@@ -188,6 +211,58 @@ mod tests {
         assert_eq!(payload.new_status, "completed");
     }
 
+    #[test]
+    fn test_rate_limit_detected_payload_serialization() {
+        let payload = RateLimitDetectedPayload {
+            agent_id: "agent-123".to_string(),
+            session_id: "session-456".to_string(),
+            limit_type: "claude_rate_limit".to_string(),
+            retry_after_ms: Some(30000),
+            matched_pattern: Some("rate limit exceeded".to_string()),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"agentId\":\"agent-123\""));
+        assert!(json.contains("\"sessionId\":\"session-456\""));
+        assert!(json.contains("\"limitType\":\"claude_rate_limit\""));
+        assert!(json.contains("\"retryAfterMs\":30000"));
+        assert!(json.contains("\"matchedPattern\":\"rate limit exceeded\""));
+    }
+
+    #[test]
+    fn test_rate_limit_detected_payload_deserialization() {
+        let json = r#"{
+            "agentId": "agent-123",
+            "sessionId": "session-456",
+            "limitType": "http_429",
+            "retryAfterMs": 60000,
+            "matchedPattern": "429 Too Many Requests"
+        }"#;
+
+        let payload: RateLimitDetectedPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.agent_id, "agent-123");
+        assert_eq!(payload.session_id, "session-456");
+        assert_eq!(payload.limit_type, "http_429");
+        assert_eq!(payload.retry_after_ms, Some(60000));
+        assert_eq!(payload.matched_pattern, Some("429 Too Many Requests".to_string()));
+    }
+
+    #[test]
+    fn test_rate_limit_detected_payload_with_none_values() {
+        let payload = RateLimitDetectedPayload {
+            agent_id: "agent-123".to_string(),
+            session_id: "session-456".to_string(),
+            limit_type: "rate_limit".to_string(),
+            retry_after_ms: None,
+            matched_pattern: None,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        // Should serialize None as null
+        assert!(json.contains("\"retryAfterMs\":null"));
+        assert!(json.contains("\"matchedPattern\":null"));
+    }
+
     // =========================================================================
     // Payload clone and debug tests
     // =========================================================================
@@ -219,6 +294,17 @@ mod tests {
         };
         let cloned = session_payload.clone();
         assert_eq!(session_payload.session_id, cloned.session_id);
+
+        let rate_limit_payload = RateLimitDetectedPayload {
+            agent_id: "agent-1".to_string(),
+            session_id: "session-1".to_string(),
+            limit_type: "http_429".to_string(),
+            retry_after_ms: Some(30000),
+            matched_pattern: Some("429".to_string()),
+        };
+        let cloned = rate_limit_payload.clone();
+        assert_eq!(rate_limit_payload.agent_id, cloned.agent_id);
+        assert_eq!(rate_limit_payload.limit_type, cloned.limit_type);
     }
 
     #[test]
@@ -248,5 +334,16 @@ mod tests {
         };
         let debug_str = format!("{:?}", session_payload);
         assert!(debug_str.contains("session-1"));
+
+        let rate_limit_payload = RateLimitDetectedPayload {
+            agent_id: "agent-1".to_string(),
+            session_id: "session-1".to_string(),
+            limit_type: "http_429".to_string(),
+            retry_after_ms: Some(30000),
+            matched_pattern: Some("429".to_string()),
+        };
+        let debug_str = format!("{:?}", rate_limit_payload);
+        assert!(debug_str.contains("agent-1"));
+        assert!(debug_str.contains("http_429"));
     }
 }

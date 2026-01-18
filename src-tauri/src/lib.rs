@@ -18,6 +18,24 @@ pub mod shutdown;
 pub use models::*;
 
 use std::path::Path;
+use tokio::sync::mpsc;
+
+/// State for rate limit event forwarding to the frontend
+pub struct RateLimitEventState {
+    /// Sender for rate limit events (used by AgentPool/Manager)
+    pub sender: mpsc::UnboundedSender<agents::RateLimitEvent>,
+}
+
+impl RateLimitEventState {
+    pub fn new(sender: mpsc::UnboundedSender<agents::RateLimitEvent>) -> Self {
+        Self { sender }
+    }
+
+    /// Get a clone of the sender for passing to scheduler/pool
+    pub fn get_sender(&self) -> mpsc::UnboundedSender<agents::RateLimitEvent> {
+        self.sender.clone()
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -59,6 +77,10 @@ pub fn run() {
     // Initialize trace state for subagent tracking
     let trace_state = commands::traces::TraceState::new();
 
+    // Create rate limit event channel for forwarding to frontend
+    let (rate_limit_tx, rate_limit_rx) = mpsc::unbounded_channel::<agents::RateLimitEvent>();
+    let rate_limit_state = RateLimitEventState::new(rate_limit_tx);
+
     // Log startup info
     log::info!("Ralph-UI starting up");
     log::info!("Database path: {}", db_path);
@@ -70,6 +92,15 @@ pub fn run() {
         .manage(config_state)
         .manage(trace_state)
         .manage(shutdown_state)
+        .manage(rate_limit_state)
+        .setup(move |app| {
+            // Spawn task to forward rate limit events to Tauri frontend events
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                forward_rate_limit_events(app_handle, rate_limit_rx).await;
+            });
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -278,4 +309,49 @@ fn perform_auto_recovery(db: &database::Database) {
     } else {
         log::debug!("Auto-recovery complete: no stale sessions found");
     }
+}
+
+/// Forward rate limit events from the AgentManager to Tauri frontend events
+/// This runs as a background task that listens for rate limit events on the channel
+/// and emits them to the frontend via Tauri's event system.
+async fn forward_rate_limit_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::RateLimitEvent>,
+) {
+    use crate::agents::rate_limiter::RateLimitType;
+
+    log::debug!("Rate limit event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        // Convert RateLimitType to string for the frontend
+        let limit_type_str = match event.rate_limit_info.limit_type {
+            Some(RateLimitType::Http429) => "http_429",
+            Some(RateLimitType::RateLimit) => "rate_limit",
+            Some(RateLimitType::QuotaExceeded) => "quota_exceeded",
+            Some(RateLimitType::Overloaded) => "overloaded",
+            Some(RateLimitType::ClaudeRateLimit) => "claude_rate_limit",
+            Some(RateLimitType::OpenAiRateLimit) => "openai_rate_limit",
+            None => "unknown",
+        };
+
+        let payload = events::RateLimitDetectedPayload {
+            agent_id: event.agent_id.clone(),
+            session_id: String::new(), // Session ID not available from RateLimitEvent
+            limit_type: limit_type_str.to_string(),
+            retry_after_ms: event.rate_limit_info.retry_after_ms,
+            matched_pattern: event.rate_limit_info.matched_pattern.clone(),
+        };
+
+        if let Err(e) = events::emit_rate_limit_detected(&app_handle, payload) {
+            log::warn!("Failed to emit rate limit event: {}", e);
+        } else {
+            log::info!(
+                "Rate limit detected for agent {}: {:?}",
+                event.agent_id,
+                limit_type_str
+            );
+        }
+    }
+
+    log::debug!("Rate limit event forwarder stopped");
 }
