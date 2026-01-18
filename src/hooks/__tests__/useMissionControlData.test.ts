@@ -19,21 +19,42 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore } from '@/stores/taskStore'
 
+// Create mock store functions with getState using vi.hoisted
+const { mockUseProjectStore, mockUseSessionStore, mockUseAgentStore, mockUseTaskStore } = vi.hoisted(() => {
+  const mockUseProjectStore = Object.assign(vi.fn(), {
+    getState: vi.fn(() => ({ projects: [], loading: false, error: null })),
+  })
+
+  const mockUseSessionStore = Object.assign(vi.fn(), {
+    getState: vi.fn(() => ({ sessions: [], loading: false, error: null })),
+  })
+
+  const mockUseAgentStore = Object.assign(vi.fn(), {
+    getState: vi.fn(() => ({ agents: [], loading: false, error: null })),
+  })
+
+  const mockUseTaskStore = Object.assign(vi.fn(), {
+    getState: vi.fn(() => ({ tasks: [] })),
+  })
+
+  return { mockUseProjectStore, mockUseSessionStore, mockUseAgentStore, mockUseTaskStore }
+})
+
 // Mock the stores
 vi.mock('@/stores/projectStore', () => ({
-  useProjectStore: vi.fn(),
+  useProjectStore: mockUseProjectStore,
 }))
 
 vi.mock('@/stores/sessionStore', () => ({
-  useSessionStore: vi.fn(),
+  useSessionStore: mockUseSessionStore,
 }))
 
 vi.mock('@/stores/agentStore', () => ({
-  useAgentStore: vi.fn(),
+  useAgentStore: mockUseAgentStore,
 }))
 
 vi.mock('@/stores/taskStore', () => ({
-  useTaskStore: vi.fn(),
+  useTaskStore: mockUseTaskStore,
 }))
 
 // Mock Tauri API
@@ -155,6 +176,7 @@ describe('useMissionControlData hooks', () => {
       }
       return defaultProjectState
     })
+    mockUseProjectStore.getState.mockReturnValue(defaultProjectState)
 
     vi.mocked(useSessionStore).mockImplementation((selector: any) => {
       if (typeof selector === 'function') {
@@ -162,6 +184,7 @@ describe('useMissionControlData hooks', () => {
       }
       return defaultSessionState
     })
+    mockUseSessionStore.getState.mockReturnValue(defaultSessionState)
 
     vi.mocked(useAgentStore).mockImplementation((selector: any) => {
       if (typeof selector === 'function') {
@@ -169,6 +192,7 @@ describe('useMissionControlData hooks', () => {
       }
       return defaultAgentState
     })
+    mockUseAgentStore.getState.mockReturnValue(defaultAgentState)
 
     vi.mocked(useTaskStore).mockImplementation((selector: any) => {
       if (typeof selector === 'function') {
@@ -176,6 +200,7 @@ describe('useMissionControlData hooks', () => {
       }
       return defaultTaskState
     })
+    mockUseTaskStore.getState.mockReturnValue(defaultTaskState)
 
     return {
       projectState: defaultProjectState,
