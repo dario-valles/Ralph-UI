@@ -29,13 +29,13 @@ vi.mock('@/lib/agent-api', () => ({
 describe('agentStore', () => {
   const mockAgent: Agent = {
     id: 'agent-1',
-    session_id: 'session-1',
-    task_id: 'task-1',
+    sessionId: 'session-1',
+    taskId: 'task-1',
     status: 'idle' as AgentStatus,
-    process_id: 12345,
-    worktree_path: '/path/to/worktree',
+    processId: 12345,
+    worktreePath: '/path/to/worktree',
     branch: 'feature/test',
-    iteration_count: 0,
+    iterationCount: 0,
     tokens: 0,
     cost: 0,
     logs: [],
@@ -259,7 +259,7 @@ describe('agentStore', () => {
       expect(updateAgentMetrics).toHaveBeenCalledWith('agent-1', 1000, 0.05, 5)
       expect(useAgentStore.getState().agents[0].tokens).toBe(1000)
       expect(useAgentStore.getState().agents[0].cost).toBe(0.05)
-      expect(useAgentStore.getState().agents[0].iteration_count).toBe(5)
+      expect(useAgentStore.getState().agents[0].iterationCount).toBe(5)
     })
 
     it('should not affect other agents when updating metrics', async () => {

@@ -15,13 +15,13 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 
 export interface Agent {
   id: string
-  session_id: string
-  task_id: string
+  sessionId: string
+  taskId: string
   status: AgentStatus
-  process_id: number | null
-  worktree_path: string
+  processId: number | null
+  worktreePath: string
   branch: string
-  iteration_count: number
+  iterationCount: number
   tokens: number
   cost: number
   logs: LogEntry[]
@@ -40,13 +40,13 @@ export interface LogEntry {
 
 export interface CreateAgentParams {
   id: string
-  session_id: string
-  task_id: string
+  sessionId: string
+  taskId: string
   status: AgentStatus
-  process_id: number | null
-  worktree_path: string
+  processId: number | null
+  worktreePath: string
   branch: string
-  iteration_count: number
+  iterationCount: number
   tokens: number
   cost: number
   logs: LogEntry[]
@@ -105,6 +105,24 @@ export async function addAgentLog(agentId: string, log: LogEntry): Promise<void>
 
 export async function getAgentLogs(agentId: string): Promise<LogEntry[]> {
   return invoke('get_agent_logs', { agentId })
+}
+
+// Stale agent cleanup
+
+export interface StaleAgentCleanupResult {
+  agentId: string
+  sessionId: string
+  processId: number | null
+  wasZombie: boolean
+}
+
+/**
+ * Cleanup stale agents whose processes are no longer running.
+ * This is useful after app restart when agents in the database
+ * are still marked as active but their processes have terminated.
+ */
+export async function cleanupStaleAgents(): Promise<StaleAgentCleanupResult[]> {
+  return invoke('cleanup_stale_agents')
 }
 
 // Helper functions

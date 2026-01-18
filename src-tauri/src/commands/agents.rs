@@ -3,7 +3,9 @@
 use crate::database::Database;
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
 use crate::models::{Agent, AgentStatus, LogEntry};
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use sysinfo::{System, Pid};
 use tauri::State;
 
 /// Create a new agent
@@ -168,6 +170,99 @@ pub fn get_agent_logs(
     let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
     db.get_logs_for_agent(&agent_id)
         .map_err(|e| format!("Failed to get logs: {}", e))
+}
+
+/// Result of cleaning up stale agents
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaleAgentCleanupResult {
+    pub agent_id: String,
+    pub session_id: String,
+    pub process_id: Option<u32>,
+    pub was_zombie: bool,
+}
+
+/// Cleanup stale agents whose processes are no longer running
+/// This is useful after app restart when the scheduler is not initialized
+/// but agents in the database are still marked as active.
+#[tauri::command]
+pub fn cleanup_stale_agents(
+    app_handle: tauri::AppHandle,
+    db: State<Mutex<Database>>,
+) -> Result<Vec<StaleAgentCleanupResult>, String> {
+    log::info!("[Agents] cleanup_stale_agents called");
+
+    let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+    // Get all active agents
+    let active_agents = db.get_all_active_agents()
+        .map_err(|e| format!("Failed to get active agents: {}", e))?;
+
+    if active_agents.is_empty() {
+        log::debug!("[Agents] No active agents to cleanup");
+        return Ok(vec![]);
+    }
+
+    log::info!("[Agents] Found {} active agents to check", active_agents.len());
+
+    // Initialize sysinfo to check processes
+    let mut system = System::new();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let mut cleaned_up = Vec::new();
+
+    for agent in active_agents {
+        let should_cleanup = match agent.process_id {
+            Some(pid) => {
+                // Check if process is still running
+                let process = system.process(Pid::from_u32(pid));
+                let is_alive = process.map(|p| {
+                    !matches!(p.status(), sysinfo::ProcessStatus::Zombie)
+                        && p.status() != sysinfo::ProcessStatus::Dead
+                }).unwrap_or(false);
+
+                if !is_alive {
+                    log::info!("[Agents] Agent {} (PID {}) process is not running", agent.id, pid);
+                    true
+                } else {
+                    log::debug!("[Agents] Agent {} (PID {}) is still running", agent.id, pid);
+                    false
+                }
+            }
+            None => {
+                // No process ID means the agent was never properly started or is stale
+                log::info!("[Agents] Agent {} has no process ID, marking as stale", agent.id);
+                true
+            }
+        };
+
+        if should_cleanup {
+            // Update agent status to idle
+            if let Err(e) = db.update_agent_status(&agent.id, &AgentStatus::Idle) {
+                log::error!("[Agents] Failed to update agent {} status: {}", agent.id, e);
+                continue;
+            }
+
+            // Emit status changed event
+            let payload = AgentStatusChangedPayload {
+                agent_id: agent.id.clone(),
+                session_id: agent.session_id.clone(),
+                old_status: format!("{:?}", agent.status).to_lowercase(),
+                new_status: "idle".to_string(),
+            };
+            let _ = emit_agent_status_changed(&app_handle, payload);
+
+            cleaned_up.push(StaleAgentCleanupResult {
+                agent_id: agent.id,
+                session_id: agent.session_id,
+                process_id: agent.process_id,
+                was_zombie: agent.process_id.is_some(),
+            });
+        }
+    }
+
+    log::info!("[Agents] Cleaned up {} stale agents", cleaned_up.len());
+    Ok(cleaned_up)
 }
 
 #[cfg(test)]

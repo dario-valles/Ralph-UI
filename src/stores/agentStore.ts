@@ -156,7 +156,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       set((state) => ({
         agents: state.agents.map((agent) =>
           agent.id === agentId
-            ? { ...agent, tokens, cost, iteration_count: iterationCount }
+            ? { ...agent, tokens, cost, iterationCount }
             : agent
         ),
       }))
