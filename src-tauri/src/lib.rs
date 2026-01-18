@@ -77,6 +77,9 @@ pub fn run() {
     // Initialize trace state for subagent tracking
     let trace_state = commands::traces::TraceState::new();
 
+    // Initialize model cache state for dynamic model discovery
+    let model_cache_state = commands::models::ModelCacheState::new();
+
     // Create rate limit event channel for forwarding to frontend
     let (rate_limit_tx, rate_limit_rx) = mpsc::unbounded_channel::<agents::RateLimitEvent>();
     let rate_limit_state = RateLimitEventState::new(rate_limit_tx);
@@ -93,6 +96,7 @@ pub fn run() {
         .manage(trace_state)
         .manage(shutdown_state)
         .manage(rate_limit_state)
+        .manage(model_cache_state)
         .setup(move |app| {
             // Spawn task to forward rate limit events to Tauri frontend events
             let app_handle = app.handle().clone();
@@ -245,6 +249,9 @@ pub fn run() {
             // Mission Control commands
             commands::get_activity_feed,
             commands::get_global_stats,
+            // Model discovery commands
+            commands::get_available_models,
+            commands::refresh_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,6 +17,7 @@ import type {
   RalphFallbackSettings,
   AgentType,
 } from '@/types'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
 
 // UI-only settings that remain in localStorage
 interface UISettings {
@@ -51,6 +52,10 @@ export function SettingsPage() {
   // Track changes
   const [hasChanges, setHasChanges] = useState(false)
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
+
+  // Load available models for the current agent type
+  const currentAgentType = (config?.execution?.agentType || 'claude') as AgentType
+  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(currentAgentType)
 
   // Load config from backend on mount
   const loadConfig = useCallback(async () => {
@@ -280,13 +285,38 @@ export function SettingsPage() {
                     <Select
                       id="agentType"
                       value={config.execution.agentType}
-                      onChange={(e) =>
-                        updateExecutionConfig({ agentType: e.target.value as AgentType })
-                      }
+                      onChange={(e) => {
+                        const newAgentType = e.target.value as AgentType
+                        // Update agent type - model will be updated when models load for new agent type
+                        updateExecutionConfig({
+                          agentType: newAgentType,
+                          model: undefined, // Will be set to default after models load
+                        })
+                      }}
                     >
                       <option value="claude">Claude</option>
                       <option value="opencode">OpenCode</option>
                       <option value="cursor">Cursor</option>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="defaultModel">Default Model</Label>
+                    <Select
+                      id="defaultModel"
+                      value={config.execution.model || defaultModelId || ''}
+                      onChange={(e) => updateExecutionConfig({ model: e.target.value })}
+                      disabled={modelsLoading}
+                    >
+                      {modelsLoading ? (
+                        <option>Loading models...</option>
+                      ) : (
+                        models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))
+                      )}
                     </Select>
                   </div>
 

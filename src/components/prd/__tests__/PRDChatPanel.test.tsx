@@ -33,6 +33,20 @@ vi.mock('@/lib/tauri-api', () => ({
   },
 }))
 
+// Mock the useAvailableModels hook
+vi.mock('@/hooks/useAvailableModels', () => ({
+  useAvailableModels: () => ({
+    models: [
+      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'anthropic', isDefault: false },
+    ],
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+    defaultModelId: 'claude-sonnet-4-5',
+  }),
+}))
+
 // Sample test data
 const mockMessages: ChatMessage[] = [
   {
@@ -171,6 +185,39 @@ describe('PRDChatPanel', () => {
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       expect(agentSelector).toBeDisabled()
+    })
+  })
+
+  // ============================================================================
+  // Model Selector Tests
+  // ============================================================================
+
+  describe('Model Selector', () => {
+    it('renders model selector dropdown', () => {
+      renderWithRouter(<PRDChatPanel />)
+
+      const modelSelector = screen.getByRole('combobox', { name: /model/i })
+      expect(modelSelector).toBeInTheDocument()
+    })
+
+    it('shows available models for selected agent', () => {
+      renderWithRouter(<PRDChatPanel />)
+
+      // For claude agent, should show Claude models
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument()
+      expect(screen.getByText('Claude Opus 4.5')).toBeInTheDocument()
+    })
+
+    it('disables model selector when streaming', () => {
+      mockUsePRDChatStore.mockReturnValue({
+        ...defaultStoreState,
+        streaming: true,
+      })
+
+      renderWithRouter(<PRDChatPanel />)
+
+      const modelSelector = screen.getByRole('combobox', { name: /model/i })
+      expect(modelSelector).toBeDisabled()
     })
   })
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Play, Eye } from 'lucide-react'
+import { Loader2, Play, Eye, RefreshCw } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
@@ -23,6 +23,8 @@ import {
   type SchedulerConfig,
 } from '@/lib/parallel-api'
 import type { ExecutionConfig, AgentType } from '@/types'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { getModelName } from '@/lib/model-api'
 
 interface PRDExecutionDialogProps {
   prdId: string
@@ -49,24 +51,60 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     runTests: true,
     runLint: true,
     dryRun: false,
+    model: 'claude-sonnet-4-5',
   })
+
+  // Load available models dynamically
+  const { models, loading: modelsLoading, refresh: refreshModels, defaultModelId } = useAvailableModels(config.agentType)
+
+  // Update model to default when models load or change
+  useEffect(() => {
+    if (defaultModelId && (!config.model || !models.some(m => m.id === config.model))) {
+      setConfig((prev) => ({ ...prev, model: defaultModelId }))
+    }
+  }, [defaultModelId, models, config.model])
+
+  // Update model when agent type changes
+  const handleAgentTypeChange = (newAgentType: AgentType) => {
+    setConfig({
+      ...config,
+      agentType: newAgentType,
+      // Model will be updated by useEffect when models load for the new agent type
+      model: undefined,
+    })
+  }
+
 
   const handleExecute = async () => {
     setExecuting(true)
     try {
+      console.log('[PRD Execution] Step 1: Executing PRD...', { prdId, config })
       // 1. Execute PRD - creates session and tasks
       const sessionId = await executePRD(prdId, config)
+      console.log('[PRD Execution] Step 1 complete: Session created', { sessionId })
 
       // 2. Fetch the created session with tasks (this sets currentSession in the store)
+      console.log('[PRD Execution] Step 2: Fetching session...')
       await fetchSession(sessionId)
 
       // Get the session from the store
       const session = useSessionStore.getState().currentSession
+      console.log('[PRD Execution] Step 2 complete: Session fetched', {
+        sessionId: session?.id,
+        taskCount: session?.tasks?.length,
+        projectPath: session?.projectPath,
+      })
+
       if (!session) {
         throw new Error('Failed to fetch created session')
       }
 
       // 3. If not dry-run, initialize scheduler and start agents
+      console.log('[PRD Execution] Step 3: Checking if should start agents...', {
+        dryRun: config.dryRun,
+        hasTasks: session.tasks && session.tasks.length > 0,
+      })
+
       if (!config.dryRun && session.tasks && session.tasks.length > 0) {
         try {
           // Initialize the parallel scheduler
@@ -84,32 +122,53 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
               maxTotalMemoryMb: 8192,
               maxRuntimeSecs: 3600,
             },
+            model: config.model,
           }
 
+          console.log('[PRD Execution] Step 3a: Initializing scheduler...', {
+            schedulerConfig,
+            projectPath: session.projectPath,
+          })
           await initParallelScheduler(schedulerConfig, session.projectPath)
+          console.log('[PRD Execution] Step 3a complete: Scheduler initialized')
 
           // Add tasks to the scheduler
+          console.log('[PRD Execution] Step 3b: Adding tasks to scheduler...', {
+            tasks: session.tasks,
+          })
           await parallelAddTasks(session.tasks)
+          console.log('[PRD Execution] Step 3b complete: Tasks added')
 
           // Schedule agents (up to maxParallel)
           const maxToSpawn = config.executionMode === 'parallel' ? config.maxParallel : 1
+          console.log('[PRD Execution] Step 3c: Scheduling agents...', { maxToSpawn })
+
           for (let i = 0; i < maxToSpawn; i++) {
+            console.log(`[PRD Execution] Scheduling agent ${i + 1}/${maxToSpawn}...`)
             const agent = await parallelScheduleNext(sessionId, session.projectPath)
-            if (!agent) break // No more tasks to schedule
+            console.log(`[PRD Execution] Schedule result:`, { agent })
+            if (!agent) {
+              console.log('[PRD Execution] No more tasks to schedule')
+              break
+            }
           }
+          console.log('[PRD Execution] Step 3c complete: Agents scheduled')
         } catch (schedulerErr) {
           // Log scheduler errors but don't fail the whole execution
           // The session and tasks were created successfully
-          console.warn('Failed to start scheduler/agents:', schedulerErr)
+          console.error('[PRD Execution] Failed to start scheduler/agents:', schedulerErr)
         }
+      } else {
+        console.log('[PRD Execution] Skipping agent spawn (dry-run or no tasks)')
       }
 
       onOpenChange(false)
 
       // Navigate to agent monitor
+      console.log('[PRD Execution] Navigating to agents page...')
       navigate('/agents')
     } catch (err) {
-      console.error('Failed to execute PRD:', err)
+      console.error('[PRD Execution] Failed to execute PRD:', err)
     } finally {
       setExecuting(false)
     }
@@ -127,19 +186,51 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Agent Type */}
-          <div className="space-y-2">
-            <Label htmlFor="agent-type">Agent Type</Label>
-            <Select
-              id="agent-type"
-              value={config.agentType}
-              onChange={(e) => setConfig({ ...config, agentType: e.target.value as AgentType })}
-            >
-              <option value="claude">Claude Code</option>
-              <option value="opencode">OpenCode</option>
-              <option value="cursor">Cursor</option>
-              <option value="codex">Codex CLI</option>
-            </Select>
+          {/* Agent Type and Model */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="agent-type">Agent Type</Label>
+              <Select
+                id="agent-type"
+                value={config.agentType}
+                onChange={(e) => handleAgentTypeChange(e.target.value as AgentType)}
+              >
+                <option value="claude">Claude Code</option>
+                <option value="opencode">OpenCode</option>
+                <option value="cursor">Cursor</option>
+                <option value="codex">Codex CLI</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="model">Model</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshModels}
+                  disabled={modelsLoading}
+                  className="h-6 w-6 p-0"
+                >
+                  <RefreshCw className={`h-3 w-3 ${modelsLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <Select
+                id="model"
+                value={config.model || ''}
+                onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                disabled={modelsLoading}
+              >
+                {modelsLoading ? (
+                  <option>Loading models...</option>
+                ) : (
+                  models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))
+                )}
+              </Select>
+            </div>
           </div>
 
           {/* Execution Mode */}
@@ -286,6 +377,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             <p className="text-sm font-medium">Summary:</p>
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               <li>• Agent: {config.agentType}</li>
+              <li>• Model: {getModelName(models, config.model || '')}</li>
               <li>• Mode: {config.executionMode}</li>
               {config.executionMode === 'parallel' && (
                 <li>• Max parallel agents: {config.maxParallel}</li>

@@ -31,8 +31,9 @@ import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
 import { prdChatApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, ChatSession } from '@/types'
+import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
 
 // ============================================================================
 // Main Component
@@ -53,6 +54,7 @@ export function PRDChatPanel() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('')
 
   const {
     sessions,
@@ -72,6 +74,24 @@ export function PRDChatPanel() {
     exportToPRD,
     assessQuality,
   } = usePRDChatStore()
+
+  // Load available models for the current agent type
+  const agentType = (currentSession?.agentType || 'claude') as AgentType
+  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
+
+  // Update selected model when default changes (e.g., agent type changed)
+  useEffect(() => {
+    if (defaultModelId && !selectedModel) {
+      setSelectedModel(defaultModelId)
+    }
+  }, [defaultModelId, selectedModel])
+
+  // Reset selected model when agent type changes
+  useEffect(() => {
+    if (defaultModelId) {
+      setSelectedModel(defaultModelId)
+    }
+  }, [agentType, defaultModelId])
 
   // Track the previous processing session to detect when processing completes
   const prevProcessingSessionIdRef = useRef<string | null>(null)
@@ -321,11 +341,36 @@ export function PRDChatPanel() {
                   value={currentSession?.agentType || 'claude'}
                   onChange={handleAgentChange}
                   disabled={streaming}
-                  className="w-36"
+                  className="w-32"
                 >
                   <option value="claude">Claude</option>
                   <option value="opencode">OpenCode</option>
                   <option value="cursor">Cursor</option>
+                </Select>
+              </div>
+
+              {/* Model Selector - shows available models for the selected agent */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="model-selector" className="text-sm text-muted-foreground">
+                  Model:
+                </label>
+                <Select
+                  id="model-selector"
+                  aria-label="Model"
+                  value={selectedModel || defaultModelId || ''}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={streaming || modelsLoading}
+                  className="w-40"
+                >
+                  {modelsLoading ? (
+                    <option>Loading...</option>
+                  ) : (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))
+                  )}
                 </Select>
               </div>
 

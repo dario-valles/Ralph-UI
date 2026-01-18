@@ -7,7 +7,7 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { AgentComparison } from './AgentComparison'
 import { ConflictResolution } from './ConflictResolution'
-import type { Agent } from '../../types'
+import type { Agent, AgentType } from '../../types'
 import type {
   SchedulerConfig,
   SchedulerStats,
@@ -15,6 +15,8 @@ import type {
   MergeConflict,
   ConflictResolutionStrategy,
 } from '../../lib/parallel-api'
+import { Select } from '../ui/select'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
 import {
   initParallelScheduler,
   parallelScheduleNext,
@@ -47,6 +49,9 @@ export function ParallelExecutionPage() {
 
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Load available models for the current agent type
+  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(config.agentType)
 
   // Initialize scheduler
   const handleInitialize = async () => {
@@ -235,6 +240,42 @@ export function ParallelExecutionPage() {
                 placeholder="session-id"
                 className="mt-1"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Agent Type</label>
+              <Select
+                value={config.agentType}
+                onChange={(e) => {
+                  const newAgentType = e.target.value as AgentType
+                  // Model will be updated when models load for the new agent type
+                  setConfig({ ...config, agentType: newAgentType, model: undefined })
+                }}
+                className="mt-1"
+              >
+                <option value="claude">Claude Code</option>
+                <option value="opencode">OpenCode</option>
+                <option value="cursor">Cursor</option>
+                <option value="codex">Codex CLI</option>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Model</label>
+              <Select
+                value={config.model || defaultModelId || ''}
+                onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                className="mt-1"
+                disabled={modelsLoading}
+              >
+                {modelsLoading ? (
+                  <option>Loading models...</option>
+                ) : (
+                  models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))
+                )}
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium">Max Parallel</label>
