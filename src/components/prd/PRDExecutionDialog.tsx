@@ -275,7 +275,8 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    {/* Main dialog - hidden when git init dialog is showing */}
+    <Dialog open={open && !showGitInitDialog} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Execute PRD</DialogTitle>
@@ -521,25 +522,21 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
       </DialogContent>
     </Dialog>
 
-    {/* Git Initialization Dialog - rendered with higher z-index to appear above main dialog */}
-    {showGitInitDialog && (
-      <div className="fixed inset-0 z-[60]">
-        <ConfirmDialog
-          open={showGitInitDialog}
-          onOpenChange={(open) => {
-            if (!open) handleSkipGitInit()
-          }}
-          title="Git Repository Required"
-          description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
-          confirmLabel="Initialize Git"
-          cancelLabel="Skip"
-          variant="default"
-          loading={gitInitLoading}
-          onConfirm={handleGitInit}
-          onCancel={handleSkipGitInit}
-        />
-      </div>
-    )}
+    {/* Git Initialization Dialog - shown when main dialog is hidden */}
+    <ConfirmDialog
+      open={showGitInitDialog}
+      onOpenChange={(open) => {
+        if (!open) handleSkipGitInit()
+      }}
+      title="Git Repository Required"
+      description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
+      confirmLabel="Initialize Git"
+      cancelLabel="Skip"
+      variant="default"
+      loading={gitInitLoading}
+      onConfirm={handleGitInit}
+      onCancel={handleSkipGitInit}
+    />
   </>
   )
 }
