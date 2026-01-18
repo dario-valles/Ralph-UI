@@ -60,6 +60,9 @@ export function PRDChatPanel() {
   const [userSelectedModel, setUserSelectedModel] = useState<string>('')
   // Track the last agent type to detect changes
   const prevAgentTypeRef = useRef<string>('')
+  // Track when streaming started and last message for retry
+  const [streamingStartedAt, setStreamingStartedAt] = useState<string | null>(null)
+  const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
 
   const {
     sessions,
@@ -162,8 +165,29 @@ export function PRDChatPanel() {
     }
   }
 
-  const handleSendMessage = (content: string) => {
-    sendMessage(content)
+  const handleSendMessage = async (content: string) => {
+    setLastMessageContent(content)
+    setStreamingStartedAt(new Date().toISOString())
+    try {
+      await sendMessage(content)
+    } finally {
+      setStreamingStartedAt(null)
+    }
+  }
+
+  const handleRetryMessage = () => {
+    if (lastMessageContent) {
+      handleSendMessage(lastMessageContent)
+    }
+  }
+
+  const handleCancelStreaming = () => {
+    // For now, just clear the streaming state on frontend
+    // The backend timeout will handle actual process termination
+    setStreamingStartedAt(null)
+    // Note: The actual request cannot be cancelled from frontend,
+    // but we can show the user the interface is responsive
+    toast.warning('Request will complete in background. You can retry with a new message.')
   }
 
   const handleCreateSession = () => {
@@ -518,21 +542,21 @@ export function PRDChatPanel() {
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => sendMessage("Help me create a PRD")}
+                    onClick={() => handleSendMessage("Help me create a PRD")}
                   >
                     Help me create a PRD
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => sendMessage("What should my PRD include?")}
+                    onClick={() => handleSendMessage("What should my PRD include?")}
                   >
                     What should my PRD include?
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => sendMessage("PRD best practices")}
+                    onClick={() => handleSendMessage("PRD best practices")}
                   >
                     PRD best practices
                   </Badge>
@@ -543,7 +567,13 @@ export function PRDChatPanel() {
                 {messages.map((message) => (
                   <ChatMessageItem key={message.id} message={message} />
                 ))}
-                {streaming && <StreamingIndicator />}
+                {streaming && (
+                  <StreamingIndicator
+                    startedAt={streamingStartedAt || undefined}
+                    onRetry={handleRetryMessage}
+                    onCancel={handleCancelStreaming}
+                  />
+                )}
                 <div ref={messagesEndRef} />
               </>
             )}

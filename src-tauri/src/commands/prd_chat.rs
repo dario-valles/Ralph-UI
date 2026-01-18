@@ -1534,6 +1534,9 @@ fn build_prd_chat_prompt(
     prompt
 }
 
+/// Default timeout for agent execution (5 minutes)
+const AGENT_TIMEOUT_SECS: u64 = 300;
+
 async fn execute_chat_agent(
     agent_type: AgentType,
     prompt: &str,
@@ -1541,6 +1544,7 @@ async fn execute_chat_agent(
 ) -> Result<String, String> {
     use std::process::Stdio;
     use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
 
     let (program, args) = match agent_type {
         AgentType::Claude => {
@@ -1570,20 +1574,41 @@ async fn execute_chat_agent(
         cmd.current_dir(dir);
     }
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute {}: {}", program, e))?;
+    // Execute the command with a timeout
+    let output = timeout(
+        Duration::from_secs(AGENT_TIMEOUT_SECS),
+        cmd.output()
+    ).await;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Agent returned error: {}", stderr));
+    match output {
+        Ok(Ok(output)) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                // Check for common interrupt signals
+                if let Some(code) = output.status.code() {
+                    if code == 130 || code == 137 || code == 143 {
+                        return Err("Agent process was interrupted (SIGINT/SIGTERM)".to_string());
+                    }
+                }
+                return Err(format!("Agent returned error: {}", stderr));
+            }
+
+            let response = String::from_utf8_lossy(&output.stdout).to_string();
+            // Clean up response (remove any trailing whitespace)
+            Ok(response.trim().to_string())
+        }
+        Ok(Err(e)) => {
+            // IO error executing process
+            Err(format!("Failed to execute {}: {}", program, e))
+        }
+        Err(_) => {
+            // Timeout elapsed
+            Err(format!(
+                "Agent timed out after {} seconds. The process may have hung or be unresponsive.",
+                AGENT_TIMEOUT_SECS
+            ))
+        }
     }
-
-    let response = String::from_utf8_lossy(&output.stdout).to_string();
-
-    // Clean up response (remove any trailing whitespace)
-    Ok(response.trim().to_string())
 }
 
 fn convert_chat_to_prd_content(messages: &[ChatMessage]) -> String {
