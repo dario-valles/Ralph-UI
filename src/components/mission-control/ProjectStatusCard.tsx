@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useProjectStore } from '@/stores/projectStore'
 import type { ProjectStatus } from '@/hooks/useMissionControlData'
 import type { Session, SessionStatus } from '@/types'
 
@@ -140,6 +141,7 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
 
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const updateSessionStatus = useSessionStore((s) => s.updateSessionStatus)
+  const setActiveProject = useProjectStore((s) => s.setActiveProject)
 
   const handleStatusChange = async (sessionId: string, status: SessionStatus) => {
     setActionLoading(sessionId)
@@ -269,7 +271,11 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
             variant="ghost"
             size="sm"
             className="w-full justify-between"
-            onClick={onNavigate}
+            onClick={() => {
+              // Set this project as active before navigating
+              setActiveProject(project.id)
+              onNavigate?.()
+            }}
           >
             View Sessions
             <ArrowRight className="h-4 w-4" />
