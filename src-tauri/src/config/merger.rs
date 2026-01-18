@@ -28,6 +28,7 @@ pub struct PartialExecutionConfig {
     pub max_retries: Option<i32>,
     pub agent_type: Option<String>,
     pub strategy: Option<String>,
+    pub dry_run: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -170,6 +171,7 @@ impl ConfigMerger {
             max_retries: over.max_retries,
             agent_type: over.agent_type.clone(),
             strategy: over.strategy.clone(),
+            dry_run: over.dry_run,
         }
     }
 
@@ -219,6 +221,7 @@ impl ConfigMerger {
             max_retries: partial.max_retries.unwrap_or(base.max_retries),
             agent_type: partial.agent_type.clone().unwrap_or_else(|| base.agent_type.clone()),
             strategy: partial.strategy.clone().unwrap_or_else(|| base.strategy.clone()),
+            dry_run: partial.dry_run.unwrap_or(base.dry_run),
         }
     }
 
@@ -286,6 +289,7 @@ mod tests {
                 max_retries: 3,
                 agent_type: "claude".to_string(),
                 strategy: "priority".to_string(),
+                dry_run: false,
             },
             git: GitConfig {
                 auto_create_prs: true,
@@ -304,6 +308,7 @@ mod tests {
                 max_retries: 5,
                 agent_type: "opencode".to_string(),
                 strategy: "fifo".to_string(),
+                dry_run: false,
             },
             ..Default::default()
         }
@@ -428,6 +433,7 @@ mod tests {
                 max_retries: 2,
                 agent_type: "claude".to_string(),
                 strategy: "priority".to_string(),
+                dry_run: false,
             },
             ..Default::default()
         };
@@ -439,6 +445,7 @@ mod tests {
                 max_retries: 3,
                 agent_type: "opencode".to_string(),
                 strategy: "fifo".to_string(),
+                dry_run: false,
             },
             ..Default::default()
         };

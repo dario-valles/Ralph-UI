@@ -3,8 +3,11 @@
 
 use crate::models::{Task, Session};
 use anyhow::{Result, anyhow};
+use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::sync::Mutex;
 use tera::{Tera, Context};
 
@@ -232,6 +235,70 @@ impl TemplateEngine {
         *tera = Tera::default();
         Ok(())
     }
+
+    /// Resolve @filename references in a prompt string
+    /// Replaces @path/to/file with the contents of that file
+    /// Supports both relative paths (resolved against base_path) and absolute paths
+    ///
+    /// Examples:
+    ///   - @README.md -> contents of README.md
+    ///   - @src/main.rs -> contents of src/main.rs
+    ///   - @/absolute/path/file.txt -> contents of absolute path
+    pub fn resolve_file_references(&self, prompt: &str, base_path: &Path) -> String {
+        // Match @ followed by a non-whitespace path
+        // Stops at whitespace, newline, or end of string
+        let re = Regex::new(r"@(\S+)").unwrap();
+
+        re.replace_all(prompt, |caps: &regex::Captures| {
+            let file_path = &caps[1];
+            self.read_file_for_reference(file_path, base_path)
+        })
+        .to_string()
+    }
+
+    /// Read a file for @filename reference substitution
+    fn read_file_for_reference(&self, file_path: &str, base_path: &Path) -> String {
+        // Determine the full path
+        let full_path = if file_path.starts_with('/') {
+            // Absolute path
+            std::path::PathBuf::from(file_path)
+        } else {
+            // Relative path - resolve against base_path
+            base_path.join(file_path)
+        };
+
+        // Try to read the file
+        match fs::read_to_string(&full_path) {
+            Ok(contents) => {
+                // Wrap in a code block with file info for context
+                format!(
+                    "\n--- Contents of {} ---\n{}\n--- End of {} ---\n",
+                    file_path,
+                    contents.trim(),
+                    file_path
+                )
+            }
+            Err(e) => {
+                // Return a placeholder indicating the file couldn't be read
+                log::warn!("Failed to read file '{}': {}", full_path.display(), e);
+                format!("[Unable to read file '{}': {}]", file_path, e)
+            }
+        }
+    }
+
+    /// Check if a string contains @filename references
+    pub fn has_file_references(&self, prompt: &str) -> bool {
+        let re = Regex::new(r"@(\S+)").unwrap();
+        re.is_match(prompt)
+    }
+
+    /// Extract all @filename references from a string
+    pub fn extract_file_references(&self, prompt: &str) -> Vec<String> {
+        let re = Regex::new(r"@(\S+)").unwrap();
+        re.captures_iter(prompt)
+            .map(|cap| cap[1].to_string())
+            .collect()
+    }
 }
 
 impl Default for TemplateEngine {
@@ -402,5 +469,134 @@ mod tests {
 
         engine.clear().unwrap();
         assert!(!engine.has_template("test"));
+    }
+
+    // @filename Reference Tests
+
+    #[test]
+    fn test_resolve_single_file_reference() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let readme_path = temp_dir.path().join("README.md");
+        let mut file = std::fs::File::create(&readme_path).unwrap();
+        writeln!(file, "# Project Title\nThis is the readme.").unwrap();
+
+        let engine = TemplateEngine::new();
+        let prompt = "Check @README.md for details";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert!(resolved.contains("# Project Title"));
+        assert!(resolved.contains("This is the readme."));
+        assert!(resolved.contains("--- Contents of README.md ---"));
+    }
+
+    #[test]
+    fn test_resolve_multiple_file_references() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create two files
+        let file1_path = temp_dir.path().join("file1.txt");
+        let mut file1 = std::fs::File::create(&file1_path).unwrap();
+        writeln!(file1, "Content of file 1").unwrap();
+
+        let file2_path = temp_dir.path().join("file2.txt");
+        let mut file2 = std::fs::File::create(&file2_path).unwrap();
+        writeln!(file2, "Content of file 2").unwrap();
+
+        let engine = TemplateEngine::new();
+        let prompt = "See @file1.txt and @file2.txt for more info";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert!(resolved.contains("Content of file 1"));
+        assert!(resolved.contains("Content of file 2"));
+    }
+
+    #[test]
+    fn test_missing_file_reference_handled() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let engine = TemplateEngine::new();
+        let prompt = "Check @nonexistent.txt for details";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert!(resolved.contains("[Unable to read file 'nonexistent.txt'"));
+    }
+
+    #[test]
+    fn test_file_reference_with_path() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let subdir = temp_dir.path().join("src");
+        std::fs::create_dir(&subdir).unwrap();
+
+        let file_path = subdir.join("main.rs");
+        let mut file = std::fs::File::create(&file_path).unwrap();
+        writeln!(file, "fn main() {{ println!(\"Hello\"); }}").unwrap();
+
+        let engine = TemplateEngine::new();
+        let prompt = "Look at @src/main.rs for the entry point";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert!(resolved.contains("fn main()"));
+        assert!(resolved.contains("--- Contents of src/main.rs ---"));
+    }
+
+    #[test]
+    fn test_has_file_references() {
+        let engine = TemplateEngine::new();
+
+        assert!(engine.has_file_references("Check @README.md"));
+        assert!(engine.has_file_references("See @file1.txt and @file2.txt"));
+        assert!(!engine.has_file_references("No file references here"));
+        // Note: Email addresses like test@example.com will match - this is a known limitation
+        // In practice, file references use paths with dots/slashes which are distinguishable
+        assert!(engine.has_file_references("Email: test@example.com"));
+    }
+
+    #[test]
+    fn test_extract_file_references() {
+        let engine = TemplateEngine::new();
+
+        let refs = engine.extract_file_references("Check @README.md and @src/main.rs");
+        assert_eq!(refs.len(), 2);
+        assert!(refs.contains(&"README.md".to_string()));
+        assert!(refs.contains(&"src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn test_no_file_references_returns_unchanged() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let engine = TemplateEngine::new();
+        let prompt = "No file references in this prompt";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert_eq!(resolved, prompt);
+    }
+
+    #[test]
+    fn test_file_reference_at_end_of_line() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.json");
+        let mut file = std::fs::File::create(&file_path).unwrap();
+        writeln!(file, "{{\"key\": \"value\"}}").unwrap();
+
+        let engine = TemplateEngine::new();
+        let prompt = "Use the configuration from @config.json";
+        let resolved = engine.resolve_file_references(prompt, temp_dir.path());
+
+        assert!(resolved.contains("\"key\": \"value\""));
     }
 }

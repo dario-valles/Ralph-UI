@@ -54,6 +54,7 @@ pub enum AgentType {
     Claude,
     Opencode,
     Cursor,
+    Codex,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

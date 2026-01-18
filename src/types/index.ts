@@ -37,7 +37,7 @@ export interface Task {
 }
 
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed'
-export type AgentType = 'claude' | 'opencode' | 'cursor'
+export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex'
 
 export interface SessionConfig {
   maxParallel: number
@@ -198,6 +198,18 @@ export interface ExecutionConfig {
   draftPRs: boolean
   runTests: boolean
   runLint: boolean
+  /** Dry-run mode: preview execution without spawning agents */
+  dryRun?: boolean
+}
+
+/** Result of a dry-run schedule preview */
+export interface DryRunResult {
+  taskId: string
+  taskTitle: string
+  agentType: AgentType
+  branch: string
+  worktreePath: string
+  maxIterations: number
 }
 
 export interface PRDQualityScores {

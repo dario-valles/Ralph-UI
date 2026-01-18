@@ -145,6 +145,22 @@ impl AgentManager {
 
                 Ok(cmd)
             }
+            AgentType::Codex => {
+                // Build Codex CLI command (OpenAI Codex)
+                // Reference: https://github.com/openai/codex-cli
+                let mut cmd = Command::new("codex");
+
+                if let Some(prompt) = &config.prompt {
+                    cmd.arg("--prompt").arg(prompt);
+                }
+
+                cmd.arg("--max-turns")
+                    .arg(config.max_iterations.to_string());
+
+                cmd.current_dir(&config.worktree_path);
+
+                Ok(cmd)
+            }
         }
     }
 
@@ -383,6 +399,23 @@ mod tests {
         let cmd = manager.build_command(&config).unwrap();
         let program = cmd.get_program().to_string_lossy();
         assert_eq!(program, "cursor-agent");
+    }
+
+    #[test]
+    fn test_build_codex_command() {
+        let manager = AgentManager::new();
+        let config = AgentSpawnConfig {
+            agent_type: AgentType::Codex,
+            task_id: "task1".to_string(),
+            worktree_path: "/tmp/worktree".to_string(),
+            branch: "feature/test".to_string(),
+            max_iterations: 8,
+            prompt: Some("Add unit tests".to_string()),
+        };
+
+        let cmd = manager.build_command(&config).unwrap();
+        let program = cmd.get_program().to_string_lossy();
+        assert_eq!(program, "codex");
     }
 
     #[test]

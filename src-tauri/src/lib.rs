@@ -12,6 +12,7 @@ mod session;
 mod templates;
 mod config;
 pub mod events;
+pub mod shutdown;
 
 // Re-export models for use in commands
 pub use models::*;

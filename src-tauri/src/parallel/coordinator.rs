@@ -184,6 +184,40 @@ impl WorktreeCoordinator {
         Ok(())
     }
 
+    /// Graceful cleanup for shutdown - deallocates all worktrees and reports preserved branches
+    /// Returns (branches_preserved, worktrees_cleaned, errors)
+    pub fn graceful_cleanup(&mut self) -> (Vec<String>, usize, Vec<String>) {
+        let mut preserved_branches = Vec::new();
+        let mut cleaned = 0;
+        let mut errors = Vec::new();
+
+        let allocations: Vec<_> = self.allocations.values().cloned().collect();
+
+        for allocation in allocations {
+            // Record branch that was being worked on
+            preserved_branches.push(allocation.branch.clone());
+
+            // Try to deallocate the worktree
+            match self.deallocate_worktree(&allocation.worktree_path) {
+                Ok(_) => {
+                    cleaned += 1;
+                    log::info!("Cleaned up worktree: {} (branch: {})",
+                        allocation.worktree_path, allocation.branch);
+                }
+                Err(e) => {
+                    errors.push(format!(
+                        "Failed to cleanup worktree {}: {}",
+                        allocation.worktree_path, e
+                    ));
+                    log::warn!("Failed to cleanup worktree {}: {}",
+                        allocation.worktree_path, e);
+                }
+            }
+        }
+
+        (preserved_branches, cleaned, errors)
+    }
+
     /// Clean up orphaned worktrees (worktrees without allocations)
     pub fn cleanup_orphaned(&mut self) -> Result<Vec<String>> {
         let git = GitManager::new(&self.repo_path)?;

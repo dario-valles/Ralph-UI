@@ -74,6 +74,13 @@ dirs = "5.0"
 # TOML config parsing
 toml = "0.8"
 
+# Signal handling for graceful shutdown
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+ctrlc = "3.4"
+
 [dev-dependencies]
 tempfile = "3.8"
 

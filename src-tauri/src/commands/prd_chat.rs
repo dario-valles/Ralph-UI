@@ -411,6 +411,7 @@ pub async fn check_agent_availability(
         AgentType::Claude => "claude",
         AgentType::Opencode => "opencode",
         AgentType::Cursor => "cursor-agent",
+        AgentType::Codex => "codex",
     };
 
     // Check if the program exists in PATH using `which` on Unix or `where` on Windows
@@ -1295,6 +1296,10 @@ async fn execute_chat_agent(
         AgentType::Cursor => {
             // Use cursor agent CLI
             ("cursor-agent", vec!["--prompt".to_string(), prompt.to_string()])
+        }
+        AgentType::Codex => {
+            // Use codex CLI
+            ("codex", vec!["--prompt".to_string(), prompt.to_string()])
         }
     };
 

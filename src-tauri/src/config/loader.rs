@@ -44,6 +44,9 @@ pub struct ExecutionConfig {
     /// Scheduling strategy
     #[serde(default = "default_strategy")]
     pub strategy: String,
+    /// Dry-run mode: preview execution without actually spawning agents
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 fn default_max_parallel() -> i32 { 3 }
@@ -60,6 +63,7 @@ impl Default for ExecutionConfig {
             max_retries: default_max_retries(),
             agent_type: default_agent_type(),
             strategy: default_strategy(),
+            dry_run: false,
         }
     }
 }

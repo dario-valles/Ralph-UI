@@ -72,6 +72,9 @@ pub struct SchedulerConfig {
     pub error_strategy: ErrorStrategy,
     /// Fallback configuration for rate limiting
     pub fallback_config: FallbackConfig,
+    /// Dry-run mode: preview execution without spawning agents
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 impl Default for SchedulerConfig {
@@ -85,6 +88,7 @@ impl Default for SchedulerConfig {
             resource_limits: ResourceLimits::default(),
             error_strategy: ErrorStrategy::default(),
             fallback_config: FallbackConfig::default(),
+            dry_run: false,
         }
     }
 }
@@ -461,6 +465,121 @@ impl ParallelScheduler {
         self.pool.get_stats()
     }
 
+    /// Check if scheduler is in dry-run mode
+    pub fn is_dry_run(&self) -> bool {
+        self.config.dry_run
+    }
+
+    /// Set dry-run mode
+    pub fn set_dry_run(&mut self, dry_run: bool) {
+        self.config.dry_run = dry_run;
+    }
+
+    /// Preview all scheduled tasks without actually executing them (dry-run)
+    /// Returns a list of what would happen if the scheduler ran
+    pub fn preview_all(&mut self, project_path: &str) -> Vec<DryRunResult> {
+        // Update dependencies first
+        self.update_dependencies();
+        self.sort_ready_queue();
+
+        let mut results = Vec::new();
+
+        // Preview all ready tasks
+        for scheduled in &self.ready {
+            let branch = format!("task/{}", scheduled.task.id);
+            let worktree_path = format!("{}/worktrees/{}", project_path, scheduled.task.id);
+
+            results.push(DryRunResult {
+                task_id: scheduled.task.id.clone(),
+                task_title: scheduled.task.title.clone(),
+                agent_type: self.config.agent_type,
+                branch,
+                worktree_path,
+                max_iterations: self.config.max_iterations,
+            });
+        }
+
+        // Also preview pending tasks (those with unmet dependencies)
+        for (_, scheduled) in &self.pending {
+            let branch = format!("task/{}", scheduled.task.id);
+            let worktree_path = format!("{}/worktrees/{}", project_path, scheduled.task.id);
+
+            results.push(DryRunResult {
+                task_id: scheduled.task.id.clone(),
+                task_title: scheduled.task.title.clone(),
+                agent_type: self.config.agent_type,
+                branch,
+                worktree_path,
+                max_iterations: self.config.max_iterations,
+            });
+        }
+
+        results
+    }
+
+    /// Schedule next task in dry-run mode (simulates without spawning)
+    /// Returns a simulated agent result without actually spawning processes
+    pub fn schedule_next_dry_run(&mut self, session_id: &str, project_path: &str) -> Result<Option<Agent>> {
+        // Update dependencies
+        self.update_dependencies();
+
+        // Sort ready queue
+        self.sort_ready_queue();
+
+        // Check if we're at max parallel limit (simulate real behavior)
+        if self.running.len() >= self.config.max_parallel {
+            log::info!("DRY-RUN: Would wait - at max parallel limit ({}/{})",
+                self.running.len(), self.config.max_parallel);
+            return Ok(None);
+        }
+
+        // Get next ready task
+        let mut scheduled = match self.ready.pop_front() {
+            Some(task) => task,
+            None => return Ok(None),
+        };
+
+        // Create simulated agent (no actual process spawned)
+        let agent_id = Uuid::new_v4().to_string();
+        let branch = format!("task/{}", scheduled.task.id);
+        let worktree_path = format!("{}/worktrees/{}", project_path, scheduled.task.id);
+
+        log::info!("DRY-RUN: Would spawn {:?} agent for task '{}' ({}) on branch '{}'",
+            self.config.agent_type,
+            scheduled.task.title,
+            scheduled.task.id,
+            branch
+        );
+
+        // Update scheduled task (simulate state change)
+        scheduled.assigned_agent_id = Some(agent_id.clone());
+        scheduled.task.status = TaskStatus::InProgress;
+        scheduled.task.assigned_agent = Some(agent_id.clone());
+        scheduled.task.branch = Some(branch.clone());
+        scheduled.task.worktree_path = Some(worktree_path.clone());
+
+        // Create simulated agent object (process_id is None for dry-run)
+        let agent = Agent {
+            id: agent_id.clone(),
+            session_id: session_id.to_string(),
+            task_id: scheduled.task.id.clone(),
+            status: AgentStatus::Idle,
+            process_id: None, // No actual process in dry-run mode
+            worktree_path,
+            branch,
+            iteration_count: 0,
+            tokens: 0,
+            cost: 0.0,
+            logs: Vec::new(),
+            subagents: Vec::new(),
+        };
+
+        // Move to running (simulate)
+        self.running.insert(scheduled.task.id.clone(), scheduled);
+
+        Ok(Some(agent))
+    }
+
     /// Check for resource violations and handle them
     pub fn check_violations(&mut self) -> Result<Vec<String>> {
         let violations = self.pool.check_violations()?;
@@ -500,6 +619,23 @@ pub struct SchedulerStats {
     pub skipped: usize,
     pub aborted: bool,
     pub total: usize,
+}
+
+/// Result of a dry-run schedule operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DryRunResult {
+    /// The task that would be executed
+    pub task_id: String,
+    pub task_title: String,
+    /// The agent type that would be used
+    pub agent_type: AgentType,
+    /// The branch that would be created
+    pub branch: String,
+    /// The worktree path that would be used
+    pub worktree_path: String,
+    /// Maximum iterations configured
+    pub max_iterations: i32,
 }
 
 #[cfg(test)]
@@ -888,5 +1024,119 @@ mod tests {
         let stats = scheduler.get_stats();
         assert_eq!(stats.skipped, 1);
         assert_eq!(stats.total, 1);
+    }
+
+    // Dry-run Mode Tests
+
+    #[test]
+    fn test_dry_run_mode_disabled_by_default() {
+        let config = SchedulerConfig::default();
+        assert!(!config.dry_run);
+
+        let scheduler = ParallelScheduler::new(config);
+        assert!(!scheduler.is_dry_run());
+    }
+
+    #[test]
+    fn test_dry_run_mode_can_be_enabled() {
+        let mut config = SchedulerConfig::default();
+        config.dry_run = true;
+        let scheduler = ParallelScheduler::new(config);
+
+        assert!(scheduler.is_dry_run());
+    }
+
+    #[test]
+    fn test_set_dry_run() {
+        let config = SchedulerConfig::default();
+        let mut scheduler = ParallelScheduler::new(config);
+
+        assert!(!scheduler.is_dry_run());
+        scheduler.set_dry_run(true);
+        assert!(scheduler.is_dry_run());
+    }
+
+    #[test]
+    fn test_dry_run_preview_all() {
+        let mut config = SchedulerConfig::default();
+        config.dry_run = true;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        // Add tasks
+        scheduler.add_task(create_test_task("task1", 1, vec![]));
+        scheduler.add_task(create_test_task("task2", 2, vec![]));
+        scheduler.add_task(create_test_task("task3", 3, vec!["task1".to_string()]));
+
+        let preview = scheduler.preview_all("/test/project");
+
+        // Should have all 3 tasks previewed
+        assert_eq!(preview.len(), 3);
+
+        // Check first task preview
+        let task1_preview = preview.iter().find(|p| p.task_id == "task1").unwrap();
+        assert_eq!(task1_preview.task_title, "Task task1");
+        assert_eq!(task1_preview.branch, "task/task1");
+        assert_eq!(task1_preview.worktree_path, "/test/project/worktrees/task1");
+        assert_eq!(task1_preview.agent_type, AgentType::Claude);
+    }
+
+    #[test]
+    fn test_dry_run_schedule_next_does_not_spawn_process() {
+        let mut config = SchedulerConfig::default();
+        config.dry_run = true;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        scheduler.add_task(create_test_task("task1", 1, vec![]));
+
+        let result = scheduler.schedule_next_dry_run("session1", "/test/project");
+        assert!(result.is_ok());
+
+        let agent = result.unwrap();
+        assert!(agent.is_some());
+
+        let agent = agent.unwrap();
+        // In dry-run, process_id should be None (no actual process spawned)
+        assert!(agent.process_id.is_none());
+        assert_eq!(agent.task_id, "task1");
+        assert_eq!(agent.branch, "task/task1");
+    }
+
+    #[test]
+    fn test_dry_run_respects_max_parallel_limit() {
+        let mut config = SchedulerConfig::default();
+        config.dry_run = true;
+        config.max_parallel = 1;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        scheduler.add_task(create_test_task("task1", 1, vec![]));
+        scheduler.add_task(create_test_task("task2", 2, vec![]));
+
+        // First task should be scheduled
+        let result1 = scheduler.schedule_next_dry_run("session1", "/test/project");
+        assert!(result1.unwrap().is_some());
+
+        // Second task should be blocked (max_parallel = 1)
+        let result2 = scheduler.schedule_next_dry_run("session1", "/test/project");
+        assert!(result2.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_dry_run_result_contains_correct_info() {
+        let mut config = SchedulerConfig::default();
+        config.dry_run = true;
+        config.agent_type = AgentType::Opencode;
+        config.max_iterations = 15;
+        let mut scheduler = ParallelScheduler::new(config);
+
+        scheduler.add_task(create_test_task("test-task", 1, vec![]));
+
+        let preview = scheduler.preview_all("/my/project");
+        assert_eq!(preview.len(), 1);
+
+        let result = &preview[0];
+        assert_eq!(result.task_id, "test-task");
+        assert_eq!(result.agent_type, AgentType::Opencode);
+        assert_eq!(result.max_iterations, 15);
+        assert_eq!(result.worktree_path, "/my/project/worktrees/test-task");
     }
 }

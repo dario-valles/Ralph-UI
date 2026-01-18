@@ -371,6 +371,7 @@ mod tests {
             resource_limits: ResourceLimits::default(),
             error_strategy: ErrorStrategy::default(),
             fallback_config: FallbackConfig::default(),
+            dry_run: false,
         }
     }
 

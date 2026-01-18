@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Play } from 'lucide-react'
+import { Loader2, Play, Eye } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import type { ExecutionConfig, AgentType } from '@/types'
 
@@ -40,6 +40,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     draftPRs: true,
     runTests: true,
     runLint: true,
+    dryRun: false,
   })
 
   const handleExecute = async () => {
@@ -79,6 +80,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
               <option value="claude">Claude Code</option>
               <option value="opencode">OpenCode</option>
               <option value="cursor">Cursor</option>
+              <option value="codex">Codex CLI</option>
             </Select>
           </div>
 
@@ -199,6 +201,28 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             </div>
           </div>
 
+          {/* Dry-run Mode */}
+          <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-4">
+            <label className="flex items-center gap-3">
+              <Checkbox
+                checked={config.dryRun}
+                onCheckedChange={(checked) =>
+                  setConfig({ ...config, dryRun: checked as boolean })
+                }
+              />
+              <div>
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Dry-run Mode
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Preview what would happen without actually spawning agents or creating branches.
+                  Useful for validating your PRD and configuration before execution.
+                </p>
+              </div>
+            </label>
+          </div>
+
           {/* Preview */}
           <div className="rounded-md bg-muted p-4">
             <p className="text-sm font-medium">Summary:</p>
@@ -209,8 +233,17 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
                 <li>• Max parallel agents: {config.maxParallel}</li>
               )}
               <li>• Max iterations: {config.maxIterations} per task</li>
-              <li>• Tasks will be created automatically from PRD</li>
-              <li>• Agents will launch immediately after creation</li>
+              {config.dryRun ? (
+                <>
+                  <li className="text-yellow-600">• DRY-RUN: No agents will be spawned</li>
+                  <li className="text-yellow-600">• DRY-RUN: No branches will be created</li>
+                </>
+              ) : (
+                <>
+                  <li>• Tasks will be created automatically from PRD</li>
+                  <li>• Agents will launch immediately after creation</li>
+                </>
+              )}
             </ul>
           </div>
         </div>
@@ -223,7 +256,12 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             {executing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Starting...
+                {config.dryRun ? 'Previewing...' : 'Starting...'}
+              </>
+            ) : config.dryRun ? (
+              <>
+                <Eye className="mr-2 h-4 w-4" />
+                Preview Execution
               </>
             ) : (
               <>
