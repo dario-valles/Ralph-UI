@@ -15,7 +15,7 @@
         "title": "Ralph UI",
         "width": 1200,
         "height": 800,
-        "titleBarStyle": "overlay",
+        "titleBarStyle": "Overlay",
         "hiddenTitle": true
       }
     ],
