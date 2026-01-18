@@ -3,8 +3,20 @@
 use crate::database::{self, Database};
 use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::models::{Task, TaskStatus};
+use crate::session::{ProgressStatus, ProgressTracker};
+use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
+
+/// Convert TaskStatus to ProgressStatus for progress file tracking
+fn task_status_to_progress_status(status: TaskStatus) -> ProgressStatus {
+    match status {
+        TaskStatus::Pending => ProgressStatus::Paused,
+        TaskStatus::InProgress => ProgressStatus::InProgress,
+        TaskStatus::Completed => ProgressStatus::Completed,
+        TaskStatus::Failed => ProgressStatus::Failed,
+    }
+}
 
 #[tauri::command]
 pub async fn create_task(
@@ -98,6 +110,23 @@ pub async fn update_task_status(
     // Get the session_id for this task
     let session_id = database::tasks::get_session_id_for_task(conn, &task_id)
         .unwrap_or_else(|_| "unknown".to_string());
+
+    // Write to progress file for session recovery
+    // Get the project path from the session
+    if let Ok(session) = database::sessions::get_session(conn, &session_id) {
+        let project_path = Path::new(&session.project_path);
+        let tracker = ProgressTracker::new(project_path);
+        let progress_status = task_status_to_progress_status(status);
+
+        if let Err(e) = tracker.append_progress(
+            &session_id,
+            &task_id,
+            progress_status,
+            None,
+        ) {
+            log::warn!("Failed to write progress file: {}", e);
+        }
+    }
 
     // Emit the status changed event
     let payload = TaskStatusChangedPayload {

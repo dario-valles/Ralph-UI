@@ -29,6 +29,8 @@ pub struct RenderRequest {
     pub dependencies: Option<Vec<String>>,
     pub prd_content: Option<String>,
     pub custom_vars: Option<HashMap<String, String>>,
+    /// Project path for resolving @filename references
+    pub project_path: Option<String>,
 }
 
 /// List all available templates
@@ -124,17 +126,27 @@ pub async fn render_template(
         .get(&request.template_name)
         .ok_or_else(|| format!("Template '{}' not found", request.template_name))?;
 
-    // Render
-    engine
+    // Render the template
+    let rendered = engine
         .render_string(template_content, &context)
-        .map_err(|e| format!("Failed to render template: {}", e))
+        .map_err(|e| format!("Failed to render template: {}", e))?;
+
+    // Resolve @filename references if project_path is provided
+    if let Some(path) = request.project_path {
+        let base_path = std::path::Path::new(&path);
+        Ok(engine.resolve_file_references(&rendered, base_path))
+    } else {
+        Ok(rendered)
+    }
 }
 
 /// Render task prompt using template system
+/// Supports @filename syntax for injecting file contents into prompts
 #[tauri::command]
 pub async fn render_task_prompt(
     task_id: String,
     template_name: Option<String>,
+    project_path: Option<String>,
     db: State<'_, std::sync::Mutex<crate::database::Database>>,
 ) -> Result<String, String> {
     let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
@@ -144,8 +156,18 @@ pub async fn render_task_prompt(
     let task = crate::database::tasks::get_task(conn, &task_id)
         .map_err(|e| format!("Failed to get task: {}", e))?;
 
-    crate::templates::render_task_prompt(&task, template_name.as_deref())
-        .map_err(|e| format!("Failed to render: {}", e))
+    // Render the template
+    let rendered = crate::templates::render_task_prompt(&task, template_name.as_deref())
+        .map_err(|e| format!("Failed to render: {}", e))?;
+
+    // Resolve @filename references if project_path is provided
+    if let Some(path) = project_path {
+        let engine = TemplateEngine::new();
+        let base_path = std::path::Path::new(&path);
+        Ok(engine.resolve_file_references(&rendered, base_path))
+    } else {
+        Ok(rendered)
+    }
 }
 
 /// Get template content by name
@@ -187,6 +209,7 @@ mod tests {
             dependencies: None,
             prd_content: None,
             custom_vars: None,
+            project_path: None,
         };
 
         let result = render_template(request).await.unwrap();

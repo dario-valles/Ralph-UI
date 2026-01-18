@@ -24,6 +24,12 @@ pub fn run() {
     // Initialize logger
     env_logger::init();
 
+    // Initialize shutdown state and register signal handlers
+    let shutdown_state = shutdown::ShutdownState::new();
+    if let Err(e) = shutdown::register_signal_handlers(shutdown_state.clone()) {
+        log::warn!("Failed to register signal handlers: {}", e);
+    }
+
     // Initialize database
     let db_path = std::env::var("RALPH_DB_PATH")
         .unwrap_or_else(|_| {
@@ -63,6 +69,7 @@ pub fn run() {
         .manage(parallel_state)
         .manage(config_state)
         .manage(trace_state)
+        .manage(shutdown_state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
