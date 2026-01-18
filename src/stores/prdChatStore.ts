@@ -77,6 +77,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         loading: false,
       }))
 
+      // Load history to get the welcome message (created by backend in guided mode)
+      if (options.guidedMode !== false) {
+        const messages = await prdChatApi.getHistory(session.id)
+        set({ messages })
+      }
+
       // Load guided questions if prdType is specified
       if (options.prdType && options.guidedMode !== false) {
         const questions = await prdChatApi.getGuidedQuestions(options.prdType)

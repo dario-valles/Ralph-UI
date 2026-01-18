@@ -74,6 +74,8 @@ describe('prdChatStore', () => {
   describe('startSession', () => {
     it('should start a new session successfully', async () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
+      // Mock getHistory to return welcome message (loaded in guided mode)
+      vi.mocked(prdChatApi.getHistory).mockResolvedValue([mockAssistantMessage])
 
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
@@ -81,8 +83,19 @@ describe('prdChatStore', () => {
       expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined)
       expect(usePRDChatStore.getState().currentSession).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions).toContainEqual(mockSession)
-      expect(usePRDChatStore.getState().messages).toEqual([])
+      // In guided mode (default), welcome message is loaded
+      expect(usePRDChatStore.getState().messages).toEqual([mockAssistantMessage])
       expect(usePRDChatStore.getState().loading).toBe(false)
+    })
+
+    it('should start a session without loading history when guidedMode is false', async () => {
+      vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
+
+      const store = usePRDChatStore.getState()
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project', guidedMode: false })
+
+      expect(prdChatApi.getHistory).not.toHaveBeenCalled()
+      expect(usePRDChatStore.getState().messages).toEqual([])
     })
 
     it('should start a session with prdId for context', async () => {

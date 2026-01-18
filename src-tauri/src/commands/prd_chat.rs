@@ -65,34 +65,103 @@ pub async fn start_prd_chat_session(
     // Validate agent type
     let _agent_type = parse_agent_type(&request.agent_type)?;
 
-    // Validate PRD type if provided
-    if let Some(ref prd_type) = request.prd_type {
-        let _ = prd_type.parse::<PRDType>()
-            .map_err(|e| format!("Invalid PRD type: {}", e))?;
-    }
+    // Validate and parse PRD type if provided
+    let prd_type_enum = if let Some(ref prd_type) = request.prd_type {
+        Some(prd_type.parse::<PRDType>()
+            .map_err(|e| format!("Invalid PRD type: {}", e))?)
+    } else {
+        None
+    };
 
     let now = chrono::Utc::now().to_rfc3339();
     let session_id = Uuid::new_v4().to_string();
+    let guided_mode = request.guided_mode.unwrap_or(true);
 
-    let session = ChatSession {
-        id: session_id,
+    // Set default title based on PRD type
+    let default_title = prd_type_enum.as_ref().map(|pt| get_prd_type_title(pt));
+
+    let mut session = ChatSession {
+        id: session_id.clone(),
         agent_type: request.agent_type,
         project_path: request.project_path,
         prd_id: request.prd_id,
-        title: None, // Will be set when user starts typing or explicitly sets it
+        title: default_title,
         prd_type: request.prd_type,
-        guided_mode: request.guided_mode.unwrap_or(true), // Default to guided mode
+        guided_mode,
         quality_score: None,
         template_id: request.template_id,
         created_at: now.clone(),
-        updated_at: now,
+        updated_at: now.clone(),
         message_count: Some(0),
     };
 
     db.create_chat_session(&session)
         .map_err(|e| format!("Failed to create chat session: {}", e))?;
 
+    // If guided mode is enabled, add an initial welcome message with the first question
+    if guided_mode {
+        let welcome_message = generate_welcome_message(prd_type_enum.as_ref());
+
+        let assistant_message = ChatMessage {
+            id: Uuid::new_v4().to_string(),
+            session_id: session_id.clone(),
+            role: MessageRole::Assistant,
+            content: welcome_message,
+            created_at: now,
+        };
+
+        db.create_chat_message(&assistant_message)
+            .map_err(|e| format!("Failed to create welcome message: {}", e))?;
+
+        // Update message count
+        session.message_count = Some(1);
+    }
+
     Ok(session)
+}
+
+/// Get a default title for a PRD type
+fn get_prd_type_title(prd_type: &PRDType) -> String {
+    match prd_type {
+        PRDType::NewFeature => "New Feature PRD".to_string(),
+        PRDType::BugFix => "Bug Fix PRD".to_string(),
+        PRDType::Refactoring => "Refactoring PRD".to_string(),
+        PRDType::ApiIntegration => "API Integration PRD".to_string(),
+        PRDType::General => "General PRD".to_string(),
+    }
+}
+
+/// Generate a welcome message with the first guided question based on PRD type
+fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
+    let type_context = match prd_type {
+        Some(PRDType::NewFeature) => "new feature",
+        Some(PRDType::BugFix) => "bug fix",
+        Some(PRDType::Refactoring) => "refactoring effort",
+        Some(PRDType::ApiIntegration) => "API integration",
+        Some(PRDType::General) | None => "project",
+    };
+
+    let first_question = match prd_type {
+        Some(PRDType::NewFeature) =>
+            "What problem are you trying to solve with this new feature? Who are the target users, and what pain points are they currently experiencing?",
+        Some(PRDType::BugFix) =>
+            "Can you describe the bug you're trying to fix? What is the expected behavior vs. the actual behavior you're seeing?",
+        Some(PRDType::Refactoring) =>
+            "What part of the codebase are you looking to refactor? What are the main issues with the current implementation (e.g., performance, maintainability, technical debt)?",
+        Some(PRDType::ApiIntegration) =>
+            "Which API or service are you integrating with? What functionality do you need from this integration?",
+        Some(PRDType::General) | None =>
+            "What would you like to build or accomplish? Please describe your project idea and its main goals.",
+    };
+
+    format!(
+        "👋 Welcome! I'll help you create a comprehensive PRD for your {}.\n\n\
+        I'll guide you through a series of questions to capture all the important details. \
+        Feel free to provide as much context as you can - the more details, the better the PRD!\n\n\
+        **Let's start:**\n\n{}",
+        type_context,
+        first_question
+    )
 }
 
 /// Send a message to the chat and get an AI response
