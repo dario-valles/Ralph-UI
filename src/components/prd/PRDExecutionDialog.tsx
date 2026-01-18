@@ -265,7 +265,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Execute PRD</DialogTitle>
           <DialogDescription>
@@ -274,7 +274,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 overflow-y-auto flex-1">
           {/* Agent Type and Model */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
