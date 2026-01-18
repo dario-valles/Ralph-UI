@@ -236,4 +236,16 @@ export const prdChatApi = {
   previewExtraction: async (sessionId: string): Promise<ExtractedPRDContent> => {
     return await invoke('preview_prd_extraction', { sessionId })
   },
+
+  /** Check if an agent CLI is available in the system PATH */
+  checkAgentAvailability: async (agentType: string): Promise<AgentAvailabilityResult> => {
+    return await invoke('check_agent_availability', { agentType })
+  },
+}
+
+export interface AgentAvailabilityResult {
+  available: boolean
+  agent: string
+  path: string | null
+  error: string | null
 }

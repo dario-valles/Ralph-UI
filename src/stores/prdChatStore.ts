@@ -116,15 +116,32 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     try {
       const response = await prdChatApi.sendMessage(currentSession.id, content)
 
-      // Replace optimistic message with actual messages
-      set((state) => ({
-        messages: [
-          ...state.messages.filter((m) => m.id !== optimisticMessage.id),
-          response.userMessage,
-          response.assistantMessage,
-        ],
-        streaming: false,
-      }))
+      // Replace optimistic message with actual messages and update session message count
+      set((state) => {
+        // Update current session's message count locally
+        const updatedSession = state.currentSession
+          ? {
+              ...state.currentSession,
+              messageCount: (state.currentSession.messageCount || 0) + 2,
+            }
+          : null
+
+        // Also update the session in the sessions list
+        const updatedSessions = state.sessions.map((s) =>
+          s.id === updatedSession?.id ? updatedSession : s
+        )
+
+        return {
+          messages: [
+            ...state.messages.filter((m) => m.id !== optimisticMessage.id),
+            response.userMessage,
+            response.assistantMessage,
+          ],
+          streaming: false,
+          currentSession: updatedSession,
+          sessions: updatedSessions,
+        }
+      })
     } catch (error) {
       // Remove optimistic message on error
       set((state) => ({

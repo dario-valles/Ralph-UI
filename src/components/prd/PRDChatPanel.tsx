@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,178 +12,24 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
-  Send,
   Plus,
-  Trash2,
   FileText,
   Loader2,
   MessageSquare,
   Bot,
-  User,
   BarChart3,
+  AlertTriangle,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { QualityScoreCard } from './QualityScoreCard'
-import type { ChatMessage, ChatSession, PRDTypeValue } from '@/types'
+import { ChatMessageItem } from './ChatMessageItem'
+import { ChatInput } from './ChatInput'
+import { StreamingIndicator } from './StreamingIndicator'
+import { SessionItem } from './SessionItem'
+import { prdChatApi } from '@/lib/tauri-api'
+import type { PRDTypeValue, ChatSession } from '@/types'
 import { cn } from '@/lib/utils'
-
-// ============================================================================
-// Sub-Components
-// ============================================================================
-
-interface ChatMessageItemProps {
-  message: ChatMessage
-}
-
-function ChatMessageItem({ message }: ChatMessageItemProps) {
-  const isUser = message.role === 'user'
-  const timestamp = new Date(message.createdAt)
-
-  return (
-    <div
-      data-testid={`message-${message.role}`}
-      className={cn(
-        'flex gap-3 p-4 rounded-lg',
-        isUser ? 'bg-primary/5 ml-8' : 'bg-muted mr-8'
-      )}
-    >
-      <div
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-        )}
-      >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-      </div>
-      <div className="flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">
-            {isUser ? 'You' : 'Assistant'}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {timestamp.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </span>
-        </div>
-        <p className="text-sm leading-relaxed">{message.content}</p>
-      </div>
-    </div>
-  )
-}
-
-interface ChatInputProps {
-  onSend: (message: string) => void
-  disabled: boolean
-  placeholder?: string
-}
-
-function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
-  const [value, setValue] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleSend = () => {
-    const trimmedValue = value.trim()
-    if (!trimmedValue) return
-
-    onSend(trimmedValue)
-    setValue('')
-  }
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
-  return (
-    <div className="flex gap-2">
-      <Input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder || 'Type your message...'}
-        disabled={disabled}
-        aria-label="Message input"
-        className="flex-1"
-      />
-      <Button
-        onClick={handleSend}
-        disabled={disabled || !value.trim()}
-        aria-label="Send message"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
-    </div>
-  )
-}
-
-interface StreamingIndicatorProps {
-  className?: string
-}
-
-function StreamingIndicator({ className }: StreamingIndicatorProps) {
-  return (
-    <div
-      data-testid="streaming-indicator"
-      className={cn(
-        'flex items-center gap-2 p-4 bg-muted rounded-lg mr-8 animate-pulse',
-        className
-      )}
-    >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-        <Bot className="h-4 w-4" />
-      </div>
-      <div className="flex gap-1">
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
-      </div>
-    </div>
-  )
-}
-
-interface SessionItemProps {
-  session: ChatSession
-  isActive: boolean
-  onSelect: () => void
-  onDelete: () => void
-}
-
-function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
-  return (
-    <div
-      data-testid="session-item"
-      data-active={isActive}
-      className={cn(
-        'flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors',
-        isActive && 'bg-muted'
-      )}
-      onClick={onSelect}
-    >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm truncate">{session.title || 'Untitled Session'}</span>
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete()
-        }}
-        aria-label="Delete session"
-        className="h-7 w-7 p-0"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  )
-}
 
 // ============================================================================
 // Main Component
@@ -195,6 +40,9 @@ export function PRDChatPanel() {
   const prevSessionIdRef = useRef<string | null>(null)
   const [showTypeSelector, setShowTypeSelector] = useState(false)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
 
   const {
     sessions,
@@ -232,9 +80,22 @@ export function PRDChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleAgentChange = (_e: React.ChangeEvent<HTMLSelectElement>) => {
-    // When changing agent, start a new session with type selector
-    setShowTypeSelector(true)
+  const handleAgentChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newAgentType = e.target.value
+    setAgentError(null)
+
+    // Check if the agent is available before prompting for new session
+    try {
+      const result = await prdChatApi.checkAgentAvailability(newAgentType)
+      if (!result.available) {
+        setAgentError(result.error || `Agent '${newAgentType}' is not available`)
+        return
+      }
+      // Agent is available - show type selector to create new session
+      setShowTypeSelector(true)
+    } catch (err) {
+      setAgentError(`Failed to check agent availability: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
   }
 
   const handleSendMessage = (content: string) => {
@@ -266,12 +127,26 @@ export function PRDChatPanel() {
   }
 
   const handleDeleteSession = (sessionId: string) => {
-    deleteSession(sessionId)
+    setSessionToDelete(sessionId)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDeleteSession = async () => {
+    if (sessionToDelete) {
+      await deleteSession(sessionToDelete)
+      setSessionToDelete(null)
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  const cancelDeleteSession = () => {
+    setSessionToDelete(null)
+    setShowDeleteConfirm(false)
   }
 
   const handleSelectSession = (session: ChatSession) => {
+    // Only set the session - useEffect will handle loading history
     setCurrentSession(session)
-    loadHistory(session.id)
   }
 
   const handleExportToPRD = async () => {
@@ -462,6 +337,17 @@ export function PRDChatPanel() {
             </div>
           )}
 
+          {/* Agent Error Message */}
+          {agentError && (
+            <div className="mx-4 mt-4 p-3 rounded-md bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-sm flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Agent Not Available</p>
+                <p className="text-xs mt-1">{agentError}</p>
+              </div>
+            </div>
+          )}
+
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {!currentSession ? (
@@ -567,6 +453,27 @@ export function PRDChatPanel() {
             </Button>
             <Button onClick={handleForceExport}>
               Export Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Session?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the session and all its messages.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeleteSession}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteSession}>
+              Delete Session
             </Button>
           </DialogFooter>
         </DialogContent>

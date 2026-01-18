@@ -164,6 +164,13 @@ pub async fn send_prd_chat_message(
         update_chat_session_timestamp(db_guard.get_connection(), &request.session_id, &response_now)
             .map_err(|e| format!("Failed to update session: {}", e))?;
 
+        // Auto-generate title from first message if not set
+        if session.title.is_none() {
+            let title = generate_session_title(&request.content, session.prd_type.as_deref());
+            update_chat_session_title(db_guard.get_connection(), &request.session_id, &title)
+                .ok(); // Ignore title update errors
+        }
+
         assistant_message
         // db_guard dropped here
     };
@@ -315,6 +322,62 @@ pub async fn preview_prd_extraction(
 
     // Extract content using improved algorithm
     Ok(extract_prd_content_advanced(&messages))
+}
+
+/// Check if an agent CLI is available in the system PATH
+#[tauri::command]
+pub async fn check_agent_availability(
+    agent_type: String,
+) -> Result<AgentAvailabilityResult, String> {
+    let agent_type = parse_agent_type(&agent_type)?;
+
+    let program = match agent_type {
+        AgentType::Claude => "claude",
+        AgentType::Opencode => "opencode",
+        AgentType::Cursor => "cursor-agent",
+    };
+
+    // Check if the program exists in PATH using `which` on Unix or `where` on Windows
+    let check_result = std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
+        .arg(program)
+        .output();
+
+    match check_result {
+        Ok(output) => {
+            let available = output.status.success();
+            let path = if available {
+                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            } else {
+                None
+            };
+
+            Ok(AgentAvailabilityResult {
+                available,
+                agent: program.to_string(),
+                path,
+                error: if available { None } else {
+                    Some(format!("'{}' not found in PATH. Please install it or add it to your PATH.", program))
+                },
+            })
+        }
+        Err(e) => {
+            Ok(AgentAvailabilityResult {
+                available: false,
+                agent: program.to_string(),
+                path: None,
+                error: Some(format!("Failed to check for '{}': {}", program, e)),
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAvailabilityResult {
+    pub available: bool,
+    pub agent: String,
+    pub path: Option<String>,
+    pub error: Option<String>,
 }
 
 // ============================================================================
@@ -1314,6 +1377,45 @@ fn update_chat_session_quality_score(conn: &Connection, id: &str, score: i32) ->
         params![score, now, id],
     )?;
     Ok(())
+}
+
+fn update_chat_session_title(conn: &Connection, id: &str, title: &str) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE chat_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
+        params![title, now, id],
+    )?;
+    Ok(())
+}
+
+/// Generate a session title from the first user message and PRD type
+fn generate_session_title(first_message: &str, prd_type: Option<&str>) -> String {
+    // Extract a meaningful title from the first message
+    let message_title = first_message
+        .lines()
+        .next()
+        .unwrap_or(first_message)
+        .trim();
+
+    // Truncate to 50 characters and add ellipsis if needed
+    let truncated = if message_title.len() > 50 {
+        format!("{}...", &message_title[..47])
+    } else {
+        message_title.to_string()
+    };
+
+    // If too short, use PRD type as fallback
+    if truncated.len() < 5 {
+        match prd_type {
+            Some("new_feature") => "New Feature PRD".to_string(),
+            Some("bug_fix") => "Bug Fix PRD".to_string(),
+            Some("refactoring") => "Refactoring PRD".to_string(),
+            Some("api_integration") => "API Integration PRD".to_string(),
+            _ => "PRD Chat".to_string(),
+        }
+    } else {
+        truncated
+    }
 }
 
 // ============================================================================

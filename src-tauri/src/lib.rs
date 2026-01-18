@@ -188,6 +188,7 @@ pub fn run() {
             commands::assess_prd_quality,
             commands::get_guided_questions,
             commands::preview_prd_extraction,
+            commands::check_agent_availability,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

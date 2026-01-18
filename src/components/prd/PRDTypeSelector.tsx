@@ -13,10 +13,21 @@ import {
   ArrowRight,
   FolderOpen,
   X,
+  LucideIcon,
 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
+import { PRD_TYPES as PRD_TYPE_CONFIG, type PRDTypeConfig } from '@/config/prdTypes'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
+
+// Map icon string names to actual Lucide icons
+const ICON_MAP: Record<string, LucideIcon> = {
+  Sparkles,
+  Bug,
+  RefreshCw,
+  Link: Plug,  // Using Plug for Link
+  FileText,
+}
 
 interface PRDTypeOption {
   value: PRDTypeValue
@@ -26,43 +37,32 @@ interface PRDTypeOption {
   color: string
 }
 
-const PRD_TYPES: PRDTypeOption[] = [
-  {
-    value: 'new_feature',
-    label: 'New Feature',
-    description: 'Build a new capability or functionality',
-    icon: <Sparkles className="h-5 w-5" />,
-    color: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
-  },
-  {
-    value: 'bug_fix',
-    label: 'Bug Fix',
-    description: 'Document and fix an existing issue',
-    icon: <Bug className="h-5 w-5" />,
-    color: 'bg-red-50 border-red-200 hover:bg-red-100',
-  },
-  {
-    value: 'refactoring',
-    label: 'Refactoring',
-    description: 'Improve code structure without changing behavior',
-    icon: <RefreshCw className="h-5 w-5" />,
-    color: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
-  },
-  {
-    value: 'api_integration',
-    label: 'API Integration',
-    description: 'Connect to an external service or API',
-    icon: <Plug className="h-5 w-5" />,
-    color: 'bg-green-50 border-green-200 hover:bg-green-100',
-  },
-  {
-    value: 'general',
-    label: 'General',
-    description: 'Other types of product requirements',
-    icon: <FileText className="h-5 w-5" />,
-    color: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
-  },
-]
+// Transform config to component-specific format with rendered icons
+const PRD_TYPES: PRDTypeOption[] = PRD_TYPE_CONFIG.map((config: PRDTypeConfig) => {
+  const IconComponent = ICON_MAP[config.icon] || FileText
+  return {
+    value: config.value,
+    label: config.label,
+    description: config.description,
+    icon: <IconComponent className="h-5 w-5" />,
+    color: getColorClass(config.value),
+  }
+})
+
+function getColorClass(value: PRDTypeValue): string {
+  switch (value) {
+    case 'new_feature':
+      return 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+    case 'bug_fix':
+      return 'bg-red-50 border-red-200 hover:bg-red-100'
+    case 'refactoring':
+      return 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+    case 'api_integration':
+      return 'bg-green-50 border-green-200 hover:bg-green-100'
+    default:
+      return 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+  }
+}
 
 interface PRDTypeSelectorProps {
   onSelect: (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string) => void
