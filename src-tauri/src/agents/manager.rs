@@ -11,6 +11,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use tokio::sync::mpsc;
 
 /// Agent lifecycle manager
@@ -23,6 +24,8 @@ pub struct AgentManager {
     rate_limit_detector: RateLimitDetector,
     /// Event sender for rate limit events
     rate_limit_tx: Option<mpsc::UnboundedSender<RateLimitEvent>>,
+    /// In-memory log storage for each agent (for retrieval via command)
+    agent_logs: Arc<Mutex<HashMap<String, Vec<LogEntry>>>>,
 }
 
 /// Event emitted when a rate limit is detected
@@ -59,7 +62,20 @@ impl AgentManager {
             log_tx: None,
             rate_limit_detector: RateLimitDetector::new(),
             rate_limit_tx: None,
+            agent_logs: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Get logs for an agent from in-memory storage
+    pub fn get_agent_logs(&self, agent_id: &str) -> Vec<LogEntry> {
+        let logs = self.agent_logs.lock().unwrap();
+        logs.get(agent_id).cloned().unwrap_or_default()
+    }
+
+    /// Clear logs for an agent
+    pub fn clear_agent_logs(&self, agent_id: &str) {
+        let mut logs = self.agent_logs.lock().unwrap();
+        logs.remove(agent_id);
     }
 
     /// Set the log event sender for real-time log streaming
@@ -88,7 +104,8 @@ impl AgentManager {
         let args: Vec<String> = command.get_args().map(|s| s.to_string_lossy().to_string()).collect();
         log::info!("[AgentManager] Executing command: {} {:?}", program, args);
 
-        let child = match command
+        let mut child = match command
+            .stdin(Stdio::null())  // Prevent stdin issues causing early exit
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn() {
@@ -105,6 +122,10 @@ impl AgentManager {
         let pid = child.id();
         log::info!("[AgentManager] Process PID: {}", pid);
 
+        // Take ownership of stdout and stderr for background reading
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
         // Store the process
         {
             let mut processes = self.processes.lock().unwrap();
@@ -114,9 +135,138 @@ impl AgentManager {
 
         // Emit log
         self.emit_log(agent_id, LogLevel::Info, format!(
-            "Agent spawned with PID {} for task {}",
-            pid, config.task_id
+            "Agent spawned with PID {} for task {} in {}",
+            pid, config.task_id, config.worktree_path
         ));
+
+        // Quick check - see if process already exited (helps diagnose immediate failures)
+        {
+            let mut processes = self.processes.lock().unwrap();
+            if let Some(child) = processes.get_mut(agent_id) {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let exit_code = status.code().unwrap_or(-1);
+                        log::error!("[AgentManager] Process {} exited immediately with code {}", pid, exit_code);
+                        self.emit_log(agent_id, LogLevel::Error, format!(
+                            "Process exited immediately with code {}. This usually means the CLI command failed.",
+                            exit_code
+                        ));
+                    }
+                    Ok(None) => {
+                        log::info!("[AgentManager] Process {} is running", pid);
+                    }
+                    Err(e) => {
+                        log::error!("[AgentManager] Failed to check process status: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Spawn background thread to read stdout
+        if let Some(stdout) = stdout {
+            let log_tx = self.log_tx.clone();
+            let agent_logs = self.agent_logs.clone();
+            let agent_id_clone = agent_id.to_string();
+            thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            log::info!("[Agent {}] {}", agent_id_clone, line);
+
+                            let log_entry = LogEntry {
+                                timestamp: Utc::now(),
+                                level: LogLevel::Info,
+                                message: line,
+                            };
+
+                            // Store in memory
+                            {
+                                let mut logs = agent_logs.lock().unwrap();
+                                logs.entry(agent_id_clone.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(log_entry.clone());
+                            }
+
+                            // Also send via channel if available
+                            if let Some(tx) = &log_tx {
+                                let event = AgentLogEvent {
+                                    agent_id: agent_id_clone.clone(),
+                                    log: log_entry,
+                                };
+                                let _ = tx.send(event);
+                            }
+                        }
+                        Err(e) => {
+                            log::debug!("[Agent {}] stdout read error: {}", agent_id_clone, e);
+                            break;
+                        }
+                    }
+                }
+                log::debug!("[Agent {}] stdout reader finished", agent_id_clone);
+            });
+        }
+
+        // Spawn background thread to read stderr
+        if let Some(stderr) = stderr {
+            let log_tx = self.log_tx.clone();
+            let rate_limit_tx = self.rate_limit_tx.clone();
+            let agent_logs = self.agent_logs.clone();
+            // Create a new detector for the thread (uses static patterns internally)
+            let rate_limit_detector = RateLimitDetector::new();
+            let agent_id_clone = agent_id.to_string();
+            thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            // Log stderr as warnings (they're often important)
+                            log::warn!("[Agent {}] stderr: {}", agent_id_clone, line);
+
+                            // Check for rate limits
+                            if let Some(info) = rate_limit_detector.detect_in_stderr(&line) {
+                                log::warn!("[Agent {}] Rate limit detected: {:?}", agent_id_clone, info);
+                                if let Some(tx) = &rate_limit_tx {
+                                    let event = RateLimitEvent {
+                                        agent_id: agent_id_clone.clone(),
+                                        rate_limit_info: info,
+                                    };
+                                    let _ = tx.send(event);
+                                }
+                            }
+
+                            let log_entry = LogEntry {
+                                timestamp: Utc::now(),
+                                level: LogLevel::Warn,
+                                message: line,
+                            };
+
+                            // Store in memory
+                            {
+                                let mut logs = agent_logs.lock().unwrap();
+                                logs.entry(agent_id_clone.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(log_entry.clone());
+                            }
+
+                            // Also send via channel if available
+                            if let Some(tx) = &log_tx {
+                                let event = AgentLogEvent {
+                                    agent_id: agent_id_clone.clone(),
+                                    log: log_entry,
+                                };
+                                let _ = tx.send(event);
+                            }
+                        }
+                        Err(e) => {
+                            log::debug!("[Agent {}] stderr read error: {}", agent_id_clone, e);
+                            break;
+                        }
+                    }
+                }
+                log::debug!("[Agent {}] stderr reader finished", agent_id_clone);
+            });
+        }
 
         Ok(pid)
     }
@@ -142,9 +292,17 @@ impl AgentManager {
                     log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
                 }
 
-                // Add the prompt as positional argument
-                if let Some(prompt) = &config.prompt {
-                    cmd.arg("-p").arg(prompt);
+                // Add the prompt as positional argument - requires non-empty prompt
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg("-p").arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Claude requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
                 }
 
                 // Add max turns (iterations)
@@ -182,9 +340,17 @@ impl AgentManager {
                 // Use the 'run' subcommand for non-interactive execution
                 cmd.arg("run");
 
-                // Add the prompt as the message
-                if let Some(prompt) = &config.prompt {
-                    cmd.arg(prompt);
+                // Add the prompt as the message - opencode requires a non-empty message
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "OpenCode requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
                 }
 
                 // Use JSON format for easier parsing
@@ -215,8 +381,17 @@ impl AgentManager {
                     cmd.current_dir(&config.worktree_path);
                 }
 
-                if let Some(prompt) = &config.prompt {
-                    cmd.arg("--prompt").arg(prompt);
+                // Add the prompt - requires non-empty prompt
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg("--prompt").arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Cursor requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
                 }
 
                 // Add model if specified (Cursor may support model selection)
@@ -241,8 +416,17 @@ impl AgentManager {
                     cmd.current_dir(&config.worktree_path);
                 }
 
-                if let Some(prompt) = &config.prompt {
-                    cmd.arg("--prompt").arg(prompt);
+                // Add the prompt - requires non-empty prompt
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg("--prompt").arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Codex requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
                 }
 
                 cmd.arg("--max-turns")
@@ -324,14 +508,25 @@ impl AgentManager {
 
     /// Emit a log event
     fn emit_log(&self, agent_id: &str, level: LogLevel, message: String) {
+        let log_entry = LogEntry {
+            timestamp: Utc::now(),
+            level,
+            message,
+        };
+
+        // Store in memory for later retrieval
+        {
+            let mut logs = self.agent_logs.lock().unwrap();
+            logs.entry(agent_id.to_string())
+                .or_insert_with(Vec::new)
+                .push(log_entry.clone());
+        }
+
+        // Also send via channel if available
         if let Some(tx) = &self.log_tx {
             let event = AgentLogEvent {
                 agent_id: agent_id.to_string(),
-                log: LogEntry {
-                    timestamp: Utc::now(),
-                    level,
-                    message,
-                },
+                log: log_entry,
             };
             let _ = tx.send(event); // Best effort
         }
