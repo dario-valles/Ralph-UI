@@ -405,41 +405,50 @@ export function useTauriEventListeners(onRefresh: () => void) {
   useEffect(() => {
     if (!isTauri) return
 
-    const unlisteners: Promise<UnlistenFn>[] = []
+    // Track resolved unlisten functions
+    const unlistenFns: UnlistenFn[] = []
+    let isMounted = true
 
-    // Listen for agent status changes
-    unlisteners.push(
-      listen(TAURI_EVENTS.AGENT_STATUS_CHANGED, () => {
-        onRefresh()
-      })
-    )
+    // Helper to register a listener and store its unlisten function
+    const registerListener = async (eventName: string) => {
+      try {
+        const unlisten = await listen(eventName, () => {
+          if (isMounted) {
+            onRefresh()
+          }
+        })
+        // Only store if still mounted
+        if (isMounted) {
+          unlistenFns.push(unlisten)
+        } else {
+          // Component unmounted while we were setting up - clean up immediately
+          try {
+            unlisten()
+          } catch {
+            // Ignore errors during cleanup
+          }
+        }
+      } catch {
+        // Ignore errors if listen fails (e.g., not in Tauri environment)
+      }
+    }
 
-    // Listen for task status changes
-    unlisteners.push(
-      listen(TAURI_EVENTS.TASK_STATUS_CHANGED, () => {
-        onRefresh()
-      })
-    )
-
-    // Listen for session status changes
-    unlisteners.push(
-      listen(TAURI_EVENTS.SESSION_STATUS_CHANGED, () => {
-        onRefresh()
-      })
-    )
-
-    // Listen for explicit refresh requests
-    unlisteners.push(
-      listen(TAURI_EVENTS.MISSION_CONTROL_REFRESH, () => {
-        onRefresh()
-      })
-    )
+    // Register all listeners
+    registerListener(TAURI_EVENTS.AGENT_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.TASK_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.SESSION_STATUS_CHANGED)
+    registerListener(TAURI_EVENTS.MISSION_CONTROL_REFRESH)
 
     // Cleanup listeners on unmount
     return () => {
-      unlisteners.forEach(async (unlistenPromise) => {
-        const unlisten = await unlistenPromise
-        unlisten()
+      isMounted = false
+      // Cleanup all resolved listeners
+      unlistenFns.forEach((unlisten) => {
+        try {
+          unlisten()
+        } catch {
+          // Ignore errors during cleanup - listener may already be removed
+        }
       })
     }
   }, [onRefresh])

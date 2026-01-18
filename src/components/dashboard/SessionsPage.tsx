@@ -565,9 +565,9 @@ export function SessionsPage() {
                   <CardContent className="pt-4">
                     <div className="text-sm font-medium">Session {sessionId.slice(0, 8)}...</div>
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                      <div>Tasks: {data.completedTasks}/{data.totalTasks}</div>
-                      <div>Completion: {(data.completionRate * 100).toFixed(1)}%</div>
-                      <div>Avg Cost: ${data.averageCostPerTask.toFixed(4)}</div>
+                      <div>Tasks: {data.completedTasks ?? 0}/{data.totalTasks ?? 0}</div>
+                      <div>Completion: {((data.completionRate ?? 0) * 100).toFixed(1)}%</div>
+                      <div>Avg Cost: ${(data.averageCostPerTask ?? 0).toFixed(4)}</div>
                     </div>
                   </CardContent>
                 </Card>
