@@ -209,10 +209,15 @@ impl ParserState {
 
     fn save_current_task(&mut self) {
         if let Some(title) = self.current_task_title.take() {
-            let mut task = PRDTask::new(
-                title,
-                self.current_task_description.trim().to_string(),
-            );
+            // Handle empty descriptions by using title as fallback
+            let description = if self.current_task_description.trim().is_empty() {
+                eprintln!("[Parser Warning] Task '{}' has no description, using title as prompt", title);
+                format!("Implement: {}", title)
+            } else {
+                self.current_task_description.trim().to_string()
+            };
+
+            let mut task = PRDTask::new(title, description);
 
             if let Some(priority) = self.current_task_metadata.priority {
                 task = task.with_priority(priority);

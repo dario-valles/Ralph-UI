@@ -56,10 +56,17 @@ fn parse_tasks_array(tasks: &[Value]) -> Vec<PRDTask> {
 
 fn parse_task(value: &Value) -> Option<PRDTask> {
     let title = value.get("title")?.as_str()?.to_string();
-    let description = value.get("description")
+    let raw_description = value.get("description")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+        .unwrap_or("");
+
+    // Handle empty descriptions by using title as fallback
+    let description = if raw_description.trim().is_empty() {
+        eprintln!("[Parser Warning] Task '{}' has no description, using title as prompt", title);
+        format!("Implement: {}", title)
+    } else {
+        raw_description.to_string()
+    };
 
     let priority = value.get("priority")
         .and_then(|v| v.as_i64())
@@ -198,6 +205,7 @@ mod tests {
         assert!(result.is_ok());
 
         let doc = result.unwrap();
-        assert_eq!(doc.tasks[0].description, "");
+        // Empty descriptions now get filled with a fallback using the title
+        assert_eq!(doc.tasks[0].description, "Implement: Task 1");
     }
 }
