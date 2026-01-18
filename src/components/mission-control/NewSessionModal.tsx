@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Plus, AlertTriangle, FolderOpen } from 'lucide-react'
+import { Loader2, Plus, AlertTriangle, FolderOpen, ChevronDown } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
@@ -50,6 +50,10 @@ export function NewSessionModal({ open, onOpenChange, defaultProjectPath }: NewS
     getInitialProjectPath(defaultProjectPath, getRecentProjects, projects)
   )
   const [error, setError] = useState<string | null>(null)
+  const [showProjectPicker, setShowProjectPicker] = useState(!defaultProjectPath)
+
+  // Derive project name from path
+  const projectName = selectedProjectPath ? selectedProjectPath.split('/').pop() || selectedProjectPath : ''
 
   // Generate auto-name for sessions
   const generateAutoName = () => {
@@ -179,7 +183,7 @@ export function NewSessionModal({ open, onOpenChange, defaultProjectPath }: NewS
             )}
           </div>
 
-          {/* Project Selection */}
+          {/* Project Selection - Simplified when workspace is active */}
           {projectsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -199,10 +203,32 @@ export function NewSessionModal({ open, onOpenChange, defaultProjectPath }: NewS
                 placeholder="Select a project folder"
               />
             </div>
+          ) : selectedProjectPath && !showProjectPicker ? (
+            // Simplified view when project is already set from workspace
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Project</Label>
+              <button
+                onClick={() => setShowProjectPicker(true)}
+                disabled={isLoading}
+                className="flex items-center justify-between w-full px-3 py-2 rounded-md border bg-background text-left hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="truncate font-medium">{projectName}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+              <p className="text-xs text-muted-foreground">
+                Using active workspace. Click to change.
+              </p>
+            </div>
           ) : (
             <ProjectPicker
               value={selectedProjectPath}
-              onChange={setSelectedProjectPath}
+              onChange={(path) => {
+                setSelectedProjectPath(path)
+                if (path) setShowProjectPicker(false)
+              }}
               label="Project"
               placeholder="Select a project folder"
               disabled={isLoading}

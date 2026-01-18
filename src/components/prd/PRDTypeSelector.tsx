@@ -12,6 +12,8 @@ import {
   FileText,
   ArrowRight,
   LucideIcon,
+  FolderOpen,
+  ChevronDown,
 } from 'lucide-react'
 import { PRD_TYPES as PRD_TYPE_CONFIG, type PRDTypeConfig } from '@/config/prdTypes'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
@@ -79,6 +81,10 @@ export function PRDTypeSelector({
   const [guidedMode, setGuidedMode] = useState(true)
   // Use defaultProjectPath as initial value; parent should use key prop to reset if needed
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
+  const [showProjectPicker, setShowProjectPicker] = useState(!defaultProjectPath)
+
+  // Derive project name from path
+  const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
 
   const handleContinue = () => {
     if (selectedType) {
@@ -120,15 +126,44 @@ export function PRDTypeSelector({
           ))}
         </div>
 
-        {/* Project Path Selector */}
+        {/* Project Context - Simplified when workspace is active */}
         <div className="p-4 bg-muted/50 rounded-lg">
-          <ProjectPicker
-            value={projectPath}
-            onChange={setProjectPath}
-            label="Project Context"
-            placeholder="Select a project folder for context"
-            disabled={loading}
-          />
+          {projectPath && !showProjectPicker ? (
+            // Simplified view when project is already set from workspace
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Project Context</Label>
+              <button
+                onClick={() => setShowProjectPicker(true)}
+                disabled={loading}
+                className={cn(
+                  'flex items-center justify-between w-full px-3 py-2 rounded-md border bg-background text-left',
+                  'hover:bg-accent transition-colors',
+                  loading && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="truncate font-medium">{projectName}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+              <p className="text-xs text-muted-foreground">
+                Using active workspace. Click to change.
+              </p>
+            </div>
+          ) : (
+            // Full picker when no workspace or user wants to change
+            <ProjectPicker
+              value={projectPath}
+              onChange={(path) => {
+                setProjectPath(path)
+                if (path) setShowProjectPicker(false)
+              }}
+              label="Project Context"
+              placeholder="Select a project folder for context"
+              disabled={loading}
+            />
+          )}
         </div>
 
         {/* Guided Mode Toggle */}
