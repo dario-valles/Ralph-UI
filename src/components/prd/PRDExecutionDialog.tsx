@@ -264,6 +264,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
@@ -508,22 +509,23 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
           </Button>
         </DialogFooter>
       </DialogContent>
-
-      {/* Git Initialization Dialog */}
-      <ConfirmDialog
-        open={showGitInitDialog}
-        onOpenChange={(open) => {
-          if (!open) handleSkipGitInit()
-        }}
-        title="Git Repository Required"
-        description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
-        confirmLabel="Initialize Git"
-        cancelLabel="Skip"
-        variant="default"
-        loading={gitInitLoading}
-        onConfirm={handleGitInit}
-        onCancel={handleSkipGitInit}
-      />
     </Dialog>
+
+    {/* Git Initialization Dialog - must be outside the main dialog to avoid conflicts */}
+    <ConfirmDialog
+      open={showGitInitDialog}
+      onOpenChange={(open) => {
+        if (!open) handleSkipGitInit()
+      }}
+      title="Git Repository Required"
+      description="This project directory is not a git repository. Agent execution requires git for branch and worktree management. Would you like to initialize a git repository? If you skip, the session and tasks will be created but agents will not be spawned."
+      confirmLabel="Initialize Git"
+      cancelLabel="Skip"
+      variant="default"
+      loading={gitInitLoading}
+      onConfirm={handleGitInit}
+      onCancel={handleSkipGitInit}
+    />
+  </>
   )
 }
