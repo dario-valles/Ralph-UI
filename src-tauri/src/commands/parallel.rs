@@ -1,13 +1,14 @@
 // Tauri commands for parallel execution
 
 use crate::database::Database;
-use crate::models::{Task, Agent};
+use crate::models::{Task, Agent, AgentStatus};
 use crate::parallel::{
     scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats},
-    pool::PoolStats,
+    pool::{PoolStats, CompletedAgent},
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
+use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
 use crate::RateLimitEventState;
 use std::sync::Mutex;
 use tauri::State;
@@ -285,6 +286,85 @@ pub fn parallel_check_violations(
 
     scheduler.check_violations()
         .map_err(|e| format!("Failed to check violations: {}", e))
+}
+
+/// Poll for completed agents and update their status
+/// This should be called periodically by the frontend to detect when agents finish
+#[tauri::command]
+pub fn parallel_poll_completed(
+    app_handle: tauri::AppHandle,
+    state: State<ParallelState>,
+    db: State<Mutex<Database>>,
+) -> Result<Vec<CompletedAgent>, String> {
+    log::debug!("[Parallel] poll_completed called");
+
+    // Poll the pool for completed agents (scoped to release lock)
+    let completed = {
+        let scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let scheduler = scheduler_guard
+            .as_ref()
+            .ok_or("Scheduler not initialized")?;
+
+        scheduler.poll_completed()
+            .map_err(|e| format!("Failed to poll completed agents: {}", e))?
+    };
+
+    // Update database and emit events for each completed agent
+    {
+        let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+        for agent in &completed {
+            log::info!("[Parallel] Agent {} completed with exit code {}, {} logs",
+                agent.agent_id, agent.exit_code, agent.logs.len());
+
+            // Save logs to database
+            for log_entry in &agent.logs {
+                if let Err(e) = db.add_log(&agent.agent_id, log_entry) {
+                    log::error!("[Parallel] Failed to save log for agent {}: {}", agent.agent_id, e);
+                }
+            }
+
+            // Determine new status based on exit code
+            let new_status = if agent.exit_code == 0 {
+                AgentStatus::Idle // Success
+            } else {
+                AgentStatus::Idle // Failed but still idle
+            };
+
+            // Get current agent to get session_id
+            if let Ok(Some(current_agent)) = db.get_agent(&agent.agent_id) {
+                // Update agent status in database
+                if let Err(e) = db.update_agent_status(&agent.agent_id, &new_status) {
+                    log::error!("[Parallel] Failed to update agent status: {}", e);
+                }
+
+                // Emit status changed event
+                let payload = AgentStatusChangedPayload {
+                    agent_id: agent.agent_id.clone(),
+                    session_id: current_agent.session_id.clone(),
+                    old_status: format!("{:?}", current_agent.status).to_lowercase(),
+                    new_status: format!("{:?}", new_status).to_lowercase(),
+                };
+                let _ = emit_agent_status_changed(&app_handle, payload);
+            }
+        }
+    }
+
+    // Mark tasks as completed in scheduler (need mutable access)
+    {
+        let mut scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(scheduler) = scheduler_guard.as_mut() {
+            for agent in &completed {
+                if agent.exit_code == 0 {
+                    let _ = scheduler.complete_task(&agent.task_id);
+                } else {
+                    let _ = scheduler.fail_task(&agent.task_id, format!("Agent exited with code {}", agent.exit_code));
+                }
+            }
+        }
+    }
+
+    Ok(completed)
 }
 
 /// Allocate worktree for agent

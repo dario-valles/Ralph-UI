@@ -299,6 +299,101 @@ impl AgentPool {
             max_total_memory_mb: self.limits.max_total_memory_mb,
         })
     }
+
+    /// Poll for completed agents and clean up
+    /// Returns a list of (agent_id, task_id, exit_code) for agents that have finished
+    pub fn poll_completed(&self) -> Result<Vec<CompletedAgent>> {
+        let mut completed = Vec::new();
+        let mut to_remove = Vec::new();
+
+        // First, identify processes that are no longer running
+        {
+            let running = self.running.lock().expect("mutex poisoned");
+            let mut system = self.system.lock().expect("mutex poisoned");
+            system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+            for (agent_id, pooled) in running.iter() {
+                let process = system.process(Pid::from_u32(pooled.process_id));
+
+                // If process doesn't exist in system, it has completed (or is zombie)
+                let is_alive = process.map(|p| {
+                    // Check if the process is actually running vs zombie
+                    // A zombie shows up in process list but has status "Zombie"
+                    !matches!(p.status(), sysinfo::ProcessStatus::Zombie)
+                        && p.status() != sysinfo::ProcessStatus::Dead
+                }).unwrap_or(false);
+
+                if !is_alive {
+                    log::info!("[AgentPool] Process {} for agent {} is no longer running",
+                        pooled.process_id, agent_id);
+                    to_remove.push((agent_id.clone(), pooled.config.task_id.clone(), pooled.process_id));
+                }
+            }
+        }
+
+        // Now remove them and try to get exit status
+        {
+            let mut running = self.running.lock().expect("mutex poisoned");
+            let mut manager = self.manager.lock().expect("mutex poisoned");
+
+            for (agent_id, task_id, process_id) in to_remove {
+                running.remove(&agent_id);
+
+                // Try to wait for the process to get exit code (reap zombie)
+                let exit_code = manager.wait_for_agent(&agent_id)
+                    .unwrap_or_else(|_| {
+                        // If wait fails, process is already gone, assume success
+                        log::warn!("[AgentPool] Could not get exit code for agent {}, assuming 0", agent_id);
+                        0
+                    });
+
+                log::info!("[AgentPool] Agent {} (task {}) completed with exit code {}",
+                    agent_id, task_id, exit_code);
+
+                // Get and clear the logs for this agent
+                let logs = manager.get_agent_logs(&agent_id);
+                manager.clear_agent_logs(&agent_id);
+
+                log::info!("[AgentPool] Agent {} has {} log entries", agent_id, logs.len());
+
+                completed.push(CompletedAgent {
+                    agent_id,
+                    task_id,
+                    process_id,
+                    exit_code,
+                    logs,
+                });
+            }
+        }
+
+        Ok(completed)
+    }
+}
+
+/// Information about a completed agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedAgent {
+    pub agent_id: String,
+    pub task_id: String,
+    pub process_id: u32,
+    pub exit_code: i32,
+    /// Logs collected during agent execution
+    pub logs: Vec<crate::models::LogEntry>,
+}
+
+impl AgentPool {
+    /// Get in-memory logs for an agent
+    pub fn get_agent_logs(&self, agent_id: &str) -> Vec<crate::models::LogEntry> {
+        let manager = self.manager.lock().expect("mutex poisoned");
+        manager.get_agent_logs(agent_id)
+    }
+
+    /// Clear in-memory logs for an agent
+    pub fn clear_agent_logs(&self, agent_id: &str) {
+        let manager = self.manager.lock().expect("mutex poisoned");
+        manager.clear_agent_logs(agent_id);
+    }
 }
 
 impl Default for AgentPool {

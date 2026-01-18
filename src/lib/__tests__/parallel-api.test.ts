@@ -9,7 +9,6 @@ import {
   formatPoolStats,
   calculateUtilization,
   type SchedulingStrategy,
-  type ConflictType,
   type ConflictResolutionStrategy,
   type PoolStats,
 } from '../parallel-api'

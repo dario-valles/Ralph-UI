@@ -24,6 +24,7 @@ import {
   parallelGetSchedulerStats,
   parallelGetPoolStats,
   parallelCheckViolations,
+  parallelPollCompleted,
   conflictsDetect,
   conflictsResolve,
   createDefaultSchedulerConfig,
@@ -179,6 +180,35 @@ export function ParallelExecutionPage() {
     }
   }
 
+  // Poll for completed agents (reaps zombie processes and updates status)
+  const pollCompleted = async () => {
+    if (!initialized) return
+
+    try {
+      const completed = await parallelPollCompleted()
+      if (completed.length > 0) {
+        console.log('[ParallelExecution] Completed agents:', completed)
+
+        // Update agent statuses based on completed list
+        // Note: AgentStatus doesn't have 'error', so we use 'idle' for both success and failure
+        setAgents((prev) =>
+          prev.map((agent) => {
+            const completedAgent = completed.find((c) => c.agentId === agent.id)
+            if (completedAgent) {
+              return {
+                ...agent,
+                status: 'idle' as const,
+              }
+            }
+            return agent
+          })
+        )
+      }
+    } catch (err) {
+      console.error('Failed to poll completed agents:', err)
+    }
+  }
+
   // Monitoring interval
   const monitoringIntervalRef = useRef<number | null>(null)
 
@@ -193,6 +223,7 @@ export function ParallelExecutionPage() {
     monitoringIntervalRef.current = window.setInterval(() => {
       refreshStats()
       checkHealth()
+      pollCompleted()
     }, 5000) // Every 5 seconds
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Stable interval callback
   }, [])

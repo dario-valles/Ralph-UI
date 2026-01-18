@@ -72,8 +72,9 @@ impl WorktreeCoordinator {
         }
 
         // Create worktree using git
+        // Note: create_worktree takes (branch, path) not (path, branch)
         let git = GitManager::new(&self.repo_path)?;
-        git.create_worktree(&worktree_path_str, branch_name)?;
+        git.create_worktree(branch_name, &worktree_path_str)?;
 
         // Create allocation record
         let allocation = WorktreeAllocation {

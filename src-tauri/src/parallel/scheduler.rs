@@ -428,6 +428,21 @@ impl ParallelScheduler {
         log::info!("[Scheduler] Creating agent {} for task {} with branch {} at {}",
             agent_id, scheduled.task.id, branch, worktree_path);
 
+        // Build the prompt - use description if available, otherwise use title
+        // Include both title and description for better context
+        let prompt = if scheduled.task.description.trim().is_empty() {
+            // Only title available
+            format!("Task: {}", scheduled.task.title)
+        } else if scheduled.task.title.trim().is_empty() {
+            // Only description available
+            scheduled.task.description.clone()
+        } else {
+            // Both available - combine them
+            format!("Task: {}\n\n{}", scheduled.task.title, scheduled.task.description)
+        };
+
+        log::info!("[Scheduler] Task prompt: {}", &prompt[..prompt.len().min(200)]);
+
         // Spawn agent
         let config = AgentSpawnConfig {
             agent_type: self.config.agent_type,
@@ -435,7 +450,7 @@ impl ParallelScheduler {
             worktree_path: worktree_path.clone(),
             branch: branch.clone(),
             max_iterations: self.config.max_iterations,
-            prompt: Some(scheduled.task.description.clone()),
+            prompt: Some(prompt),
             model: self.config.model.clone(),
         };
 
@@ -586,6 +601,21 @@ impl ParallelScheduler {
     /// Get pool statistics
     pub fn get_pool_stats(&self) -> Result<crate::parallel::pool::PoolStats> {
         self.pool.get_stats()
+    }
+
+    /// Poll for completed agents in the pool
+    pub fn poll_completed(&self) -> Result<Vec<crate::parallel::pool::CompletedAgent>> {
+        self.pool.poll_completed()
+    }
+
+    /// Get in-memory logs for an agent from the pool
+    pub fn get_agent_logs(&self, agent_id: &str) -> Vec<crate::models::LogEntry> {
+        self.pool.get_agent_logs(agent_id)
+    }
+
+    /// Clear in-memory logs for an agent
+    pub fn clear_agent_logs(&self, agent_id: &str) {
+        self.pool.clear_agent_logs(agent_id);
     }
 
     /// Check if scheduler is in dry-run mode

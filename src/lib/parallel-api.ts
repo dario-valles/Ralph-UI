@@ -61,6 +61,14 @@ export interface PoolStats {
   maxTotalMemoryMb: number
 }
 
+export interface CompletedAgent {
+  agentId: string
+  taskId: string
+  processId: number
+  exitCode: number
+  logs: { timestamp: string; level: string; message: string }[]
+}
+
 // ===== Worktree Types =====
 
 export interface WorktreeAllocation {
@@ -190,6 +198,13 @@ export async function parallelGetPoolStats(): Promise<PoolStats> {
  */
 export async function parallelCheckViolations(): Promise<string[]> {
   return invoke('parallel_check_violations')
+}
+
+/**
+ * Poll for completed agents (reaps zombies and returns finished agents)
+ */
+export async function parallelPollCompleted(): Promise<CompletedAgent[]> {
+  return invoke('parallel_poll_completed')
 }
 
 // ===== Worktree API =====
