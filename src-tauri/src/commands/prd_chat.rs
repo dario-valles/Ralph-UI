@@ -6,6 +6,7 @@ use crate::models::{
     GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
 };
 use crate::parsers::structured_output;
+use crate::session_files;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -576,6 +577,17 @@ fn create_session_and_tasks_from_prd(
         database::tasks::create_task(db.get_connection(), &session_id, &task)
             .map_err(|e| format!("Failed to create task: {}", e))?;
         task_count += 1;
+    }
+
+    // Export session to file for git tracking and portability
+    // Pass PRD ID to preserve the PRD-session relationship
+    if let Err(e) = session_files::export_session_to_file(
+        db.get_connection(),
+        &session_id,
+        Some(prd.id.clone()),
+    ) {
+        log::warn!("Failed to export session to file: {}", e);
+        // Don't fail - session is in DB
     }
 
     Ok((session_id, task_count))

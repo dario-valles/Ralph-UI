@@ -43,6 +43,12 @@ pub async fn create_session(
     database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
+    // Export session to file immediately after creation for git tracking
+    // This provides a safety net for all session creation paths
+    if let Err(e) = session_files::export_session_to_file(conn, &session.id, None) {
+        log::warn!("Failed to export session to file: {}", e);
+    }
+
     Ok(session)
 }
 
