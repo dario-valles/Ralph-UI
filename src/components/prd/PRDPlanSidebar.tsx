@@ -248,29 +248,25 @@ export function PRDPlanSidebar({
   return (
     <>
       <Card className={cn('flex flex-col', className)}>
-        <CardHeader className="pb-2 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <CardTitle className="text-sm font-medium truncate">
-                Plan Document
-              </CardTitle>
-              {isWatching && (
-                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 h-5 shrink-0">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
-                  </span>
-                  Watching
-                </Badge>
-              )}
-            </div>
-            {headerControls}
+        <CardHeader className="pb-2 px-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Plan</CardTitle>
+            {isWatching && (
+              <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 h-5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                </span>
+                Watching
+              </Badge>
+            )}
+            <div className="ml-auto">{headerControls}</div>
           </div>
           {filename && (
             <div className="flex items-center gap-1.5">
               <FileCode className="h-3 w-3 text-muted-foreground shrink-0" />
-              <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground truncate">
+              <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground truncate min-w-0 flex-1">
                 {filename}
               </code>
               {path && (
@@ -292,7 +288,7 @@ export function PRDPlanSidebar({
         <CardContent className="flex-1 p-0 overflow-hidden">
           <div
             ref={contentRef}
-            className="h-full overflow-y-auto p-3"
+            className="h-full overflow-y-auto px-3 py-2"
           >
             {renderContent()}
           </div>

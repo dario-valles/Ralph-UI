@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,10 +27,10 @@ function getScoreColor(score: number): string {
 }
 
 function getScoreBg(score: number): string {
-  if (score >= 80) return 'bg-green-100'
-  if (score >= 60) return 'bg-yellow-100'
-  if (score >= 40) return 'bg-orange-100'
-  return 'bg-red-100'
+  if (score >= 80) return 'bg-green-50'
+  if (score >= 60) return 'bg-yellow-50'
+  if (score >= 40) return 'bg-orange-50'
+  return 'bg-red-50'
 }
 
 function getProgressColor(score: number): string {
@@ -40,24 +40,33 @@ function getProgressColor(score: number): string {
   return 'bg-red-500'
 }
 
+function getProgressBgColor(score: number): string {
+  if (score >= 80) return 'bg-green-100'
+  if (score >= 60) return 'bg-yellow-100'
+  if (score >= 40) return 'bg-orange-100'
+  return 'bg-red-100'
+}
+
 interface ScoreBarProps {
   label: string
+  shortLabel: string
   score: number
 }
 
-function ScoreBar({ label, score }: ScoreBarProps) {
+function ScoreBar({ label, shortLabel, score }: ScoreBarProps) {
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={cn('font-medium', getScoreColor(score))}>{score}%</span>
-      </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-muted-foreground w-12 shrink-0">
+        <span className="hidden sm:inline">{label}</span>
+        <span className="sm:hidden">{shortLabel}</span>
+      </span>
+      <div className={cn('flex-1 h-1.5 rounded-full overflow-hidden', getProgressBgColor(score))}>
         <div
-          className={cn('h-full transition-all duration-500', getProgressColor(score))}
+          className={cn('h-full rounded-full transition-all duration-500', getProgressColor(score))}
           style={{ width: `${score}%` }}
         />
       </div>
+      <span className={cn('text-[11px] font-semibold tabular-nums w-8 text-right shrink-0', getScoreColor(score))}>{score}%</span>
     </div>
   )
 }
@@ -72,24 +81,24 @@ export function QualityScoreCard({
   if (!assessment) {
     return (
       <Card className={cn('w-full', className)}>
-        <CardHeader className={cn('pb-2', compact && 'py-2 px-3')}>
+        <CardHeader className={cn('pb-3', compact && 'py-2.5 px-3')}>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
+            <h3 className="text-sm font-semibold text-foreground">Quality Score</h3>
             {onRefresh && (
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={onRefresh}
                 disabled={loading}
-                className="h-7 w-7 p-0"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className={compact ? 'py-2 px-3' : ''}>
-          <p className="text-xs text-muted-foreground">
+        <CardContent className={cn('pt-0', compact && 'py-2.5 px-3')}>
+          <p className="text-sm text-muted-foreground">
             Add content to assess quality.
           </p>
         </CardContent>
@@ -103,12 +112,12 @@ export function QualityScoreCard({
 
     return (
       <Card className={cn('w-full', className)}>
-        <CardContent className="py-2 px-3">
+        <CardContent className="py-3 px-3">
           <div className="flex items-center gap-3">
             {/* Score Circle - Smaller */}
             <div
               className={cn(
-                'flex items-center justify-center w-10 h-10 rounded-full text-lg font-bold shrink-0',
+                'flex items-center justify-center w-11 h-11 rounded-full text-lg font-bold shrink-0 shadow-sm',
                 getScoreBg(assessment.overall),
                 getScoreColor(assessment.overall)
               )}
@@ -118,41 +127,41 @@ export function QualityScoreCard({
             <div className="flex-1 min-w-0">
               {/* Status Badge */}
               {assessment.readyForExport ? (
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
-                  <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+                <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 text-[10px] px-1.5 py-0 gap-0.5">
+                  <CheckCircle className="h-2.5 w-2.5" />
                   Ready
                 </Badge>
               ) : (
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] px-1.5 py-0">
-                  <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 text-[10px] px-1.5 py-0 gap-0.5">
+                  <AlertTriangle className="h-2.5 w-2.5" />
                   Needs detail
                 </Badge>
               )}
               {/* Mini score bars */}
-              <div className="mt-1.5 space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground w-6">C</span>
-                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+              <div className="mt-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-5 font-medium">C</span>
+                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.completeness))}>
                     <div
-                      className={cn('h-full', getProgressColor(assessment.completeness))}
+                      className={cn('h-full rounded-full', getProgressColor(assessment.completeness))}
                       style={{ width: `${assessment.completeness}%` }}
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground w-6">Cl</span>
-                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-5 font-medium">Cl</span>
+                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.clarity))}>
                     <div
-                      className={cn('h-full', getProgressColor(assessment.clarity))}
+                      className={cn('h-full rounded-full', getProgressColor(assessment.clarity))}
                       style={{ width: `${assessment.clarity}%` }}
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground w-6">A</span>
-                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground w-5 font-medium">A</span>
+                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.actionability))}>
                     <div
-                      className={cn('h-full', getProgressColor(assessment.actionability))}
+                      className={cn('h-full rounded-full', getProgressColor(assessment.actionability))}
                       style={{ width: `${assessment.actionability}%` }}
                     />
                   </div>
@@ -163,10 +172,10 @@ export function QualityScoreCard({
               {onRefresh && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
                   onClick={onRefresh}
                   disabled={loading}
-                  className="h-6 w-6 p-0"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
                 >
                   <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
                 </Button>
@@ -177,8 +186,8 @@ export function QualityScoreCard({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
                     >
                       <ChevronDown className="h-3 w-3" />
                     </Button>
@@ -186,14 +195,14 @@ export function QualityScoreCard({
                   <DropdownMenuContent className="w-64 p-3" side="left" align="start">
                     {/* Missing Sections */}
                     {assessment.missingSections.length > 0 && (
-                      <div className="space-y-1.5 mb-3">
-                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600">
                           <AlertCircle className="h-3 w-3" />
                           Missing Sections
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {assessment.missingSections.map((section, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-[10px]">
+                            <Badge key={idx} variant="secondary" className="text-[10px] font-normal">
                               {section}
                             </Badge>
                           ))}
@@ -203,15 +212,16 @@ export function QualityScoreCard({
 
                     {/* Suggestions */}
                     {assessment.suggestions.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
                           <Lightbulb className="h-3 w-3" />
                           Suggestions
                         </div>
-                        <ul className="text-xs space-y-1">
+                        <ul className="space-y-1.5">
                           {assessment.suggestions.slice(0, 3).map((suggestion, idx) => (
-                            <li key={idx} className="text-muted-foreground">
-                              • {suggestion}
+                            <li key={idx} className="flex gap-1.5 text-xs text-muted-foreground leading-relaxed">
+                              <span className="text-amber-500 shrink-0">•</span>
+                              <span>{suggestion}</span>
                             </li>
                           ))}
                         </ul>
@@ -229,64 +239,64 @@ export function QualityScoreCard({
 
   return (
     <Card className={cn('w-full', className)}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
-          <div className="flex items-center gap-2">
-            {assessment.readyForExport ? (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Ready to export
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Needs more detail
-              </Badge>
-            )}
-            {onRefresh && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onRefresh}
-                disabled={loading}
-                className="h-7 w-7 p-0"
-              >
-                <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              </Button>
-            )}
-          </div>
+      <CardHeader className="pb-3 px-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Quality</h3>
+          {assessment.readyForExport ? (
+            <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 gap-1 text-[11px] px-1.5 py-0.5">
+              <CheckCircle className="h-3 w-3" />
+              Ready
+            </Badge>
+          ) : (
+            <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 gap-1 text-[11px] px-1.5 py-0.5">
+              <AlertTriangle className="h-3 w-3" />
+              Incomplete
+            </Badge>
+          )}
+          {onRefresh && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRefresh}
+              disabled={loading}
+              className="h-6 w-6 ml-auto text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            </Button>
+          )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Overall Score */}
-        <div className="flex items-center gap-4">
+      <CardContent className="space-y-4 pt-0 px-4">
+        {/* Overall Score with Score Bars */}
+        <div className="flex gap-3">
+          {/* Score Circle */}
           <div
             className={cn(
-              'flex items-center justify-center w-16 h-16 rounded-full text-2xl font-bold',
+              'flex items-center justify-center w-14 h-14 rounded-full text-xl font-bold shrink-0 shadow-sm',
               getScoreBg(assessment.overall),
               getScoreColor(assessment.overall)
             )}
           >
             {assessment.overall}
           </div>
-          <div className="flex-1 space-y-2">
-            <ScoreBar label="Completeness" score={assessment.completeness} />
-            <ScoreBar label="Clarity" score={assessment.clarity} />
-            <ScoreBar label="Actionability" score={assessment.actionability} />
+          {/* Score Bars */}
+          <div className="flex-1 min-w-0 space-y-2 py-1">
+            <ScoreBar label="Complete" shortLabel="Comp" score={assessment.completeness} />
+            <ScoreBar label="Clarity" shortLabel="Clear" score={assessment.clarity} />
+            <ScoreBar label="Action" shortLabel="Action" score={assessment.actionability} />
           </div>
         </div>
 
         {/* Missing Sections */}
         {assessment.missingSections.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
-              <AlertCircle className="h-4 w-4" />
+            <div className="flex items-center gap-1.5 text-xs font-medium text-orange-600">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               Missing Sections
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {assessment.missingSections.map((section, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
+                <Badge key={idx} variant="secondary" className="text-xs font-normal">
                   {section}
                 </Badge>
               ))}
@@ -297,14 +307,15 @@ export function QualityScoreCard({
         {/* Suggestions */}
         {assessment.suggestions.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
-              <Lightbulb className="h-4 w-4" />
+            <div className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+              <Lightbulb className="h-3.5 w-3.5 shrink-0" />
               Suggestions
             </div>
-            <ul className="text-sm space-y-1">
+            <ul className="space-y-1.5">
               {assessment.suggestions.slice(0, 3).map((suggestion, idx) => (
-                <li key={idx} className="text-muted-foreground">
-                  • {suggestion}
+                <li key={idx} className="flex gap-2 text-xs text-muted-foreground leading-relaxed">
+                  <span className="text-amber-500 shrink-0">•</span>
+                  <span>{suggestion}</span>
                 </li>
               ))}
             </ul>
