@@ -204,6 +204,16 @@ export async function parallelPollCompleted(): Promise<CompletedAgent[]> {
   return invoke('parallel_poll_completed')
 }
 
+/**
+ * Get real-time in-memory logs for an agent from the pool
+ * Use this for logs during agent execution (before agent completes)
+ */
+export async function parallelGetAgentLogs(
+  agentId: string
+): Promise<{ timestamp: string; level: string; message: string }[]> {
+  return invoke('parallel_get_agent_logs', { agentId })
+}
+
 // ===== Worktree API =====
 
 /**

@@ -8,8 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { RefreshCw, Bot, Filter, FilterX } from 'lucide-react'
-import { cleanupStaleAgents } from '@/lib/agent-api'
-import { parallelPollCompleted } from '@/lib/parallel-api'
+import { cleanupStaleAgents, LogEntry } from '@/lib/agent-api'
+import { parallelPollCompleted, parallelGetAgentLogs } from '@/lib/parallel-api'
 
 export function AgentsPage() {
   const { currentSession } = useSessionStore()
@@ -25,6 +25,8 @@ export function AgentsPage() {
   } = useAgentStore()
 
   const [showActiveOnly, setShowActiveOnly] = useState(false)
+  const [realtimeLogs, setRealtimeLogs] = useState<LogEntry[]>([])
+  const [realtimeLogsAgentId, setRealtimeLogsAgentId] = useState<string | null>(null)
 
   // Load agents when session changes
   useEffect(() => {
@@ -88,6 +90,49 @@ export function AgentsPage() {
     }
   }, [agents, pollCompleted])
 
+  // Real-time log polling for active selected agent
+  const logPollIntervalRef = useRef<number | null>(null)
+
+  const fetchRealtimeLogs = useCallback(async () => {
+    if (!activeAgentId) return
+
+    const agent = agents.find((a) => a.id === activeAgentId)
+    if (!agent || agent.status === 'idle') {
+      // Agent is idle, clear realtime logs
+      setRealtimeLogsAgentId(null)
+      setRealtimeLogs([])
+      return
+    }
+
+    try {
+      const logs = await parallelGetAgentLogs(activeAgentId)
+      setRealtimeLogsAgentId(activeAgentId)
+      setRealtimeLogs(logs as LogEntry[])
+    } catch {
+      // Scheduler not initialized or other error, fall back to DB logs
+      setRealtimeLogsAgentId(null)
+      setRealtimeLogs([])
+    }
+  }, [activeAgentId, agents])
+
+  // Start/stop log polling for the selected active agent
+  useEffect(() => {
+    const agent = agents.find((a) => a.id === activeAgentId)
+    const isAgentActive = agent && agent.status !== 'idle'
+
+    if (isAgentActive) {
+      // Poll every 1 second (first poll happens after 1s, which is fine for UX)
+      logPollIntervalRef.current = window.setInterval(fetchRealtimeLogs, 1000)
+    }
+
+    return () => {
+      if (logPollIntervalRef.current) {
+        clearInterval(logPollIntervalRef.current)
+        logPollIntervalRef.current = null
+      }
+    }
+  }, [activeAgentId, agents, fetchRealtimeLogs])
+
   // Filter agents based on toggle
   const filteredAgents = useMemo(() => {
     if (!showActiveOnly) return agents
@@ -98,6 +143,19 @@ export function AgentsPage() {
   const selectedAgent = useMemo(() => {
     return agents.find((a) => a.id === activeAgentId) || null
   }, [agents, activeAgentId])
+
+  // Effective logs to display - realtime logs for active agents, DB logs for idle
+  const effectiveLogs = useMemo(() => {
+    if (!selectedAgent) return []
+
+    // If agent is active and we have realtime logs for this specific agent, use them
+    if (selectedAgent.status !== 'idle' && realtimeLogsAgentId === selectedAgent.id && realtimeLogs.length > 0) {
+      return realtimeLogs
+    }
+
+    // Fall back to DB logs (for idle agents or before first poll)
+    return selectedAgent.logs || []
+  }, [selectedAgent, realtimeLogs, realtimeLogsAgentId])
 
   // Status summary
   const statusSummary = useMemo(() => {
@@ -230,7 +288,7 @@ export function AgentsPage() {
             onRestart={handleRestartAgent}
           />
           <AgentLogViewer
-            logs={selectedAgent?.logs || []}
+            logs={effectiveLogs}
             agentId={selectedAgent?.id}
           />
         </div>

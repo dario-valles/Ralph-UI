@@ -80,8 +80,10 @@ fn get_patterns() -> &'static Vec<CompiledPattern> {
                 limit_type: RateLimitType::OpenAiRateLimit,
             },
             // HTTP 429 patterns
+            // Use word boundary to prevent false positives from IDs containing "429"
+            // (e.g., session ID "ses_429f18024ffeVo6UO6EAo2tIHG" should NOT match)
             CompiledPattern {
-                regex: Regex::new(r"(?i)429\s*(too many requests|rate limit)?").unwrap(),
+                regex: Regex::new(r"(?i)\b429\b\s*(?:too many requests|rate limit)?").unwrap(),
                 limit_type: RateLimitType::Http429,
             },
             CompiledPattern {
@@ -326,6 +328,22 @@ mod tests {
         assert!(detector.is_rate_limited("status: 429"));
         assert!(detector.is_rate_limited("HTTP/1.1 429"));
         assert!(detector.is_rate_limited("HTTP/2 429"));
+    }
+
+    #[test]
+    fn test_no_false_positive_on_session_ids() {
+        let detector = RateLimitDetector::new();
+
+        // Session IDs that happen to contain "429" should NOT trigger rate limit detection
+        assert!(!detector.is_rate_limited("ses_429f18024ffeVo6UO6EAo2tIHG"));
+        assert!(!detector.is_rate_limited("Created session with id: ses_429f18024ffeVo6UO6EAo2tIHG"));
+        assert!(!detector.is_rate_limited("agent-429abc-def"));
+        assert!(!detector.is_rate_limited("task_id_429_hash"));
+
+        // But actual 429 errors should still be detected
+        assert!(detector.is_rate_limited("Error: 429"));
+        assert!(detector.is_rate_limited("Response code: 429"));
+        assert!(detector.is_rate_limited("429 Too Many Requests"));
     }
 
     #[test]

@@ -288,6 +288,22 @@ pub fn parallel_check_violations(
         .map_err(|e| format!("Failed to check violations: {}", e))
 }
 
+/// Get real-time in-memory logs for an agent from the pool
+/// Use this for logs during agent execution (before agent completes)
+#[tauri::command]
+pub fn parallel_get_agent_logs(
+    state: State<ParallelState>,
+    agent_id: String,
+) -> Result<Vec<crate::models::LogEntry>, String> {
+    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+    let scheduler = scheduler
+        .as_ref()
+        .ok_or("Scheduler not initialized")?;
+
+    Ok(scheduler.get_agent_logs(&agent_id))
+}
+
 /// Poll for completed agents and update their status
 /// This should be called periodically by the frontend to detect when agents finish
 #[tauri::command]

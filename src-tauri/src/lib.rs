@@ -209,6 +209,7 @@ pub fn run() {
             commands::parallel_get_pool_stats,
             commands::parallel_check_violations,
             commands::parallel_poll_completed,
+            commands::parallel_get_agent_logs,
             commands::worktree_allocate,
             commands::worktree_deallocate,
             commands::worktree_deallocate_by_agent,
