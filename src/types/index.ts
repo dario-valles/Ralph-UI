@@ -159,6 +159,17 @@ export interface PRDDocument {
   sourceChatSessionId?: string
   /** Type of PRD (new_feature, bug_fix, refactoring, api_integration, general) */
   prdType?: PRDTypeValue
+  /** AI-extracted structured items (JSON-serialized ExtractedPRDStructure) */
+  extractedStructure?: string
+}
+
+/** Result of exporting a PRD chat session */
+export interface ExportResult {
+  prd: PRDDocument
+  /** Session ID if tasks were created (for navigation to Tasks page) */
+  sessionId?: string
+  /** Number of tasks created from the PRD */
+  taskCount: number
 }
 
 export interface PRDTemplate {

@@ -4,7 +4,7 @@ import { prdChatApi } from '@/lib/tauri-api'
 import type {
   ChatSession,
   ChatMessage,
-  PRDDocument,
+  ExportResult,
   QualityAssessment,
   GuidedQuestion,
   ExtractedPRDContent,
@@ -48,7 +48,7 @@ interface PRDChatStore {
   loadSessions: () => Promise<void>
   setCurrentSession: (session: ChatSession | null) => void
   deleteSession: (sessionId: string) => Promise<void>
-  exportToPRD: (title: string) => Promise<PRDDocument | null>
+  exportToPRD: (title: string) => Promise<ExportResult | null>
   clearError: () => void
   assessQuality: () => Promise<QualityAssessment | null>
   loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
@@ -251,7 +251,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     }
   },
 
-  // Export the current chat to a PRD document
+  // Export the current chat to a PRD document (and optionally create session + tasks)
   exportToPRD: async (title: string) => {
     const { currentSession } = get()
     if (!currentSession) {
@@ -260,9 +260,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const prd = await prdChatApi.exportToPRD(currentSession.id, title)
+      const result = await prdChatApi.exportToPRD(currentSession.id, title)
       set({ loading: false })
-      return prd
+      return result
     } catch (error) {
       set({
         error: error instanceof Error && error.message ? error.message : 'Failed to export',

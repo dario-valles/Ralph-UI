@@ -28,7 +28,6 @@ import {
   Bot,
   BarChart3,
   AlertTriangle,
-  LayoutList,
   ScrollText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -36,13 +35,13 @@ import {
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { useSessionStore } from '@/stores/sessionStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { QualityScoreCard } from './QualityScoreCard'
 import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
-import { StructuredPRDSidebar } from './StructuredPRDSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { prdChatApi } from '@/lib/tauri-api'
 import { listen } from '@tauri-apps/api/event'
@@ -83,6 +82,12 @@ export function PRDChatPanel() {
   const [showPlanSidebar, setShowPlanSidebar] = useState(true)
   // Sessions sidebar collapsed state for smaller screens
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
+  // Export progress tracking
+  const [exportProgress, setExportProgress] = useState<{
+    active: boolean
+    step: number
+    message: string
+  } | null>(null)
 
   const {
     sessions,
@@ -93,7 +98,6 @@ export function PRDChatPanel() {
     error,
     qualityAssessment,
     processingSessionId,
-    extractedStructure,
     watchedPlanContent,
     watchedPlanPath,
     isWatchingPlan,
@@ -105,9 +109,6 @@ export function PRDChatPanel() {
     loadSessions,
     exportToPRD,
     assessQuality,
-    setStructuredMode,
-    loadExtractedStructure,
-    clearExtractedStructure,
     startWatchingPlanFile,
     stopWatchingPlanFile,
     updatePlanContent,
@@ -161,12 +162,8 @@ export function PRDChatPanel() {
     if (currentSession && currentSession.id !== prevSessionIdRef.current) {
       loadHistory(currentSession.id)
       prevSessionIdRef.current = currentSession.id
-      // Load extracted structure if structured mode is enabled
-      if (currentSession.structuredMode) {
-        loadExtractedStructure()
-      }
     }
-  }, [currentSession, loadHistory, loadExtractedStructure])
+  }, [currentSession, loadHistory])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -252,12 +249,19 @@ export function PRDChatPanel() {
     }
   }, [currentSession?.id, currentSession?.projectPath, startWatchingPlanFile, stopWatchingPlanFile])
 
-  // Auto-show sidebar when plan content appears
+  // Auto-show sidebar when plan content first appears (not on every render)
+  const hadPlanContentRef = useRef(false)
   useEffect(() => {
-    if (watchedPlanContent && !showPlanSidebar) {
+    // Only auto-open when content first appears, not when user manually closes
+    if (watchedPlanContent && !hadPlanContentRef.current) {
+      hadPlanContentRef.current = true
       setShowPlanSidebar(true)
     }
-  }, [watchedPlanContent, showPlanSidebar])
+    // Reset when content is cleared (e.g., session change)
+    if (!watchedPlanContent) {
+      hadPlanContentRef.current = false
+    }
+  }, [watchedPlanContent])
 
   // Auto-refresh quality score when plan file content changes
   const prevPlanContentRef = useRef<string | null>(null)
@@ -369,48 +373,85 @@ export function PRDChatPanel() {
 
   const handleExportToPRD = async () => {
     if (currentSession) {
-      // Assess quality before export
+      // Step 1: Assess quality
+      setExportProgress({ active: true, step: 1, message: 'Checking PRD quality...' })
       const assessment = await assessQuality()
       if (assessment && !assessment.readyForExport) {
+        setExportProgress(null)
         setShowQualityPanel(true)
         return
       }
-      const prd = await exportToPRD(currentSession.title || 'Untitled PRD')
-      if (prd) {
-        toast.success('PRD exported successfully', 'Your PRD has been created.')
-        // Navigate to the new PRD editor
-        navigate(`/prds/${prd.id}`)
+
+      try {
+        // Step 2: Export PRD and extract tasks
+        setExportProgress({ active: true, step: 2, message: 'Exporting PRD and extracting tasks...' })
+        const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+
+        if (result) {
+          if (result.sessionId && result.taskCount > 0) {
+            // Step 3: Set up session
+            setExportProgress({ active: true, step: 3, message: `Created ${result.taskCount} tasks. Setting up session...` })
+            await useSessionStore.getState().fetchSession(result.sessionId)
+
+            // Step 4: Navigate
+            setExportProgress({ active: true, step: 4, message: 'Navigating to tasks...' })
+            toast.success(
+              `Created ${result.taskCount} tasks from PRD`,
+              'Your tasks are ready to assign to agents.'
+            )
+            navigate('/tasks')
+          } else {
+            // No tasks extracted - navigate to PRD editor
+            setExportProgress(null)
+            toast.success('PRD exported successfully', 'Your PRD has been created.')
+            navigate(`/prds/${result.prd.id}`)
+          }
+        }
+      } catch (err) {
+        setExportProgress(null)
+        throw err
       }
     }
   }
 
   const handleForceExport = async () => {
     if (currentSession) {
-      const prd = await exportToPRD(currentSession.title || 'Untitled PRD')
       setShowQualityPanel(false)
-      if (prd) {
-        toast.success('PRD exported successfully', 'Your PRD has been created.')
-        // Navigate to the new PRD editor
-        navigate(`/prds/${prd.id}`)
+
+      try {
+        // Step 1: Export PRD and extract tasks
+        setExportProgress({ active: true, step: 1, message: 'Exporting PRD and extracting tasks...' })
+        const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+
+        if (result) {
+          if (result.sessionId && result.taskCount > 0) {
+            // Step 2: Set up session
+            setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
+            await useSessionStore.getState().fetchSession(result.sessionId)
+
+            // Step 3: Navigate
+            setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
+            toast.success(
+              `Created ${result.taskCount} tasks from PRD`,
+              'Your tasks are ready to assign to agents.'
+            )
+            navigate('/tasks')
+          } else {
+            // No tasks extracted - navigate to PRD editor
+            setExportProgress(null)
+            toast.success('PRD exported successfully', 'Your PRD has been created.')
+            navigate(`/prds/${result.prd.id}`)
+          }
+        }
+      } catch (err) {
+        setExportProgress(null)
+        throw err
       }
     }
   }
 
   const handleRefreshQuality = () => {
     assessQuality()
-  }
-
-  const handleToggleStructuredMode = async () => {
-    if (!currentSession) return
-    const newMode = !currentSession.structuredMode
-    await setStructuredMode(newMode)
-    if (newMode) {
-      loadExtractedStructure()
-    }
-  }
-
-  const handleClearStructure = () => {
-    clearExtractedStructure()
   }
 
   const hasMessages = messages.length > 0
@@ -595,25 +636,9 @@ export function PRDChatPanel() {
               </div>
 
               {/* View Toggle Buttons - Compact */}
-              <div className="flex items-center border rounded-md">
-                {/* Structured Mode Toggle */}
-                {currentSession && (
-                  <Tooltip content={currentSession.structuredMode ? 'Structured mode on' : 'Enable structured mode'} side="bottom">
-                    <Button
-                      variant={currentSession.structuredMode ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={handleToggleStructuredMode}
-                      disabled={streaming}
-                      aria-label="Toggle structured mode"
-                      className="h-8 w-8 p-0 rounded-none rounded-l-md"
-                    >
-                      <LayoutList className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                )}
-
-                {/* Plan Sidebar Toggle */}
-                {currentSession?.projectPath && (
+              {/* Plan Sidebar Toggle */}
+              {currentSession?.projectPath && (
+                <div className="flex items-center border rounded-md">
                   <Tooltip content={showPlanSidebar ? 'Hide plan' : 'Show plan'} side="bottom">
                     <Button
                       variant={showPlanSidebar ? 'default' : 'ghost'}
@@ -621,7 +646,7 @@ export function PRDChatPanel() {
                       onClick={() => setShowPlanSidebar(!showPlanSidebar)}
                       disabled={streaming}
                       aria-label="Toggle plan sidebar"
-                      className={cn('h-8 w-8 p-0 rounded-none relative', !currentSession && 'rounded-l-md', 'rounded-r-md')}
+                      className="h-8 w-8 p-0 rounded-md relative"
                     >
                       <ScrollText className="h-4 w-4" />
                       {watchedPlanContent && (
@@ -632,8 +657,8 @@ export function PRDChatPanel() {
                       )}
                     </Button>
                   </Tooltip>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Actions Dropdown for smaller screens */}
               <DropdownMenu>
@@ -680,12 +705,44 @@ export function PRDChatPanel() {
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
           {/* Loading Spinner */}
-          {loading && (
+          {loading && !exportProgress && (
             <div
               data-testid="loading-spinner"
               className="absolute inset-0 flex items-center justify-center bg-background/50 z-10"
             >
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {/* Export Progress Overlay */}
+          {exportProgress?.active && (
+            <div
+              data-testid="export-progress"
+              className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-20"
+            >
+              <div className="flex flex-col items-center gap-4 p-6 bg-card rounded-lg shadow-lg border max-w-sm mx-4">
+                <div className="relative">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-medium text-primary">{exportProgress.step}</span>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="font-medium text-foreground">Exporting PRD</p>
+                  <p className="text-sm text-muted-foreground mt-1">{exportProgress.message}</p>
+                </div>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((step) => (
+                    <div
+                      key={step}
+                      className={cn(
+                        'w-2 h-2 rounded-full transition-colors',
+                        step <= exportProgress.step ? 'bg-primary' : 'bg-muted'
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -796,15 +853,6 @@ export function PRDChatPanel() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Structured Output Sidebar */}
-      {currentSession?.structuredMode && (
-        <StructuredPRDSidebar
-          structure={extractedStructure}
-          onClear={handleClearStructure}
-          className="w-56 xl:w-64 2xl:w-72 shrink-0"
-        />
-      )}
 
       {/* Plan Document Sidebar */}
       {showPlanSidebar && currentSession?.projectPath && (

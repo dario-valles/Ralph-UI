@@ -22,6 +22,7 @@ import type {
   GuidedQuestion,
   ExtractedPRDContent,
   ExtractedPRDStructure,
+  ExportResult,
   PRDTypeValue,
   Project,
 } from '@/types'
@@ -219,7 +220,7 @@ export const prdChatApi = {
     return await invoke('delete_prd_chat_session', { sessionId })
   },
 
-  exportToPRD: async (sessionId: string, title: string): Promise<PRDDocument> => {
+  exportToPRD: async (sessionId: string, title: string): Promise<ExportResult> => {
     return await invoke('export_chat_to_prd', {
       request: { sessionId, title }
     })

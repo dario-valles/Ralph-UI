@@ -53,6 +53,17 @@ pub struct SendMessageResponse {
     pub assistant_message: ChatMessage,
 }
 
+/// Result of exporting a PRD chat session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub prd: crate::database::prd::PRDDocument,
+    /// Session ID if tasks were created (for navigation to Tasks page)
+    pub session_id: Option<String>,
+    /// Number of tasks created from the PRD
+    pub task_count: usize,
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -342,39 +353,99 @@ pub async fn delete_prd_chat_session(
         .map_err(|e| format!("Failed to delete session: {}", e))
 }
 
-/// Export chat conversation to a new PRD document
+/// Export chat conversation to a new PRD document, creating a session and tasks
 #[tauri::command]
 pub async fn export_chat_to_prd(
+    app_handle: tauri::AppHandle,
     request: ExportToPRDRequest,
     db: State<'_, Mutex<Database>>,
-) -> Result<crate::database::prd::PRDDocument, String> {
-    let db_guard = db.lock().map_err(|e| e.to_string())?;
+) -> Result<ExportResult, String> {
+    // First, get session data and determine content source
+    // We need to release the lock before async AI call
+    let (session, content, assessment, from_plan_file) = {
+        let db_guard = db.lock().map_err(|e| e.to_string())?;
 
-    // Get session
-    let session = db_guard.get_chat_session(&request.session_id)
-        .map_err(|e| format!("Session not found: {}", e))?;
+        // Get session
+        let session = db_guard.get_chat_session(&request.session_id)
+            .map_err(|e| format!("Session not found: {}", e))?;
 
-    // Get all messages
-    let messages = db_guard.get_messages_by_session(&request.session_id)
-        .map_err(|e| format!("Failed to get messages: {}", e))?;
+        // Try to get content from PRD plan file first (this has the actual PRD)
+        // Fall back to chat messages if the file doesn't exist or can't be read
+        let (content, assessment, from_plan_file) = if let Some(ref project_path) = session.project_path {
+            let plan_path = crate::watchers::get_prd_plan_file_path(
+                project_path,
+                &request.session_id,
+                session.title.as_deref(),
+            );
 
-    // Calculate quality assessment before export
-    let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
-
-    // Convert conversation to PRD content
-    // Use extracted structure if available for structured mode sessions
-    let content = if session.structured_mode {
-        if let Some(ref structure_json) = session.extracted_structure {
-            if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
-                convert_structure_to_prd_content(&structure, &messages)
+            if plan_path.exists() {
+                // Use the actual PRD file content
+                match std::fs::read_to_string(&plan_path) {
+                    Ok(file_content) => {
+                        log::info!("Exporting PRD from plan file: {:?}", plan_path);
+                        let assessment = calculate_quality_from_markdown(
+                            &file_content,
+                            session.prd_type.as_deref(),
+                        );
+                        (file_content, assessment, true)
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
+                        let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
+                        (c, a, false)
+                    }
+                }
             } else {
-                convert_chat_to_prd_content(&messages)
+                // No plan file yet, use messages
+                let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
+                (c, a, false)
             }
         } else {
-            convert_chat_to_prd_content(&messages)
+            // No project path, use messages
+            let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
+            (c, a, false)
+        };
+
+        (session, content, assessment, from_plan_file)
+    }; // Release db lock here before async AI call
+
+    // Extract structured items via AI if we have substantial content from the plan file
+    let extracted_structure = if from_plan_file && !content.trim().is_empty() && content.len() > 100 {
+        log::info!("Extracting structured items via AI for export...");
+
+        // Parse the agent type for the session
+        let agent_type = parse_agent_type(&session.agent_type)
+            .unwrap_or(AgentType::Claude);
+
+        match extract_items_via_ai(
+            &app_handle,
+            &content,
+            session.prd_type.as_deref(),
+            agent_type,
+            session.project_path.as_deref(),
+        ).await {
+            Ok(structure) if structure.has_items() => {
+                log::info!("Extracted {} items from PRD", structure.total_items());
+                match serde_json::to_string(&structure) {
+                    Ok(json) => Some(json),
+                    Err(e) => {
+                        log::warn!("Failed to serialize extracted structure: {}", e);
+                        None
+                    }
+                }
+            }
+            Ok(_) => {
+                log::info!("AI extraction returned no items");
+                None
+            }
+            Err(e) => {
+                log::warn!("AI extraction failed, continuing without extracted items: {}", e);
+                None
+            }
         }
     } else {
-        convert_chat_to_prd_content(&messages)
+        // For message-based exports or short content, check if session already has extracted structure
+        session.extracted_structure.clone()
     };
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -398,12 +469,147 @@ pub async fn export_chat_to_prd(
         // Track the source chat session
         source_chat_session_id: Some(request.session_id.clone()),
         prd_type: session.prd_type.clone(),
+        // Store the AI-extracted structured items
+        extracted_structure,
     };
 
+    // Re-acquire lock to save to database
+    let db_guard = db.lock().map_err(|e| e.to_string())?;
     db_guard.create_prd(&prd)
         .map_err(|e| format!("Failed to create PRD: {}", e))?;
 
-    Ok(prd)
+    // If we have extracted structure with tasks, create a Session and Task records
+    let (session_id, task_count) = if let Some(ref structure_json) = prd.extracted_structure {
+        if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
+            if !structure.tasks.is_empty() {
+                // We have tasks to create - create a work session
+                match create_session_and_tasks_from_prd(&db_guard, &prd, &structure) {
+                    Ok((new_session_id, count)) => {
+                        log::info!("Created session {} with {} tasks from PRD export", new_session_id, count);
+                        (Some(new_session_id), count)
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to create session/tasks from PRD: {}", e);
+                        (None, 0)
+                    }
+                }
+            } else {
+                log::info!("No tasks in extracted structure, skipping session creation");
+                (None, 0)
+            }
+        } else {
+            log::warn!("Failed to parse extracted structure JSON");
+            (None, 0)
+        }
+    } else {
+        (None, 0)
+    };
+
+    Ok(ExportResult {
+        prd,
+        session_id,
+        task_count,
+    })
+}
+
+/// Create a work session and tasks from an exported PRD with extracted structure
+fn create_session_and_tasks_from_prd(
+    db: &Database,
+    prd: &crate::database::prd::PRDDocument,
+    structure: &ExtractedPRDStructure,
+) -> Result<(String, usize), String> {
+    use crate::database;
+    use crate::models::{Session, SessionConfig, SessionStatus, Task, TaskStatus};
+    use chrono::Utc;
+
+    // Create a new session for this PRD
+    let session_id = Uuid::new_v4().to_string();
+    let project_path = prd.project_path.clone()
+        .ok_or_else(|| "PRD has no project path, cannot create session".to_string())?;
+
+    let session = Session {
+        id: session_id.clone(),
+        name: prd.title.clone(),
+        project_path,
+        created_at: Utc::now(),
+        last_resumed_at: None,
+        status: SessionStatus::Active,
+        config: SessionConfig {
+            max_parallel: 3,
+            max_iterations: 10,
+            max_retries: 3,
+            agent_type: AgentType::Claude,
+            auto_create_prs: true,
+            draft_prs: false,
+            run_tests: true,
+            run_lint: true,
+        },
+        tasks: vec![],
+        total_cost: 0.0,
+        total_tokens: 0,
+    };
+
+    // Save the session
+    database::sessions::create_session(db.get_connection(), &session)
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+
+    // Convert extracted tasks to Task records
+    let mut task_count = 0;
+    for (index, prd_item) in structure.tasks.iter().enumerate() {
+        let task = Task {
+            id: Uuid::new_v4().to_string(),
+            title: prd_item.title.clone(),
+            description: prd_item.description.clone(),
+            status: TaskStatus::Pending,
+            priority: prd_item.priority.unwrap_or((index + 1) as i32),
+            dependencies: prd_item.dependencies.clone().unwrap_or_default(),
+            assigned_agent: None,
+            estimated_tokens: None,
+            actual_tokens: None,
+            started_at: None,
+            completed_at: None,
+            branch: None,
+            worktree_path: None,
+            error: None,
+        };
+
+        database::tasks::create_task(db.get_connection(), &session_id, &task)
+            .map_err(|e| format!("Failed to create task: {}", e))?;
+        task_count += 1;
+    }
+
+    Ok((session_id, task_count))
+}
+
+/// Helper function to extract PRD content and quality from chat messages
+/// Used as a fallback when no PRD plan file exists
+fn export_content_from_messages(
+    db: &Database,
+    session_id: &str,
+    session: &ChatSession,
+) -> Result<(String, QualityAssessment), String> {
+    let messages = db.get_messages_by_session(session_id)
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
+
+    // Convert conversation to PRD content
+    // Use extracted structure if available for structured mode sessions
+    let content = if session.structured_mode {
+        if let Some(ref structure_json) = session.extracted_structure {
+            if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
+                convert_structure_to_prd_content(&structure, &messages)
+            } else {
+                convert_chat_to_prd_content(&messages)
+            }
+        } else {
+            convert_chat_to_prd_content(&messages)
+        }
+    } else {
+        convert_chat_to_prd_content(&messages)
+    };
+
+    Ok((content, assessment))
 }
 
 /// Assess the quality of a PRD chat session before export
@@ -587,6 +793,166 @@ pub async fn clear_extracted_structure(
         .map_err(|e| format!("Failed to clear structure: {}", e))?;
 
     Ok(())
+}
+
+// ============================================================================
+// AI Item Extraction
+// ============================================================================
+
+/// Extract structured items from PRD content using AI
+/// This is called during export to automatically populate the extracted items
+async fn extract_items_via_ai(
+    app_handle: &tauri::AppHandle,
+    prd_content: &str,
+    prd_type: Option<&str>,
+    agent_type: AgentType,
+    working_dir: Option<&str>,
+) -> Result<ExtractedPRDStructure, String> {
+    let prd_type_hint = prd_type
+        .map(|t| format!("This is a {} PRD.", t.replace("_", " ")))
+        .unwrap_or_default();
+
+    let prompt = format!(r#"Extract all structured items from this PRD document and return them as JSON.
+
+{prd_type_hint}
+
+PRD Content:
+```
+{prd_content}
+```
+
+Analyze the PRD and extract these types of items:
+1. **Epics**: High-level phases or major feature groups (e.g., "Phase 1: Foundation", "Authentication System")
+2. **User Stories**: User-focused requirements starting with "As a..." or describing user needs
+3. **Tasks**: Implementation tasks, often with IDs like T-1.2.3 or numbered items
+4. **Acceptance Criteria**: Quality criteria, success conditions, or testing requirements
+
+Return a JSON object with this exact structure (no markdown formatting, just raw JSON):
+{{
+  "epics": [
+    {{
+      "type": "epic",
+      "id": "Phase-1",
+      "parentId": null,
+      "title": "Phase Title",
+      "description": "Full description",
+      "acceptanceCriteria": null,
+      "priority": 1,
+      "dependencies": null,
+      "estimatedEffort": null,
+      "tags": null
+    }}
+  ],
+  "userStories": [
+    {{
+      "type": "user_story",
+      "id": "US-1.1",
+      "parentId": "Phase-1",
+      "title": "Short title",
+      "description": "As a user, I want...",
+      "acceptanceCriteria": ["Given...", "When...", "Then..."],
+      "priority": 2,
+      "dependencies": null,
+      "estimatedEffort": "medium",
+      "tags": null
+    }}
+  ],
+  "tasks": [
+    {{
+      "type": "task",
+      "id": "T-1.1.1",
+      "parentId": "US-1.1",
+      "title": "Task title",
+      "description": "Implementation details",
+      "acceptanceCriteria": null,
+      "priority": 3,
+      "dependencies": ["T-1.1.0"],
+      "estimatedEffort": "small",
+      "tags": null
+    }}
+  ],
+  "acceptanceCriteria": [
+    {{
+      "type": "acceptance_criteria",
+      "id": "AC-1",
+      "parentId": "US-1.1",
+      "title": "Criteria title",
+      "description": "The system should...",
+      "acceptanceCriteria": null,
+      "priority": null,
+      "dependencies": null,
+      "estimatedEffort": null,
+      "tags": null
+    }}
+  ]
+}}
+
+Important:
+- Use hierarchical parentId relationships (tasks belong to stories, stories to epics)
+- Generate meaningful IDs that reflect hierarchy (Phase-1, US-1.1, T-1.1.1)
+- estimatedEffort can only be: "small", "medium", or "large" (or null)
+- priority is 1-5 (1 being highest priority)
+- Return ONLY the JSON object, no explanatory text or markdown code blocks
+"#);
+
+    // Use a dummy session ID for extraction (not stored)
+    let extraction_session_id = format!("extract-{}", Uuid::new_v4());
+
+    // Call the AI to extract items
+    let response = execute_chat_agent(
+        app_handle,
+        &extraction_session_id,
+        agent_type,
+        &prompt,
+        working_dir,
+    ).await?;
+
+    // Parse the JSON response
+    // Try to extract JSON from the response (AI might add extra text)
+    let json_str = extract_json_from_response(&response)?;
+
+    serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse AI extraction response: {}. Response was: {}", e, json_str))
+}
+
+/// Extract JSON object from AI response that might contain extra text
+fn extract_json_from_response(response: &str) -> Result<String, String> {
+    let trimmed = response.trim();
+
+    // If it starts with {, try to find the matching }
+    if trimmed.starts_with('{') {
+        // Find the last } to handle nested objects
+        if let Some(end_pos) = trimmed.rfind('}') {
+            return Ok(trimmed[..=end_pos].to_string());
+        }
+    }
+
+    // Try to find JSON block in markdown code fence
+    if let Some(start) = trimmed.find("```json") {
+        let after_fence = &trimmed[start + 7..];
+        if let Some(end) = after_fence.find("```") {
+            return Ok(after_fence[..end].trim().to_string());
+        }
+    }
+
+    // Try to find JSON block in plain code fence
+    if let Some(start) = trimmed.find("```\n{") {
+        let after_fence = &trimmed[start + 4..];
+        if let Some(end) = after_fence.find("```") {
+            return Ok(after_fence[..end].trim().to_string());
+        }
+    }
+
+    // Try to find any JSON object in the response
+    if let Some(start) = trimmed.find('{') {
+        if let Some(end) = trimmed.rfind('}') {
+            if end > start {
+                return Ok(trimmed[start..=end].to_string());
+            }
+        }
+    }
+
+    Err(format!("No valid JSON found in response: {}", trimmed.chars().take(200).collect::<String>()))
 }
 
 // ============================================================================
@@ -817,6 +1183,53 @@ fn calculate_quality_assessment(messages: &[ChatMessage], prd_type: Option<&str>
     }
 }
 
+/// Check if content contains a numbered task list (e.g., "1. Implement X", "2. Create Y")
+fn has_numbered_task_list(content: &str) -> bool {
+    let task_verbs = [
+        "implement",
+        "create",
+        "build",
+        "add",
+        "develop",
+        "design",
+        "configure",
+        "set up",
+        "integrate",
+        "write",
+        "test",
+        "update",
+        "remove",
+        "refactor",
+        "migrate",
+    ];
+
+    // Count numbered items that look like tasks
+    let mut task_count = 0;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Check for numbered list items: "1.", "2)", "1:", etc.
+        if trimmed.len() > 3 {
+            let first_chars: String = trimmed.chars().take(4).collect();
+            if first_chars
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+                && (first_chars.contains('.') || first_chars.contains(')') || first_chars.contains(':'))
+            {
+                // Check if it contains a task verb
+                let lower_line = trimmed.to_lowercase();
+                if task_verbs.iter().any(|v| lower_line.contains(v)) {
+                    task_count += 1;
+                }
+            }
+        }
+    }
+
+    // Consider it a task list if there are 3+ numbered task items
+    task_count >= 3
+}
+
 /// Calculate quality assessment from PRD markdown file content
 fn calculate_quality_from_markdown(content: &str, prd_type: Option<&str>) -> QualityAssessment {
     let content_lower = content.to_lowercase();
@@ -861,12 +1274,31 @@ fn calculate_quality_from_markdown(content: &str, prd_type: Option<&str>) -> Qua
         suggestions.push("List what the system must do using clear requirement language".to_string());
     }
 
-    // Tasks / Implementation
-    if content_lower.contains("## task")
+    // Tasks / Implementation - Check for various common patterns
+    let has_tasks = content_lower.contains("## task")
+        || content_lower.contains("# task")
+        || content_lower.contains("### task")
         || content_lower.contains("## implementation")
+        || content_lower.contains("# implementation")
         || content_lower.contains("### implementation")
         || content_lower.contains("## phases")
-    {
+        || content_lower.contains("## phase ")
+        || content_lower.contains("# phase ")
+        || content_lower.contains("## checklist")
+        || content_lower.contains("## master checklist")
+        || content_lower.contains("## development")
+        || content_lower.contains("## action item")
+        || content_lower.contains("## todo")
+        || content_lower.contains("## to-do")
+        || content_lower.contains("## work breakdown")
+        // Also check for numbered phase/task/step headers (common LLM format)
+        || Regex::new(r"(?m)^#{1,3}\s*(?:phase\s*\d|task\s*\d|step\s*\d)")
+            .map(|r| r.is_match(&content_lower))
+            .unwrap_or(false)
+        // Check for substantial numbered lists with action verbs
+        || has_numbered_task_list(&content_lower);
+
+    if has_tasks {
         completeness_score += 15;
     } else {
         missing_sections.push("Implementation Tasks".to_string());
@@ -3057,6 +3489,7 @@ mod tests {
             project_path: None,
             source_chat_session_id: None,
             prd_type: None,
+            extracted_structure: None,
         };
         db.create_prd(&prd).unwrap();
 
@@ -3684,5 +4117,211 @@ mod tests {
         let retrieved = db.get_chat_session("persist-test").unwrap();
         assert!(retrieved.structured_mode);
         assert_eq!(retrieved.quality_score, Some(75));
+    }
+
+    // -------------------------------------------------------------------------
+    // has_numbered_task_list Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_has_numbered_task_list_with_task_verbs() {
+        let content = r#"
+Here are the implementation steps:
+1. Implement the user authentication module
+2. Create the database schema
+3. Build the API endpoints
+4. Test the integration
+"#;
+        assert!(has_numbered_task_list(content));
+    }
+
+    #[test]
+    fn test_has_numbered_task_list_with_parentheses() {
+        let content = r#"
+Tasks:
+1) Create the login form
+2) Implement password validation
+3) Add session management
+"#;
+        assert!(has_numbered_task_list(content));
+    }
+
+    #[test]
+    fn test_has_numbered_task_list_insufficient_items() {
+        // Only 2 items - should return false (need 3+)
+        let content = r#"
+1. Implement feature
+2. Test feature
+"#;
+        assert!(!has_numbered_task_list(content));
+    }
+
+    #[test]
+    fn test_has_numbered_task_list_no_task_verbs() {
+        // Numbered list but no task verbs
+        let content = r#"
+1. First item here
+2. Second item here
+3. Third item here
+"#;
+        assert!(!has_numbered_task_list(content));
+    }
+
+    #[test]
+    fn test_has_numbered_task_list_mixed_verbs() {
+        let content = r#"
+1. Design the architecture
+2. Develop the backend services
+3. Integrate with third-party APIs
+4. Write unit tests
+"#;
+        assert!(has_numbered_task_list(content));
+    }
+
+    // -------------------------------------------------------------------------
+    // calculate_quality_from_markdown Task Detection Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_quality_from_markdown_detects_implementation_tasks_header() {
+        let content = r#"
+# Feature PRD
+
+## Overview
+This is the overview.
+
+## Implementation Tasks
+1. First task
+2. Second task
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '## Implementation Tasks' header"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_h1_tasks() {
+        let content = r#"
+# Tasks
+
+1. Implement authentication
+2. Build the dashboard
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '# Tasks' header"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_phase_sections() {
+        let content = r#"
+## Overview
+Feature description here.
+
+## Phase 1: Setup
+Initial setup tasks.
+
+## Phase 2: Implementation
+Core implementation.
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '## Phase X' headers"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_checklist() {
+        let content = r#"
+## Overview
+Description.
+
+## Master Checklist
+- [ ] Task 1
+- [ ] Task 2
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '## Master Checklist' header"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_numbered_task_list_fallback() {
+        // No explicit task header, but has numbered tasks with action verbs
+        let content = r#"
+## Overview
+We need to build a new feature.
+
+## Requirements
+The system must do X.
+
+Here's what we need to do:
+1. Implement the data model
+2. Create the API endpoints
+3. Build the frontend components
+4. Write integration tests
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect numbered task list via fallback"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_missing_tasks_when_none_present() {
+        let content = r#"
+## Overview
+This is a feature description.
+
+## Requirements
+The system should work well.
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should report missing Implementation Tasks when none present"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_work_breakdown() {
+        let content = r#"
+## Overview
+Feature overview.
+
+## Work Breakdown
+- Component A
+- Component B
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '## Work Breakdown' header"
+        );
+    }
+
+    #[test]
+    fn test_quality_from_markdown_detects_todo_section() {
+        let content = r#"
+## Overview
+Description.
+
+## TODO
+- Item 1
+- Item 2
+"#;
+        let assessment = calculate_quality_from_markdown(content, None);
+        assert!(
+            !assessment.missing_sections.contains(&"Implementation Tasks".to_string()),
+            "Should detect '## TODO' header"
+        );
     }
 }
