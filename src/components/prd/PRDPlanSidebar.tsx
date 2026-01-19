@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   FileText,
   RefreshCw,
@@ -35,6 +36,7 @@ function MarkdownContent({ content, className }: { content: string; className?: 
   return (
     <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           // Style code blocks
           pre: ({ children }) => (
@@ -73,15 +75,24 @@ function MarkdownContent({ content, className }: { content: string; className?: 
           p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
           // Style tables
           table: ({ children }) => (
-            <div className="overflow-x-auto my-2">
+            <div className="overflow-x-auto my-3 rounded-md border border-border">
               <table className="min-w-full text-xs border-collapse">{children}</table>
             </div>
           ),
+          thead: ({ children }) => (
+            <thead className="bg-muted/70">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-border">{children}</tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
+          ),
           th: ({ children }) => (
-            <th className="border border-border px-2 py-1 bg-muted font-medium text-left">{children}</th>
+            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-2 py-1">{children}</td>
+            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{children}</td>
           ),
           // Style blockquotes
           blockquote: ({ children }) => (
@@ -153,60 +164,51 @@ export function PRDPlanSidebar({
   }
 
   const headerControls = (
-    <div className="flex items-center gap-1">
-      {isWatching && (
-        <Badge variant="outline" className="text-xs gap-1">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-          </span>
-          Watching
-        </Badge>
-      )}
+    <div className="flex items-center gap-0.5">
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setShowRaw(!showRaw)}
-        className="h-6 w-6 p-0"
+        className="h-7 w-7 p-0"
         title={showRaw ? 'Show rendered markdown' : 'Show raw markdown'}
       >
         {showRaw ? (
-          <FileText className="h-3 w-3" />
+          <FileText className="h-3.5 w-3.5" />
         ) : (
-          <Code className="h-3 w-3" />
+          <Code className="h-3.5 w-3.5" />
         )}
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setAutoScroll(!autoScroll)}
-        className="h-6 w-6 p-0"
+        className="h-7 w-7 p-0"
         title={autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'}
       >
         {autoScroll ? (
-          <Eye className="h-3 w-3" />
+          <Eye className="h-3.5 w-3.5" />
         ) : (
-          <EyeOff className="h-3 w-3" />
+          <EyeOff className="h-3.5 w-3.5" />
         )}
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setIsExpanded(true)}
-        className="h-6 w-6 p-0"
+        className="h-7 w-7 p-0"
         title="Expand to full view"
       >
-        <Maximize2 className="h-3 w-3" />
+        <Maximize2 className="h-3.5 w-3.5" />
       </Button>
       {onRefresh && (
         <Button
           variant="ghost"
           size="sm"
           onClick={onRefresh}
-          className="h-6 w-6 p-0"
+          className="h-7 w-7 p-0"
           title="Refresh content"
         >
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       )}
     </div>
@@ -246,25 +248,36 @@ export function PRDPlanSidebar({
   return (
     <>
       <Card className={cn('flex flex-col', className)}>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Plan Document
-            </CardTitle>
+        <CardHeader className="pb-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium truncate">
+                Plan Document
+              </CardTitle>
+              {isWatching && (
+                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 h-5 shrink-0">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                  </span>
+                  Watching
+                </Badge>
+              )}
+            </div>
             {headerControls}
           </div>
           {filename && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-              <FileCode className="h-3 w-3" />
-              <code className="bg-muted px-1 py-0.5 rounded text-[10px]">
+            <div className="flex items-center gap-1.5">
+              <FileCode className="h-3 w-3 text-muted-foreground shrink-0" />
+              <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground truncate">
                 {filename}
               </code>
               {path && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-4 w-4 p-0"
+                  className="h-5 w-5 p-0 shrink-0"
                   title="Open file location"
                   onClick={() => {
                     console.log('Open file:', path)

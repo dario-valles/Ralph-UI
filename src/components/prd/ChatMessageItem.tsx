@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import type { ChatMessage } from '@/types'
 import { cn } from '@/lib/utils'
@@ -44,6 +45,7 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
         ) : (
           <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 // Style code blocks
                 pre: ({ children }) => (
@@ -80,6 +82,35 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
                 ),
                 // Style paragraphs
                 p: ({ children }) => <p className="my-1.5">{children}</p>,
+                // Style tables
+                table: ({ children }) => (
+                  <div className="overflow-x-auto my-3 rounded-md border border-border">
+                    <table className="min-w-full text-xs border-collapse">{children}</table>
+                  </div>
+                ),
+                thead: ({ children }) => (
+                  <thead className="bg-muted/70">{children}</thead>
+                ),
+                tbody: ({ children }) => (
+                  <tbody className="divide-y divide-border">{children}</tbody>
+                ),
+                tr: ({ children }) => (
+                  <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
+                ),
+                th: ({ children }) => (
+                  <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
+                ),
+                td: ({ children }) => (
+                  <td className="px-3 py-2 text-muted-foreground">{children}</td>
+                ),
+                // Style blockquotes
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-2 border-primary/50 pl-3 my-2 italic text-muted-foreground">
+                    {children}
+                  </blockquote>
+                ),
+                // Style horizontal rules
+                hr: () => <hr className="my-4 border-border" />,
               }}
             >
               {message.content}
