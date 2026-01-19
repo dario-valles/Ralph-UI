@@ -498,25 +498,37 @@ describe('PRDChatPanel', () => {
   // ============================================================================
 
   describe('Export to PRD', () => {
-    it('shows export button when messages exist', () => {
+    it('shows export option in Actions menu when messages exist', async () => {
+      const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      const exportButton = screen.getByRole('button', { name: /export to prd/i })
-      expect(exportButton).toBeInTheDocument()
+      // Click on Actions dropdown to open the menu
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      await user.click(actionsButton)
+
+      // Export option should be visible in the dropdown
+      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
+      expect(exportOption).toBeInTheDocument()
     })
 
-    it('hides export button when no messages', () => {
+    it('hides export option when no messages', async () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         messages: [],
       })
 
+      const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      expect(screen.queryByRole('button', { name: /export to prd/i })).not.toBeInTheDocument()
+      // Click on Actions dropdown
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      await user.click(actionsButton)
+
+      // Export option should not be in the dropdown when no messages
+      expect(screen.queryByRole('menuitem', { name: /export to prd/i })).not.toBeInTheDocument()
     })
 
-    it('calls exportToPRD when export button is clicked and quality is ready', async () => {
+    it('calls exportToPRD when export option is clicked and quality is ready', async () => {
       // Mock assessQuality to return a ready-for-export assessment
       mockAssessQuality.mockResolvedValue({
         overall: 80,
@@ -531,8 +543,13 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      const exportButton = screen.getByRole('button', { name: /export to prd/i })
-      await user.click(exportButton)
+      // Click on Actions dropdown
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      await user.click(actionsButton)
+
+      // Click on Export to PRD option
+      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
+      await user.click(exportOption)
 
       await waitFor(() => {
         expect(mockAssessQuality).toHaveBeenCalled()
@@ -555,8 +572,13 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      const exportButton = screen.getByRole('button', { name: /export to prd/i })
-      await user.click(exportButton)
+      // Click on Actions dropdown
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      await user.click(actionsButton)
+
+      // Click on Export to PRD option
+      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
+      await user.click(exportOption)
 
       await waitFor(() => {
         expect(mockAssessQuality).toHaveBeenCalled()
@@ -565,7 +587,7 @@ describe('PRDChatPanel', () => {
       expect(mockExportToPRD).not.toHaveBeenCalled()
     })
 
-    it('disables export button when streaming', () => {
+    it('disables Actions button when streaming', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         streaming: true,
@@ -573,8 +595,8 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      const exportButton = screen.getByRole('button', { name: /export to prd/i })
-      expect(exportButton).toBeDisabled()
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      expect(actionsButton).toBeDisabled()
     })
   })
 

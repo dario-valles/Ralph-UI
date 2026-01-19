@@ -693,7 +693,7 @@ describe('prdChatStore', () => {
     })
 
     it('should handle errors when setting structured mode', async () => {
-      vi.mocked(prdChatApi.setStructuredMode).mockRejectedValue(new Error('Failed to update'))
+      vi.mocked(prdChatApi.setStructuredMode).mockRejectedValue(new Error('Failed to set structured mode'))
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockSession
@@ -727,7 +727,7 @@ describe('prdChatStore', () => {
     })
 
     it('should handle errors when loading extracted structure', async () => {
-      vi.mocked(prdChatApi.getExtractedStructure).mockRejectedValue(new Error('Failed to load'))
+      vi.mocked(prdChatApi.getExtractedStructure).mockRejectedValue(new Error('Failed to load extracted structure'))
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockStructuredSession
@@ -780,7 +780,7 @@ describe('prdChatStore', () => {
     })
 
     it('should handle errors when clearing extracted structure', async () => {
-      vi.mocked(prdChatApi.clearExtractedStructure).mockRejectedValue(new Error('Failed to clear'))
+      vi.mocked(prdChatApi.clearExtractedStructure).mockRejectedValue(new Error('Failed to clear extracted structure'))
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockStructuredSession
