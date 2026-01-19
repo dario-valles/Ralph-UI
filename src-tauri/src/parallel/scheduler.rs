@@ -136,6 +136,53 @@ pub struct ParallelScheduler {
     should_abort: bool,
 }
 
+/// Natural sort comparison for strings containing numbers
+/// Examples: "US-1.1" < "US-1.2" < "US-5.2" < "US-10.1"
+fn natural_compare(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    let a_parts: Vec<&str> = a.split(|c: char| c.is_ascii_digit() || c == '.')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let b_parts: Vec<&str> = b.split(|c: char| c.is_ascii_digit() || c == '.')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Extract numeric segments
+    let a_nums: Vec<f64> = a.split(|c: char| !c.is_ascii_digit() && c != '.')
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let b_nums: Vec<f64> = b.split(|c: char| !c.is_ascii_digit() && c != '.')
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    // First compare non-numeric prefixes
+    let max_prefix = a_parts.len().max(b_parts.len());
+    for i in 0..max_prefix {
+        let a_part = a_parts.get(i).copied().unwrap_or("");
+        let b_part = b_parts.get(i).copied().unwrap_or("");
+        match a_part.cmp(b_part) {
+            Ordering::Equal => continue,
+            other => return other,
+        }
+    }
+
+    // Then compare numeric segments
+    let max_num = a_nums.len().max(b_nums.len());
+    for i in 0..max_num {
+        let a_num = a_nums.get(i).copied().unwrap_or(0.0);
+        let b_num = b_nums.get(i).copied().unwrap_or(0.0);
+        match a_num.partial_cmp(&b_num).unwrap_or(Ordering::Equal) {
+            Ordering::Equal => continue,
+            other => return other,
+        }
+    }
+
+    Ordering::Equal
+}
+
 impl ParallelScheduler {
     /// Create a new parallel scheduler
     pub fn new(config: SchedulerConfig) -> Self {
@@ -310,18 +357,48 @@ impl ParallelScheduler {
             }
             SchedulingStrategy::Priority => {
                 // Higher priority first (lower number = higher priority)
-                tasks.sort_by_key(|t| t.task.priority);
+                // Secondary sort by title (natural sort) when priorities are equal
+                tasks.sort_by(|a, b| {
+                    match a.task.priority.cmp(&b.task.priority) {
+                        std::cmp::Ordering::Equal => natural_compare(&a.task.title, &b.task.title),
+                        other => other,
+                    }
+                });
             }
             SchedulingStrategy::DependencyFirst => {
                 // Fewer dependencies first
-                tasks.sort_by_key(|t| t.task.dependencies.len());
+                // Secondary sort by priority, then title when deps count is equal
+                tasks.sort_by(|a, b| {
+                    match a.task.dependencies.len().cmp(&b.task.dependencies.len()) {
+                        std::cmp::Ordering::Equal => {
+                            match a.task.priority.cmp(&b.task.priority) {
+                                std::cmp::Ordering::Equal => natural_compare(&a.task.title, &b.task.title),
+                                other => other,
+                            }
+                        }
+                        other => other,
+                    }
+                });
             }
             SchedulingStrategy::Fifo => {
                 // Already in FIFO order, no sorting needed
             }
             SchedulingStrategy::CostFirst => {
                 // Higher estimated cost first
-                tasks.sort_by_key(|t| std::cmp::Reverse(t.task.estimated_tokens.unwrap_or(0)));
+                // Secondary sort by priority, then title when cost is equal
+                tasks.sort_by(|a, b| {
+                    let a_cost = a.task.estimated_tokens.unwrap_or(0);
+                    let b_cost = b.task.estimated_tokens.unwrap_or(0);
+                    match b_cost.cmp(&a_cost) { // Reverse order (higher cost first)
+                        std::cmp::Ordering::Equal => {
+                            match a.task.priority.cmp(&b.task.priority) {
+                                std::cmp::Ordering::Equal => natural_compare(&a.task.title, &b.task.title),
+                                other => other,
+                            }
+                        }
+                        other => other,
+                    }
+                });
             }
         }
 

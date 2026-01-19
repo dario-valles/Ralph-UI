@@ -11,6 +11,34 @@ interface TaskFilter {
   sortOrder?: 'asc' | 'desc'
 }
 
+/**
+ * Natural sort comparison for strings containing numbers
+ * Examples: "US-1.1" < "US-1.2" < "US-5.2" < "US-10.1"
+ */
+function naturalCompare(a: string, b: string): number {
+  const aParts = a.split(/(\d+\.?\d*)/).filter(Boolean)
+  const bParts = b.split(/(\d+\.?\d*)/).filter(Boolean)
+
+  const maxLen = Math.max(aParts.length, bParts.length)
+  for (let i = 0; i < maxLen; i++) {
+    const aPart = aParts[i] || ''
+    const bPart = bParts[i] || ''
+
+    const aNum = parseFloat(aPart)
+    const bNum = parseFloat(bPart)
+
+    // Both are numbers - compare numerically
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      if (aNum !== bNum) return aNum - bNum
+    } else {
+      // At least one is not a number - compare as strings
+      const cmp = aPart.localeCompare(bPart)
+      if (cmp !== 0) return cmp
+    }
+  }
+  return 0
+}
+
 interface TaskStore {
   tasks: Task[]
   loading: boolean
@@ -147,12 +175,23 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         switch (filter.sortBy) {
           case 'priority':
             comparison = a.priority - b.priority
+            // Secondary sort by title (natural sort) when priorities are equal
+            if (comparison === 0) {
+              comparison = naturalCompare(a.title, b.title)
+            }
             break
           case 'title':
-            comparison = a.title.localeCompare(b.title)
+            comparison = naturalCompare(a.title, b.title)
             break
           case 'status':
             comparison = a.status.localeCompare(b.status)
+            // Secondary sort by priority, then title when status is equal
+            if (comparison === 0) {
+              comparison = a.priority - b.priority
+              if (comparison === 0) {
+                comparison = naturalCompare(a.title, b.title)
+              }
+            }
             break
         }
         return filter.sortOrder === 'desc' ? -comparison : comparison
