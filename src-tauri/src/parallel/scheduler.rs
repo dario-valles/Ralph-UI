@@ -14,6 +14,8 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SchedulingStrategy {
+    /// Execute tasks one at a time (sequential mode)
+    Sequential,
     /// Execute tasks in priority order
     Priority,
     /// Execute tasks with fewest dependencies first
@@ -303,6 +305,9 @@ impl ParallelScheduler {
         let mut tasks: Vec<_> = self.ready.drain(..).collect();
 
         match self.config.strategy {
+            SchedulingStrategy::Sequential => {
+                // Sequential: no sorting, process in order (like FIFO)
+            }
             SchedulingStrategy::Priority => {
                 // Higher priority first (lower number = higher priority)
                 tasks.sort_by_key(|t| t.task.priority);

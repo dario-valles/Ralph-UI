@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TaskList } from './TaskList'
@@ -10,12 +11,23 @@ import { useTaskStore } from '@/stores/taskStore'
 import { Upload, Network } from 'lucide-react'
 
 export function TasksPage() {
-  const { currentSession } = useSessionStore()
+  const [searchParams] = useSearchParams()
+  const sessionIdFromUrl = searchParams.get('sessionId')
+
+  const { currentSession, fetchSession } = useSessionStore()
   const { fetchTasks, tasks } = useTaskStore()
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [showGraph, setShowGraph] = useState(false)
 
+  // Fetch session from URL param if currentSession is not set
+  useEffect(() => {
+    if (!currentSession && sessionIdFromUrl) {
+      fetchSession(sessionIdFromUrl)
+    }
+  }, [currentSession, sessionIdFromUrl, fetchSession])
+
+  // Fetch tasks when session is available
   useEffect(() => {
     if (currentSession) {
       fetchTasks(currentSession.id)

@@ -573,6 +573,7 @@ mod tests {
             project_path: Some("/test/project".to_string()),
             source_chat_session_id: None,
             prd_type: None,
+            extracted_structure: None,
         };
         db.create_prd(&prd).unwrap();
 

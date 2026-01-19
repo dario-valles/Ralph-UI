@@ -1,7 +1,7 @@
 // TypeScript API for parallel execution
 
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import type { Task, Agent, AgentType } from '../types'
+import type { Task, Agent, AgentType, SchedulingStrategy } from '../types'
 
 // Check if we're running inside Tauri
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -15,13 +15,10 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 // ===== Scheduler Types =====
+// Note: SchedulingStrategy is imported from '../types' for consistency
 
-export type SchedulingStrategy =
-  | 'sequential'
-  | 'priority'
-  | 'dependency_first'
-  | 'fifo'
-  | 'cost_first'
+// Re-export for convenience
+export type { SchedulingStrategy } from '../types'
 
 export interface ResourceLimits {
   maxAgents: number

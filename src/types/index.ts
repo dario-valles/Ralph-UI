@@ -198,13 +198,14 @@ export interface PRDExecution {
   config: string // JSON string of ExecutionConfig
 }
 
-export type ExecutionStrategy = 'sequential' | 'dependency_first' | 'priority' | 'fifo' | 'cost_first'
+/** Scheduling strategy - determines task ordering and parallelism */
+export type SchedulingStrategy = 'sequential' | 'dependency_first' | 'priority' | 'fifo' | 'cost_first'
 
 export interface ExecutionConfig {
   sessionName?: string
   agentType: AgentType
   /** Execution strategy - determines task ordering and parallelism */
-  strategy: ExecutionStrategy
+  strategy: SchedulingStrategy
   maxParallel: number
   maxIterations: number
   maxRetries: number

@@ -274,3 +274,21 @@ pub struct ExtractedPRDStructure {
     pub tasks: Vec<StructuredPRDItem>,
     pub acceptance_criteria: Vec<StructuredPRDItem>,
 }
+
+impl ExtractedPRDStructure {
+    /// Returns true if any items have been extracted
+    pub fn has_items(&self) -> bool {
+        !self.epics.is_empty()
+            || !self.user_stories.is_empty()
+            || !self.tasks.is_empty()
+            || !self.acceptance_criteria.is_empty()
+    }
+
+    /// Returns the total number of extracted items
+    pub fn total_items(&self) -> usize {
+        self.epics.len()
+            + self.user_stories.len()
+            + self.tasks.len()
+            + self.acceptance_criteria.len()
+    }
+}

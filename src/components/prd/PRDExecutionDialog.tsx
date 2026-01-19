@@ -20,13 +20,14 @@ import {
   initParallelScheduler,
   parallelAddTasks,
   parallelScheduleNext,
+  parallelGetSchedulerStats,
   isGitRepository,
   initGitRepository,
   type SchedulerConfig,
 } from '@/lib/parallel-api'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { configApi } from '@/lib/config-api'
-import type { ExecutionConfig, ExecutionStrategy, AgentType, RalphConfig } from '@/types'
+import type { ExecutionConfig, SchedulingStrategy, AgentType, RalphConfig } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getModelName } from '@/lib/model-api'
 
@@ -73,7 +74,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
           setConfig((prev) => ({
             ...prev,
             agentType: (savedConfig.execution.agentType as AgentType) || prev.agentType,
-            strategy: (savedConfig.execution.strategy as ExecutionStrategy) || prev.strategy,
+            strategy: (savedConfig.execution.strategy as SchedulingStrategy) || prev.strategy,
             maxParallel: savedConfig.execution.maxParallel || prev.maxParallel,
             maxIterations: savedConfig.execution.maxIterations || prev.maxIterations,
             maxRetries: savedConfig.execution.maxRetries || prev.maxRetries,
@@ -135,32 +136,91 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
       model: config.model,
     }
 
-    console.log('[PRD Execution] Initializing scheduler...', {
-      schedulerConfig,
+    console.log('[PRD Execution] Starting agent spawn process...', {
+      sessionId,
       projectPath,
+      taskCount: tasks?.length ?? 0,
+      schedulerConfig,
     })
-    await initParallelScheduler(schedulerConfig, projectPath)
-    console.log('[PRD Execution] Scheduler initialized')
+
+    // Log task details for debugging
+    if (tasks && tasks.length > 0) {
+      console.log('[PRD Execution] First 3 tasks:', tasks.slice(0, 3).map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        dependencies: t.dependencies,
+      })))
+    } else {
+      console.warn('[PRD Execution] WARNING: No tasks provided to scheduler!')
+    }
+
+    console.log('[PRD Execution] Initializing scheduler...')
+    try {
+      await initParallelScheduler(schedulerConfig, projectPath)
+      console.log('[PRD Execution] Scheduler initialized successfully')
+    } catch (initErr) {
+      console.error('[PRD Execution] FAILED to initialize scheduler:', initErr)
+      throw initErr
+    }
 
     // Add tasks to the scheduler
-    console.log('[PRD Execution] Adding tasks to scheduler...', { tasks })
-    await parallelAddTasks(tasks)
-    console.log('[PRD Execution] Tasks added')
+    console.log('[PRD Execution] Adding', tasks?.length ?? 0, 'tasks to scheduler...')
+    try {
+      await parallelAddTasks(tasks)
+      console.log('[PRD Execution] Tasks added successfully')
+
+      // Get scheduler stats to verify task state
+      const stats = await parallelGetSchedulerStats()
+      console.log('[PRD Execution] Scheduler stats after adding tasks:', stats)
+      if (stats.ready === 0 && stats.pending > 0) {
+        console.warn('[PRD Execution] WARNING: All tasks are pending, none are ready! Check task dependencies.')
+      }
+    } catch (addErr) {
+      console.error('[PRD Execution] FAILED to add tasks:', addErr)
+      throw addErr
+    }
 
     // Schedule agents (up to maxParallel)
     const maxToSpawn = isParallel ? config.maxParallel : 1
-    console.log('[PRD Execution] Scheduling agents...', { maxToSpawn })
+    console.log('[PRD Execution] Attempting to schedule up to', maxToSpawn, 'agents...')
 
+    let spawnedCount = 0
     for (let i = 0; i < maxToSpawn; i++) {
       console.log(`[PRD Execution] Scheduling agent ${i + 1}/${maxToSpawn}...`)
-      const agent = await parallelScheduleNext(sessionId, projectPath)
-      console.log(`[PRD Execution] Schedule result:`, { agent })
-      if (!agent) {
-        console.log('[PRD Execution] No more tasks to schedule')
-        break
+      try {
+        const agent = await parallelScheduleNext(sessionId, projectPath)
+        if (agent) {
+          spawnedCount++
+          console.log(`[PRD Execution] Agent ${i + 1} scheduled successfully:`, {
+            agentId: agent.id,
+            taskId: agent.taskId,
+            processId: agent.processId,
+            branch: agent.branch,
+          })
+        } else {
+          console.log(`[PRD Execution] parallelScheduleNext returned null - no more tasks ready`)
+          break
+        }
+      } catch (scheduleErr) {
+        console.error(`[PRD Execution] FAILED to schedule agent ${i + 1}:`, scheduleErr)
+        // Continue trying to schedule other agents
       }
     }
-    console.log('[PRD Execution] Agents scheduled')
+
+    console.log(`[PRD Execution] Agent spawning complete. Spawned: ${spawnedCount}/${maxToSpawn}`)
+
+    // Get final scheduler stats
+    try {
+      const finalStats = await parallelGetSchedulerStats()
+      console.log('[PRD Execution] Final scheduler stats:', finalStats)
+    } catch (statsErr) {
+      console.warn('[PRD Execution] Could not get final scheduler stats:', statsErr)
+    }
+
+    if (spawnedCount === 0) {
+      console.warn('[PRD Execution] WARNING: No agents were spawned! Check backend logs for scheduler state.')
+    }
   }
 
   // Handle git initialization and continue execution
@@ -189,13 +249,33 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     }
   }
 
-  // Handle skipping git init (just navigate without agents)
-  const handleSkipGitInit = () => {
-    setShowGitInitDialog(false)
-    setPendingSession(null)
-    onOpenChange(false)
-    // Still navigate - session and tasks were created, just no agents
-    navigate('/agents')
+  // Handle skipping git init - still spawn agents without git worktrees
+  const handleSkipGitInit = async () => {
+    if (!pendingSession) {
+      setShowGitInitDialog(false)
+      onOpenChange(false)
+      navigate('/agents')
+      return
+    }
+
+    setGitInitLoading(true)
+    try {
+      // Get session from store to access tasks
+      const session = useSessionStore.getState().currentSession
+      if (session?.tasks && session.tasks.length > 0) {
+        // Spawn agents anyway - scheduler will use project path directly without git worktrees
+        console.log('[PRD Execution] Skipping git init, spawning agents without worktrees...')
+        await startSchedulerAndAgents(pendingSession.id, pendingSession.projectPath, session.tasks)
+      }
+    } catch (err) {
+      console.error('[PRD Execution] Failed to start agents without git:', err)
+    } finally {
+      setGitInitLoading(false)
+      setShowGitInitDialog(false)
+      setPendingSession(null)
+      onOpenChange(false)
+      navigate('/agents')
+    }
   }
 
   const handleExecute = async () => {
@@ -340,7 +420,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             <Select
               id="strategy"
               value={config.strategy}
-              onChange={(e) => setConfig({ ...config, strategy: e.target.value as ExecutionStrategy })}
+              onChange={(e) => setConfig({ ...config, strategy: e.target.value as SchedulingStrategy })}
             >
               <option value="sequential">Sequential (One at a time)</option>
               <option value="dependency_first">Dependency First (Parallel)</option>

@@ -393,13 +393,13 @@ export function PRDChatPanel() {
             setExportProgress({ active: true, step: 3, message: `Created ${result.taskCount} tasks. Setting up session...` })
             await useSessionStore.getState().fetchSession(result.sessionId)
 
-            // Step 4: Navigate
+            // Step 4: Navigate - pass sessionId in URL for reliable loading
             setExportProgress({ active: true, step: 4, message: 'Navigating to tasks...' })
             toast.success(
               `Created ${result.taskCount} tasks from PRD`,
               'Your tasks are ready to assign to agents.'
             )
-            navigate('/tasks')
+            navigate(`/tasks?sessionId=${result.sessionId}`)
           } else {
             // No tasks extracted - navigate to PRD editor
             setExportProgress(null)
@@ -429,13 +429,13 @@ export function PRDChatPanel() {
             setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
             await useSessionStore.getState().fetchSession(result.sessionId)
 
-            // Step 3: Navigate
+            // Step 3: Navigate - pass sessionId in URL for reliable loading
             setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
             toast.success(
               `Created ${result.taskCount} tasks from PRD`,
               'Your tasks are ready to assign to agents.'
             )
-            navigate('/tasks')
+            navigate(`/tasks?sessionId=${result.sessionId}`)
           } else {
             // No tasks extracted - navigate to PRD editor
             setExportProgress(null)

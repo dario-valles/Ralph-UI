@@ -162,6 +162,8 @@ impl ParserState {
             return;
         }
 
+        let text_lower = text.to_lowercase();
+
         match level {
             1 => {
                 // H1 is the document title
@@ -170,20 +172,26 @@ impl ParserState {
                 }
             }
             2 => {
-                // H2 could be "Tasks" section or a major section
-                if text.eq_ignore_ascii_case("tasks") {
+                // H2 could be a task section - recognize multiple patterns
+                // "Tasks", "Epic X", "Implementation", "Features", "Milestones", etc.
+                if is_task_section_heading(&text_lower) {
                     self.found_tasks_section = true;
                 }
             }
-            3 => {
-                // H3 is a task title (if we're in tasks section)
-                if self.found_tasks_section {
+            3 | 4 => {
+                // H3/H4 could be a task - be more flexible
+                // Treat as task if:
+                // 1. We're in a recognized tasks section, OR
+                // 2. The heading looks like a task (starts with action verb, numbered, etc.)
+                if self.found_tasks_section || looks_like_task_heading(&text_lower) {
                     self.save_current_task();
                     let (title, priority) = extract_priority(&text);
                     self.current_task_title = Some(title);
                     if let Some(p) = priority {
                         self.current_task_metadata.priority = Some(p);
                     }
+                    // If we found a task-like heading, assume we're in a task section
+                    self.found_tasks_section = true;
                 }
             }
             _ => {}
@@ -263,6 +271,42 @@ impl ParserState {
             tasks: self.tasks,
         })
     }
+}
+
+/// Check if an H2 heading indicates a task section
+fn is_task_section_heading(text: &str) -> bool {
+    let task_section_patterns = [
+        "tasks", "epic", "implementation", "features", "milestones",
+        "stories", "user stories", "work items", "deliverables",
+        "action items", "to do", "todo", "backlog", "sprint",
+        "phase", "step", "stage",
+    ];
+
+    // Check for exact matches or patterns
+    task_section_patterns.iter().any(|p| text.contains(p))
+        // Also match numbered sections like "1. Setup" or "Phase 1:"
+        || text.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+}
+
+/// Check if a heading looks like a task (for H3/H4 headings)
+fn looks_like_task_heading(text: &str) -> bool {
+    let action_verbs = [
+        "implement", "create", "build", "add", "update", "fix", "refactor",
+        "design", "test", "deploy", "setup", "set up", "configure", "install",
+        "integrate", "migrate", "remove", "delete", "optimize", "improve",
+        "write", "develop", "enable", "disable", "connect", "validate",
+    ];
+
+    // Check if starts with an action verb
+    let starts_with_verb = action_verbs.iter().any(|v| text.starts_with(v));
+
+    // Check if starts with a number (like "1.1 Setup database")
+    let starts_with_number = text.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+
+    // Check if contains "task" keyword
+    let contains_task = text.contains("task");
+
+    starts_with_verb || starts_with_number || contains_task
 }
 
 /// Extract priority from heading text like "Task Title [priority: 1]"

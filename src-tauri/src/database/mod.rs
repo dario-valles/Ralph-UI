@@ -10,7 +10,7 @@ pub mod projects;
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 8;
+const SCHEMA_VERSION: i32 = 9;
 
 pub struct Database {
     conn: Connection,
@@ -105,6 +105,9 @@ impl Database {
         }
         if from_version < 8 {
             self.migrate_to_v8()?;
+        }
+        if from_version < 9 {
+            self.migrate_to_v9()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -491,6 +494,17 @@ impl Database {
         )?;
 
         self.set_schema_version(8)?;
+        Ok(())
+    }
+
+    fn migrate_to_v9(&self) -> Result<()> {
+        // Add extracted_structure column to prd_documents for AI-extracted items
+        self.conn.execute(
+            "ALTER TABLE prd_documents ADD COLUMN extracted_structure TEXT",
+            [],
+        )?;
+
+        self.set_schema_version(9)?;
         Ok(())
     }
 

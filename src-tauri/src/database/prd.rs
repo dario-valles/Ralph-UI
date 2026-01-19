@@ -24,6 +24,8 @@ pub struct PRDDocument {
     pub source_chat_session_id: Option<String>,
     /// Type of PRD (new_feature, bug_fix, refactoring, api_integration, general)
     pub prd_type: Option<String>,
+    /// Extracted structured items (JSON-serialized ExtractedPRDStructure)
+    pub extracted_structure: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,8 +64,8 @@ impl super::Database {
                 quality_score_completeness, quality_score_clarity,
                 quality_score_actionability, quality_score_overall,
                 created_at, updated_at, version, project_path,
-                source_chat_session_id, prd_type
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                source_chat_session_id, prd_type, extracted_structure
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 prd.id,
                 prd.title,
@@ -80,6 +82,7 @@ impl super::Database {
                 prd.project_path,
                 prd.source_chat_session_id,
                 prd.prd_type,
+                prd.extracted_structure,
             ],
         )?;
         Ok(())
@@ -91,7 +94,7 @@ impl super::Database {
                     quality_score_completeness, quality_score_clarity,
                     quality_score_actionability, quality_score_overall,
                     created_at, updated_at, version, project_path,
-                    source_chat_session_id, prd_type
+                    source_chat_session_id, prd_type, extracted_structure
              FROM prd_documents WHERE id = ?1",
             params![id],
             |row| {
@@ -111,6 +114,7 @@ impl super::Database {
                     project_path: row.get(12)?,
                     source_chat_session_id: row.get(13)?,
                     prd_type: row.get(14)?,
+                    extracted_structure: row.get(15)?,
                 })
             },
         )
@@ -123,8 +127,8 @@ impl super::Database {
                 quality_score_completeness = ?5, quality_score_clarity = ?6,
                 quality_score_actionability = ?7, quality_score_overall = ?8,
                 updated_at = ?9, version = ?10, project_path = ?11,
-                source_chat_session_id = ?12, prd_type = ?13
-             WHERE id = ?14",
+                source_chat_session_id = ?12, prd_type = ?13, extracted_structure = ?14
+             WHERE id = ?15",
             params![
                 prd.title,
                 prd.description,
@@ -139,6 +143,7 @@ impl super::Database {
                 prd.project_path,
                 prd.source_chat_session_id,
                 prd.prd_type,
+                prd.extracted_structure,
                 prd.id,
             ],
         )?;
@@ -160,7 +165,7 @@ impl super::Database {
                     quality_score_completeness, quality_score_clarity,
                     quality_score_actionability, quality_score_overall,
                     created_at, updated_at, version, project_path,
-                    source_chat_session_id, prd_type
+                    source_chat_session_id, prd_type, extracted_structure
              FROM prd_documents
              ORDER BY updated_at DESC",
         )?;
@@ -182,6 +187,7 @@ impl super::Database {
                 project_path: row.get(12)?,
                 source_chat_session_id: row.get(13)?,
                 prd_type: row.get(14)?,
+                extracted_structure: row.get(15)?,
             })
         })?;
 
@@ -369,6 +375,7 @@ mod tests {
             project_path: Some("/test/project".to_string()),
             source_chat_session_id: Some("chat-session-123".to_string()),
             prd_type: Some("new_feature".to_string()),
+            extracted_structure: None,
         };
 
         db.create_prd(&prd).unwrap();
@@ -400,6 +407,7 @@ mod tests {
             project_path: None,
             source_chat_session_id: None,
             prd_type: None,
+            extracted_structure: None,
         };
 
         db.create_prd(&prd1).unwrap();
