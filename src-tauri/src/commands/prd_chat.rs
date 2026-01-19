@@ -188,6 +188,7 @@ fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
 /// Send a message to the chat and get an AI response
 #[tauri::command]
 pub async fn send_prd_chat_message(
+    app_handle: tauri::AppHandle,
     request: SendMessageRequest,
     db: State<'_, Mutex<Database>>,
 ) -> Result<SendMessageResponse, String> {
@@ -227,8 +228,14 @@ pub async fn send_prd_chat_message(
     // Parse agent type (no db access needed)
     let agent_type = parse_agent_type(&session.agent_type)?;
 
-    // Execute CLI agent and get response (no mutex held)
-    let response_content = execute_chat_agent(agent_type, &prompt, session.project_path.as_deref())
+    // Execute CLI agent and get response with streaming (no mutex held)
+    let response_content = execute_chat_agent(
+        &app_handle,
+        &request.session_id,
+        agent_type,
+        &prompt,
+        session.project_path.as_deref()
+    )
         .await
         .map_err(|e| format!("Agent execution failed: {}", e))?;
 
@@ -1977,15 +1984,19 @@ fn sanitize_filename_for_prd(name: &str) -> String {
         .collect()
 }
 
-/// Default timeout for agent execution (5 minutes)
-const AGENT_TIMEOUT_SECS: u64 = 300;
+/// Default timeout for agent execution (25 minutes - 5x multiplier for longer agent operations)
+const AGENT_TIMEOUT_SECS: u64 = 1500;
 
 async fn execute_chat_agent(
+    app_handle: &tauri::AppHandle,
+    session_id: &str,
     agent_type: AgentType,
     prompt: &str,
     working_dir: Option<&str>,
 ) -> Result<String, String> {
+    use crate::events::{emit_prd_chat_chunk, PrdChatChunkPayload};
     use std::process::Stdio;
+    use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
 
@@ -2022,41 +2033,72 @@ async fn execute_chat_agent(
         cmd.current_dir(dir);
     }
 
-    // Execute the command with a timeout
-    let output = timeout(
-        Duration::from_secs(AGENT_TIMEOUT_SECS),
-        cmd.output()
-    ).await;
+    // Spawn the process instead of waiting for full output
+    let mut child = cmd.spawn()
+        .map_err(|e| format!("Failed to spawn {}: {}", program, e))?;
 
-    match output {
-        Ok(Ok(output)) => {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                // Check for common interrupt signals
-                if let Some(code) = output.status.code() {
-                    if code == 130 || code == 137 || code == 143 {
-                        return Err("Agent process was interrupted (SIGINT/SIGTERM)".to_string());
-                    }
-                }
-                return Err(format!("Agent returned error: {}", stderr));
+    // Take ownership of stdout for streaming
+    let stdout = child.stdout.take()
+        .ok_or_else(|| "Failed to capture stdout".to_string())?;
+
+    // Create async buffered reader for line-by-line streaming
+    let mut reader = BufReader::new(stdout).lines();
+    let mut accumulated = String::new();
+
+    // Stream lines with overall timeout
+    let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
+        while let Some(line) = reader.next_line().await.map_err(|e| format!("Read error: {}", e))? {
+            // Add line to accumulated response
+            if !accumulated.is_empty() {
+                accumulated.push('\n');
             }
+            accumulated.push_str(&line);
 
-            let response = String::from_utf8_lossy(&output.stdout).to_string();
-            // Clean up response (remove any trailing whitespace)
-            Ok(response.trim().to_string())
+            // Emit streaming chunk event to frontend
+            let _ = emit_prd_chat_chunk(
+                app_handle,
+                PrdChatChunkPayload {
+                    session_id: session_id.to_string(),
+                    content: line,
+                },
+            );
         }
-        Ok(Err(e)) => {
-            // IO error executing process
-            Err(format!("Failed to execute {}: {}", program, e))
-        }
-        Err(_) => {
-            // Timeout elapsed
-            Err(format!(
-                "Agent timed out after {} seconds. The process may have hung or be unresponsive.",
-                AGENT_TIMEOUT_SECS
-            ))
-        }
+        Ok::<(), String>(())
+    }).await;
+
+    // Handle streaming timeout
+    if let Err(_) = stream_result {
+        // Try to kill the hung process
+        let _ = child.kill().await;
+        return Err(format!(
+            "Agent timed out after {} seconds. The process may have hung or be unresponsive.",
+            AGENT_TIMEOUT_SECS
+        ));
     }
+
+    // Check for streaming errors
+    stream_result.unwrap()?;
+
+    // Wait for process to complete and check exit status
+    let status = child.wait().await
+        .map_err(|e| format!("Failed to wait for process: {}", e))?;
+
+    if !status.success() {
+        // Check for common interrupt signals
+        if let Some(code) = status.code() {
+            if code == 130 || code == 137 || code == 143 {
+                return Err("Agent process was interrupted (SIGINT/SIGTERM)".to_string());
+            }
+        }
+        // If we got some output before failure, return it with a warning
+        if !accumulated.is_empty() {
+            return Ok(accumulated.trim().to_string());
+        }
+        return Err(format!("Agent returned error (exit code: {:?})", status.code()));
+    }
+
+    // Clean up response (remove any trailing whitespace)
+    Ok(accumulated.trim().to_string())
 }
 
 fn convert_chat_to_prd_content(messages: &[ChatMessage]) -> String {

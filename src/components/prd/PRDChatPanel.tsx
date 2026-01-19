@@ -77,6 +77,8 @@ export function PRDChatPanel() {
   // Track when streaming started and last message for retry
   const [streamingStartedAt, setStreamingStartedAt] = useState<string | null>(null)
   const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
+  // Track streaming content received via events
+  const [streamingContent, setStreamingContent] = useState<string>('')
   // Plan sidebar visibility
   const [showPlanSidebar, setShowPlanSidebar] = useState(true)
   // Sessions sidebar collapsed state for smaller screens
@@ -200,6 +202,43 @@ export function PRDChatPanel() {
       }
     }
   }, [currentSession?.id, updatePlanContent])
+
+  // Listen for PRD chat streaming chunk events
+  useEffect(() => {
+    const currentSessionId = currentSession?.id
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      try {
+        unlisten = await listen<{ sessionId: string; content: string }>(
+          'prd:chat_chunk',
+          (event) => {
+            // Only update if the event is for the current session
+            if (currentSessionId && event.payload.sessionId === currentSessionId) {
+              setStreamingContent((prev) => prev + event.payload.content + '\n')
+            }
+          }
+        )
+      } catch (err) {
+        console.warn('Failed to set up PRD chat chunk event listener:', err)
+      }
+    }
+
+    setupListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [currentSession?.id])
+
+  // Clear streaming content when streaming completes
+  useEffect(() => {
+    if (!streaming) {
+      setStreamingContent('')
+    }
+  }, [streaming])
 
   // Start/stop watching plan file when session changes
   useEffect(() => {
@@ -735,6 +774,7 @@ export function PRDChatPanel() {
                     startedAt={streamingStartedAt || undefined}
                     onRetry={handleRetryMessage}
                     onCancel={handleCancelStreaming}
+                    content={streamingContent}
                   />
                 )}
                 <div ref={messagesEndRef} />

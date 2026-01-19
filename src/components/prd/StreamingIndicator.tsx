@@ -11,12 +11,14 @@ interface StreamingIndicatorProps {
   onRetry?: () => void
   /** Callback to cancel the current operation */
   onCancel?: () => void
+  /** Streaming content to display (shows real-time output instead of bouncing dots) */
+  content?: string
 }
 
-// Thresholds in seconds
-const WARNING_THRESHOLD = 30 // Show "taking longer" message after 30s
-const CONCERN_THRESHOLD = 60 // Show "may have stopped" after 60s
-const TIMEOUT_THRESHOLD = 120 // Show full error state after 2 min
+// Thresholds in seconds (5x multiplier for longer agent operations)
+const WARNING_THRESHOLD = 150 // Show "taking longer" message after 2.5 min
+const CONCERN_THRESHOLD = 300 // Show "may have stopped" after 5 min
+const TIMEOUT_THRESHOLD = 600 // Show full error state after 10 min
 
 type StreamingState = 'normal' | 'warning' | 'concern' | 'timeout'
 
@@ -25,6 +27,7 @@ export function StreamingIndicator({
   startedAt,
   onRetry,
   onCancel,
+  content,
 }: StreamingIndicatorProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [state, setState] = useState<StreamingState>('normal')
@@ -195,24 +198,44 @@ export function StreamingIndicator({
     )
   }
 
-  // Normal state - simple bouncing dots
+  // Normal state - show streaming content if available, otherwise bouncing dots
+  const hasContent = content && content.trim().length > 0
+
   return (
     <div
       data-testid="streaming-indicator"
       data-state="normal"
       className={cn(
-        'flex items-center gap-2 p-4 bg-muted rounded-lg mr-8 animate-pulse',
+        'flex gap-2 p-4 bg-muted rounded-lg mr-8',
+        !hasContent && 'items-center animate-pulse',
+        hasContent && 'items-start',
         className
       )}
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
         <Bot className="h-4 w-4" />
       </div>
-      <div className="flex gap-1">
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
-      </div>
+      {hasContent ? (
+        <div className="flex-1 min-w-0">
+          <pre className="text-sm whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed max-h-96 overflow-y-auto">
+            {content}
+          </pre>
+          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+            <div className="flex gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span>Streaming...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-1">
+          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      )}
     </div>
   )
 }

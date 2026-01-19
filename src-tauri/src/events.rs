@@ -11,6 +11,7 @@ pub const EVENT_SESSION_STATUS_CHANGED: &str = "session:status_changed";
 pub const EVENT_MISSION_CONTROL_REFRESH: &str = "mission_control:refresh";
 pub const EVENT_RATE_LIMIT_DETECTED: &str = "agent:rate_limit_detected";
 pub const EVENT_PRD_FILE_UPDATED: &str = "prd:file_updated";
+pub const EVENT_PRD_CHAT_CHUNK: &str = "prd:chat_chunk";
 
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +60,14 @@ pub struct PrdFileUpdatedPayload {
     pub session_id: String,
     pub content: String,
     pub path: String,
+}
+
+/// Payload for PRD chat streaming chunk events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrdChatChunkPayload {
+    pub session_id: String,
+    pub content: String,
 }
 
 /// Emit an agent status changed event
@@ -118,6 +127,16 @@ pub fn emit_prd_file_updated(
         .map_err(|e| format!("Failed to emit PRD file updated event: {}", e))
 }
 
+/// Emit a PRD chat streaming chunk event
+pub fn emit_prd_chat_chunk(
+    app_handle: &tauri::AppHandle,
+    payload: PrdChatChunkPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_PRD_CHAT_CHUNK, payload)
+        .map_err(|e| format!("Failed to emit PRD chat chunk event: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +152,8 @@ mod tests {
         assert_eq!(EVENT_SESSION_STATUS_CHANGED, "session:status_changed");
         assert_eq!(EVENT_MISSION_CONTROL_REFRESH, "mission_control:refresh");
         assert_eq!(EVENT_RATE_LIMIT_DETECTED, "agent:rate_limit_detected");
+        assert_eq!(EVENT_PRD_FILE_UPDATED, "prd:file_updated");
+        assert_eq!(EVENT_PRD_CHAT_CHUNK, "prd:chat_chunk");
     }
 
     // =========================================================================
