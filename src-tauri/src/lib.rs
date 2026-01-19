@@ -14,6 +14,7 @@ mod config;
 pub mod events;
 pub mod shutdown;
 pub mod watchers;
+pub mod session_files;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -301,6 +302,7 @@ pub fn run() {
 /// Perform automatic recovery of stale sessions on startup
 /// This checks all known project paths for sessions that were left in Active state
 /// but have stale lock files (indicating a crash), and transitions them to Paused.
+/// It also imports any sessions from per-project .ralph-ui/sessions/ directories.
 fn perform_auto_recovery(db: &database::Database) {
     let conn = db.get_connection();
 
@@ -318,9 +320,10 @@ fn perform_auto_recovery(db: &database::Database) {
         return;
     }
 
-    log::info!("Checking {} project paths for stale sessions", project_paths.len());
+    log::info!("Checking {} project paths for stale sessions and file imports", project_paths.len());
 
     let mut total_recovered = 0;
+    let mut total_imported = 0;
 
     for project_path in project_paths {
         let path = Path::new(&project_path);
@@ -331,6 +334,21 @@ fn perform_auto_recovery(db: &database::Database) {
             continue;
         }
 
+        // Import sessions from .ralph-ui/sessions/ directory
+        match session_files::import_sessions_from_project(conn, path) {
+            Ok(imported) => {
+                total_imported += imported.len();
+            }
+            Err(e) => {
+                log::warn!(
+                    "Session file import failed for project '{}': {}",
+                    project_path,
+                    e
+                );
+            }
+        }
+
+        // Perform stale session recovery
         match session::auto_recover_on_startup(conn, path) {
             Ok(results) => {
                 for result in &results {
@@ -350,6 +368,10 @@ fn perform_auto_recovery(db: &database::Database) {
                 );
             }
         }
+    }
+
+    if total_imported > 0 {
+        log::info!("Imported {} sessions from project files", total_imported);
     }
 
     if total_recovered > 0 {

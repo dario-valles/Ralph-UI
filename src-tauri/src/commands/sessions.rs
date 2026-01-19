@@ -3,6 +3,7 @@
 use crate::database::{self, Database};
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::models::{AgentType, Session, SessionConfig, SessionStatus};
+use crate::session_files;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -79,6 +80,11 @@ pub async fn update_session(
     database::sessions::update_session(conn, &session)
         .map_err(|e| format!("Failed to update session: {}", e))?;
 
+    // Export session to file on update (for persistence)
+    if let Err(e) = session_files::export_session_to_file(conn, &session.id, None) {
+        log::warn!("Failed to export session to file: {}", e);
+    }
+
     Ok(session)
 }
 
@@ -90,8 +96,22 @@ pub async fn delete_session(
     let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
     let conn = db.get_connection();
 
+    // Get session to find project path before deletion
+    let session = database::sessions::get_session(conn, &id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+
+    // Delete from database
     database::sessions::delete_session(conn, &id)
-        .map_err(|e| format!("Failed to delete session: {}", e))
+        .map_err(|e| format!("Failed to delete session: {}", e))?;
+
+    // Delete session file to prevent re-import on next startup
+    let project_path = std::path::Path::new(&session.project_path);
+    if let Err(e) = session_files::delete_session_file(project_path, &id) {
+        log::warn!("Failed to delete session file: {}", e);
+        // Don't fail the command - database deletion succeeded
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -113,6 +133,13 @@ pub async fn update_session_status(
 
     database::sessions::update_session_status(conn, &session_id, status)
         .map_err(|e| format!("Failed to update session status: {}", e))?;
+
+    // Export session to file on status change (for persistence)
+    // This ensures session state is saved to .ralph-ui/sessions/ for git tracking
+    if let Err(e) = session_files::export_session_to_file(conn, &session_id, None) {
+        log::warn!("Failed to export session to file: {}", e);
+        // Don't fail the command - this is a secondary operation
+    }
 
     // Emit the status changed event
     let payload = SessionStatusChangedPayload {

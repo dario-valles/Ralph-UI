@@ -4,6 +4,7 @@ use crate::database::{self, Database};
 use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
+use crate::session_files;
 use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
@@ -125,6 +126,15 @@ pub async fn update_task_status(
             None,
         ) {
             log::warn!("Failed to write progress file: {}", e);
+        }
+
+        // Export session to file on task status change (for persistence)
+        // This ensures task state is saved to .ralph-ui/sessions/ for git tracking
+        // Only export on significant status changes (completed, failed)
+        if matches!(status, TaskStatus::Completed | TaskStatus::Failed) {
+            if let Err(e) = session_files::export_session_to_file(conn, &session_id, None) {
+                log::warn!("Failed to export session to file: {}", e);
+            }
         }
     }
 

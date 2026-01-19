@@ -1,12 +1,15 @@
 // Tauri commands for project management
 
 use crate::database::{Database, projects};
+use crate::session_files;
+use std::path::Path;
 use std::sync::Mutex;
 use tauri::State;
 
 pub type DbState = Mutex<Database>;
 
 /// Register (or get existing) project from a folder path
+/// Also imports any sessions from the project's .ralph-ui/sessions/ directory
 #[tauri::command]
 pub fn register_project(
     db: State<DbState>,
@@ -16,8 +19,32 @@ pub fn register_project(
     let db = db.lock().map_err(|e| e.to_string())?;
     let conn = db.get_connection();
 
-    projects::upsert_project(conn, &path, name.as_deref())
-        .map_err(|e| e.to_string())
+    let project = projects::upsert_project(conn, &path, name.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    // Import any sessions from the project's .ralph-ui/sessions/ directory
+    // This ensures sessions saved to files are available in the database
+    let project_path = Path::new(&path);
+    if project_path.exists() {
+        match session_files::import_sessions_from_project(conn, project_path) {
+            Ok(imported) => {
+                if !imported.is_empty() {
+                    log::info!(
+                        "Imported {} sessions from project '{}': {:?}",
+                        imported.len(),
+                        path,
+                        imported
+                    );
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to import sessions from project '{}': {}", path, e);
+                // Don't fail the command - this is a secondary operation
+            }
+        }
+    }
+
+    Ok(project)
 }
 
 /// Get a project by ID
