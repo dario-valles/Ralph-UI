@@ -129,6 +129,15 @@ fn get_patterns() -> &'static Vec<CompiledPattern> {
                 regex: Regex::new(r"(?i)capacity\s+(exceeded|limit)").unwrap(),
                 limit_type: RateLimitType::Overloaded,
             },
+            // Concurrency limit patterns (e.g., ZhiPu AI "High concurrency usage")
+            CompiledPattern {
+                regex: Regex::new(r"(?i)high\s+concurrency").unwrap(),
+                limit_type: RateLimitType::Overloaded,
+            },
+            CompiledPattern {
+                regex: Regex::new(r"(?i)reduce\s+concurrency").unwrap(),
+                limit_type: RateLimitType::Overloaded,
+            },
         ]
     })
 }
@@ -269,6 +278,20 @@ mod tests {
         let detector = RateLimitDetector::new();
 
         let stderr = "Error: service overloaded, try again later";
+        let result = detector.detect_in_stderr(stderr);
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert!(info.is_rate_limited);
+        assert_eq!(info.limit_type, Some(RateLimitType::Overloaded));
+    }
+
+    #[test]
+    fn test_detects_high_concurrency() {
+        let detector = RateLimitDetector::new();
+
+        // ZhiPu AI style concurrency limit
+        let stderr = "High concurrency usage of this API, please reduce concurrency or contact customer service";
         let result = detector.detect_in_stderr(stderr);
 
         assert!(result.is_some());
