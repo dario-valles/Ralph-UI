@@ -98,8 +98,14 @@ function getProjectName(path: string): string {
 /**
  * Hook to get global statistics across all projects
  * Uses single store calls with useShallow to avoid infinite loops
+ * Fetches agents directly from backend to get accurate cross-session counts
  */
 export function useGlobalStats(): GlobalStats & { loading: boolean; error: string | null } {
+  // State for backend-fetched agents
+  const [allAgents, setAllAgents] = useState<Agent[]>([])
+  const [agentsLoading, setAgentsLoading] = useState(true)
+  const [agentsError, setAgentsError] = useState<string | null>(null)
+
   // Use useShallow to prevent infinite re-renders from object selectors
   const projectState = useProjectStore(useShallow(s => ({
     projects: s.projects,
@@ -111,22 +117,41 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
     loading: s.loading,
     error: s.error
   })))
-  const agentState = useAgentStore(useShallow(s => ({
-    agents: s.agents,
-    loading: s.loading,
-    error: s.error
-  })))
   const tasks = useTaskStore(s => s.tasks)
 
-  const loading = projectState.loading || sessionState.loading || agentState.loading
-  const error = projectState.error || sessionState.error || agentState.error
+  // Fetch all agents from backend (cross-session)
+  useEffect(() => {
+    const fetchAgents = async () => {
+      if (!isTauri) {
+        setAgentsLoading(false)
+        return
+      }
+      try {
+        const agents = await invoke<Agent[]>('get_all_active_agents')
+        setAllAgents(agents)
+        setAgentsError(null)
+      } catch (err) {
+        console.error('Failed to fetch all agents:', err)
+        setAgentsError(err instanceof Error ? err.message : 'Failed to fetch agents')
+      } finally {
+        setAgentsLoading(false)
+      }
+    }
+    fetchAgents()
+    // Poll for agents periodically
+    const interval = setInterval(fetchAgents, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const loading = projectState.loading || sessionState.loading || agentsLoading
+  const error = projectState.error || sessionState.error || agentsError
 
   const stats = useMemo(() => {
-    const { agents } = agentState
     const { sessions } = sessionState
     const { projects } = projectState
 
-    const activeAgentsCount = agents.filter(a => a.status !== 'idle').length
+    // Use backend-fetched agents for accurate cross-session counts
+    const activeAgentsCount = allAgents.filter(a => a.status !== 'idle').length
     const tasksInProgress = tasks.filter(t => t.status === 'in_progress').length
     const tasksCompletedToday = tasks.filter(t =>
       t.status === 'completed' && isToday(t.completedAt)
@@ -134,7 +159,7 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
     const totalTasksToday = tasks.filter(t =>
       isToday(t.startedAt) || isToday(t.completedAt)
     ).length
-    const totalCostToday = agents.reduce((sum, a) => sum + a.cost, 0)
+    const totalCostToday = allAgents.reduce((sum, a) => sum + a.cost, 0)
     const activeProjectPaths = new Set(
       sessions.filter(s => s.status === 'active').map(s => s.projectPath)
     )
@@ -148,7 +173,7 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
       activeProjectsCount: activeProjectPaths.size,
       totalProjects: projects.length,
     }
-  }, [agentState, sessionState, projectState, tasks])
+  }, [allAgents, sessionState, projectState, tasks])
 
   return { ...stats, loading, error }
 }

@@ -14,6 +14,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useAgentStore } from '@/stores/agentStore'
 import { useTaskStore } from '@/stores/taskStore'
+import { invoke } from '@tauri-apps/api/core'
 
 // Create mock store functions with getState using vi.hoisted
 const { mockUseProjectStore, mockUseSessionStore, mockUseAgentStore, mockUseTaskStore } = vi.hoisted(() => {
@@ -215,10 +216,20 @@ describe('useMissionControlData hooks', () => {
       expect(result.current.loading).toBe(true)
     })
 
-    it('should calculate active agents count correctly', () => {
+    it('should calculate active agents count correctly', async () => {
       setupStoreMocks()
+      // Mock invoke to return agents from backend
+      vi.mocked(invoke).mockResolvedValue(mockAgents)
+      // Set isTauri to true
+      Object.defineProperty(window, '__TAURI_INTERNALS__', { value: true, configurable: true })
 
-      const { result } = renderHook(() => useGlobalStats())
+      const { result, rerender } = renderHook(() => useGlobalStats())
+
+      // Wait for async agent fetch to complete
+      await act(async () => {
+        await vi.waitFor(() => !result.current.loading)
+      })
+      rerender()
 
       // Only agent-1 is active (thinking), agent-2 is idle
       expect(result.current.activeAgentsCount).toBe(1)
@@ -240,10 +251,20 @@ describe('useMissionControlData hooks', () => {
       expect(result.current.totalProjects).toBe(2)
     })
 
-    it('should calculate total cost correctly', () => {
+    it('should calculate total cost correctly', async () => {
       setupStoreMocks()
+      // Mock invoke to return agents from backend
+      vi.mocked(invoke).mockResolvedValue(mockAgents)
+      // Set isTauri to true
+      Object.defineProperty(window, '__TAURI_INTERNALS__', { value: true, configurable: true })
 
-      const { result } = renderHook(() => useGlobalStats())
+      const { result, rerender } = renderHook(() => useGlobalStats())
+
+      // Wait for async agent fetch to complete
+      await act(async () => {
+        await vi.waitFor(() => !result.current.loading)
+      })
+      rerender()
 
       expect(result.current.totalCostToday).toBe(0.07) // 0.05 + 0.02
     })

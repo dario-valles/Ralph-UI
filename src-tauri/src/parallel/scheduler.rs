@@ -552,7 +552,7 @@ impl ParallelScheduler {
             id: agent_id.clone(),
             session_id: session_id.to_string(),
             task_id: scheduled.task.id.clone(),
-            status: AgentStatus::Idle,
+            status: AgentStatus::Thinking,
             process_id: Some(process_id),
             worktree_path,
             branch,

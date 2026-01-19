@@ -1,14 +1,14 @@
 // Tauri commands for parallel execution
 
-use crate::database::Database;
-use crate::models::{Task, Agent, AgentStatus};
+use crate::database::{Database, tasks as db_tasks};
+use crate::models::{Task, Agent, AgentStatus, TaskStatus};
 use crate::parallel::{
     scheduler::{ParallelScheduler, SchedulerConfig, SchedulerStats},
     pool::{PoolStats, CompletedAgent},
     coordinator::{WorktreeCoordinator, WorktreeAllocation},
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
-use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
+use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload, emit_task_status_changed, TaskStatusChangedPayload};
 use crate::RateLimitEventState;
 use std::sync::Mutex;
 use tauri::State;
@@ -104,6 +104,7 @@ pub fn parallel_add_tasks(
 /// Schedule next task from queue
 #[tauri::command]
 pub fn parallel_schedule_next(
+    app_handle: tauri::AppHandle,
     state: State<ParallelState>,
     db: State<Mutex<Database>>,
     session_id: String,
@@ -182,6 +183,24 @@ pub fn parallel_schedule_next(
             db.create_agent(&agent)
                 .map_err(|e| format!("Failed to save agent: {}", e))?;
             log::info!("[Parallel] Agent saved to database");
+
+            // Update task status to InProgress in database
+            let conn = db.get_connection();
+            if let Err(e) = db_tasks::update_task_status(conn, &agent.task_id, TaskStatus::InProgress) {
+                log::warn!("[Parallel] Failed to update task status to in_progress: {}", e);
+            } else {
+                log::info!("[Parallel] Task {} status updated to in_progress", agent.task_id);
+                // Emit task status changed event
+                let payload = TaskStatusChangedPayload {
+                    task_id: agent.task_id.clone(),
+                    session_id: agent.session_id.clone(),
+                    old_status: "pending".to_string(),
+                    new_status: "in_progress".to_string(),
+                };
+                if let Err(e) = emit_task_status_changed(&app_handle, payload) {
+                    log::warn!("[Parallel] Failed to emit task status changed event: {}", e);
+                }
+            }
 
             Ok(Some(agent))
         }
@@ -362,6 +381,30 @@ pub fn parallel_poll_completed(
                     new_status: format!("{:?}", new_status).to_lowercase(),
                 };
                 let _ = emit_agent_status_changed(&app_handle, payload);
+
+                // Update task status in database based on exit code
+                let task_status = if agent.exit_code == 0 {
+                    TaskStatus::Completed
+                } else {
+                    TaskStatus::Failed
+                };
+
+                let conn = db.get_connection();
+                if let Err(e) = db_tasks::update_task_status(conn, &agent.task_id, task_status) {
+                    log::error!("[Parallel] Failed to persist task status: {}", e);
+                } else {
+                    log::info!("[Parallel] Task {} status updated to {:?}", agent.task_id, task_status);
+                    // Emit task status changed event
+                    let task_payload = TaskStatusChangedPayload {
+                        task_id: agent.task_id.clone(),
+                        session_id: current_agent.session_id.clone(),
+                        old_status: "in_progress".to_string(),
+                        new_status: format!("{:?}", task_status).to_lowercase(),
+                    };
+                    if let Err(e) = emit_task_status_changed(&app_handle, task_payload) {
+                        log::warn!("[Parallel] Failed to emit task status changed event: {}", e);
+                    }
+                }
             }
         }
     }
