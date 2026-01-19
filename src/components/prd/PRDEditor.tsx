@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,12 +17,17 @@ import {
   CheckCircle,
   AlertTriangle,
   MessageSquare,
+  Edit3,
+  Eye,
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { PRDExecutionDialog } from './PRDExecutionDialog'
 import { QualityScoreCard } from './QualityScoreCard'
 import { toast } from '@/stores/toastStore'
-import type { PRDSection, PRDDocument, QualityAssessment } from '@/types'
+import { cn } from '@/lib/utils'
+import type { PRDDocument, QualityAssessment } from '@/types'
+
+// NOTE: PRD content is always markdown format
 
 // Helper function to convert PRD quality scores to QualityAssessment format
 function convertPRDToAssessment(prd: PRDDocument): QualityAssessment | null {
@@ -38,6 +45,89 @@ function convertPRDToAssessment(prd: PRDDocument): QualityAssessment | null {
   }
 }
 
+// Reusable markdown renderer component (matches PRDPlanSidebar styling)
+function MarkdownContent({ content, className }: { content: string; className?: string }) {
+  return (
+    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          // Style code blocks
+          pre: ({ children }) => (
+            <pre className="bg-secondary/50 rounded-md p-3 overflow-x-auto text-xs">
+              {children}
+            </pre>
+          ),
+          code: ({ children, className }) => {
+            const isInline = !className
+            return isInline ? (
+              <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">
+                {children}
+              </code>
+            ) : (
+              <code className={className}>{children}</code>
+            )
+          },
+          // Style lists
+          ul: ({ children }) => (
+            <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>
+          ),
+          // Style headings
+          h1: ({ children }) => (
+            <h1 className="text-xl font-bold mt-6 mb-3 pb-2 border-b">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-lg font-bold mt-5 mb-2">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-base font-semibold mt-4 mb-1.5">{children}</h3>
+          ),
+          // Style paragraphs
+          p: ({ children }) => <p className="my-2 text-sm leading-relaxed">{children}</p>,
+          // Style tables
+          table: ({ children }) => (
+            <div className="overflow-x-auto my-4 rounded-md border border-border">
+              <table className="min-w-full text-sm border-collapse">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-muted/70">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-border">{children}</tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
+          ),
+          th: ({ children }) => (
+            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-2 text-muted-foreground">{children}</td>
+          ),
+          // Style blockquotes
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-primary/50 pl-4 my-3 italic text-muted-foreground">
+              {children}
+            </blockquote>
+          ),
+          // Style horizontal rules
+          hr: () => <hr className="my-6 border-border" />,
+          // Style strong/bold
+          strong: ({ children }) => (
+            <strong className="font-semibold">{children}</strong>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 export function PRDEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -45,7 +135,8 @@ export function PRDEditor() {
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [sections, setSections] = useState<PRDSection[]>([])
+  const [content, setContent] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [showExecutionDialog, setShowExecutionDialog] = useState(false)
@@ -60,34 +151,24 @@ export function PRDEditor() {
     if (currentPRD) {
       setTitle(currentPRD.title)
       setDescription(currentPRD.description || '')
-      try {
-        const parsed = JSON.parse(currentPRD.content)
-        setSections(parsed.sections || [])
-      } catch (err) {
-        console.error('Failed to parse PRD content:', err)
-        toast.error('Failed to parse PRD content', 'The document may be corrupted or in an invalid format.')
-      }
+      setContent(currentPRD.content)
     }
   }, [currentPRD])
-
-  const handleSectionChange = (index: number, content: string) => {
-    const newSections = [...sections]
-    newSections[index] = { ...newSections[index], content }
-    setSections(newSections)
-  }
 
   const handleSave = async () => {
     if (!currentPRD) return
 
     setSaving(true)
     try {
+      // Always save as markdown format now
       await updatePRD({
         id: currentPRD.id,
         title,
         description,
-        content: JSON.stringify({ sections }),
+        content,
       })
       toast.success('PRD saved', 'Your changes have been saved successfully.')
+      setIsEditing(false)
     } catch (err) {
       console.error('Failed to save PRD:', err)
       toast.error('Failed to save PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
@@ -261,33 +342,55 @@ export function PRDEditor() {
         </CardContent>
       </Card>
 
-      {/* Sections */}
-      <div className="space-y-4">
-        {sections.map((section, index) => (
-          <Card key={section.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  {section.title}
-                  {section.required && <span className="ml-1 text-destructive">*</span>}
-                </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {section.content.length} characters
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={section.content}
-                onChange={(e) => handleSectionChange(index, e.target.value)}
-                placeholder={`Describe ${section.title.toLowerCase()}...`}
-                rows={6}
-                className="font-mono text-sm"
-              />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* PRD Content */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">PRD Content</CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {content.length} characters
+              </Badge>
+              <Button
+                variant={isEditing ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                {isEditing ? (
+                  <>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Preview
+                  </>
+                ) : (
+                  <>
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Edit
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isEditing ? (
+            <Textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write your PRD content in markdown..."
+              rows={25}
+              className="font-mono text-sm min-h-[500px]"
+            />
+          ) : content.trim() ? (
+            <div className="border rounded-md p-4 bg-background min-h-[200px]">
+              <MarkdownContent content={content} />
+            </div>
+          ) : (
+            <div className="border rounded-md p-8 bg-muted/30 text-center">
+              <p className="text-muted-foreground">No content yet. Click "Edit" to start writing your PRD.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Execution Dialog */}
       {showExecutionDialog && (

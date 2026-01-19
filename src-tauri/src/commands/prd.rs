@@ -1,4 +1,5 @@
 // PRD Tauri commands
+// NOTE: PRD content is always markdown. JSON format support was removed as the app is not yet released.
 
 use crate::database::{Database, prd::*};
 use crate::parsers;
@@ -61,20 +62,14 @@ pub async fn create_prd(
     let now = chrono::Utc::now().to_rfc3339();
     let prd_id = Uuid::new_v4().to_string();
 
-    // Load template if provided
+    // Load template if provided, otherwise use empty markdown
     let content = if let Some(template_id) = &request.template_id {
         let template = db.get_template(template_id)
             .map_err(|e| format!("Failed to load template: {}", e))?;
         template.template_structure
     } else {
-        // Default empty PRD structure
-        r#"{
-            "sections": [
-                {"id": "overview", "title": "Overview", "content": "", "required": true},
-                {"id": "requirements", "title": "Requirements", "content": "", "required": true},
-                {"id": "tasks", "title": "Tasks", "content": "", "required": true}
-            ]
-        }"#.to_string()
+        // Default empty markdown PRD structure
+        "## Overview\n\n## Requirements\n\n## Tasks\n\n".to_string()
     };
 
     let prd = PRDDocument {
@@ -178,7 +173,7 @@ pub async fn list_prd_templates(
         .map_err(|e| format!("Failed to list templates: {}", e))
 }
 
-/// Export PRD to different formats
+/// Export PRD to different formats (content is always markdown)
 #[tauri::command]
 pub async fn export_prd(
     prd_id: String,
@@ -190,52 +185,30 @@ pub async fn export_prd(
     let prd = db.get_prd(&prd_id)
         .map_err(|e| format!("PRD not found: {}", e))?;
 
-    // Check if content is JSON or markdown
-    let is_json = is_json_content(&prd.content);
-
     match format.as_str() {
-        "json" => {
-            if is_json {
-                Ok(prd.content)
-            } else {
-                // Content is markdown - wrap it in a JSON structure
-                let json = serde_json::json!({
-                    "sections": [{
-                        "id": "content",
-                        "title": "Content",
-                        "content": prd.content,
-                        "required": false
-                    }]
-                });
-                Ok(json.to_string())
-            }
-        }
-        "markdown" => {
-            // Convert to Markdown (handles both JSON and markdown content)
-            convert_prd_to_markdown(&prd)
-        }
+        "markdown" => Ok(format_prd_markdown(&prd)),
         "yaml" => {
-            if is_json {
-                // Convert JSON to YAML
-                let json: serde_json::Value = serde_json::from_str(&prd.content)
-                    .map_err(|e| format!("Invalid PRD content: {}", e))?;
-                serde_yaml::to_string(&json)
-                    .map_err(|e| format!("Failed to convert to YAML: {}", e))
-            } else {
-                // Content is markdown - wrap it in a YAML structure
-                let json = serde_json::json!({
-                    "title": prd.title,
-                    "content": prd.content
-                });
-                serde_yaml::to_string(&json)
-                    .map_err(|e| format!("Failed to convert to YAML: {}", e))
-            }
+            let data = serde_json::json!({
+                "title": prd.title,
+                "description": prd.description,
+                "content": prd.content
+            });
+            serde_yaml::to_string(&data)
+                .map_err(|e| format!("Failed to convert to YAML: {}", e))
+        }
+        "json" => {
+            let data = serde_json::json!({
+                "title": prd.title,
+                "description": prd.description,
+                "content": prd.content
+            });
+            Ok(serde_json::to_string_pretty(&data).unwrap_or_default())
         }
         _ => Err(format!("Unsupported format: {}", format))
     }
 }
 
-/// Analyze PRD quality
+/// Analyze PRD quality (markdown content)
 #[tauri::command]
 pub async fn analyze_prd_quality(
     prd_id: String,
@@ -246,26 +219,10 @@ pub async fn analyze_prd_quality(
     let mut prd = db.get_prd(&prd_id)
         .map_err(|e| format!("PRD not found: {}", e))?;
 
-    // Calculate quality scores based on content format
-    let (completeness, clarity, actionability) = if is_json_content(&prd.content) {
-        // Parse JSON content
-        let content: serde_json::Value = serde_json::from_str(&prd.content)
-            .map_err(|e| format!("Invalid PRD content: {}", e))?;
-
-        (
-            calculate_completeness(&content),
-            calculate_clarity(&content),
-            calculate_actionability(&content),
-        )
-    } else {
-        // Markdown content - use different quality metrics
-        (
-            calculate_markdown_completeness(&prd.content),
-            calculate_markdown_clarity(&prd.content),
-            calculate_markdown_actionability(&prd.content),
-        )
-    };
-
+    // Calculate quality scores for markdown content
+    let completeness = calculate_completeness(&prd.content);
+    let clarity = calculate_clarity(&prd.content);
+    let actionability = calculate_actionability(&prd.content);
     let overall = (completeness + clarity + actionability) / 3;
 
     prd.quality_score_completeness = Some(completeness);
@@ -293,8 +250,7 @@ pub async fn execute_prd(
     let prd = db_guard.get_prd(&prd_id)
         .map_err(|e| format!("PRD not found: {}", e))?;
 
-    // 2. Try to get tasks from extracted_structure first (AI-extracted during export)
-    //    Fall back to parsing markdown if no extracted structure exists
+    // 2. Get tasks from extracted_structure (AI-extracted during export) or parse markdown
     let tasks_from_structure = prd.extracted_structure.as_ref()
         .and_then(|json| serde_json::from_str::<crate::models::ExtractedPRDStructure>(json).ok())
         .filter(|s| !s.tasks.is_empty());
@@ -320,18 +276,17 @@ pub async fn execute_prd(
             }).collect(),
         }
     } else {
-        // Fall back to parsing markdown content
-        log::info!("[PRD Execute] No extracted_structure, parsing markdown content");
-        let markdown_content = convert_prd_to_markdown(&prd)?;
+        // Parse markdown content directly
+        log::info!("[PRD Execute] Parsing markdown content for tasks");
+        let markdown_content = format_prd_markdown(&prd);
         parsers::parse_prd_auto(&markdown_content)
             .map_err(|e| format!("Failed to parse PRD: {}", e))?
     };
 
-    // 4. Create session for this execution
+    // 3. Create session for this execution
     let session_id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now();
 
-    // Parse agent type
     let agent_type = match config.agent_type.as_str() {
         "claude" => crate::models::AgentType::Claude,
         "opencode" => crate::models::AgentType::Opencode,
@@ -365,29 +320,24 @@ pub async fn execute_prd(
     crate::database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
-    // 5. Validate and create tasks in database with PRD reference
-    let mut task_ids = vec![];
-    let mut warnings: Vec<String> = vec![];
-
-    // Validate tasks before creation
+    // 4. Validate and create tasks
     if parsed_prd.tasks.is_empty() {
         return Err("No tasks found in PRD. Please add tasks with descriptions before executing.".to_string());
     }
 
+    let mut task_ids = vec![];
+    let mut warnings: Vec<String> = vec![];
+
     for prd_task in parsed_prd.tasks {
         let task_id = Uuid::new_v4().to_string();
 
-        // Validate and potentially fix the description
         let description = if prd_task.description.trim().is_empty() {
-            // Use title as fallback description with a clear instruction
             warnings.push(format!("Task '{}' has no description, using title as prompt", prd_task.title));
-            log::warn!("[PRD Execute] Task '{}' has empty description, using title", prd_task.title);
             format!("Implement the following task: {}", prd_task.title)
         } else {
             prd_task.description
         };
 
-        // Validate title
         let title = if prd_task.title.trim().is_empty() {
             warnings.push("Found task with empty title, using 'Untitled Task'".to_string());
             "Untitled Task".to_string()
@@ -418,22 +368,18 @@ pub async fn execute_prd(
         task_ids.push(task_id);
     }
 
-    // Log warnings if any
     if !warnings.is_empty() {
         log::warn!("[PRD Execute] Task validation warnings:\n{}", warnings.join("\n"));
     }
 
-    // Export session to file for git tracking and portability
-    // Pass PRD ID to preserve the PRD-session relationship
+    // 5. Export session to file for git tracking
     if let Err(e) = session_files::export_session_to_file(conn, &session_id, Some(prd_id.clone())) {
         log::warn!("Failed to export session to file: {}", e);
-        // Don't fail - session is in DB
     }
 
     // 6. Create PRD execution record
-    let execution_id = Uuid::new_v4().to_string();
     let execution = PRDExecution {
-        id: execution_id,
+        id: Uuid::new_v4().to_string(),
         prd_id: prd_id.clone(),
         session_id: session_id.clone(),
         status: "in_progress".to_string(),
@@ -448,229 +394,27 @@ pub async fn execute_prd(
     db_guard.create_prd_execution(&execution)
         .map_err(|e| format!("Failed to create PRD execution: {}", e))?;
 
-    // Drop the database guard before starting agents
     drop(db_guard);
-
-    // 7. Agents will be started by the frontend/session manager
-    // We just return the session ID so the UI can navigate to the agent monitor
 
     Ok(session_id)
 }
 
 // Helper functions
 
-/// Check if content looks like JSON (starts with { or [)
-fn is_json_content(content: &str) -> bool {
-    let trimmed = content.trim();
-    trimmed.starts_with('{') || trimmed.starts_with('[')
-}
-
-fn convert_prd_to_markdown(prd: &PRDDocument) -> Result<String, String> {
-    // If content is already markdown (not JSON), return it with title prepended
-    if !is_json_content(&prd.content) {
-        let mut markdown = format!("# {}\n\n", prd.title);
-        if let Some(desc) = &prd.description {
-            if !desc.is_empty() {
-                markdown.push_str(&format!("{}\n\n", desc));
-            }
-        }
-        markdown.push_str(&prd.content);
-        return Ok(markdown);
-    }
-
-    // Content is JSON - convert to markdown
-    let content: serde_json::Value = serde_json::from_str(&prd.content)
-        .map_err(|e| format!("Invalid PRD content: {}", e))?;
-
+/// Format PRD as markdown with title
+fn format_prd_markdown(prd: &PRDDocument) -> String {
     let mut markdown = format!("# {}\n\n", prd.title);
-
     if let Some(desc) = &prd.description {
-        markdown.push_str(&format!("{}\n\n", desc));
-    }
-
-    // Context section titles - these provide background, not tasks
-    let context_sections = [
-        "overview", "requirements", "goals", "scope", "background",
-        "visual style", "audio", "game overview", "core features",
-        "development phases", "architecture", "design", "introduction",
-        "summary", "description", "context", "notes", "references",
-        "technical requirements", "non-functional requirements",
-    ];
-
-    // Task section indicators - these are actual implementation items
-    let task_indicators = [
-        "epic", "story", "task", "feature", "implement", "create",
-        "build", "develop", "add", "update", "fix", "refactor",
-        "milestone", "sprint", "user story", "acceptance criteria",
-    ];
-
-    if let Some(sections) = content.get("sections").and_then(|s| s.as_array()) {
-        let mut context_content = String::new();
-        let mut task_sections: Vec<(String, String)> = Vec::new();
-
-        for section in sections {
-            if let Some(title) = section.get("title").and_then(|t| t.as_str()) {
-                let content_text = section.get("content")
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("")
-                    .trim();
-
-                let title_lower = title.to_lowercase();
-
-                // Determine if this is a context section or a task section
-                let is_context = context_sections.iter().any(|cs| title_lower.contains(cs));
-                let is_task = task_indicators.iter().any(|ti| title_lower.contains(ti))
-                    || title_lower.starts_with("epic ")
-                    || title_lower.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
-
-                if is_context && !is_task {
-                    // Add to context/background
-                    if !content_text.is_empty() {
-                        context_content.push_str(&format!("## {}\n\n{}\n\n", title, content_text));
-                    }
-                } else if !content_text.is_empty() || is_task {
-                    // This is a task section
-                    let description = if content_text.is_empty() {
-                        format!("Implement: {}", title)
-                    } else {
-                        content_text.to_string()
-                    };
-                    task_sections.push((title.to_string(), description));
-                }
-            }
-        }
-
-        // Add context first (as background info)
-        if !context_content.is_empty() {
-            markdown.push_str(&context_content);
-        }
-
-        // Then add tasks section
-        if !task_sections.is_empty() {
-            markdown.push_str("## Tasks\n\n");
-            for (title, description) in task_sections {
-                markdown.push_str(&format!("### {}\n\n{}\n\n", title, description));
-            }
+        if !desc.is_empty() {
+            markdown.push_str(&format!("{}\n\n", desc));
         }
     }
-
-    Ok(markdown)
+    markdown.push_str(&prd.content);
+    markdown
 }
 
-fn calculate_completeness(content: &serde_json::Value) -> i32 {
-    let sections = content.get("sections").and_then(|s| s.as_array());
-
-    if let Some(sections) = sections {
-        let required_sections: Vec<_> = sections.iter()
-            .filter(|s| s.get("required").and_then(|r| r.as_bool()).unwrap_or(false))
-            .collect();
-
-        if required_sections.is_empty() {
-            return 100;
-        }
-
-        let filled_sections = required_sections.iter()
-            .filter(|s| {
-                s.get("content")
-                    .and_then(|c| c.as_str())
-                    .map(|c| !c.trim().is_empty())
-                    .unwrap_or(false)
-            })
-            .count();
-
-        ((filled_sections as f32 / required_sections.len() as f32) * 100.0) as i32
-    } else {
-        0
-    }
-}
-
-fn calculate_clarity(content: &serde_json::Value) -> i32 {
-    let sections = content.get("sections").and_then(|s| s.as_array());
-
-    if let Some(sections) = sections {
-        let mut total_score = 0;
-        let mut count = 0;
-
-        for section in sections {
-            if let Some(content_text) = section.get("content").and_then(|c| c.as_str()) {
-                if content_text.trim().is_empty() {
-                    continue;
-                }
-
-                count += 1;
-                let mut score = 100;
-
-                // Check for vague terms
-                let vague_terms = ["simple", "easy", "fast", "good", "better", "nice", "clean"];
-                for term in vague_terms {
-                    if content_text.to_lowercase().contains(term) {
-                        score -= 10;
-                    }
-                }
-
-                // Check minimum length
-                if content_text.len() < 50 {
-                    score -= 20;
-                }
-
-                total_score += score.max(0);
-            }
-        }
-
-        if count > 0 {
-            total_score / count
-        } else {
-            0
-        }
-    } else {
-        0
-    }
-}
-
-fn calculate_actionability(content: &serde_json::Value) -> i32 {
-    let sections = content.get("sections").and_then(|s| s.as_array());
-
-    if let Some(sections) = sections {
-        let has_task_section = sections.iter().any(|s| {
-            s.get("id")
-                .and_then(|id| id.as_str())
-                .map(|id| id.contains("task") || id.contains("requirement"))
-                .unwrap_or(false)
-        });
-
-        if has_task_section {
-            // Check if tasks are well-defined
-            let task_content_length: usize = sections.iter()
-                .filter(|s| {
-                    s.get("id")
-                        .and_then(|id| id.as_str())
-                        .map(|id| id.contains("task") || id.contains("requirement"))
-                        .unwrap_or(false)
-                })
-                .filter_map(|s| s.get("content").and_then(|c| c.as_str()))
-                .map(|c| c.len())
-                .sum();
-
-            if task_content_length > 200 {
-                90
-            } else if task_content_length > 100 {
-                70
-            } else if task_content_length > 0 {
-                50
-            } else {
-                20
-            }
-        } else {
-            40 // Has structure but no explicit task section
-        }
-    } else {
-        0
-    }
-}
-
-// Markdown-specific quality metrics
-
-fn calculate_markdown_completeness(content: &str) -> i32 {
+/// Calculate completeness score for markdown PRD
+fn calculate_completeness(content: &str) -> i32 {
     let mut score = 0;
     let content_lower = content.to_lowercase();
 
@@ -680,10 +424,9 @@ fn calculate_markdown_completeness(content: &str) -> i32 {
         .filter(|s| content_lower.contains(&format!("# {}", s)) || content_lower.contains(&format!("## {}", s)))
         .count();
 
-    // Base score from section coverage
     score += (found_sections as i32 * 15).min(60);
 
-    // Check content length (reasonable PRD should be >500 chars)
+    // Check content length
     if content.len() > 2000 {
         score += 30;
     } else if content.len() > 1000 {
@@ -692,7 +435,7 @@ fn calculate_markdown_completeness(content: &str) -> i32 {
         score += 10;
     }
 
-    // Bonus for having multiple headings (well-structured)
+    // Bonus for multiple headings (well-structured)
     let heading_count = content.lines()
         .filter(|line| line.starts_with('#'))
         .count();
@@ -705,8 +448,9 @@ fn calculate_markdown_completeness(content: &str) -> i32 {
     score.min(100)
 }
 
-fn calculate_markdown_clarity(content: &str) -> i32 {
-    let mut score = 80; // Start with good score, deduct for issues
+/// Calculate clarity score for markdown PRD
+fn calculate_clarity(content: &str) -> i32 {
+    let mut score = 80;
     let content_lower = content.to_lowercase();
 
     // Check for vague terms
@@ -717,12 +461,11 @@ fn calculate_markdown_clarity(content: &str) -> i32 {
     }
 
     // Check for lists (indicates structured thinking)
-    let has_lists = content.contains("- ") || content.contains("* ") || content.contains("1. ");
-    if has_lists {
+    if content.contains("- ") || content.contains("* ") || content.contains("1. ") {
         score += 10;
     }
 
-    // Check for code blocks or technical details
+    // Check for code blocks
     if content.contains("```") {
         score += 5;
     }
@@ -735,7 +478,8 @@ fn calculate_markdown_clarity(content: &str) -> i32 {
     score.max(0).min(100)
 }
 
-fn calculate_markdown_actionability(content: &str) -> i32 {
+/// Calculate actionability score for markdown PRD
+fn calculate_actionability(content: &str) -> i32 {
     let content_lower = content.to_lowercase();
 
     // Look for task-related sections
@@ -754,29 +498,25 @@ fn calculate_markdown_actionability(content: &str) -> i32 {
         })
         .count();
 
-    // Count headings at level 3+ (could be tasks/subtasks)
+    // Count task headings (level 3+)
     let task_headings: usize = content.lines()
         .filter(|line| line.starts_with("### ") || line.starts_with("#### "))
         .count();
 
     let mut score = 0;
 
-    // Score based on task structure
     if has_tasks {
         score += 30;
     }
 
-    // Score based on number of list items (likely action items)
     score += (list_items as i32 * 3).min(30);
-
-    // Score based on task headings
     score += (task_headings as i32 * 5).min(30);
 
-    // Bonus for having specific action verbs
+    // Bonus for action verbs
     let action_verbs = ["implement", "create", "build", "add", "update", "fix", "refactor", "design", "test", "deploy"];
-    let action_count = action_verbs.iter()
+    let action_count: usize = action_verbs.iter()
         .map(|v| content_lower.matches(v).count())
-        .sum::<usize>();
+        .sum();
     score += (action_count as i32 * 2).min(20);
 
     score.min(100)
