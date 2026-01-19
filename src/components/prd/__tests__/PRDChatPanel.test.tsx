@@ -33,6 +33,11 @@ vi.mock('@/lib/tauri-api', () => ({
   },
 }))
 
+// Mock Tauri event listener
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}))
+
 // Mock the useAvailableModels hook
 vi.mock('@/hooks/useAvailableModels', () => ({
   useAvailableModels: () => ({
@@ -96,6 +101,12 @@ describe('PRDChatPanel', () => {
   const mockAssessQuality = vi.fn()
   const mockLoadGuidedQuestions = vi.fn()
   const mockPreviewExtraction = vi.fn()
+  const mockSetStructuredMode = vi.fn()
+  const mockLoadExtractedStructure = vi.fn()
+  const mockClearExtractedStructure = vi.fn()
+  const mockStartWatchingPlanFile = vi.fn()
+  const mockStopWatchingPlanFile = vi.fn()
+  const mockUpdatePlanContent = vi.fn()
 
   const defaultStoreState = {
     sessions: mockSessions,
@@ -107,6 +118,11 @@ describe('PRDChatPanel', () => {
     qualityAssessment: null,
     guidedQuestions: [],
     extractedContent: null,
+    processingSessionId: null,
+    extractedStructure: null,
+    watchedPlanContent: null,
+    watchedPlanPath: null,
+    isWatchingPlan: false,
     sendMessage: mockSendMessage,
     startSession: mockStartSession,
     deleteSession: mockDeleteSession,
@@ -118,6 +134,12 @@ describe('PRDChatPanel', () => {
     assessQuality: mockAssessQuality,
     loadGuidedQuestions: mockLoadGuidedQuestions,
     previewExtraction: mockPreviewExtraction,
+    setStructuredMode: mockSetStructuredMode,
+    loadExtractedStructure: mockLoadExtractedStructure,
+    clearExtractedStructure: mockClearExtractedStructure,
+    startWatchingPlanFile: mockStartWatchingPlanFile,
+    stopWatchingPlanFile: mockStopWatchingPlanFile,
+    updatePlanContent: mockUpdatePlanContent,
   }
 
   beforeEach(() => {

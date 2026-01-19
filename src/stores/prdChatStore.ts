@@ -36,6 +36,10 @@ interface PRDChatStore {
   processingSessionId: string | null
   // Structured output state
   extractedStructure: ExtractedPRDStructure | null
+  // PRD plan file watcher state
+  watchedPlanContent: string | null
+  watchedPlanPath: string | null
+  isWatchingPlan: boolean
 
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
@@ -53,6 +57,10 @@ interface PRDChatStore {
   setStructuredMode: (enabled: boolean) => Promise<void>
   loadExtractedStructure: () => Promise<void>
   clearExtractedStructure: () => Promise<void>
+  // PRD plan file watcher actions
+  startWatchingPlanFile: () => Promise<void>
+  stopWatchingPlanFile: () => Promise<void>
+  updatePlanContent: (content: string, path: string) => void
 }
 
 export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
@@ -68,10 +76,13 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   extractedContent: null,
   processingSessionId: null,
   extractedStructure: null,
+  watchedPlanContent: null,
+  watchedPlanPath: null,
+  isWatchingPlan: false,
 
   // Start a new chat session
   startSession: async (options: StartSessionOptions) => {
-    set({ loading: true, error: null, qualityAssessment: null, guidedQuestions: [], extractedContent: null, extractedStructure: null })
+    set({ loading: true, error: null, qualityAssessment: null, guidedQuestions: [], extractedContent: null, extractedStructure: null, watchedPlanContent: null, watchedPlanPath: null, isWatchingPlan: false })
     try {
       const session = await prdChatApi.startSession(
         options.agentType,
@@ -381,5 +392,62 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         error: error instanceof Error && error.message ? error.message : 'Failed to clear extracted structure',
       })
     }
+  },
+
+  // Start watching the PRD plan file for the current session
+  startWatchingPlanFile: async () => {
+    const { currentSession, isWatchingPlan } = get()
+    if (!currentSession || isWatchingPlan) {
+      return
+    }
+
+    try {
+      const result = await prdChatApi.startWatchingPlanFile(currentSession.id)
+      if (result.success) {
+        set({
+          isWatchingPlan: true,
+          watchedPlanPath: result.path,
+          watchedPlanContent: result.initialContent,
+        })
+      } else {
+        // Don't show error for missing project path - it's expected for some sessions
+        if (result.error && !result.error.includes('no project path')) {
+          set({
+            error: result.error,
+          })
+        }
+      }
+    } catch (error) {
+      // Silently fail - not all sessions have project paths
+      console.warn('Failed to start watching plan file:', error)
+    }
+  },
+
+  // Stop watching the PRD plan file
+  stopWatchingPlanFile: async () => {
+    const { currentSession, isWatchingPlan } = get()
+    if (!currentSession || !isWatchingPlan) {
+      return
+    }
+
+    try {
+      await prdChatApi.stopWatchingPlanFile(currentSession.id)
+    } catch {
+      // Ignore errors when stopping
+    } finally {
+      set({
+        isWatchingPlan: false,
+        watchedPlanContent: null,
+        watchedPlanPath: null,
+      })
+    }
+  },
+
+  // Update plan content (called from event listener)
+  updatePlanContent: (content: string, path: string) => {
+    set({
+      watchedPlanContent: content,
+      watchedPlanPath: path,
+    })
   },
 }))

@@ -13,6 +13,7 @@ mod templates;
 mod config;
 pub mod events;
 pub mod shutdown;
+pub mod watchers;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -34,6 +35,24 @@ impl RateLimitEventState {
     /// Get a clone of the sender for passing to scheduler/pool
     pub fn get_sender(&self) -> mpsc::UnboundedSender<agents::RateLimitEvent> {
         self.sender.clone()
+    }
+}
+
+/// State for PRD file watcher manager
+pub struct PrdFileWatcherState {
+    /// Manager for PRD file watchers
+    pub manager: std::sync::Mutex<Option<watchers::PrdFileWatcherManager>>,
+    /// Sender for PRD file updates
+    pub sender: mpsc::UnboundedSender<watchers::PrdFileUpdate>,
+}
+
+impl PrdFileWatcherState {
+    pub fn new(sender: mpsc::UnboundedSender<watchers::PrdFileUpdate>) -> Self {
+        let manager = watchers::PrdFileWatcherManager::new(sender.clone());
+        Self {
+            manager: std::sync::Mutex::new(Some(manager)),
+            sender,
+        }
     }
 }
 
@@ -84,6 +103,10 @@ pub fn run() {
     let (rate_limit_tx, rate_limit_rx) = mpsc::unbounded_channel::<agents::RateLimitEvent>();
     let rate_limit_state = RateLimitEventState::new(rate_limit_tx);
 
+    // Create PRD file watcher event channel for forwarding to frontend
+    let (prd_file_tx, prd_file_rx) = mpsc::unbounded_channel::<watchers::PrdFileUpdate>();
+    let prd_file_watcher_state = PrdFileWatcherState::new(prd_file_tx);
+
     // Log startup info
     log::info!("Ralph-UI starting up");
     log::info!("Database path: {}", db_path);
@@ -97,11 +120,17 @@ pub fn run() {
         .manage(shutdown_state)
         .manage(rate_limit_state)
         .manage(model_cache_state)
+        .manage(prd_file_watcher_state)
         .setup(move |app| {
             // Spawn task to forward rate limit events to Tauri frontend events
             let app_handle = app.handle().clone();
+            let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 forward_rate_limit_events(app_handle, rate_limit_rx).await;
+            });
+            // Spawn task to forward PRD file update events to Tauri frontend events
+            tauri::async_runtime::spawn(async move {
+                forward_prd_file_events(app_handle_clone, prd_file_rx).await;
             });
             Ok(())
         })
@@ -260,6 +289,10 @@ pub fn run() {
             // Model discovery commands
             commands::get_available_models,
             commands::refresh_models,
+            // PRD file watcher commands
+            commands::start_watching_prd_file,
+            commands::stop_watching_prd_file,
+            commands::get_prd_plan_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -369,4 +402,34 @@ async fn forward_rate_limit_events(
     }
 
     log::debug!("Rate limit event forwarder stopped");
+}
+
+/// Forward PRD file update events to Tauri frontend events
+/// This runs as a background task that listens for file update events on the channel
+/// and emits them to the frontend via Tauri's event system.
+async fn forward_prd_file_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<watchers::PrdFileUpdate>,
+) {
+    log::debug!("PRD file event forwarder started");
+
+    while let Some(update) = rx.recv().await {
+        let payload = events::PrdFileUpdatedPayload {
+            session_id: update.session_id.clone(),
+            content: update.content.clone(),
+            path: update.path.clone(),
+        };
+
+        if let Err(e) = events::emit_prd_file_updated(&app_handle, payload) {
+            log::warn!("Failed to emit PRD file update event: {}", e);
+        } else {
+            log::debug!(
+                "PRD file updated for session {}: {}",
+                update.session_id,
+                update.path
+            );
+        }
+    }
+
+    log::debug!("PRD file event forwarder stopped");
 }

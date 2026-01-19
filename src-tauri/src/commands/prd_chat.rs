@@ -104,6 +104,17 @@ pub async fn start_prd_chat_session(
     db.create_chat_session(&session)
         .map_err(|e| format!("Failed to create chat session: {}", e))?;
 
+    // Ensure .ralph-ui/prds/ directory exists for plan files
+    if let Some(ref project_path) = session.project_path {
+        let prds_dir = std::path::Path::new(project_path)
+            .join(".ralph-ui")
+            .join("prds");
+        if let Err(e) = std::fs::create_dir_all(&prds_dir) {
+            log::warn!("Failed to create PRD plan directory: {}", e);
+            // Don't fail the session creation, just log the warning
+        }
+    }
+
     // If guided mode is enabled, add an initial welcome message with the first question
     if guided_mode {
         let welcome_message = generate_welcome_message(prd_type_enum.as_ref());
@@ -389,6 +400,7 @@ pub async fn export_chat_to_prd(
 }
 
 /// Assess the quality of a PRD chat session before export
+/// Prioritizes the PRD plan file content if it exists, falls back to chat messages
 #[tauri::command]
 pub async fn assess_prd_quality(
     session_id: String,
@@ -400,12 +412,41 @@ pub async fn assess_prd_quality(
     let session = db.get_chat_session(&session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
 
-    // Get all messages
-    let messages = db.get_messages_by_session(&session_id)
-        .map_err(|e| format!("Failed to get messages: {}", e))?;
+    // Try to use PRD plan file content first if available
+    let assessment = if let Some(ref project_path) = session.project_path {
+        let plan_path = crate::watchers::get_prd_plan_file_path(
+            project_path,
+            &session_id,
+            session.title.as_deref(),
+        );
 
-    // Perform quality assessment
-    let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
+        if plan_path.exists() {
+            // Use PRD plan file for quality assessment
+            match std::fs::read_to_string(&plan_path) {
+                Ok(content) => {
+                    log::info!("Assessing quality from PRD plan file: {:?}", plan_path);
+                    calculate_quality_from_markdown(&content, session.prd_type.as_deref())
+                }
+                Err(e) => {
+                    log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
+                    // Fall back to messages
+                    let messages = db.get_messages_by_session(&session_id)
+                        .map_err(|e| format!("Failed to get messages: {}", e))?;
+                    calculate_quality_assessment(&messages, session.prd_type.as_deref())
+                }
+            }
+        } else {
+            // No plan file yet, use messages
+            let messages = db.get_messages_by_session(&session_id)
+                .map_err(|e| format!("Failed to get messages: {}", e))?;
+            calculate_quality_assessment(&messages, session.prd_type.as_deref())
+        }
+    } else {
+        // No project path, use messages
+        let messages = db.get_messages_by_session(&session_id)
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+        calculate_quality_assessment(&messages, session.prd_type.as_deref())
+    };
 
     // Update session with quality score
     update_chat_session_quality_score(
@@ -541,6 +582,118 @@ pub async fn clear_extracted_structure(
     Ok(())
 }
 
+// ============================================================================
+// PRD Plan File Watcher Commands
+// ============================================================================
+
+/// Response for starting a file watch
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchFileResponse {
+    pub success: bool,
+    pub path: String,
+    pub initial_content: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Start watching a PRD plan file for changes
+#[tauri::command]
+pub async fn start_watching_prd_file(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+    watcher_state: State<'_, crate::PrdFileWatcherState>,
+) -> Result<WatchFileResponse, String> {
+    // Get the session to determine the file path
+    let (project_path, title) = {
+        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let session = db_guard.get_chat_session(&session_id)
+            .map_err(|e| format!("Session not found: {}", e))?;
+        (session.project_path, session.title)
+    };
+
+    let project_path = project_path
+        .ok_or("Session has no project path - cannot watch PRD plan file")?;
+
+    // Calculate the plan file path
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        title.as_deref(),
+    );
+
+    // Get the watcher manager and start watching
+    let manager = watcher_state.manager.lock()
+        .map_err(|e| format!("Failed to lock watcher manager: {}", e))?;
+
+    if let Some(ref manager) = *manager {
+        let result = manager.watch_file(&session_id, &plan_path);
+        Ok(WatchFileResponse {
+            success: result.success,
+            path: result.path,
+            initial_content: result.initial_content,
+            error: result.error,
+        })
+    } else {
+        Err("Watcher manager not initialized".to_string())
+    }
+}
+
+/// Stop watching a PRD plan file
+#[tauri::command]
+pub async fn stop_watching_prd_file(
+    session_id: String,
+    watcher_state: State<'_, crate::PrdFileWatcherState>,
+) -> Result<bool, String> {
+    let manager = watcher_state.manager.lock()
+        .map_err(|e| format!("Failed to lock watcher manager: {}", e))?;
+
+    if let Some(ref manager) = *manager {
+        Ok(manager.unwatch_file(&session_id))
+    } else {
+        Err("Watcher manager not initialized".to_string())
+    }
+}
+
+/// Get the current content of a PRD plan file
+#[tauri::command]
+pub async fn get_prd_plan_content(
+    session_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<Option<String>, String> {
+    // Get the session to determine the file path
+    let (project_path, title) = {
+        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let session = db_guard.get_chat_session(&session_id)
+            .map_err(|e| format!("Session not found: {}", e))?;
+        (session.project_path, session.title)
+    };
+
+    let project_path = match project_path {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    // Calculate the plan file path
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        title.as_deref(),
+    );
+
+    // Read the file content if it exists
+    if plan_path.exists() {
+        match std::fs::read_to_string(&plan_path) {
+            Ok(content) => Ok(Some(content)),
+            Err(e) => {
+                log::warn!("Failed to read PRD plan file: {}", e);
+                Ok(None)
+            }
+        }
+    } else {
+        Ok(None)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAvailabilityResult {
@@ -655,6 +808,252 @@ fn calculate_quality_assessment(messages: &[ChatMessage], prd_type: Option<&str>
         suggestions,
         ready_for_export,
     }
+}
+
+/// Calculate quality assessment from PRD markdown file content
+fn calculate_quality_from_markdown(content: &str, prd_type: Option<&str>) -> QualityAssessment {
+    let content_lower = content.to_lowercase();
+    let mut missing_sections = vec![];
+    let mut suggestions = vec![];
+    let mut completeness_score = 0u8;
+
+    // Check for key PRD sections in the markdown
+    // Overview / Problem Statement / Executive Summary
+    if content_lower.contains("## overview")
+        || content_lower.contains("## problem")
+        || content_lower.contains("## executive summary")
+        || content_lower.contains("# overview")
+        || content_lower.contains("### product vision")
+    {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Problem Statement / Overview".to_string());
+        suggestions.push("Add an Overview or Problem Statement section".to_string());
+    }
+
+    // User Stories
+    if content_lower.contains("user stor")
+        || content_lower.contains("as a ")
+        || content_lower.contains("## stories")
+    {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("User Stories".to_string());
+        suggestions.push("Add user stories in the format: 'As a [user], I want [feature] so that [benefit]'".to_string());
+    }
+
+    // Requirements (functional/technical)
+    if content_lower.contains("requirement")
+        || content_lower.contains("## features")
+        || content_lower.contains("### features")
+        || content_lower.contains("## functionality")
+    {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Functional Requirements".to_string());
+        suggestions.push("List what the system must do using clear requirement language".to_string());
+    }
+
+    // Tasks / Implementation
+    if content_lower.contains("## task")
+        || content_lower.contains("## implementation")
+        || content_lower.contains("### implementation")
+        || content_lower.contains("## phases")
+    {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Implementation Tasks".to_string());
+        suggestions.push("Break down the feature into actionable implementation tasks".to_string());
+    }
+
+    // Acceptance Criteria
+    if content_lower.contains("acceptance")
+        || content_lower.contains("## criteria")
+        || content_lower.contains("definition of done")
+    {
+        completeness_score += 15;
+    } else {
+        missing_sections.push("Acceptance Criteria".to_string());
+        suggestions.push("Define clear acceptance criteria for when the feature is complete".to_string());
+    }
+
+    // Success Metrics
+    if content_lower.contains("metric")
+        || content_lower.contains("success")
+        || content_lower.contains("kpi")
+        || content_lower.contains("measure")
+    {
+        completeness_score += 10;
+    } else {
+        missing_sections.push("Success Metrics".to_string());
+        suggestions.push("How will you measure if this feature is successful?".to_string());
+    }
+
+    // Technical constraints / considerations
+    if content_lower.contains("technical")
+        || content_lower.contains("constraint")
+        || content_lower.contains("technology")
+        || content_lower.contains("architecture")
+    {
+        completeness_score += 8;
+    }
+
+    // Out of scope
+    if content_lower.contains("out of scope")
+        || content_lower.contains("non-goal")
+        || content_lower.contains("not included")
+        || content_lower.contains("scope")
+    {
+        completeness_score += 7;
+    }
+
+    // Calculate clarity score based on markdown structure
+    let clarity_score = calculate_clarity_from_markdown(content);
+
+    // Calculate actionability score based on content
+    let actionability_score = calculate_actionability_from_markdown(content, prd_type);
+
+    // Calculate overall score (weighted average)
+    let overall = ((completeness_score as f32 * 0.4) +
+                   (clarity_score as f32 * 0.3) +
+                   (actionability_score as f32 * 0.3)) as u8;
+
+    // Add PRD type-specific suggestions
+    if let Some(prd_type_str) = prd_type {
+        if let Ok(pt) = prd_type_str.parse::<PRDType>() {
+            // Reuse type-specific suggestions logic with empty extracted content
+            let extracted = ExtractedPRDContent {
+                overview: String::new(),
+                user_stories: vec![],
+                functional_requirements: vec![],
+                non_functional_requirements: vec![],
+                technical_constraints: vec![],
+                acceptance_criteria: vec![],
+                tasks: vec![],
+                success_metrics: vec![],
+                out_of_scope: vec![],
+            };
+            add_type_specific_suggestions(&mut suggestions, pt, &extracted);
+        }
+    }
+
+    let ready_for_export = overall >= 60 && missing_sections.len() <= 2;
+
+    QualityAssessment {
+        completeness: completeness_score,
+        clarity: clarity_score,
+        actionability: actionability_score,
+        overall,
+        missing_sections,
+        suggestions,
+        ready_for_export,
+    }
+}
+
+/// Calculate clarity score from markdown content
+fn calculate_clarity_from_markdown(content: &str) -> u8 {
+    let mut score = 50u8;
+
+    // Bonus for having headers (well-structured)
+    let header_count = content.matches("\n#").count() + content.matches("\n##").count();
+    if header_count >= 3 {
+        score = score.saturating_add(15);
+    } else if header_count >= 1 {
+        score = score.saturating_add(5);
+    }
+
+    // Bonus for having lists (organized)
+    let list_count = content.matches("\n- ").count() + content.matches("\n* ").count();
+    if list_count >= 5 {
+        score = score.saturating_add(10);
+    }
+
+    // Bonus for code blocks (technical detail)
+    if content.contains("```") {
+        score = score.saturating_add(5);
+    }
+
+    // Bonus for tables (structured data)
+    if content.contains("|--") || content.contains("| -") {
+        score = score.saturating_add(10);
+    }
+
+    // Penalize if too short
+    if content.len() < 500 {
+        score = score.saturating_sub(20);
+    } else if content.len() > 2000 {
+        score = score.saturating_add(10);
+    }
+
+    // Bonus for requirement language
+    let action_verb_pattern = Regex::new(r"(?i)\b(must|shall|should|will|can|may)\b").unwrap();
+    let action_count = action_verb_pattern.find_iter(content).count();
+    if action_count > 5 {
+        score = score.saturating_add(10);
+    }
+
+    score.min(100)
+}
+
+/// Calculate actionability score from markdown content
+fn calculate_actionability_from_markdown(content: &str, prd_type: Option<&str>) -> u8 {
+    let mut score = 40u8;
+    let content_lower = content.to_lowercase();
+
+    // Bonus for numbered lists (actionable steps)
+    let numbered_pattern = Regex::new(r"\n\d+\.").unwrap();
+    let numbered_count = numbered_pattern.find_iter(content).count();
+    if numbered_count >= 3 {
+        score = score.saturating_add(15);
+    }
+
+    // Bonus for task-like language
+    let task_patterns = ["implement", "create", "build", "design", "test", "deploy", "configure", "add", "remove", "update"];
+    let task_count: usize = task_patterns.iter()
+        .map(|p| content_lower.matches(p).count())
+        .sum();
+    if task_count >= 5 {
+        score = score.saturating_add(15);
+    }
+
+    // Bonus for priority/phase indicators
+    if content_lower.contains("priority") || content_lower.contains("phase") || content_lower.contains("milestone") {
+        score = score.saturating_add(10);
+    }
+
+    // Bonus for time estimates
+    if content_lower.contains("hour") || content_lower.contains("day") || content_lower.contains("week") || content_lower.contains("sprint") {
+        score = score.saturating_add(10);
+    }
+
+    // Type-specific bonuses
+    if let Some(pt) = prd_type {
+        match pt {
+            "new_feature" => {
+                if content_lower.contains("mvp") || content_lower.contains("minimum viable") {
+                    score = score.saturating_add(10);
+                }
+            }
+            "bug_fix" => {
+                if content_lower.contains("root cause") || content_lower.contains("reproduce") {
+                    score = score.saturating_add(10);
+                }
+            }
+            "refactor" => {
+                if content_lower.contains("before") && content_lower.contains("after") {
+                    score = score.saturating_add(10);
+                }
+            }
+            "integration" => {
+                if content_lower.contains("api") || content_lower.contains("endpoint") {
+                    score = score.saturating_add(10);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    score.min(100)
 }
 
 fn calculate_clarity_score(extracted: &ExtractedPRDContent, messages: &[ChatMessage]) -> u8 {
@@ -1512,6 +1911,10 @@ fn build_prd_chat_prompt(
     // Include project context if available
     if let Some(ref project_path) = session.project_path {
         prompt.push_str(&format!("Project path: {}\n\n", project_path));
+
+        // Add plan file instruction
+        let plan_file_instruction = get_prd_plan_instruction(project_path, &session.id, session.title.as_deref());
+        prompt.push_str(&plan_file_instruction);
     }
 
     // Include conversation history
@@ -1534,6 +1937,46 @@ fn build_prd_chat_prompt(
     prompt
 }
 
+/// Generate the plan file instruction to be injected into prompts
+/// This instructs the AI to maintain a living plan document
+fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<&str>) -> String {
+    let prd_name = title
+        .map(|t| sanitize_filename_for_prd(t))
+        .unwrap_or_else(|| format!("prd-{}", session_id));
+
+    format!(
+        "\n=== PLAN FILE INSTRUCTION ===\n\n\
+        Maintain a living plan document at: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
+        This file should contain:\n\
+        - Current understanding of requirements\n\
+        - Key decisions and rationale\n\
+        - Draft user stories and tasks as they emerge\n\
+        - Open questions to resolve\n\n\
+        UPDATE THIS FILE NOW with any new insights from this exchange.\n\
+        Write the file content using your file writing capabilities.\n\n\
+        === END PLAN FILE INSTRUCTION ===\n\n"
+    )
+}
+
+/// Sanitize a string for use as a filename (for PRD plan files)
+fn sanitize_filename_for_prd(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else if c.is_whitespace() {
+                '-'
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .to_lowercase()
+        .chars()
+        .take(50) // Limit length
+        .collect()
+}
+
 /// Default timeout for agent execution (5 minutes)
 const AGENT_TIMEOUT_SECS: u64 = 300;
 
@@ -1549,7 +1992,12 @@ async fn execute_chat_agent(
     let (program, args) = match agent_type {
         AgentType::Claude => {
             // Use claude CLI in print mode for single response
-            ("claude", vec!["-p".to_string(), prompt.to_string()])
+            // --dangerously-skip-permissions allows file writes for plan documents
+            ("claude", vec![
+                "-p".to_string(),
+                "--dangerously-skip-permissions".to_string(),
+                prompt.to_string(),
+            ])
         }
         AgentType::Opencode => {
             // Use opencode CLI

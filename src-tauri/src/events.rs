@@ -10,6 +10,7 @@ pub const EVENT_TASK_STATUS_CHANGED: &str = "task:status_changed";
 pub const EVENT_SESSION_STATUS_CHANGED: &str = "session:status_changed";
 pub const EVENT_MISSION_CONTROL_REFRESH: &str = "mission_control:refresh";
 pub const EVENT_RATE_LIMIT_DETECTED: &str = "agent:rate_limit_detected";
+pub const EVENT_PRD_FILE_UPDATED: &str = "prd:file_updated";
 
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +50,15 @@ pub struct RateLimitDetectedPayload {
     pub limit_type: String, // "claude_rate_limit", "http_429", etc.
     pub retry_after_ms: Option<u64>,
     pub matched_pattern: Option<String>,
+}
+
+/// Payload for PRD file update events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrdFileUpdatedPayload {
+    pub session_id: String,
+    pub content: String,
+    pub path: String,
 }
 
 /// Emit an agent status changed event
@@ -96,6 +106,16 @@ pub fn emit_rate_limit_detected(
     app_handle
         .emit(EVENT_RATE_LIMIT_DETECTED, payload)
         .map_err(|e| format!("Failed to emit rate limit detected event: {}", e))
+}
+
+/// Emit a PRD file updated event
+pub fn emit_prd_file_updated(
+    app_handle: &tauri::AppHandle,
+    payload: PrdFileUpdatedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_PRD_FILE_UPDATED, payload)
+        .map_err(|e| format!("Failed to emit PRD file updated event: {}", e))
 }
 
 #[cfg(test)]

@@ -259,6 +259,21 @@ export const prdChatApi = {
   clearExtractedStructure: async (sessionId: string): Promise<void> => {
     return await invoke('clear_extracted_structure', { sessionId })
   },
+
+  /** Start watching a PRD plan file for changes */
+  startWatchingPlanFile: async (sessionId: string): Promise<WatchFileResponse> => {
+    return await invoke('start_watching_prd_file', { sessionId })
+  },
+
+  /** Stop watching a PRD plan file */
+  stopWatchingPlanFile: async (sessionId: string): Promise<boolean> => {
+    return await invoke('stop_watching_prd_file', { sessionId })
+  },
+
+  /** Get the current content of a PRD plan file */
+  getPlanContent: async (sessionId: string): Promise<string | null> => {
+    return await invoke('get_prd_plan_content', { sessionId })
+  },
 }
 
 // Project API
@@ -323,6 +338,13 @@ export interface AgentAvailabilityResult {
   available: boolean
   agent: string
   path: string | null
+  error: string | null
+}
+
+export interface WatchFileResponse {
+  success: boolean
+  path: string
+  initialContent: string | null
   error: string | null
 }
 

@@ -21,6 +21,7 @@ import {
   BarChart3,
   AlertTriangle,
   LayoutList,
+  ScrollText,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -31,7 +32,9 @@ import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
 import { StructuredPRDSidebar } from './StructuredPRDSidebar'
+import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { prdChatApi } from '@/lib/tauri-api'
+import { listen } from '@tauri-apps/api/event'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
@@ -63,6 +66,8 @@ export function PRDChatPanel() {
   // Track when streaming started and last message for retry
   const [streamingStartedAt, setStreamingStartedAt] = useState<string | null>(null)
   const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
+  // Plan sidebar visibility
+  const [showPlanSidebar, setShowPlanSidebar] = useState(true)
 
   const {
     sessions,
@@ -74,6 +79,9 @@ export function PRDChatPanel() {
     qualityAssessment,
     processingSessionId,
     extractedStructure,
+    watchedPlanContent,
+    watchedPlanPath,
+    isWatchingPlan,
     sendMessage,
     startSession,
     deleteSession,
@@ -85,6 +93,9 @@ export function PRDChatPanel() {
     setStructuredMode,
     loadExtractedStructure,
     clearExtractedStructure,
+    startWatchingPlanFile,
+    stopWatchingPlanFile,
+    updatePlanContent,
   } = usePRDChatStore()
 
   // Load available models for the current agent type
@@ -146,6 +157,69 @@ export function PRDChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Listen for PRD file update events from the backend
+  useEffect(() => {
+    const currentSessionId = currentSession?.id
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      try {
+        unlisten = await listen<{ sessionId: string; content: string; path: string }>(
+          'prd:file_updated',
+          (event) => {
+            // Only update if the event is for the current session
+            if (currentSessionId && event.payload.sessionId === currentSessionId) {
+              updatePlanContent(event.payload.content, event.payload.path)
+            }
+          }
+        )
+      } catch (err) {
+        console.warn('Failed to set up PRD file event listener:', err)
+      }
+    }
+
+    setupListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [currentSession?.id, updatePlanContent])
+
+  // Start/stop watching plan file when session changes
+  useEffect(() => {
+    const hasProjectPath = currentSession?.projectPath
+    if (hasProjectPath) {
+      startWatchingPlanFile()
+    }
+
+    return () => {
+      stopWatchingPlanFile()
+    }
+  }, [currentSession?.id, currentSession?.projectPath, startWatchingPlanFile, stopWatchingPlanFile])
+
+  // Auto-show sidebar when plan content appears
+  useEffect(() => {
+    if (watchedPlanContent && !showPlanSidebar) {
+      setShowPlanSidebar(true)
+    }
+  }, [watchedPlanContent, showPlanSidebar])
+
+  // Auto-refresh quality score when plan file content changes
+  const prevPlanContentRef = useRef<string | null>(null)
+  useEffect(() => {
+    // Only refresh if content actually changed and we have content
+    if (watchedPlanContent && watchedPlanContent !== prevPlanContentRef.current) {
+      prevPlanContentRef.current = watchedPlanContent
+      // Debounce the quality assessment to avoid too many calls
+      const timer = setTimeout(() => {
+        assessQuality()
+      }, 1000) // Wait 1 second after last update
+      return () => clearTimeout(timer)
+    }
+  }, [watchedPlanContent, assessQuality])
 
   const handleAgentChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newAgentType = e.target.value
@@ -437,6 +511,28 @@ export function PRDChatPanel() {
                 </Button>
               )}
 
+              {/* Plan Sidebar Toggle */}
+              {currentSession?.projectPath && (
+                <Button
+                  variant={showPlanSidebar ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowPlanSidebar(!showPlanSidebar)}
+                  disabled={streaming}
+                  aria-label="Toggle plan sidebar"
+                  className="gap-1"
+                  title={showPlanSidebar ? 'Hide plan sidebar' : 'Show plan sidebar'}
+                >
+                  <ScrollText className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs">Plan</span>
+                  {watchedPlanContent && (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                  )}
+                </Button>
+              )}
+
               {/* Quality Score Button */}
               {hasMessages && (
                 <Button
@@ -600,6 +696,17 @@ export function PRDChatPanel() {
           structure={extractedStructure}
           onClear={handleClearStructure}
           className="w-72 shrink-0"
+        />
+      )}
+
+      {/* Plan Document Sidebar */}
+      {showPlanSidebar && currentSession?.projectPath && (
+        <PRDPlanSidebar
+          content={watchedPlanContent}
+          path={watchedPlanPath}
+          isWatching={isWatchingPlan}
+          onRefresh={startWatchingPlanFile}
+          className="w-80 shrink-0"
         />
       )}
 

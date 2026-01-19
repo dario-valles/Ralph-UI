@@ -74,6 +74,9 @@ dirs = "5.0"
 # TOML config parsing
 toml = "0.8"
 
+# File system watching
+notify = "6.1"
+
 # Signal handling for graceful shutdown
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
