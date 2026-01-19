@@ -13,6 +13,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip } from '@/components/ui/tooltip'
+import {
   Plus,
   FileText,
   Loader2,
@@ -22,6 +30,9 @@ import {
   AlertTriangle,
   LayoutList,
   ScrollText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronDown,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -68,6 +79,8 @@ export function PRDChatPanel() {
   const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
   // Plan sidebar visibility
   const [showPlanSidebar, setShowPlanSidebar] = useState(true)
+  // Sessions sidebar collapsed state for smaller screens
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
 
   const {
     sessions,
@@ -378,110 +391,157 @@ export function PRDChatPanel() {
   }
 
   return (
-    <div className="flex h-full gap-4">
-      {/* Session Sidebar */}
-      <Card className="w-64 shrink-0 flex flex-col">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">Sessions</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCreateSession}
-              aria-label="New session"
-              className="h-7 w-7 p-0"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-2 flex-1 overflow-auto">
-          {sessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">No sessions yet</p>
+    <div className="flex h-full gap-2 xl:gap-4">
+      {/* Session Sidebar - Collapsible */}
+      <Card className={cn(
+        'shrink-0 flex flex-col transition-all duration-200',
+        sessionsCollapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64'
+      )}>
+        <CardHeader className={cn('pb-2', sessionsCollapsed && 'px-2')}>
+          <div className="flex items-center justify-between gap-1">
+            {!sessionsCollapsed && (
+              <CardTitle className="text-sm font-medium truncate">Sessions</CardTitle>
+            )}
+            <div className="flex items-center gap-0.5">
+              {!sessionsCollapsed && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCreateSession}
+                  aria-label="New session"
+                  className="h-7 w-7 p-0"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={handleCreateSession}
-                className="mt-2"
-                aria-label="New session"
+                onClick={() => setSessionsCollapsed(!sessionsCollapsed)}
+                aria-label={sessionsCollapsed ? "Expand sessions" : "Collapse sessions"}
+                className="h-7 w-7 p-0"
               >
-                <Plus className="h-3 w-3 mr-1" />
-                New Session
+                {sessionsCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
               </Button>
             </div>
-          ) : (
-            <div className="space-y-1">
-              {sessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  isActive={currentSession?.id === session.id}
-                  isProcessing={processingSessionId === session.id}
-                  onSelect={() => handleSelectSession(session)}
-                  onDelete={() => handleDeleteSession(session.id)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-
-        {/* Quality Score in Sidebar */}
-        {currentSession && hasMessages && (
-          <div className="p-2 border-t">
-            <QualityScoreCard
-              assessment={qualityAssessment}
-              loading={loading}
-              onRefresh={handleRefreshQuality}
-              className="border-0 shadow-none"
-            />
           </div>
+        </CardHeader>
+
+        {sessionsCollapsed ? (
+          <CardContent className="p-2 flex-1 flex flex-col items-center gap-2">
+            <Tooltip content="New Session" side="right">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCreateSession}
+                aria-label="New session"
+                className="h-8 w-8 p-0"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+            {sessions.slice(0, 5).map((session) => (
+              <Tooltip key={session.id} content={session.title || 'Untitled'} side="right">
+                <Button
+                  variant={currentSession?.id === session.id ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleSelectSession(session)}
+                  className="h-8 w-8 p-0"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+            ))}
+            {sessions.length > 5 && (
+              <span className="text-xs text-muted-foreground">+{sessions.length - 5}</span>
+            )}
+          </CardContent>
+        ) : (
+          <>
+            <CardContent className="p-2 flex-1 overflow-auto">
+              {sessions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <MessageSquare className="h-6 w-6 text-muted-foreground mb-2" />
+                  <p className="text-xs text-muted-foreground">No sessions yet</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateSession}
+                    className="mt-2 text-xs"
+                    aria-label="New session"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    New
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {sessions.map((session) => (
+                    <SessionItem
+                      key={session.id}
+                      session={session}
+                      isActive={currentSession?.id === session.id}
+                      isProcessing={processingSessionId === session.id}
+                      onSelect={() => handleSelectSession(session)}
+                      onDelete={() => handleDeleteSession(session.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+
+            {/* Quality Score in Sidebar */}
+            {currentSession && hasMessages && (
+              <div className="p-2 border-t">
+                <QualityScoreCard
+                  assessment={qualityAssessment}
+                  loading={loading}
+                  onRefresh={handleRefreshQuality}
+                  className="border-0 shadow-none"
+                />
+              </div>
+            )}
+          </>
         )}
       </Card>
 
       {/* Chat Panel */}
-      <Card className={cn('flex-1 flex flex-col', currentSession?.structuredMode && 'min-w-0')}>
-        <CardHeader className="pb-3 border-b">
-          <div className="flex items-center justify-between">
-            <div>
+      <Card className={cn('flex-1 flex flex-col min-w-0')}>
+        <CardHeader className="pb-2 border-b px-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-shrink">
               <h2 className="sr-only">PRD Chat</h2>
-              <CardTitle className="text-lg">
+              <CardTitle className="text-base truncate">
                 {currentSession?.title || 'PRD Chat'}
               </CardTitle>
             </div>
-            <div className="flex items-center gap-2">
-              {/* Agent Selector */}
-              <div className="flex items-center gap-2">
-                <label htmlFor="agent-selector" className="text-sm text-muted-foreground">
-                  Agent:
-                </label>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Agent/Model Selector - Compact */}
+              <div className="flex items-center gap-1">
                 <Select
                   id="agent-selector"
                   aria-label="Agent"
                   value={currentSession?.agentType || 'claude'}
                   onChange={handleAgentChange}
                   disabled={streaming}
-                  className="w-32"
+                  className="w-24 text-xs h-8"
                 >
                   <option value="claude">Claude</option>
                   <option value="opencode">OpenCode</option>
                   <option value="cursor">Cursor</option>
                 </Select>
-              </div>
 
-              {/* Model Selector - shows available models for the selected agent */}
-              <div className="flex items-center gap-2">
-                <label htmlFor="model-selector" className="text-sm text-muted-foreground">
-                  Model:
-                </label>
                 <Select
                   id="model-selector"
                   aria-label="Model"
                   value={selectedModel || defaultModelId || ''}
                   onChange={(e) => setUserSelectedModel(e.target.value)}
                   disabled={streaming || modelsLoading}
-                  className="w-40"
+                  className="w-28 xl:w-36 text-xs h-8"
                 >
                   {modelsLoading ? (
                     <option>Loading...</option>
@@ -495,79 +555,86 @@ export function PRDChatPanel() {
                 </Select>
               </div>
 
-              {/* Structured Mode Toggle */}
-              {currentSession && (
-                <Button
-                  variant={currentSession.structuredMode ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={handleToggleStructuredMode}
-                  disabled={streaming}
-                  aria-label="Toggle structured mode"
-                  className="gap-1"
-                  title={currentSession.structuredMode ? 'Structured mode enabled' : 'Enable structured output mode'}
-                >
-                  <LayoutList className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Structured</span>
-                </Button>
-              )}
+              {/* View Toggle Buttons - Compact */}
+              <div className="flex items-center border rounded-md">
+                {/* Structured Mode Toggle */}
+                {currentSession && (
+                  <Tooltip content={currentSession.structuredMode ? 'Structured mode on' : 'Enable structured mode'} side="bottom">
+                    <Button
+                      variant={currentSession.structuredMode ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={handleToggleStructuredMode}
+                      disabled={streaming}
+                      aria-label="Toggle structured mode"
+                      className="h-8 w-8 p-0 rounded-none rounded-l-md"
+                    >
+                      <LayoutList className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
+                )}
 
-              {/* Plan Sidebar Toggle */}
-              {currentSession?.projectPath && (
-                <Button
-                  variant={showPlanSidebar ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setShowPlanSidebar(!showPlanSidebar)}
-                  disabled={streaming}
-                  aria-label="Toggle plan sidebar"
-                  className="gap-1"
-                  title={showPlanSidebar ? 'Hide plan sidebar' : 'Show plan sidebar'}
-                >
-                  <ScrollText className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs">Plan</span>
-                  {watchedPlanContent && (
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                    </span>
+                {/* Plan Sidebar Toggle */}
+                {currentSession?.projectPath && (
+                  <Tooltip content={showPlanSidebar ? 'Hide plan' : 'Show plan'} side="bottom">
+                    <Button
+                      variant={showPlanSidebar ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setShowPlanSidebar(!showPlanSidebar)}
+                      disabled={streaming}
+                      aria-label="Toggle plan sidebar"
+                      className={cn('h-8 w-8 p-0 rounded-none relative', !currentSession && 'rounded-l-md', 'rounded-r-md')}
+                    >
+                      <ScrollText className="h-4 w-4" />
+                      {watchedPlanContent && (
+                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                        </span>
+                      )}
+                    </Button>
+                  </Tooltip>
+                )}
+              </div>
+
+              {/* Actions Dropdown for smaller screens */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1 px-2"
+                    disabled={streaming}
+                  >
+                    <span className="hidden xl:inline text-xs">Actions</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {hasMessages && (
+                    <>
+                      <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Check Quality
+                        {qualityAssessment && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {qualityAssessment.overall}%
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleExportToPRD}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Export to PRD
+                      </DropdownMenuItem>
+                    </>
                   )}
-                </Button>
-              )}
-
-              {/* Quality Score Button */}
-              {hasMessages && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefreshQuality}
-                  disabled={streaming || loading}
-                  aria-label="Check quality"
-                  className="gap-1"
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  {qualityAssessment && (
-                    <span className={cn(
-                      'text-xs font-medium',
-                      qualityAssessment.overall >= 60 ? 'text-green-600' : 'text-yellow-600'
-                    )}>
-                      {qualityAssessment.overall}%
-                    </span>
+                  {!hasMessages && (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground text-xs">Send a message first</span>
+                    </DropdownMenuItem>
                   )}
-                </Button>
-              )}
-
-              {/* Export Button */}
-              {hasMessages && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportToPRD}
-                  disabled={streaming}
-                  aria-label="Export to PRD"
-                >
-                  <FileText className="h-4 w-4 mr-1" />
-                  Export to PRD
-                </Button>
-              )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>
@@ -695,7 +762,7 @@ export function PRDChatPanel() {
         <StructuredPRDSidebar
           structure={extractedStructure}
           onClear={handleClearStructure}
-          className="w-72 shrink-0"
+          className="w-56 xl:w-64 2xl:w-72 shrink-0"
         />
       )}
 
@@ -706,7 +773,7 @@ export function PRDChatPanel() {
           path={watchedPlanPath}
           isWatching={isWatchingPlan}
           onRefresh={startWatchingPlanFile}
-          className="w-80 shrink-0"
+          className="w-60 xl:w-72 2xl:w-80 shrink-0"
         />
       )}
 

@@ -1,7 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertCircle, CheckCircle, RefreshCw, Lightbulb, AlertTriangle } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { AlertCircle, CheckCircle, RefreshCw, Lightbulb, AlertTriangle, ChevronDown } from 'lucide-react'
 import type { QualityAssessment } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +15,8 @@ interface QualityScoreCardProps {
   loading?: boolean
   onRefresh?: () => void
   className?: string
+  /** Render a compact version for smaller spaces */
+  compact?: boolean
 }
 
 function getScoreColor(score: number): string {
@@ -60,11 +67,12 @@ export function QualityScoreCard({
   loading = false,
   onRefresh,
   className,
+  compact = false,
 }: QualityScoreCardProps) {
   if (!assessment) {
     return (
       <Card className={cn('w-full', className)}>
-        <CardHeader className="pb-2">
+        <CardHeader className={cn('pb-2', compact && 'py-2 px-3')}>
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
             {onRefresh && (
@@ -80,10 +88,140 @@ export function QualityScoreCard({
             )}
           </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Add more content to your conversation to assess PRD quality.
+        <CardContent className={compact ? 'py-2 px-3' : ''}>
+          <p className="text-xs text-muted-foreground">
+            Add content to assess quality.
           </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Compact version for sidebar
+  if (compact) {
+    const hasSuggestions = assessment.missingSections.length > 0 || assessment.suggestions.length > 0
+
+    return (
+      <Card className={cn('w-full', className)}>
+        <CardContent className="py-2 px-3">
+          <div className="flex items-center gap-3">
+            {/* Score Circle - Smaller */}
+            <div
+              className={cn(
+                'flex items-center justify-center w-10 h-10 rounded-full text-lg font-bold shrink-0',
+                getScoreBg(assessment.overall),
+                getScoreColor(assessment.overall)
+              )}
+            >
+              {assessment.overall}
+            </div>
+            <div className="flex-1 min-w-0">
+              {/* Status Badge */}
+              {assessment.readyForExport ? (
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
+                  <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+                  Ready
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] px-1.5 py-0">
+                  <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                  Needs detail
+                </Badge>
+              )}
+              {/* Mini score bars */}
+              <div className="mt-1.5 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground w-6">C</span>
+                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full', getProgressColor(assessment.completeness))}
+                      style={{ width: `${assessment.completeness}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground w-6">Cl</span>
+                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full', getProgressColor(assessment.clarity))}
+                      style={{ width: `${assessment.clarity}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground w-6">A</span>
+                  <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full', getProgressColor(assessment.actionability))}
+                      style={{ width: `${assessment.actionability}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 shrink-0">
+              {onRefresh && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRefresh}
+                  disabled={loading}
+                  className="h-6 w-6 p-0"
+                >
+                  <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+                </Button>
+              )}
+              {/* Expand button for suggestions */}
+              {hasSuggestions && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64 p-3" side="left" align="start">
+                    {/* Missing Sections */}
+                    {assessment.missingSections.length > 0 && (
+                      <div className="space-y-1.5 mb-3">
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                          <AlertCircle className="h-3 w-3" />
+                          Missing Sections
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {assessment.missingSections.map((section, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-[10px]">
+                              {section}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Suggestions */}
+                    {assessment.suggestions.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                          <Lightbulb className="h-3 w-3" />
+                          Suggestions
+                        </div>
+                        <ul className="text-xs space-y-1">
+                          {assessment.suggestions.slice(0, 3).map((suggestion, idx) => (
+                            <li key={idx} className="text-muted-foreground">
+                              • {suggestion}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
     )
