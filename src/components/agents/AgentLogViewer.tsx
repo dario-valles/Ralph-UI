@@ -11,11 +11,28 @@ interface AgentLogViewerProps {
 
 export function AgentLogViewer({ logs, agentId }: AgentLogViewerProps) {
   const logsEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const wasNearBottomRef = useRef(true)
 
-  // Auto-scroll to bottom when new logs arrive
+  // Track if user is near bottom before logs update
+  const checkIfNearBottom = () => {
+    const container = scrollContainerRef.current
+    if (!container) return true
+    const threshold = 50 // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+  }
+
+  // Auto-scroll to bottom only if user was already near bottom
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (wasNearBottomRef.current) {
+      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [logs])
+
+  // Update near-bottom status on scroll
+  const handleScroll = () => {
+    wasNearBottomRef.current = checkIfNearBottom()
+  }
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -44,7 +61,11 @@ export function AgentLogViewer({ logs, agentId }: AgentLogViewerProps) {
             <p>No logs available</p>
           </div>
         ) : (
-          <div className="h-[300px] overflow-y-auto bg-gray-900 rounded-md p-4 font-mono text-sm">
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="h-[300px] overflow-y-auto bg-gray-900 rounded-md p-4 font-mono text-sm"
+          >
             <div className="space-y-1">
               {logs.map((log, index) => (
                 <div key={index} className="flex gap-3 text-gray-200">
