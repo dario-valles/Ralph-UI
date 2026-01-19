@@ -96,32 +96,29 @@ export function AgentsPage() {
   const fetchRealtimeLogs = useCallback(async () => {
     if (!activeAgentId) return
 
-    const agent = agents.find((a) => a.id === activeAgentId)
-    if (!agent || agent.status === 'idle') {
-      // Agent is idle, clear realtime logs
-      setRealtimeLogsAgentId(null)
-      setRealtimeLogs([])
-      return
-    }
-
+    // Always try to fetch logs - the scheduler will return empty if agent isn't running
     try {
       const logs = await parallelGetAgentLogs(activeAgentId)
-      setRealtimeLogsAgentId(activeAgentId)
-      setRealtimeLogs(logs as LogEntry[])
+      if (logs.length > 0) {
+        setRealtimeLogsAgentId(activeAgentId)
+        setRealtimeLogs(logs as LogEntry[])
+      } else {
+        // No logs from scheduler, clear realtime state (will fall back to DB logs)
+        setRealtimeLogsAgentId(null)
+        setRealtimeLogs([])
+      }
     } catch {
       // Scheduler not initialized or other error, fall back to DB logs
       setRealtimeLogsAgentId(null)
       setRealtimeLogs([])
     }
-  }, [activeAgentId, agents])
+  }, [activeAgentId])
 
-  // Start/stop log polling for the selected active agent
+  // Start/stop log polling for the selected agent
+  // Poll whenever an agent is selected - we'll get logs if it's running
   useEffect(() => {
-    const agent = agents.find((a) => a.id === activeAgentId)
-    const isAgentActive = agent && agent.status !== 'idle'
-
-    if (isAgentActive) {
-      // Poll every 1 second (first poll happens after 1s, which is fine for UX)
+    if (activeAgentId) {
+      // Poll every 1 second
       logPollIntervalRef.current = window.setInterval(fetchRealtimeLogs, 1000)
     }
 
@@ -131,7 +128,7 @@ export function AgentsPage() {
         logPollIntervalRef.current = null
       }
     }
-  }, [activeAgentId, agents, fetchRealtimeLogs])
+  }, [activeAgentId, fetchRealtimeLogs])
 
   // Filter agents based on toggle
   const filteredAgents = useMemo(() => {
@@ -144,16 +141,16 @@ export function AgentsPage() {
     return agents.find((a) => a.id === activeAgentId) || null
   }, [agents, activeAgentId])
 
-  // Effective logs to display - realtime logs for active agents, DB logs for idle
+  // Effective logs to display - realtime logs if available, else DB logs
   const effectiveLogs = useMemo(() => {
     if (!selectedAgent) return []
 
-    // If agent is active and we have realtime logs for this specific agent, use them
-    if (selectedAgent.status !== 'idle' && realtimeLogsAgentId === selectedAgent.id && realtimeLogs.length > 0) {
+    // If we have realtime logs for this specific agent, use them
+    if (realtimeLogsAgentId === selectedAgent.id && realtimeLogs.length > 0) {
       return realtimeLogs
     }
 
-    // Fall back to DB logs (for idle agents or before first poll)
+    // Fall back to DB logs
     return selectedAgent.logs || []
   }, [selectedAgent, realtimeLogs, realtimeLogsAgentId])
 

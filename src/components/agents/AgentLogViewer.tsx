@@ -28,8 +28,8 @@ export function AgentLogViewer({ logs, agentId }: AgentLogViewerProps) {
   }
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader>
+    <Card className="flex flex-col max-h-[400px]">
+      <CardHeader className="flex-shrink-0">
         <div className="flex items-center gap-2">
           <Terminal className="h-5 w-5" />
           <CardTitle>Agent Logs</CardTitle>
@@ -38,9 +38,9 @@ export function AgentLogViewer({ logs, agentId }: AgentLogViewerProps) {
           {agentId ? `Agent ${agentId.slice(0, 8)} - ${logs.length} log entries` : 'Select an agent to view logs'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
+      <CardContent className="flex-1 overflow-hidden min-h-0">
         {logs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
             <p>No logs available</p>
           </div>
         ) : (
