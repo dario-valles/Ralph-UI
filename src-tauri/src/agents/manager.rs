@@ -139,27 +139,61 @@ impl AgentManager {
             pid, config.task_id, config.worktree_path
         ));
 
+        // Give the process a moment to start (helps detect immediate failures)
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
         // Quick check - see if process already exited (helps diagnose immediate failures)
-        {
+        let process_exited_immediately = {
             let mut processes = self.processes.lock().unwrap();
             if let Some(child) = processes.get_mut(agent_id) {
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         let exit_code = status.code().unwrap_or(-1);
                         log::error!("[AgentManager] Process {} exited immediately with code {}", pid, exit_code);
-                        self.emit_log(agent_id, LogLevel::Error, format!(
-                            "Process exited immediately with code {}. This usually means the CLI command failed.",
-                            exit_code
-                        ));
+                        Some(exit_code)
                     }
                     Ok(None) => {
                         log::info!("[AgentManager] Process {} is running", pid);
+                        None
                     }
                     Err(e) => {
                         log::error!("[AgentManager] Failed to check process status: {}", e);
+                        None
                     }
                 }
+            } else {
+                None
             }
+        };
+
+        // If process exited immediately, try to read stderr for error details
+        if let Some(exit_code) = process_exited_immediately {
+            let stderr_content = if let Some(mut stderr_handle) = stderr {
+                let mut buf = String::new();
+                use std::io::Read;
+                if stderr_handle.read_to_string(&mut buf).is_ok() {
+                    buf
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            if !stderr_content.is_empty() {
+                log::error!("[AgentManager] Process stderr: {}", stderr_content);
+                self.emit_log(agent_id, LogLevel::Error, format!(
+                    "Process exited with code {}. Error: {}",
+                    exit_code, stderr_content.trim()
+                ));
+            } else {
+                self.emit_log(agent_id, LogLevel::Error, format!(
+                    "Process exited immediately with code {}. This usually means the CLI command failed. Check if claude CLI works: claude --version",
+                    exit_code
+                ));
+            }
+            // Process already exited, no point in spawning background readers
+            return Ok(pid);
         }
 
         // Spawn background thread to read stdout
