@@ -11,7 +11,7 @@ pub mod providers;
 pub mod ansi_stripper;
 
 // Re-export for convenience
-pub use manager::{AgentManager, AgentSpawnConfig, AgentSpawnMode, RateLimitEvent, AgentCompletionEvent};
+pub use manager::{AgentManager, AgentSpawnConfig, AgentSpawnMode, RateLimitEvent, AgentCompletionEvent, AgentPtyDataEvent};
 // Note: CliPathResolver is used internally by providers, not re-exported
 // Note: RateLimitDetector, RateLimitInfo, RateLimitType accessible via full path (agents::rate_limiter::*)
 // Fallback infrastructure for future use (Phase 4)

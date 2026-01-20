@@ -21,6 +21,7 @@ pub use models::*;
 
 use std::path::Path;
 use std::sync::Arc;
+use tauri::Emitter;
 use tokio::sync::mpsc;
 
 /// State for rate limit event forwarding to the frontend
@@ -82,9 +83,11 @@ pub struct AgentManagerState {
 }
 
 impl AgentManagerState {
-    pub fn new() -> Self {
+    pub fn new(pty_data_tx: mpsc::UnboundedSender<agents::AgentPtyDataEvent>) -> Self {
+        let mut manager = agents::AgentManager::new();
+        manager.set_pty_data_sender(pty_data_tx);
         Self {
-            manager: Arc::new(std::sync::Mutex::new(agents::AgentManager::new())),
+            manager: Arc::new(std::sync::Mutex::new(manager)),
         }
     }
 
@@ -94,11 +97,7 @@ impl AgentManagerState {
     }
 }
 
-impl Default for AgentManagerState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Note: AgentManagerState doesn't have a Default impl because it requires a pty_data_tx channel
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -152,8 +151,11 @@ pub fn run() {
     let (prd_file_tx, prd_file_rx) = mpsc::unbounded_channel::<watchers::PrdFileUpdate>();
     let prd_file_watcher_state = PrdFileWatcherState::new(prd_file_tx);
 
-    // Initialize AgentManager state for PTY tracking
-    let agent_manager_state = AgentManagerState::new();
+    // Create PTY data event channel for forwarding agent output to frontend
+    let (pty_data_tx, pty_data_rx) = mpsc::unbounded_channel::<agents::AgentPtyDataEvent>();
+
+    // Initialize AgentManager state for PTY tracking (with PTY data sender)
+    let agent_manager_state = AgentManagerState::new(pty_data_tx);
 
     // Initialize Ralph loop state for external loop orchestration
     let ralph_loop_state = commands::ralph_loop::RalphLoopManagerState::new();
@@ -179,6 +181,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
             let app_handle_clone2 = app_handle.clone();
+            let app_handle_clone3 = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 forward_rate_limit_events(app_handle, rate_limit_rx).await;
             });
@@ -189,6 +192,10 @@ pub fn run() {
             // Spawn task to forward PRD file update events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
                 forward_prd_file_events(app_handle_clone2, prd_file_rx).await;
+            });
+            // Spawn task to forward PTY data events to Tauri frontend events
+            tauri::async_runtime::spawn(async move {
+                forward_pty_data_events(app_handle_clone3, pty_data_rx).await;
             });
             Ok(())
         })
@@ -588,4 +595,26 @@ async fn forward_prd_file_events(
     }
 
     log::debug!("PRD file event forwarder stopped");
+}
+
+/// Forward PTY data events to Tauri frontend events
+/// This runs as a background task that listens for PTY output events on the channel
+/// and emits them to the frontend via Tauri's event system for terminal display.
+async fn forward_pty_data_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::AgentPtyDataEvent>,
+) {
+    log::debug!("PTY data event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        // Emit as Tauri event that the terminal component listens for
+        if let Err(e) = app_handle.emit("agent-pty-data", serde_json::json!({
+            "agentId": event.agent_id,
+            "data": event.data,
+        })) {
+            log::warn!("Failed to emit PTY data event: {}", e);
+        }
+    }
+
+    log::debug!("PTY data event forwarder stopped");
 }
