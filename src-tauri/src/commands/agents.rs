@@ -231,20 +231,16 @@ pub fn cleanup_stale_agents(
                 }
             }
             None => {
-                // No process ID - check if agent is still in spawning state
-                // Agents with active work statuses (non-Idle) but no process_id are still spawning
-                // and should not be cleaned up prematurely
-                if agent.status != AgentStatus::Idle {
-                    log::debug!(
-                        "[Agents] Agent {} has no process ID but status is {:?}, likely still spawning - skipping cleanup",
-                        agent.id, agent.status
-                    );
-                    false
-                } else {
-                    // Status is Idle, so this agent is truly stale
-                    log::info!("[Agents] Agent {} has no process ID and status {:?}, marking as stale", agent.id, agent.status);
-                    true
-                }
+                // No process ID - the agent spawn likely failed or the app restarted
+                // while the agent was spawning. In cleanup context, these should be
+                // cleaned up since there's no process to verify.
+                // If the agent was truly still spawning, the spawn process would have
+                // registered a process_id by now.
+                log::info!(
+                    "[Agents] Agent {} has no process ID with status {:?}, marking as stale (spawn likely failed or app restarted)",
+                    agent.id, agent.status
+                );
+                true
             }
         };
 
