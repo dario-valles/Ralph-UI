@@ -58,9 +58,7 @@ impl super::Database {
              FROM agents WHERE id = ?1"
         )?;
 
-        let agent = stmt.query_row(params![id], |row| {
-            Ok(row_to_agent(row))
-        });
+        let agent = stmt.query_row(params![id], row_to_agent);
 
         match agent {
             Ok(mut a) => {
@@ -86,7 +84,7 @@ impl super::Database {
         )?;
 
         let agents = stmt
-            .query_map(params![session_id], |row| Ok(row_to_agent(row)))?
+            .query_map(params![session_id], row_to_agent)?
             .collect::<Result<Vec<_>, _>>()?;
 
         self.hydrate_agents(agents)
@@ -103,7 +101,7 @@ impl super::Database {
         )?;
 
         let agents = stmt
-            .query_map(params![task_id], |row| Ok(row_to_agent(row)))?
+            .query_map(params![task_id], row_to_agent)?
             .collect::<Result<Vec<_>, _>>()?;
 
         self.hydrate_agents(agents)
@@ -181,10 +179,16 @@ impl super::Database {
                 let level_str: String = row.get(1)?;
                 let message: String = row.get(2)?;
 
+                // Parse timestamp, defaulting to now if malformed
+                let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|e| {
+                        log::warn!("Failed to parse timestamp '{}': {}", timestamp_str, e);
+                        Utc::now()
+                    });
+
                 Ok(LogEntry {
-                    timestamp: DateTime::parse_from_rfc3339(&timestamp_str)
-                        .unwrap()
-                        .with_timezone(&Utc),
+                    timestamp,
                     level: string_to_log_level(&level_str),
                     message,
                 })
@@ -217,7 +221,7 @@ impl super::Database {
         )?;
 
         let agents = stmt
-            .query_map([], |row| Ok(row_to_agent(row)))?
+            .query_map([], row_to_agent)?
             .collect::<Result<Vec<_>, _>>()?;
 
         self.hydrate_agents(agents)
@@ -237,7 +241,7 @@ impl super::Database {
         )?;
 
         let agents = stmt
-            .query_map(params![session_id], |row| Ok(row_to_agent(row)))?
+            .query_map(params![session_id], row_to_agent)?
             .collect::<Result<Vec<_>, _>>()?;
 
         self.hydrate_agents(agents)
@@ -245,24 +249,24 @@ impl super::Database {
 }
 
 /// Convert database row to Agent struct
-fn row_to_agent(row: &Row) -> Agent {
-    let status_str: String = row.get(3).unwrap();
-    let process_id: Option<i64> = row.get(4).unwrap();
+fn row_to_agent(row: &Row) -> rusqlite::Result<Agent> {
+    let status_str: String = row.get(3)?;
+    let process_id: Option<i64> = row.get(4)?;
 
-    Agent {
-        id: row.get(0).unwrap(),
-        session_id: row.get(1).unwrap(),
-        task_id: row.get(2).unwrap(),
+    Ok(Agent {
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        task_id: row.get(2)?,
         status: string_to_agent_status(&status_str),
         process_id: process_id.map(|pid| pid as u32),
-        worktree_path: row.get(5).unwrap(),
-        branch: row.get(6).unwrap(),
-        iteration_count: row.get(7).unwrap(),
-        tokens: row.get(8).unwrap(),
-        cost: row.get(9).unwrap(),
+        worktree_path: row.get(5)?,
+        branch: row.get(6)?,
+        iteration_count: row.get(7)?,
+        tokens: row.get(8)?,
+        cost: row.get(9)?,
         logs: Vec::new(), // Will be populated separately
         subagents: Vec::new(), // Will be populated separately
-    }
+    })
 }
 
 /// Convert AgentStatus to database string
