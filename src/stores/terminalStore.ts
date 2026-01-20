@@ -8,13 +8,22 @@ import type {
   SplitDirection,
 } from '@/types/terminal'
 
-// Split pane contains terminal IDs that are displayed together
-interface SplitGroup {
+// A pane can either be a terminal or a split container
+interface TerminalPane {
   id: string
-  direction: SplitDirection
-  terminalIds: string[]
-  sizes: number[] // Percentage for each terminal
+  type: 'terminal'
+  terminalId: string
 }
+
+interface SplitPane {
+  id: string
+  type: 'split'
+  direction: SplitDirection
+  children: PaneNode[]
+  sizes: number[] // Percentage for each child
+}
+
+type PaneNode = TerminalPane | SplitPane
 
 interface TerminalStore {
   // State
@@ -22,30 +31,111 @@ interface TerminalStore {
   activeTerminalId: string | null
   panelMode: TerminalPanelMode
   panelHeight: number // Percentage (10-90)
-  splitGroups: SplitGroup[] // Groups of terminals shown together
-  activeSplitGroupId: string | null
+  rootPane: PaneNode | null // Root of the pane tree
 
   // Actions
-  createTerminal: (cwd?: string) => string // Returns terminal ID
+  createTerminal: (cwd?: string) => string
   closeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
   updateTerminalTitle: (id: string, title: string) => void
   setPanelMode: (mode: TerminalPanelMode) => void
   setPanelHeight: (height: number) => void
   splitTerminal: (id: string, direction: SplitDirection) => string | null
-  updateSplitSizes: (groupId: string, sizes: number[]) => void
+  updatePaneSizes: (paneId: string, sizes: number[]) => void
   togglePanel: () => void
   minimizePanel: () => void
   maximizePanel: () => void
   closePanel: () => void
-  getActiveSplitGroup: () => SplitGroup | null
-  getTerminalsInActiveGroup: () => TerminalInstance[]
+  getRootPane: () => PaneNode | null
 }
 
 const generateTerminalId = () => `term-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-const generateGroupId = () => `group-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+const generatePaneId = () => `pane-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
 const getDefaultTitle = (index: number) => `Terminal ${index + 1}`
+
+// Helper to find a pane by terminal ID in the tree
+function findPaneByTerminalId(node: PaneNode | null, terminalId: string): TerminalPane | null {
+  if (!node) return null
+  if (node.type === 'terminal') {
+    return node.terminalId === terminalId ? node : null
+  }
+  for (const child of node.children) {
+    const found = findPaneByTerminalId(child, terminalId)
+    if (found) return found
+  }
+  return null
+}
+
+// Helper to find parent split pane of a terminal
+function findParentSplit(node: PaneNode | null, terminalId: string, parent: SplitPane | null = null): { parent: SplitPane | null; index: number } | null {
+  if (!node) return null
+  if (node.type === 'terminal') {
+    if (node.terminalId === terminalId && parent) {
+      const index = parent.children.findIndex(c => c.type === 'terminal' && c.terminalId === terminalId)
+      return { parent, index }
+    }
+    return null
+  }
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i]
+    if (child.type === 'terminal' && child.terminalId === terminalId) {
+      return { parent: node, index: i }
+    }
+    const found = findParentSplit(child, terminalId, node)
+    if (found) return found
+  }
+  return null
+}
+
+// Helper to replace a node in the tree
+function replaceNode(root: PaneNode, targetId: string, newNode: PaneNode): PaneNode {
+  if (root.id === targetId) return newNode
+  if (root.type === 'terminal') return root
+  return {
+    ...root,
+    children: root.children.map(child => replaceNode(child, targetId, newNode))
+  }
+}
+
+// Helper to remove a terminal from the tree
+function removeTerminal(node: PaneNode, terminalId: string): PaneNode | null {
+  if (node.type === 'terminal') {
+    return node.terminalId === terminalId ? null : node
+  }
+
+  const newChildren: PaneNode[] = []
+  const newSizes: number[] = []
+
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i]
+    const result = removeTerminal(child, terminalId)
+    if (result) {
+      newChildren.push(result)
+      newSizes.push(node.sizes[i])
+    }
+  }
+
+  if (newChildren.length === 0) return null
+  if (newChildren.length === 1) return newChildren[0]
+
+  // Normalize sizes
+  const total = newSizes.reduce((a, b) => a + b, 0)
+  const normalizedSizes = newSizes.map(s => (s / total) * 100)
+
+  return { ...node, children: newChildren, sizes: normalizedSizes }
+}
+
+// Helper to find another terminal in the tree
+function findAnyTerminal(node: PaneNode | null): string | null {
+  if (!node) return null
+  if (node.type === 'terminal') return node.terminalId
+  for (const child of node.children) {
+    const found = findAnyTerminal(child)
+    if (found) return found
+  }
+  return null
+}
 
 export const useTerminalStore = create<TerminalStore>()(
   persist(
@@ -54,16 +144,13 @@ export const useTerminalStore = create<TerminalStore>()(
       terminals: [],
       activeTerminalId: null,
       panelMode: 'closed',
-      panelHeight: 35, // Default to 35% of screen
-      splitGroups: [],
-      activeSplitGroupId: null,
+      panelHeight: 35,
+      rootPane: null,
 
       createTerminal: (cwd?: string) => {
         const id = generateTerminalId()
-        const groupId = generateGroupId()
-        const { terminals, panelMode } = get()
+        const { terminals, panelMode, rootPane } = get()
 
-        // Use provided cwd or empty string (terminal-api will handle default)
         const workingDir = cwd || ''
 
         const newTerminal: TerminalInstance = {
@@ -74,19 +161,28 @@ export const useTerminalStore = create<TerminalStore>()(
           createdAt: new Date().toISOString(),
         }
 
-        // Create a new split group with just this terminal
-        const newGroup: SplitGroup = {
-          id: groupId,
-          direction: 'horizontal',
-          terminalIds: [id],
-          sizes: [100],
+        // Create a terminal pane
+        const newPane: TerminalPane = {
+          id: generatePaneId(),
+          type: 'terminal',
+          terminalId: id,
+        }
+
+        // If no root, this becomes the root. Otherwise, it's a new "tab" (replace root)
+        // For simplicity, new terminals without split create a fresh view
+        let newRoot: PaneNode
+        if (!rootPane) {
+          newRoot = newPane
+        } else {
+          // Add as a new tab - for now, replace root (tabs are separate groups)
+          // We'll keep the existing terminals but switch view
+          newRoot = newPane
         }
 
         set({
           terminals: [...terminals, newTerminal],
           activeTerminalId: id,
-          splitGroups: [...get().splitGroups, newGroup],
-          activeSplitGroupId: groupId,
+          rootPane: newRoot,
           panelMode: panelMode === 'closed' ? 'panel' : panelMode,
         })
 
@@ -94,76 +190,55 @@ export const useTerminalStore = create<TerminalStore>()(
       },
 
       closeTerminal: (id: string) => {
-        const { terminals, activeTerminalId, splitGroups, activeSplitGroupId } = get()
+        const { terminals, activeTerminalId, rootPane } = get()
         const newTerminals = terminals.filter((t) => t.id !== id)
 
-        // Update split groups - remove terminal from any group
-        let newSplitGroups = splitGroups.map((group) => {
-          if (group.terminalIds.includes(id)) {
-            const idx = group.terminalIds.indexOf(id)
-            const newTerminalIds = group.terminalIds.filter((tid) => tid !== id)
-            const newSizes = group.sizes.filter((_, i) => i !== idx)
-            // Redistribute sizes
-            const total = newSizes.reduce((a, b) => a + b, 0)
-            const normalizedSizes = newSizes.map((s) => (s / total) * 100)
-            return {
-              ...group,
-              terminalIds: newTerminalIds,
-              sizes: normalizedSizes.length > 0 ? normalizedSizes : [],
-            }
-          }
-          return group
-        })
+        // Remove from pane tree
+        const newRoot = rootPane ? removeTerminal(rootPane, id) : null
 
-        // Remove empty groups
-        newSplitGroups = newSplitGroups.filter((g) => g.terminalIds.length > 0)
-
-        // If closing active terminal, switch to another
+        // Find new active terminal
         let newActiveId = activeTerminalId
-        let newActiveSplitGroupId = activeSplitGroupId
-
         if (activeTerminalId === id) {
-          // Find another terminal in the same group first
-          const currentGroup = splitGroups.find((g) => g.terminalIds.includes(id))
-          if (currentGroup) {
-            const otherInGroup = currentGroup.terminalIds.find((tid) => tid !== id)
-            if (otherInGroup) {
-              newActiveId = otherInGroup
-            } else {
-              // Switch to last terminal in another group
-              newActiveId = newTerminals.length > 0 ? newTerminals[newTerminals.length - 1].id : null
-              newActiveSplitGroupId = newSplitGroups.length > 0 ? newSplitGroups[newSplitGroups.length - 1].id : null
-            }
-          } else {
-            newActiveId = newTerminals.length > 0 ? newTerminals[newTerminals.length - 1].id : null
-          }
+          newActiveId = newRoot ? findAnyTerminal(newRoot) : (newTerminals.length > 0 ? newTerminals[0].id : null)
         }
 
-        // Update active split group if it was removed
-        if (activeSplitGroupId && !newSplitGroups.find((g) => g.id === activeSplitGroupId)) {
-          newActiveSplitGroupId = newSplitGroups.length > 0 ? newSplitGroups[newSplitGroups.length - 1].id : null
+        // If the removed terminal was in a different tree, find its tree
+        if (newActiveId && !findPaneByTerminalId(newRoot, newActiveId)) {
+          // Active terminal is not in current tree, need to switch
+          // For now, just pick first available
+          newActiveId = newRoot ? findAnyTerminal(newRoot) : null
         }
 
-        // If no terminals left, close panel
         const newPanelMode = newTerminals.length === 0 ? 'closed' : get().panelMode
 
         set({
           terminals: newTerminals,
           activeTerminalId: newActiveId,
-          splitGroups: newSplitGroups,
-          activeSplitGroupId: newActiveSplitGroupId,
+          rootPane: newRoot,
           panelMode: newPanelMode,
         })
       },
 
       setActiveTerminal: (id: string | null) => {
-        const { splitGroups } = get()
-        // Find which group contains this terminal
-        const group = splitGroups.find((g) => g.terminalIds.includes(id || ''))
-        set({
-          activeTerminalId: id,
-          activeSplitGroupId: group?.id || get().activeSplitGroupId,
-        })
+        const { terminals, rootPane } = get()
+
+        // If the terminal exists but is not in current pane tree,
+        // we need to find/build its tree
+        if (id) {
+          const terminal = terminals.find(t => t.id === id)
+          if (terminal && !findPaneByTerminalId(rootPane, id)) {
+            // Terminal exists but not in current view - create a pane for it
+            const newPane: TerminalPane = {
+              id: generatePaneId(),
+              type: 'terminal',
+              terminalId: id,
+            }
+            set({ activeTerminalId: id, rootPane: newPane })
+            return
+          }
+        }
+
+        set({ activeTerminalId: id })
       },
 
       updateTerminalTitle: (id: string, title: string) => {
@@ -178,17 +253,16 @@ export const useTerminalStore = create<TerminalStore>()(
       },
 
       setPanelHeight: (height: number) => {
-        // Clamp between 10% and 90%
         const clampedHeight = Math.min(90, Math.max(10, height))
         set({ panelHeight: clampedHeight })
       },
 
       splitTerminal: (id: string, direction: SplitDirection) => {
-        const { terminals, splitGroups } = get()
+        const { terminals, rootPane } = get()
         const existingTerminal = terminals.find((t) => t.id === id)
-        if (!existingTerminal) return null
+        if (!existingTerminal || !rootPane) return null
 
-        // Create a new terminal for the split
+        // Create new terminal
         const newId = generateTerminalId()
         const newTerminal: TerminalInstance = {
           id: newId,
@@ -198,90 +272,104 @@ export const useTerminalStore = create<TerminalStore>()(
           createdAt: new Date().toISOString(),
         }
 
-        // Find the group containing the original terminal
-        const groupIndex = splitGroups.findIndex((g) => g.terminalIds.includes(id))
+        const newTerminalPane: TerminalPane = {
+          id: generatePaneId(),
+          type: 'terminal',
+          terminalId: newId,
+        }
 
-        let newSplitGroups: SplitGroup[]
+        // Find the terminal pane in the tree
+        const terminalPane = findPaneByTerminalId(rootPane, id)
+        if (!terminalPane) return null
 
-        if (groupIndex >= 0) {
-          const group = splitGroups[groupIndex]
+        // Find parent of the terminal pane
+        const parentInfo = findParentSplit(rootPane, id, null)
 
-          // If trying to split in a different direction than the group,
-          // create a new separate tab/group instead of changing existing layout
-          if (group.terminalIds.length > 1 && group.direction !== direction) {
-            // Create a new independent group (new tab)
-            const newGroup: SplitGroup = {
-              id: generateGroupId(),
-              direction,
-              terminalIds: [newId],
-              sizes: [100],
-            }
-            newSplitGroups = [...splitGroups, newGroup]
+        let newRoot: PaneNode
 
-            set({
-              terminals: [...terminals, newTerminal],
-              activeTerminalId: newId,
-              splitGroups: newSplitGroups,
-              activeSplitGroupId: newGroup.id,
-            })
-            return newId
-          }
-
-          // Same direction or single terminal - add to existing group
-          const terminalIndex = group.terminalIds.indexOf(id)
-
-          // Insert new terminal after the current one
-          const newTerminalIds = [...group.terminalIds]
-          newTerminalIds.splice(terminalIndex + 1, 0, newId)
-
-          // Split the size of the current terminal
-          const currentSize = group.sizes[terminalIndex]
-          const newSize = currentSize / 2
-          const newSizes = [...group.sizes]
-          newSizes[terminalIndex] = newSize
-          newSizes.splice(terminalIndex + 1, 0, newSize)
-
-          // Only update direction if it was a single terminal (first split)
-          const newDirection = group.terminalIds.length === 1 ? direction : group.direction
-
-          newSplitGroups = splitGroups.map((g, i) =>
-            i === groupIndex
-              ? { ...g, direction: newDirection, terminalIds: newTerminalIds, sizes: newSizes }
-              : g
-          )
-        } else {
-          // Create new group with both terminals
-          const newGroup: SplitGroup = {
-            id: generateGroupId(),
+        if (!parentInfo) {
+          // Terminal is the root - wrap in a split
+          const newSplit: SplitPane = {
+            id: generatePaneId(),
+            type: 'split',
             direction,
-            terminalIds: [id, newId],
+            children: [terminalPane, newTerminalPane],
             sizes: [50, 50],
           }
-          newSplitGroups = [...splitGroups, newGroup]
+          newRoot = newSplit
+        } else {
+          const { parent, index } = parentInfo
+
+          if (parent.direction === direction) {
+            // Same direction - add to parent
+            const newChildren = [...parent.children]
+            newChildren.splice(index + 1, 0, newTerminalPane)
+
+            // Redistribute sizes
+            const oldSize = parent.sizes[index]
+            const newSize = oldSize / 2
+            const newSizes = [...parent.sizes]
+            newSizes[index] = newSize
+            newSizes.splice(index + 1, 0, newSize)
+
+            const updatedParent: SplitPane = {
+              ...parent,
+              children: newChildren,
+              sizes: newSizes,
+            }
+            newRoot = replaceNode(rootPane, parent.id, updatedParent)
+          } else {
+            // Different direction - create nested split
+            const newSplit: SplitPane = {
+              id: generatePaneId(),
+              type: 'split',
+              direction,
+              children: [terminalPane, newTerminalPane],
+              sizes: [50, 50],
+            }
+
+            // Replace the terminal pane with the new split in parent
+            const newChildren = parent.children.map((child, i) =>
+              i === index ? newSplit : child
+            )
+            const updatedParent: SplitPane = {
+              ...parent,
+              children: newChildren,
+            }
+            newRoot = replaceNode(rootPane, parent.id, updatedParent)
+          }
         }
 
         set({
           terminals: [...terminals, newTerminal],
           activeTerminalId: newId,
-          splitGroups: newSplitGroups,
+          rootPane: newRoot,
         })
 
         return newId
       },
 
-      updateSplitSizes: (groupId: string, sizes: number[]) => {
-        const { splitGroups } = get()
-        set({
-          splitGroups: splitGroups.map((g) =>
-            g.id === groupId ? { ...g, sizes } : g
-          ),
-        })
+      updatePaneSizes: (paneId: string, sizes: number[]) => {
+        const { rootPane } = get()
+        if (!rootPane) return
+
+        const updateSizes = (node: PaneNode): PaneNode => {
+          if (node.type === 'terminal') return node
+          if (node.id === paneId) {
+            return { ...node, sizes }
+          }
+          return {
+            ...node,
+            children: node.children.map(updateSizes)
+          }
+        }
+
+        set({ rootPane: updateSizes(rootPane) })
       },
 
       togglePanel: () => {
         const { panelMode, terminals } = get()
         if (panelMode === 'closed') {
-          // If no terminals, create one
           if (terminals.length === 0) {
             get().createTerminal()
           } else {
@@ -312,26 +400,16 @@ export const useTerminalStore = create<TerminalStore>()(
         set({ panelMode: 'closed' })
       },
 
-      getActiveSplitGroup: () => {
-        const { splitGroups, activeSplitGroupId } = get()
-        return splitGroups.find((g) => g.id === activeSplitGroupId) || null
-      },
-
-      getTerminalsInActiveGroup: () => {
-        const { terminals, splitGroups, activeSplitGroupId } = get()
-        const group = splitGroups.find((g) => g.id === activeSplitGroupId)
-        if (!group) return []
-        return group.terminalIds
-          .map((id) => terminals.find((t) => t.id === id))
-          .filter((t): t is TerminalInstance => t !== undefined)
-      },
+      getRootPane: () => get().rootPane,
     }),
     {
       name: 'ralph-terminal-storage',
       partialize: (state) => ({
-        // Only persist UI preferences, not active terminals
         panelHeight: state.panelHeight,
       }),
     }
   )
 )
+
+// Export types for use in components
+export type { PaneNode, TerminalPane, SplitPane }

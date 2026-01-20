@@ -1,14 +1,107 @@
 // Terminal panel component - main container for terminals
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { Minus, Maximize2, Minimize2, X, SplitSquareHorizontal, SplitSquareVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTerminalStore } from '@/stores/terminalStore'
+import { useTerminalStore, type PaneNode } from '@/stores/terminalStore'
 import { TerminalInstance } from './TerminalInstance'
 import { TerminalTabs } from './TerminalTabs'
 import { ResizeHandle } from './ResizeHandle'
 import { SplitResizeHandle } from './SplitResizeHandle'
 import { Tooltip } from '@/components/ui/tooltip'
+
+// Recursive pane renderer
+interface PaneRendererProps {
+  node: PaneNode
+  terminals: { id: string; cwd: string }[]
+  activeTerminalId: string | null
+  onSelectTerminal: (id: string) => void
+  onUpdateSizes: (paneId: string, sizes: number[]) => void
+}
+
+function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onUpdateSizes }: PaneRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  if (node.type === 'terminal') {
+    const terminal = terminals.find(t => t.id === node.terminalId)
+    if (!terminal) return null
+
+    return (
+      <div
+        className={cn(
+          'h-full w-full overflow-hidden',
+          node.terminalId === activeTerminalId && 'ring-1 ring-primary/50 ring-inset'
+        )}
+        onClick={() => onSelectTerminal(node.terminalId)}
+      >
+        <TerminalInstance
+          terminalId={node.terminalId}
+          cwd={terminal.cwd}
+          isActive={true}
+        />
+      </div>
+    )
+  }
+
+  // Split pane
+  const isVertical = node.direction === 'vertical'
+
+  const handleResize = (index: number, delta: number) => {
+    if (!containerRef.current) return
+
+    const containerSize = isVertical
+      ? containerRef.current.clientHeight
+      : containerRef.current.clientWidth
+
+    const deltaPercent = (delta / containerSize) * 100
+    const newSizes = [...node.sizes]
+
+    newSizes[index] = Math.max(10, newSizes[index] + deltaPercent)
+    newSizes[index + 1] = Math.max(10, newSizes[index + 1] - deltaPercent)
+
+    // Normalize
+    const total = newSizes.reduce((a, b) => a + b, 0)
+    const normalizedSizes = newSizes.map(s => (s / total) * 100)
+
+    onUpdateSizes(node.id, normalizedSizes)
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        'flex h-full w-full',
+        isVertical ? 'flex-col' : 'flex-row'
+      )}
+    >
+      {node.children.map((child, index) => (
+        <div key={child.id} className="contents">
+          <div
+            style={{
+              [isVertical ? 'height' : 'width']: `${node.sizes[index]}%`,
+              [isVertical ? 'width' : 'height']: '100%',
+            }}
+            className="overflow-hidden"
+          >
+            <PaneRenderer
+              node={child}
+              terminals={terminals}
+              activeTerminalId={activeTerminalId}
+              onSelectTerminal={onSelectTerminal}
+              onUpdateSizes={onUpdateSizes}
+            />
+          </div>
+          {index < node.children.length - 1 && (
+            <SplitResizeHandle
+              direction={node.direction}
+              onResize={(delta) => handleResize(index, delta)}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function TerminalPanel() {
   const {
@@ -16,20 +109,18 @@ export function TerminalPanel() {
     activeTerminalId,
     panelMode,
     panelHeight,
-    splitGroups,
-    activeSplitGroupId,
+    rootPane,
     setPanelHeight,
     minimizePanel,
     maximizePanel,
     closePanel,
     splitTerminal,
     setActiveTerminal,
-    updateSplitSizes,
+    updatePaneSizes,
   } = useTerminalStore()
 
   const handleResize = useCallback(
     (deltaY: number) => {
-      // Convert pixel delta to percentage based on window height
       const windowHeight = window.innerHeight
       const deltaPercent = (deltaY / windowHeight) * 100
       setPanelHeight(panelHeight + deltaPercent)
@@ -49,44 +140,12 @@ export function TerminalPanel() {
     }
   }
 
-  // Get the active split group
-  const activeGroup = splitGroups.find((g) => g.id === activeSplitGroupId)
-
-  // Handle resize between split panes
-  const handleSplitResize = useCallback(
-    (index: number, delta: number, containerSize: number) => {
-      if (!activeGroup) return
-
-      const deltaPercent = (delta / containerSize) * 100
-      const newSizes = [...activeGroup.sizes]
-
-      // Adjust sizes of adjacent panes
-      newSizes[index] = Math.max(10, newSizes[index] + deltaPercent)
-      newSizes[index + 1] = Math.max(10, newSizes[index + 1] - deltaPercent)
-
-      // Normalize to ensure total is 100%
-      const total = newSizes.reduce((a, b) => a + b, 0)
-      const normalizedSizes = newSizes.map((s) => (s / total) * 100)
-
-      updateSplitSizes(activeGroup.id, normalizedSizes)
-    },
-    [activeGroup, updateSplitSizes]
-  )
-
-  // Don't render if closed
   if (panelMode === 'closed') {
     return null
   }
 
   const isMinimized = panelMode === 'minimized'
   const isFullScreen = panelMode === 'full'
-
-  // Get terminals for the active group
-  const terminalsInGroup = activeGroup
-    ? activeGroup.terminalIds
-        .map((id) => terminals.find((t) => t.id === id))
-        .filter((t): t is NonNullable<typeof t> => t !== undefined)
-    : []
 
   return (
     <div
@@ -99,18 +158,15 @@ export function TerminalPanel() {
         height: isMinimized ? 'auto' : isFullScreen ? '100%' : `${panelHeight}%`,
       }}
     >
-      {/* Resize handle - only show when in panel mode */}
       {!isMinimized && !isFullScreen && <ResizeHandle onResize={handleResize} />}
 
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[32px]">
-        {/* Left: Tabs */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Terminal</span>
           {!isMinimized && <TerminalTabs className="flex-1 min-w-0" />}
         </div>
 
-        {/* Right: Actions */}
         <div className="flex items-center gap-0.5 shrink-0">
           {!isMinimized && (
             <>
@@ -141,11 +197,7 @@ export function TerminalPanel() {
               onClick={minimizePanel}
               className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              {isMinimized ? (
-                <Maximize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Minus className="h-3.5 w-3.5" />
-              )}
+              {isMinimized ? <Maximize2 className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
             </button>
           </Tooltip>
 
@@ -154,11 +206,7 @@ export function TerminalPanel() {
               onClick={maximizePanel}
               className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              {isFullScreen ? (
-                <Minimize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize2 className="h-3.5 w-3.5" />
-              )}
+              {isFullScreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
           </Tooltip>
 
@@ -176,65 +224,18 @@ export function TerminalPanel() {
       {/* Terminal content */}
       {!isMinimized && (
         <div className="flex-1 overflow-hidden">
-          {terminals.length === 0 ? (
+          {!rootPane ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               No terminals open
             </div>
-          ) : activeGroup && terminalsInGroup.length > 1 ? (
-            // Render split view
-            <div
-              className={cn(
-                'flex h-full',
-                activeGroup.direction === 'vertical' ? 'flex-col' : 'flex-row'
-              )}
-            >
-              {terminalsInGroup.map((terminal, index) => (
-                <div key={terminal.id} className="contents">
-                  <div
-                    className={cn(
-                      'overflow-hidden',
-                      terminal.id === activeTerminalId && 'ring-1 ring-primary/50'
-                    )}
-                    style={{
-                      [activeGroup.direction === 'vertical' ? 'height' : 'width']:
-                        `${activeGroup.sizes[index]}%`,
-                    }}
-                    onClick={() => setActiveTerminal(terminal.id)}
-                  >
-                    <TerminalInstance
-                      terminalId={terminal.id}
-                      cwd={terminal.cwd}
-                      isActive={true} // All terminals in split view are "active" (visible)
-                    />
-                  </div>
-                  {index < terminalsInGroup.length - 1 && (
-                    <SplitResizeHandle
-                      direction={activeGroup.direction}
-                      onResize={(delta) => {
-                        const container = document.querySelector('.flex-1.overflow-hidden')
-                        if (container) {
-                          const size =
-                            activeGroup.direction === 'vertical'
-                              ? container.clientHeight
-                              : container.clientWidth
-                          handleSplitResize(index, delta, size)
-                        }
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
           ) : (
-            // Render single terminal (tab-based view)
-            terminals.map((terminal) => (
-              <TerminalInstance
-                key={terminal.id}
-                terminalId={terminal.id}
-                cwd={terminal.cwd}
-                isActive={terminal.id === activeTerminalId}
-              />
-            ))
+            <PaneRenderer
+              node={rootPane}
+              terminals={terminals.map(t => ({ id: t.id, cwd: t.cwd }))}
+              activeTerminalId={activeTerminalId}
+              onSelectTerminal={setActiveTerminal}
+              onUpdateSizes={updatePaneSizes}
+            />
           )}
         </div>
       )}
