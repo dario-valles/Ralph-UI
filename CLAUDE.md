@@ -14,11 +14,11 @@ bun run tauri dev              # Start full dev environment (Vite + Rust backend
 bun run dev                    # Frontend only (Vite dev server on port 1420)
 
 # Testing
-bun test                       # Unit tests (Vitest)
+bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test", not "bun test"
 bun run test:run               # Run tests once
 bun run test:coverage          # With coverage report
 bun run e2e                    # E2E tests (Playwright)
-cd src-tauri && cargo test     # Rust backend tests (418+ tests)
+cd src-tauri && cargo test     # Rust backend tests (515+ tests)
 
 # Code Quality
 bun run lint                   # ESLint (strict, 0 warnings allowed)
@@ -71,9 +71,14 @@ import { invoke } from '@tauri-apps/api/core'
 const result = await invoke<T>('command_name', { args })
 ```
 
+### Shared Utilities
+- `src/lib/tauri-check.ts` - Centralized `isTauri` check for environment detection
+- `src/test/store-test-utils.ts` - Test utilities: mock factories, `resetStore` helper
+
 ### Component Organization
 - Feature folders under `src/components/` (e.g., `mission-control/`, `agents/`, `sessions/`)
 - shadcn/ui base components in `src/components/ui/`
+- Shared components in `src/components/shared/` (EmptyState, StatCard)
 - Layout components in `src/components/layout/`
 
 ### Navigation Context Pattern
