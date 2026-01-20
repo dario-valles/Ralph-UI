@@ -1,4 +1,5 @@
 use crate::git::{BranchInfo, CommitInfo, DiffInfo, FileStatus, GitManager, MergeResult, WorktreeInfo};
+use crate::utils::ResultExt;
 use tauri::State;
 use std::sync::Mutex;
 use std::collections::HashMap;
@@ -16,11 +17,11 @@ impl GitState {
     }
 
     pub fn get_or_create(&self, repo_path: &str) -> Result<(), String> {
-        let mut managers = self.managers.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut managers = self.managers.lock().with_context("Lock error")?;
 
         if !managers.contains_key(repo_path) {
             let manager = GitManager::new(repo_path)
-                .map_err(|e| format!("Failed to open repository: {}", e))?;
+                .with_context("Failed to open repository")?;
             managers.insert(repo_path.to_string(), manager);
         }
 
@@ -32,10 +33,10 @@ impl GitState {
         F: FnOnce(&GitManager) -> Result<R, git2::Error>,
     {
         self.get_or_create(repo_path)?;
-        let managers = self.managers.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let managers = self.managers.lock().with_context("Lock error")?;
         let manager = managers.get(repo_path)
             .ok_or_else(|| "Repository not found".to_string())?;
-        f(manager).map_err(|e| format!("Git operation failed: {}", e))
+        f(manager).with_context("Git operation failed")
     }
 }
 
@@ -268,7 +269,7 @@ pub fn git_init_repository(path: String) -> Result<(), String> {
     }
 
     Repository::init(repo_path)
-        .map_err(|e| format!("Failed to initialize git repository: {}", e))?;
+        .with_context("Failed to initialize git repository")?;
 
     log::info!("[Git] Initialized new repository at: {}", path);
     Ok(())

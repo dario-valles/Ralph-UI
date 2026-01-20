@@ -56,7 +56,7 @@ describe('sessionStore', () => {
 
       expect(useSessionStore.getState().sessions).toEqual([])
       expect(useSessionStore.getState().loading).toBe(false)
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
 
     it('should set loading state during fetch', async () => {
@@ -94,7 +94,7 @@ describe('sessionStore', () => {
       await store.fetchSession('nonexistent')
 
       expect(useSessionStore.getState().currentSession).toBeNull()
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
   })
 
@@ -120,8 +120,8 @@ describe('sessionStore', () => {
       const store = useSessionStore.getState()
       const result = await store.createSession('Test', '/test')
 
-      expect(result).toBeNull()
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(result).toBeUndefined()
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
 
     it('should add new session to existing sessions', async () => {
@@ -177,7 +177,7 @@ describe('sessionStore', () => {
       const store = useSessionStore.getState()
       await store.updateSession(mockSession)
 
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
   })
 
@@ -232,7 +232,7 @@ describe('sessionStore', () => {
       await store.deleteSession('session-1')
 
       expect(useSessionStore.getState().sessions).toContainEqual(mockSession)
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
   })
 
@@ -273,7 +273,7 @@ describe('sessionStore', () => {
       const store = useSessionStore.getState()
       await store.updateSessionStatus('session-1', 'paused')
 
-      expect(useSessionStore.getState().error).toBe(`Error: ${errorMessage}`)
+      expect(useSessionStore.getState().error).toBe(errorMessage)
     })
   })
 

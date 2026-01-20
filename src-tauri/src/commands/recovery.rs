@@ -5,7 +5,7 @@ use crate::session::{
     lock::{find_stale_locks, remove_stale_lock, SessionLock, LockInfo},
     recovery::SessionRecovery,
 };
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -51,7 +51,7 @@ pub async fn check_stale_sessions(
 
     find_stale_locks(path)
         .map(|locks| locks.into_iter().map(StaleLockInfo::from).collect())
-        .map_err(|e| format!("Failed to check stale sessions: {}", e))
+        .with_context("Failed to check stale sessions")
 }
 
 /// Recover a single stale session
@@ -97,7 +97,7 @@ pub async fn recover_all_stale_sessions(
 
     let recovery = SessionRecovery::new(path);
     let stale_sessions = recovery.detect_stale_sessions(conn)
-        .map_err(|e| format!("Failed to detect stale sessions: {}", e))?;
+        .with_context("Failed to detect stale sessions")?;
 
     let mut results = Vec::new();
 
@@ -136,7 +136,7 @@ pub async fn acquire_session_lock(
     // Create lock directory if needed
     let lock_dir = path.join(".ralph-ui");
     std::fs::create_dir_all(&lock_dir)
-        .map_err(|e| format!("Failed to create lock directory: {}", e))?;
+        .with_context("Failed to create lock directory")?;
 
     let lock_path = lock_dir.join(format!("session-{}.lock", session_id));
 
@@ -164,9 +164,9 @@ pub async fn acquire_session_lock(
         version: env!("CARGO_PKG_VERSION").to_string(),
     };
     let content = serde_json::to_string_pretty(&lock_info)
-        .map_err(|e| format!("Failed to serialize lock: {}", e))?;
+        .with_context("Failed to serialize lock")?;
     std::fs::write(&lock_path, content)
-        .map_err(|e| format!("Failed to write lock: {}", e))?;
+        .with_context("Failed to write lock")?;
 
     Ok(true)
 }
@@ -185,7 +185,7 @@ pub async fn release_session_lock(
         if info.pid == std::process::id() {
             // Force release by removing the file
             remove_stale_lock(path, &session_id)
-                .map_err(|e| format!("Failed to release lock: {}", e))?;
+                .with_context("Failed to release lock")?;
         }
     }
 
@@ -228,9 +228,9 @@ pub async fn refresh_session_lock(
     if lock_path.exists() {
         // Read current lock to verify ownership
         let content = std::fs::read_to_string(&lock_path)
-            .map_err(|e| format!("Failed to read lock: {}", e))?;
+            .with_context("Failed to read lock")?;
         let info: LockInfo = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse lock: {}", e))?;
+            .with_context("Failed to parse lock")?;
 
         if info.pid == std::process::id() {
             // We own it, refresh timestamp
@@ -241,9 +241,9 @@ pub async fn refresh_session_lock(
                 version: env!("CARGO_PKG_VERSION").to_string(),
             };
             let new_content = serde_json::to_string_pretty(&new_info)
-                .map_err(|e| format!("Failed to serialize: {}", e))?;
+                .with_context("Failed to serialize lock")?;
             std::fs::write(&lock_path, new_content)
-                .map_err(|e| format!("Failed to write lock: {}", e))?;
+                .with_context("Failed to write lock")?;
         }
     }
 

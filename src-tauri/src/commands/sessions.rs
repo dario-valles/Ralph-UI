@@ -4,7 +4,7 @@ use crate::database::{self, Database};
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::models::{Session, SessionConfig, SessionStatus};
 use crate::session_files;
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -33,7 +33,7 @@ pub async fn create_session(
     let conn = db.get_connection();
 
     database::sessions::create_session(conn, &session)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
+        .with_context("Failed to create session")?;
 
     // Enforce single-active-session-per-project: pause any other active sessions
     if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
@@ -57,7 +57,7 @@ pub async fn get_sessions(
     let conn = db.get_connection();
 
     database::sessions::get_all_sessions(conn)
-        .map_err(|e| format!("Failed to get sessions: {}", e))
+        .with_context("Failed to get sessions")
 }
 
 #[tauri::command]
@@ -69,7 +69,7 @@ pub async fn get_session(
     let conn = db.get_connection();
 
     database::sessions::get_session_with_tasks(conn, &id)
-        .map_err(|e| format!("Failed to get session: {}", e))
+        .with_context("Failed to get session")
 }
 
 #[tauri::command]
@@ -81,7 +81,7 @@ pub async fn update_session(
     let conn = db.get_connection();
 
     database::sessions::update_session(conn, &session)
-        .map_err(|e| format!("Failed to update session: {}", e))?;
+        .with_context("Failed to update session")?;
 
     // Export session to file on update (for persistence)
     if let Err(e) = session_files::export_session_to_file(conn, &session.id, None) {
@@ -101,11 +101,11 @@ pub async fn delete_session(
 
     // Get session to find project path before deletion
     let session = database::sessions::get_session(conn, &id)
-        .map_err(|e| format!("Failed to get session: {}", e))?;
+        .with_context("Failed to get session")?;
 
     // Delete from database
     database::sessions::delete_session(conn, &id)
-        .map_err(|e| format!("Failed to delete session: {}", e))?;
+        .with_context("Failed to delete session")?;
 
     // Delete session file to prevent re-import on next startup
     let project_path = std::path::Path::new(&session.project_path);
@@ -129,13 +129,13 @@ pub async fn update_session_status(
 
     // Get the current session to capture the old status
     let current_session = database::sessions::get_session(conn, &session_id)
-        .map_err(|e| format!("Failed to get session: {}", e))?;
+        .with_context("Failed to get session")?;
 
     let old_status = format!("{:?}", current_session.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
     database::sessions::update_session_status(conn, &session_id, status.clone())
-        .map_err(|e| format!("Failed to update session status: {}", e))?;
+        .with_context("Failed to update session status")?;
 
     // If activating a session, pause any other active sessions in the same project
     if matches!(status, SessionStatus::Active) {
@@ -184,10 +184,10 @@ pub async fn export_session_json(
     let conn = db.get_connection();
 
     let session = database::sessions::get_session_with_tasks(conn, &session_id)
-        .map_err(|e| format!("Failed to get session: {}", e))?;
+        .with_context("Failed to get session")?;
 
     serde_json::to_string_pretty(&session)
-        .map_err(|e| format!("Failed to serialize session: {}", e))
+        .with_context("Failed to serialize session")
 }
 
 /// Session template structure
@@ -213,7 +213,7 @@ pub async fn create_session_template(
     let conn = db.get_connection();
 
     let session = database::sessions::get_session(conn, &session_id)
-        .map_err(|e| format!("Failed to get session: {}", e))?;
+        .with_context("Failed to get session")?;
 
     let template = SessionTemplate {
         id: Uuid::new_v4().to_string(),
@@ -235,7 +235,7 @@ pub async fn create_session_template(
             template.created_at.to_rfc3339(),
         ],
     )
-    .map_err(|e| format!("Failed to create template: {}", e))?;
+    .with_context("Failed to create template")?;
 
     Ok(template)
 }
@@ -250,7 +250,7 @@ pub async fn get_session_templates(
 
     let mut stmt = conn
         .prepare("SELECT id, name, description, config, created_at FROM session_templates ORDER BY created_at DESC")
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        .with_context("Failed to prepare query")?;
 
     let templates = stmt
         .query_map([], |row| {
@@ -268,11 +268,11 @@ pub async fn get_session_templates(
                 created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
             })
         })
-        .map_err(|e| format!("Failed to query templates: {}", e))?;
+        .with_context("Failed to query templates")?;
 
     templates
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect templates: {}", e))
+        .with_context("Failed to collect templates")
 }
 
 /// Create session from template
@@ -307,7 +307,7 @@ pub async fn create_session_from_template(
                 })
             },
         )
-        .map_err(|e| format!("Template not found: {}", e))?;
+        .with_context("Template not found")?;
 
     // Create new session with template config
     let session = Session {
@@ -324,7 +324,7 @@ pub async fn create_session_from_template(
     };
 
     database::sessions::create_session(conn, &session)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
+        .with_context("Failed to create session")?;
 
     // Enforce single-active-session-per-project: pause any other active sessions
     if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
@@ -355,24 +355,24 @@ pub async fn save_recovery_state(
     // Get active tasks
     let mut task_stmt = conn
         .prepare("SELECT id FROM tasks WHERE session_id = ?1 AND (status = 'InProgress' OR status = 'Pending')")
-        .map_err(|e| format!("Failed to prepare task query: {}", e))?;
+        .with_context("Failed to prepare task query")?;
 
     let active_tasks: Vec<String> = task_stmt
         .query_map(rusqlite::params![session_id], |row| row.get(0))
-        .map_err(|e| format!("Failed to query tasks: {}", e))?
+        .with_context("Failed to query tasks")?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect tasks: {}", e))?;
+        .with_context("Failed to collect tasks")?;
 
     // Get active agents
     let mut agent_stmt = conn
         .prepare("SELECT id FROM agents WHERE session_id = ?1 AND status != 'idle'")
-        .map_err(|e| format!("Failed to prepare agent query: {}", e))?;
+        .with_context("Failed to prepare agent query")?;
 
     let active_agents: Vec<String> = agent_stmt
         .query_map(rusqlite::params![session_id], |row| row.get(0))
-        .map_err(|e| format!("Failed to query agents: {}", e))?
+        .with_context("Failed to query agents")?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect agents: {}", e))?;
+        .with_context("Failed to collect agents")?;
 
     let recovery_state = SessionRecoveryState {
         session_id: session_id.clone(),
@@ -391,7 +391,7 @@ pub async fn save_recovery_state(
             serde_json::to_string(&recovery_state).unwrap_or_default(),
         ],
     )
-    .map_err(|e| format!("Failed to save recovery state: {}", e))?;
+    .with_context("Failed to save recovery state")?;
 
     Ok(())
 }
@@ -417,7 +417,7 @@ pub async fn get_recovery_state(
     match result {
         Ok(state_str) => {
             let state: SessionRecoveryState = serde_json::from_str(&state_str)
-                .map_err(|e| format!("Failed to deserialize recovery state: {}", e))?;
+                .with_context("Failed to deserialize recovery state")?;
             Ok(Some(state))
         }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -450,10 +450,10 @@ pub async fn compare_sessions(
     let conn = db.get_connection();
 
     let session1 = database::sessions::get_session_with_tasks(conn, &session1_id)
-        .map_err(|e| format!("Failed to get session 1: {}", e))?;
+        .with_context("Failed to get session 1")?;
 
     let session2 = database::sessions::get_session_with_tasks(conn, &session2_id)
-        .map_err(|e| format!("Failed to get session 2: {}", e))?;
+        .with_context("Failed to get session 2")?;
 
     // Calculate completed tasks
     let tasks1_completed = session1
@@ -547,7 +547,7 @@ pub async fn get_session_analytics(
     let conn = db.get_connection();
 
     let session = database::sessions::get_session_with_tasks(conn, &session_id)
-        .map_err(|e| format!("Failed to get session: {}", e))?;
+        .with_context("Failed to get session")?;
 
     let total_tasks = session.tasks.len();
     let completed_tasks = session

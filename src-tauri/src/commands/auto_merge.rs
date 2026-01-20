@@ -4,7 +4,7 @@
 use crate::database::{Database, tasks as db_tasks};
 use crate::models::TaskStatus;
 use crate::commands::git::GitState;
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -67,7 +67,7 @@ pub fn get_mergeable_branches(
     let conn = db.get_connection();
 
     let tasks = db_tasks::get_tasks_for_session(conn, &session_id)
-        .map_err(|e| format!("Failed to get tasks: {}", e))?;
+        .with_context("Failed to get tasks")?;
 
     let mergeable: Vec<MergeableBranch> = tasks
         .iter()
@@ -102,7 +102,7 @@ pub fn auto_merge_completed_branches(
         let conn = db.get_connection();
 
         let tasks = db_tasks::get_tasks_for_session(conn, &session_id)
-            .map_err(|e| format!("Failed to get tasks: {}", e))?;
+            .with_context("Failed to get tasks")?;
 
         tasks
             .into_iter()

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -29,35 +29,32 @@ import {
   BarChart3,
   AlertTriangle,
   ScrollText,
-  PanelLeftClose,
-  PanelLeftOpen,
   ChevronDown,
   CheckCircle2,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { useSessionStore } from '@/stores/sessionStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { QualityScoreCard } from './QualityScoreCard'
 import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
-import { SessionItem } from './SessionItem'
+import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { TaskPreviewDialog } from './TaskPreviewDialog'
 import { prdChatApi } from '@/lib/tauri-api'
-import { listen } from '@tauri-apps/api/event'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, ChatSession, AgentType, ExtractedPRDStructure } from '@/types'
+import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { useExportWorkflow } from '@/hooks/useExportWorkflow'
+import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 
 // ============================================================================
 // Main Component
 // ============================================================================
 
 export function PRDChatPanel() {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const prdIdFromUrl = searchParams.get('prdId')
 
@@ -67,7 +64,6 @@ export function PRDChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
   const [showTypeSelector, setShowTypeSelector] = useState(false)
-  const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
@@ -78,22 +74,10 @@ export function PRDChatPanel() {
   // Track when streaming started and last message for retry
   const [streamingStartedAt, setStreamingStartedAt] = useState<string | null>(null)
   const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
-  // Track streaming content received via events
-  const [streamingContent, setStreamingContent] = useState<string>('')
   // Plan sidebar visibility
   const [showPlanSidebar, setShowPlanSidebar] = useState(true)
   // Sessions sidebar collapsed state for smaller screens
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
-  // Export progress tracking
-  const [exportProgress, setExportProgress] = useState<{
-    active: boolean
-    step: number
-    message: string
-  } | null>(null)
-  // Task preview dialog state
-  const [showTaskPreview, setShowTaskPreview] = useState(false)
-  const [previewStructure, setPreviewStructure] = useState<ExtractedPRDStructure | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
 
   const {
     sessions,
@@ -113,7 +97,6 @@ export function PRDChatPanel() {
     setCurrentSession,
     loadHistory,
     loadSessions,
-    exportToPRD,
     assessQuality,
     startWatchingPlanFile,
     stopWatchingPlanFile,
@@ -123,6 +106,34 @@ export function PRDChatPanel() {
   // Load available models for the current agent type
   const agentType = (currentSession?.agentType || 'claude') as AgentType
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
+
+  // Export workflow hook - handles export progress, task preview, and quality assessment
+  const {
+    exportProgress,
+    showTaskPreview,
+    previewStructure,
+    previewLoading,
+    showQualityPanel,
+    setShowQualityPanel,
+    setShowTaskPreview,
+    handleExportToPRD,
+    handleConfirmTaskPreview,
+    handleForceExport,
+  } = useExportWorkflow(currentSession)
+
+  // Memoize the plan update callback for the events hook
+  const handlePlanUpdated = useCallback(
+    (content: string, path: string) => {
+      updatePlanContent(content, path)
+    },
+    [updatePlanContent]
+  )
+
+  // PRD chat events hook - handles file updates and streaming chunks
+  const { streamingContent, clearStreamingContent } = usePRDChatEvents({
+    sessionId: currentSession?.id,
+    onPlanUpdated: handlePlanUpdated,
+  })
 
   // Reset user selection when agent type changes
   if (prevAgentTypeRef.current !== agentType) {
@@ -181,72 +192,12 @@ export function PRDChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Listen for PRD file update events from the backend
-  useEffect(() => {
-    const currentSessionId = currentSession?.id
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      try {
-        unlisten = await listen<{ sessionId: string; content: string; path: string }>(
-          'prd:file_updated',
-          (event) => {
-            // Only update if the event is for the current session
-            if (currentSessionId && event.payload.sessionId === currentSessionId) {
-              updatePlanContent(event.payload.content, event.payload.path)
-            }
-          }
-        )
-      } catch (err) {
-        console.warn('Failed to set up PRD file event listener:', err)
-      }
-    }
-
-    setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [currentSession?.id, updatePlanContent])
-
-  // Listen for PRD chat streaming chunk events
-  useEffect(() => {
-    const currentSessionId = currentSession?.id
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      try {
-        unlisten = await listen<{ sessionId: string; content: string }>(
-          'prd:chat_chunk',
-          (event) => {
-            // Only update if the event is for the current session
-            if (currentSessionId && event.payload.sessionId === currentSessionId) {
-              setStreamingContent((prev) => prev + event.payload.content + '\n')
-            }
-          }
-        )
-      } catch (err) {
-        console.warn('Failed to set up PRD chat chunk event listener:', err)
-      }
-    }
-
-    setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [currentSession?.id])
-
   // Clear streaming content when streaming completes
   useEffect(() => {
     if (!streaming) {
-      setStreamingContent('')
+      clearStreamingContent()
     }
-  }, [streaming])
+  }, [streaming, clearStreamingContent])
 
   // Start/stop watching plan file when session changes
   useEffect(() => {
@@ -384,128 +335,6 @@ export function PRDChatPanel() {
     setCurrentSession(session)
   }
 
-  // Load extracted structure and show preview dialog
-  const handleExportToPRD = async () => {
-    if (!currentSession) return
-
-    // Step 1: Assess quality
-    setExportProgress({ active: true, step: 1, message: 'Checking PRD quality...' })
-    const assessment = await assessQuality()
-    if (assessment && !assessment.readyForExport) {
-      setExportProgress(null)
-      setShowQualityPanel(true)
-      return
-    }
-
-    try {
-      // Step 2: Load extracted structure for preview
-      setExportProgress({ active: true, step: 2, message: 'Extracting tasks from PRD...' })
-      setPreviewLoading(true)
-      const structure = await prdChatApi.getExtractedStructure(currentSession.id)
-      setPreviewStructure(structure)
-      setPreviewLoading(false)
-      setExportProgress(null)
-
-      // Step 3: Show preview dialog
-      setShowTaskPreview(true)
-    } catch (err) {
-      setExportProgress(null)
-      setPreviewLoading(false)
-      // If extraction fails, show error but allow direct export
-      console.error('Failed to extract tasks for preview:', err)
-      toast.error('Preview failed', 'Could not extract tasks. You can still export directly.')
-      setShowQualityPanel(true)
-    }
-  }
-
-  // Called when user confirms tasks in preview dialog
-  const handleConfirmTaskPreview = async (_structure: ExtractedPRDStructure) => {
-    if (!currentSession) return
-    // TODO: Pass the modified _structure to exportToPRD when backend supports it
-    void _structure // Silence unused warning until backend integration
-
-    setShowTaskPreview(false)
-
-    try {
-      // Step 1: Export PRD and create tasks with the confirmed structure
-      setExportProgress({ active: true, step: 1, message: 'Creating PRD and tasks...' })
-
-      // For now, export uses the structure stored in the session
-      const result = await exportToPRD(currentSession.title || 'Untitled PRD')
-
-      if (result) {
-        if (result.sessionId && result.taskCount > 0) {
-          // Step 2: Set up session
-          setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
-          await useSessionStore.getState().fetchSession(result.sessionId)
-
-          // Step 3: Navigate
-          setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
-          toast.success(
-            `Created ${result.taskCount} tasks from PRD`,
-            'Your tasks are ready to assign to agents.'
-          )
-          navigate(`/tasks?sessionId=${result.sessionId}`)
-        } else {
-          // No tasks extracted - navigate to PRD editor
-          setExportProgress(null)
-          toast.success('PRD exported successfully', 'Your PRD has been created.')
-          navigate(`/prds/${result.prd.id}`)
-        }
-      }
-    } catch (err) {
-      setExportProgress(null)
-      throw err
-    }
-  }
-
-  // Force export without preview (from quality warning dialog)
-  const handleForceExport = async () => {
-    if (!currentSession) return
-
-    setShowQualityPanel(false)
-
-    try {
-      // Try to show preview first
-      setPreviewLoading(true)
-      try {
-        const structure = await prdChatApi.getExtractedStructure(currentSession.id)
-        setPreviewStructure(structure)
-        setPreviewLoading(false)
-        setShowTaskPreview(true)
-        return
-      } catch {
-        // If preview fails, do direct export
-        setPreviewLoading(false)
-      }
-
-      // Direct export without preview
-      setExportProgress({ active: true, step: 1, message: 'Exporting PRD and extracting tasks...' })
-      const result = await exportToPRD(currentSession.title || 'Untitled PRD')
-
-      if (result) {
-        if (result.sessionId && result.taskCount > 0) {
-          setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
-          await useSessionStore.getState().fetchSession(result.sessionId)
-
-          setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
-          toast.success(
-            `Created ${result.taskCount} tasks from PRD`,
-            'Your tasks are ready to assign to agents.'
-          )
-          navigate(`/tasks?sessionId=${result.sessionId}`)
-        } else {
-          setExportProgress(null)
-          toast.success('PRD exported successfully', 'Your PRD has been created.')
-          navigate(`/prds/${result.prd.id}`)
-        }
-      }
-    } catch (err) {
-      setExportProgress(null)
-      throw err
-    }
-  }
-
   const handleRefreshQuality = () => {
     assessQuality()
   }
@@ -535,121 +364,20 @@ export function PRDChatPanel() {
   return (
     <div className="flex h-full gap-2 xl:gap-4">
       {/* Session Sidebar - Collapsible */}
-      <Card className={cn(
-        'shrink-0 flex flex-col transition-all duration-200',
-        sessionsCollapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64'
-      )}>
-        <CardHeader className={cn('pb-2', sessionsCollapsed && 'px-2')}>
-          <div className="flex items-center justify-between gap-1">
-            {!sessionsCollapsed && (
-              <CardTitle className="text-sm font-medium truncate">Sessions</CardTitle>
-            )}
-            <div className="flex items-center gap-0.5">
-              {!sessionsCollapsed && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCreateSession}
-                  aria-label="New session"
-                  className="h-7 w-7 p-0"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSessionsCollapsed(!sessionsCollapsed)}
-                aria-label={sessionsCollapsed ? "Expand sessions" : "Collapse sessions"}
-                className="h-7 w-7 p-0"
-              >
-                {sessionsCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-
-        {sessionsCollapsed ? (
-          <CardContent className="p-2 flex-1 flex flex-col items-center gap-2">
-            <Tooltip content="New Session" side="right">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCreateSession}
-                aria-label="New session"
-                className="h-8 w-8 p-0"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </Tooltip>
-            {sessions.slice(0, 5).map((session) => (
-              <Tooltip key={session.id} content={session.title || 'Untitled'} side="right">
-                <Button
-                  variant={currentSession?.id === session.id ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => handleSelectSession(session)}
-                  className="h-8 w-8 p-0"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </Button>
-              </Tooltip>
-            ))}
-            {sessions.length > 5 && (
-              <span className="text-xs text-muted-foreground">+{sessions.length - 5}</span>
-            )}
-          </CardContent>
-        ) : (
-          <>
-            <CardContent className="p-2 flex-1 overflow-auto">
-              {sessions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <MessageSquare className="h-6 w-6 text-muted-foreground mb-2" />
-                  <p className="text-xs text-muted-foreground">No sessions yet</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCreateSession}
-                    className="mt-2 text-xs"
-                    aria-label="New session"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    New
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {sessions.map((session) => (
-                    <SessionItem
-                      key={session.id}
-                      session={session}
-                      isActive={currentSession?.id === session.id}
-                      isProcessing={processingSessionId === session.id}
-                      onSelect={() => handleSelectSession(session)}
-                      onDelete={() => handleDeleteSession(session.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-
-            {/* Quality Score in Sidebar */}
-            {currentSession && hasMessages && (
-              <div className="p-2 border-t">
-                <QualityScoreCard
-                  assessment={qualityAssessment}
-                  loading={loading}
-                  onRefresh={handleRefreshQuality}
-                  className="border-0 shadow-none"
-                />
-              </div>
-            )}
-          </>
-        )}
-      </Card>
+      <SessionsSidebar
+        sessions={sessions}
+        currentSession={currentSession}
+        processingSessionId={processingSessionId}
+        hasMessages={hasMessages}
+        collapsed={sessionsCollapsed}
+        onCollapsedChange={setSessionsCollapsed}
+        onCreateSession={handleCreateSession}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
+        qualityAssessment={qualityAssessment}
+        loading={loading}
+        onRefreshQuality={handleRefreshQuality}
+      />
 
       {/* Chat Panel */}
       <Card className={cn('flex-1 flex flex-col min-w-0')}>

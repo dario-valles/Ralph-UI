@@ -4,6 +4,7 @@ use crate::config::{
     load_merged_config, get_config_paths, RalphConfig, ExecutionConfig, GitConfig, ValidationConfig,
     FallbackSettings, ConfigLoader,
 };
+use crate::utils::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::RwLock;
@@ -40,15 +41,15 @@ impl ConfigState {
     /// Set project path and reload config
     pub fn set_project_path(&self, path: Option<PathBuf>) -> Result<(), String> {
         let mut project_path = self.project_path.write()
-            .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+            .with_context("Failed to acquire lock")?;
         *project_path = path.clone();
 
         // Reload config with new project path
         let new_config = load_merged_config(path.as_deref(), None)
-            .map_err(|e| format!("Failed to load config: {}", e))?;
+            .with_context("Failed to load config")?;
 
         let mut config = self.config.write()
-            .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+            .with_context("Failed to acquire lock")?;
         *config = new_config;
 
         Ok(())
@@ -103,7 +104,7 @@ pub async fn get_config_paths_cmd(
     config_state: State<'_, ConfigState>,
 ) -> Result<ConfigPaths, String> {
     let project_path = config_state.project_path.read()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     let (global, project) = get_config_paths(project_path.as_deref());
 
@@ -127,7 +128,7 @@ pub async fn update_execution_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<ExecutionConfig, String> {
     let mut config = config_state.config.write()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     if let Some(v) = max_parallel {
         if v > 0 {
@@ -166,7 +167,7 @@ pub async fn update_git_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<GitConfig, String> {
     let mut config = config_state.config.write()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     if let Some(v) = auto_create_prs {
         config.git.auto_create_prs = v;
@@ -191,7 +192,7 @@ pub async fn update_validation_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<ValidationConfig, String> {
     let mut config = config_state.config.write()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     if let Some(v) = run_tests {
         config.validation.run_tests = v;
@@ -220,7 +221,7 @@ pub async fn update_fallback_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<FallbackSettings, String> {
     let mut config = config_state.config.write()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     if let Some(v) = enabled {
         config.fallback.enabled = v;
@@ -247,13 +248,13 @@ pub async fn reload_config(
     config_state: State<'_, ConfigState>,
 ) -> Result<RalphConfig, String> {
     let project_path = config_state.project_path.read()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     let new_config = load_merged_config(project_path.as_deref(), None)
-        .map_err(|e| format!("Failed to load config: {}", e))?;
+        .with_context("Failed to load config")?;
 
     let mut config = config_state.config.write()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
     *config = new_config.clone();
 
     Ok(new_config)
@@ -268,7 +269,7 @@ pub async fn save_config(
     log::info!("[save_config] Starting save to global config...");
 
     let config = config_state.config.read()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        .with_context("Failed to acquire lock")?;
 
     log::info!("[save_config] Config to save: max_parallel={}, agent_type={}, model={:?}",
         config.execution.max_parallel,

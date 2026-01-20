@@ -2,7 +2,7 @@
 
 use crate::database::Database;
 use crate::models::{ActivityEvent, ActivityEventType};
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use std::sync::Mutex;
 use tauri::State;
 
@@ -31,7 +31,7 @@ pub fn get_activity_feed(
          WHERE t.completed_at IS NOT NULL OR t.started_at IS NOT NULL
          ORDER BY COALESCE(t.completed_at, t.started_at) DESC
          LIMIT ?1 OFFSET ?2"
-    ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    ).with_context("Failed to prepare statement")?;
 
     let task_events = task_stmt.query_map([limit, offset], |row| {
         let id: String = row.get(0)?;
@@ -43,11 +43,11 @@ pub fn get_activity_feed(
         let project_path: String = row.get(6)?;
 
         Ok((id, title, status, completed_at, started_at, session_name, project_path))
-    }).map_err(|e| format!("Failed to query tasks: {}", e))?;
+    }).with_context("Failed to query tasks")?;
 
     for event_result in task_events {
         let (id, title, status, completed_at, started_at, session_name, project_path) =
-            event_result.map_err(|e| format!("Failed to read row: {}", e))?;
+            event_result.with_context("Failed to read row")?;
 
         // Extract project name from path
         let project_name = project_path
@@ -97,7 +97,7 @@ pub fn get_activity_feed(
          FROM sessions
          ORDER BY created_at DESC
          LIMIT ?1 OFFSET ?2"
-    ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    ).with_context("Failed to prepare statement")?;
 
     let session_events = session_stmt.query_map([limit, offset], |row| {
         let id: String = row.get(0)?;
@@ -107,11 +107,11 @@ pub fn get_activity_feed(
         let status: String = row.get(4)?;
 
         Ok((id, name, project_path, created_at, status))
-    }).map_err(|e| format!("Failed to query sessions: {}", e))?;
+    }).with_context("Failed to query sessions")?;
 
     for event_result in session_events {
         let (id, session_name, project_path, created_at, status) =
-            event_result.map_err(|e| format!("Failed to read row: {}", e))?;
+            event_result.with_context("Failed to read row")?;
 
         let project_name = project_path
             .split('/')

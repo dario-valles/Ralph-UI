@@ -1,6 +1,7 @@
 // PRD Chat State Management Store
 import { create } from 'zustand'
 import { prdChatApi } from '@/lib/tauri-api'
+import { asyncAction, type AsyncState } from '@/lib/store-utils'
 import type {
   ChatSession,
   ChatMessage,
@@ -22,14 +23,12 @@ interface StartSessionOptions {
   structuredMode?: boolean
 }
 
-interface PRDChatStore {
+interface PRDChatStore extends AsyncState {
   // State
   sessions: ChatSession[]
   currentSession: ChatSession | null
   messages: ChatMessage[]
-  loading: boolean
   streaming: boolean
-  error: string | null
   qualityAssessment: QualityAssessment | null
   guidedQuestions: GuidedQuestion[]
   extractedContent: ExtractedPRDContent | null
@@ -197,30 +196,18 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Load message history for a session
   loadHistory: async (sessionId: string) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const messages = await prdChatApi.getHistory(sessionId)
-      set({ messages, loading: false })
-    } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to load history',
-        loading: false,
-      })
-    }
+      return { messages }
+    })
   },
 
   // Load all chat sessions
   loadSessions: async () => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const sessions = await prdChatApi.getSessions()
-      set({ sessions, loading: false })
-    } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to load sessions',
-        loading: false,
-      })
-    }
+      return { sessions }
+    })
   },
 
   // Set the current session (clears messages)
@@ -233,22 +220,15 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Delete a chat session
   deleteSession: async (sessionId: string) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       await prdChatApi.deleteSession(sessionId)
-      set((state) => ({
+      const state = get()
+      return {
         sessions: state.sessions.filter((s) => s.id !== sessionId),
         currentSession: state.currentSession?.id === sessionId ? null : state.currentSession,
         messages: state.currentSession?.id === sessionId ? [] : state.messages,
-        loading: false,
-      }))
-    } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to delete session',
-        loading: false,
-      })
-      throw error
-    }
+      }
+    }, { rethrow: true })
   },
 
   // Export the current chat to a PRD document (and optionally create session + tasks)

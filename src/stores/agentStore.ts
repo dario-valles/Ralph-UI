@@ -14,13 +14,12 @@ import {
   addAgentLog,
   getAgentLogs,
 } from '@/lib/agent-api'
+import { asyncAction, type AsyncState } from '@/lib/store-utils'
 
-interface AgentStore {
+interface AgentStore extends AsyncState {
   // State
   agents: Agent[]
   activeAgentId: string | null
-  loading: boolean
-  error: string | null
 
   // Actions
   setActiveAgent: (agentId: string | null) => void
@@ -50,68 +49,37 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   // Load a single agent by ID
   loadAgent: async (agentId) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const agent = await getAgent(agentId)
       if (agent) {
-        set((state) => ({
-          agents: [
-            ...state.agents.filter((a) => a.id !== agentId),
-            agent,
-          ],
-          loading: false,
-        }))
-      } else {
-        set({ loading: false })
+        return { agents: [...get().agents.filter((a) => a.id !== agentId), agent] }
       }
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to load agent',
-        loading: false,
-      })
-    }
+      return {}
+    })
   },
 
   // Load all agents for a session
   loadAgentsForSession: async (sessionId) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const agents = await getAgentsForSession(sessionId)
-      set({ agents, loading: false })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to load agents',
-        loading: false,
-      })
-    }
+      return { agents }
+    })
   },
 
   // Load all agents for a task
   loadAgentsForTask: async (taskId) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const agents = await getAgentsForTask(taskId)
-      set({ agents, loading: false })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to load agents for task',
-        loading: false,
-      })
-    }
+      return { agents }
+    })
   },
 
   // Load active agents for a session
   loadActiveAgents: async (sessionId) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const agents = await getActiveAgents(sessionId)
-      set({ agents, loading: false })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to load active agents',
-        loading: false,
-      })
-    }
+      return { agents }
+    })
   },
 
   // Update agent status

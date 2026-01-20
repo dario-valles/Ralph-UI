@@ -4,7 +4,7 @@
 use crate::database::{Database, prd::*};
 use crate::parsers;
 use crate::session_files;
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use std::sync::Mutex;
@@ -69,7 +69,7 @@ pub async fn create_prd(
     // Load template if provided, otherwise use empty markdown
     let content = if let Some(template_id) = &request.template_id {
         let template = db.get_template(template_id)
-            .map_err(|e| format!("Failed to load template: {}", e))?;
+            .with_context("Failed to load template")?;
         template.template_structure
     } else {
         // Default empty markdown PRD structure
@@ -96,7 +96,7 @@ pub async fn create_prd(
     };
 
     db.create_prd(&prd)
-        .map_err(|e| format!("Failed to create PRD: {}", e))?;
+        .with_context("Failed to create PRD")?;
 
     Ok(prd)
 }
@@ -110,7 +110,7 @@ pub async fn get_prd(
     let db = lock_db(&db)?;
 
     db.get_prd(&id)
-        .map_err(|e| format!("PRD not found: {}", e))
+        .with_context("PRD not found")
 }
 
 /// Update a PRD document
@@ -122,7 +122,7 @@ pub async fn update_prd(
     let db = lock_db(&db)?;
 
     let mut prd = db.get_prd(&request.id)
-        .map_err(|e| format!("PRD not found: {}", e))?;
+        .with_context("PRD not found")?;
 
     if let Some(title) = request.title {
         prd.title = title;
@@ -138,7 +138,7 @@ pub async fn update_prd(
     prd.version += 1;
 
     db.update_prd(&prd)
-        .map_err(|e| format!("Failed to update PRD: {}", e))?;
+        .with_context("Failed to update PRD")?;
 
     Ok(prd)
 }
@@ -152,7 +152,7 @@ pub async fn delete_prd(
     let db = lock_db(&db)?;
 
     db.delete_prd(&id)
-        .map_err(|e| format!("Failed to delete PRD: {}", e))
+        .with_context("Failed to delete PRD")
 }
 
 /// List all PRD documents
@@ -163,7 +163,7 @@ pub async fn list_prds(
     let db = lock_db(&db)?;
 
     db.list_prds()
-        .map_err(|e| format!("Failed to list PRDs: {}", e))
+        .with_context("Failed to list PRDs")
 }
 
 /// Get all PRD templates
@@ -174,7 +174,7 @@ pub async fn list_prd_templates(
     let db = lock_db(&db)?;
 
     db.list_templates()
-        .map_err(|e| format!("Failed to list templates: {}", e))
+        .with_context("Failed to list templates")
 }
 
 /// Export PRD to different formats (content is always markdown)
@@ -187,7 +187,7 @@ pub async fn export_prd(
     let db = lock_db(&db)?;
 
     let prd = db.get_prd(&prd_id)
-        .map_err(|e| format!("PRD not found: {}", e))?;
+        .with_context("PRD not found")?;
 
     match format.as_str() {
         "markdown" => Ok(format_prd_markdown(&prd)),
@@ -198,7 +198,7 @@ pub async fn export_prd(
                 "content": prd.content
             });
             serde_yaml::to_string(&data)
-                .map_err(|e| format!("Failed to convert to YAML: {}", e))
+                .with_context("Failed to convert to YAML")
         }
         "json" => {
             let data = serde_json::json!({
@@ -221,7 +221,7 @@ pub async fn analyze_prd_quality(
     let db = lock_db(&db)?;
 
     let mut prd = db.get_prd(&prd_id)
-        .map_err(|e| format!("PRD not found: {}", e))?;
+        .with_context("PRD not found")?;
 
     // Calculate quality scores for markdown content
     let completeness = calculate_completeness(&prd.content);
@@ -236,7 +236,7 @@ pub async fn analyze_prd_quality(
     prd.updated_at = chrono::Utc::now().to_rfc3339();
 
     db.update_prd(&prd)
-        .map_err(|e| format!("Failed to update PRD: {}", e))?;
+        .with_context("Failed to update PRD")?;
 
     Ok(prd)
 }
@@ -252,7 +252,7 @@ pub async fn execute_prd(
 
     // 1. Load PRD from database
     let prd = db_guard.get_prd(&prd_id)
-        .map_err(|e| format!("PRD not found: {}", e))?;
+        .with_context("PRD not found")?;
 
     // 2. Get tasks from extracted_structure (AI-extracted during export) or parse markdown
     let tasks_from_structure = prd.extracted_structure.as_ref()
@@ -291,7 +291,7 @@ pub async fn execute_prd(
         log::info!("[PRD Execute] Parsing markdown content for tasks");
         let markdown_content = format_prd_markdown(&prd);
         parsers::parse_prd_auto(&markdown_content)
-            .map_err(|e| format!("Failed to parse PRD: {}", e))?
+            .with_context("Failed to parse PRD")?
     };
 
     // 3. Get or create session for this execution
@@ -386,7 +386,7 @@ pub async fn execute_prd(
         };
 
         crate::database::tasks::create_task(conn, &session_id, &task)
-            .map_err(|e| format!("Failed to create task: {}", e))?;
+            .with_context("Failed to create task")?;
 
         task_ids.push(task_id);
     }
@@ -416,7 +416,7 @@ pub async fn execute_prd(
     };
 
     db_guard.create_prd_execution(&execution)
-        .map_err(|e| format!("Failed to create PRD execution: {}", e))?;
+        .with_context("Failed to create PRD execution")?;
 
     drop(db_guard);
 
@@ -459,7 +459,7 @@ fn create_new_session_for_prd(
     };
 
     crate::database::sessions::create_session(conn, &session)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
+        .with_context("Failed to create session")?;
 
     Ok(session_id)
 }

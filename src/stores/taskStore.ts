@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { Task, TaskStatus } from '@/types'
 import { taskApi } from '@/lib/tauri-api'
+import { asyncAction, type AsyncState } from '@/lib/store-utils'
 
 interface TaskFilter {
   status?: TaskStatus
@@ -39,10 +40,8 @@ function naturalCompare(a: string, b: string): number {
   return 0
 }
 
-interface TaskStore {
+interface TaskStore extends AsyncState {
   tasks: Task[]
-  loading: boolean
-  error: string | null
   filter: TaskFilter
 
   // Actions
@@ -66,81 +65,45 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   fetchTasks: async (sessionId: string) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const tasks = await taskApi.getForSession(sessionId)
-      set({ tasks, loading: false })
-    } catch (error) {
-      set({ error: String(error), loading: false })
-    }
+      return { tasks }
+    })
   },
 
   createTask: async (sessionId: string, task: Task) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const newTask = await taskApi.create(sessionId, task)
-      set((state) => ({
-        tasks: [...state.tasks, newTask],
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: String(error), loading: false })
-    }
+      return { tasks: [...get().tasks, newTask] }
+    })
   },
 
   updateTask: async (task: Task) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const updatedTask = await taskApi.update(task)
-      set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)),
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: String(error), loading: false })
-    }
+      return { tasks: get().tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)) }
+    })
   },
 
   deleteTask: async (taskId: string) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       await taskApi.delete(taskId)
-      set((state) => ({
-        tasks: state.tasks.filter((t) => t.id !== taskId),
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: String(error), loading: false })
-    }
+      return { tasks: get().tasks.filter((t) => t.id !== taskId) }
+    })
   },
 
   updateTaskStatus: async (taskId: string, status: TaskStatus) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       await taskApi.updateStatus(taskId, status)
-      set((state) => ({
-        tasks: state.tasks.map((t) =>
-          t.id === taskId ? { ...t, status } : t
-        ),
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: String(error), loading: false })
-    }
+      return { tasks: get().tasks.map((t) => (t.id === taskId ? { ...t, status } : t)) }
+    })
   },
 
   importPRD: async (sessionId: string, content: string, format?: string) => {
-    set({ loading: true, error: null })
-    try {
+    await asyncAction(set, async () => {
       const tasks = await taskApi.importPRD(sessionId, content, format)
-      set((state) => ({
-        tasks: [...state.tasks, ...tasks],
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: String(error), loading: false })
-      throw error
-    }
+      return { tasks: [...get().tasks, ...tasks] }
+    }, { rethrow: true })
   },
 
   setFilter: (filter: Partial<TaskFilter>) => {

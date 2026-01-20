@@ -9,6 +9,7 @@ use crate::parallel::{
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload, emit_task_status_changed, TaskStatusChangedPayload};
+use crate::utils::ResultExt;
 use crate::{RateLimitEventState, CompletionEventState};
 use std::sync::Mutex;
 use tauri::State;
@@ -60,9 +61,9 @@ pub fn init_parallel_scheduler(
     let coordinator = WorktreeCoordinator::new(&repo_path);
     let detector = ConflictDetector::new(&repo_path);
 
-    *state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))? = Some(scheduler);
-    *state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))? = Some(coordinator);
-    *state.detector.lock().map_err(|e| format!("Lock error: {}", e))? = Some(detector);
+    *state.scheduler.lock().with_context("Lock error")? = Some(scheduler);
+    *state.coordinator.lock().with_context("Lock error")? = Some(coordinator);
+    *state.detector.lock().with_context("Lock error")? = Some(detector);
 
     log::info!("[Parallel] Scheduler initialized successfully");
     Ok(())
@@ -74,7 +75,7 @@ pub fn parallel_add_task(
     state: State<ParallelState>,
     task: Task,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
@@ -95,7 +96,7 @@ pub fn parallel_add_tasks(
         log::debug!("[Parallel] Task: {} - {}", task.id, task.title);
     }
 
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
@@ -119,7 +120,7 @@ pub fn parallel_schedule_next(
 
     // First, peek at what task would be scheduled
     let task_info = {
-        let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
         let scheduler = scheduler
             .as_mut()
             .ok_or("Scheduler not initialized")?;
@@ -143,7 +144,7 @@ pub fn parallel_schedule_next(
     // Allocate worktree for the task
     log::info!("[Parallel] Allocating worktree for task: {}", task_id);
     let worktree_allocation = {
-        let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut coordinator = state.coordinator.lock().with_context("Lock error")?;
         let coordinator = coordinator
             .as_mut()
             .ok_or("Coordinator not initialized")?;
@@ -174,7 +175,7 @@ pub fn parallel_schedule_next(
     };
 
     // Now schedule the task with the allocated worktree
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
@@ -184,9 +185,9 @@ pub fn parallel_schedule_next(
         Ok(Some(agent)) => {
             log::info!("[Parallel] Agent scheduled: {} for task {}", agent.id, agent.task_id);
             // Save agent to database
-            let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+            let db = db.lock().with_context("Lock error")?;
             db.create_agent(&agent)
-                .map_err(|e| format!("Failed to save agent: {}", e))?;
+                .with_context("Failed to save agent")?;
             log::info!("[Parallel] Agent saved to database");
 
             // Update task status to InProgress in database
@@ -226,14 +227,14 @@ pub fn parallel_complete_task(
     state: State<ParallelState>,
     task_id: String,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
 
     scheduler.complete_task(&task_id)
-        .map_err(|e| format!("Failed to complete task: {}", e))
+        .with_context("Failed to complete task")
 }
 
 /// Mark a task as failed
@@ -243,14 +244,14 @@ pub fn parallel_fail_task(
     task_id: String,
     error: String,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
 
     scheduler.fail_task(&task_id, error)
-        .map_err(|e| format!("Failed to mark task as failed: {}", e))
+        .with_context("Failed to mark task as failed")
 }
 
 /// Handle agent completion result (success or failure)
@@ -276,13 +277,13 @@ pub fn parallel_handle_agent_result(
 
     // Scope for scheduler and DB locks
     {
-        let mut scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut scheduler_guard = state.scheduler.lock().with_context("Lock error")?;
         let scheduler = scheduler_guard
             .as_mut()
             .ok_or("Scheduler not initialized")?;
 
         // Get the database connection
-        let db_guard = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let db_guard = db.lock().with_context("Lock error")?;
         let conn = db_guard.get_connection();
 
         if success {
@@ -398,14 +399,14 @@ pub fn parallel_handle_agent_result(
 pub fn parallel_stop_all(
     state: State<ParallelState>,
 ) -> Result<(), String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
 
     scheduler.stop_all()
-        .map_err(|e| format!("Failed to stop all tasks: {}", e))
+        .with_context("Failed to stop all tasks")
 }
 
 /// Get scheduler statistics
@@ -413,7 +414,7 @@ pub fn parallel_stop_all(
 pub fn parallel_get_scheduler_stats(
     state: State<ParallelState>,
 ) -> Result<SchedulerStats, String> {
-    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_ref()
@@ -427,14 +428,14 @@ pub fn parallel_get_scheduler_stats(
 pub fn parallel_get_pool_stats(
     state: State<ParallelState>,
 ) -> Result<PoolStats, String> {
-    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_ref()
         .ok_or("Scheduler not initialized")?;
 
     scheduler.get_pool_stats()
-        .map_err(|e| format!("Failed to get pool stats: {}", e))
+        .with_context("Failed to get pool stats")
 }
 
 /// Check for resource violations
@@ -442,14 +443,14 @@ pub fn parallel_get_pool_stats(
 pub fn parallel_check_violations(
     state: State<ParallelState>,
 ) -> Result<Vec<String>, String> {
-    let mut scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_mut()
         .ok_or("Scheduler not initialized")?;
 
     scheduler.check_violations()
-        .map_err(|e| format!("Failed to check violations: {}", e))
+        .with_context("Failed to check violations")
 }
 
 /// Get real-time in-memory logs for an agent from the pool
@@ -459,7 +460,7 @@ pub fn parallel_get_agent_logs(
     state: State<ParallelState>,
     agent_id: String,
 ) -> Result<Vec<crate::models::LogEntry>, String> {
-    let scheduler = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let scheduler = state.scheduler.lock().with_context("Lock error")?;
 
     let scheduler = scheduler
         .as_ref()
@@ -480,18 +481,18 @@ pub fn parallel_poll_completed(
 
     // Poll the pool for completed agents (scoped to release lock)
     let completed = {
-        let scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let scheduler_guard = state.scheduler.lock().with_context("Lock error")?;
         let scheduler = scheduler_guard
             .as_ref()
             .ok_or("Scheduler not initialized")?;
 
         scheduler.poll_completed()
-            .map_err(|e| format!("Failed to poll completed agents: {}", e))?
+            .with_context("Failed to poll completed agents")?
     };
 
     // Update database and emit events for each completed agent
     {
-        let db = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let db = db.lock().with_context("Lock error")?;
 
         for agent in &completed {
             log::info!("[Parallel] Agent {} completed with exit code {}, {} logs",
@@ -556,7 +557,7 @@ pub fn parallel_poll_completed(
 
     // Mark tasks as completed in scheduler (need mutable access)
     {
-        let mut scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut scheduler_guard = state.scheduler.lock().with_context("Lock error")?;
         if let Some(scheduler) = scheduler_guard.as_mut() {
             for agent in &completed {
                 if agent.exit_code == 0 {
@@ -579,14 +580,14 @@ pub fn worktree_allocate(
     task_id: String,
     branch: String,
 ) -> Result<WorktreeAllocation, String> {
-    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut coordinator = state.coordinator.lock().with_context("Lock error")?;
 
     let coordinator = coordinator
         .as_mut()
         .ok_or("Coordinator not initialized")?;
 
     coordinator.allocate_worktree(&agent_id, &task_id, &branch)
-        .map_err(|e| format!("Failed to allocate worktree: {}", e))
+        .with_context("Failed to allocate worktree")
 }
 
 /// Deallocate worktree
@@ -595,14 +596,14 @@ pub fn worktree_deallocate(
     state: State<ParallelState>,
     worktree_path: String,
 ) -> Result<(), String> {
-    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut coordinator = state.coordinator.lock().with_context("Lock error")?;
 
     let coordinator = coordinator
         .as_mut()
         .ok_or("Coordinator not initialized")?;
 
     coordinator.deallocate_worktree(&worktree_path)
-        .map_err(|e| format!("Failed to deallocate worktree: {}", e))
+        .with_context("Failed to deallocate worktree")
 }
 
 /// Deallocate worktree by agent ID
@@ -611,14 +612,14 @@ pub fn worktree_deallocate_by_agent(
     state: State<ParallelState>,
     agent_id: String,
 ) -> Result<(), String> {
-    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut coordinator = state.coordinator.lock().with_context("Lock error")?;
 
     let coordinator = coordinator
         .as_mut()
         .ok_or("Coordinator not initialized")?;
 
     coordinator.deallocate_by_agent(&agent_id)
-        .map_err(|e| format!("Failed to deallocate worktree: {}", e))
+        .with_context("Failed to deallocate worktree")
 }
 
 /// Get all worktree allocations
@@ -626,7 +627,7 @@ pub fn worktree_deallocate_by_agent(
 pub fn worktree_get_allocations(
     state: State<ParallelState>,
 ) -> Result<Vec<WorktreeAllocation>, String> {
-    let coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let coordinator = state.coordinator.lock().with_context("Lock error")?;
 
     let coordinator = coordinator
         .as_ref()
@@ -640,14 +641,14 @@ pub fn worktree_get_allocations(
 pub fn worktree_cleanup_orphaned(
     state: State<ParallelState>,
 ) -> Result<Vec<String>, String> {
-    let mut coordinator = state.coordinator.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut coordinator = state.coordinator.lock().with_context("Lock error")?;
 
     let coordinator = coordinator
         .as_mut()
         .ok_or("Coordinator not initialized")?;
 
     coordinator.cleanup_orphaned()
-        .map_err(|e| format!("Failed to cleanup orphaned worktrees: {}", e))
+        .with_context("Failed to cleanup orphaned worktrees")
 }
 
 /// Detect conflicts between branches
@@ -656,14 +657,14 @@ pub fn conflicts_detect(
     state: State<ParallelState>,
     branches: Vec<(String, String)>, // (branch_name, agent_id)
 ) -> Result<Vec<MergeConflict>, String> {
-    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let detector = state.detector.lock().with_context("Lock error")?;
 
     let detector = detector
         .as_ref()
         .ok_or("Conflict detector not initialized")?;
 
     detector.detect_all_conflicts(branches)
-        .map_err(|e| format!("Failed to detect conflicts: {}", e))
+        .with_context("Failed to detect conflicts")
 }
 
 /// Check if branches can merge safely
@@ -673,14 +674,14 @@ pub fn conflicts_can_merge_safely(
     branch1: String,
     branch2: String,
 ) -> Result<bool, String> {
-    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let detector = state.detector.lock().with_context("Lock error")?;
 
     let detector = detector
         .as_ref()
         .ok_or("Conflict detector not initialized")?;
 
     detector.can_merge_safely(&branch1, &branch2)
-        .map_err(|e| format!("Failed to check merge safety: {}", e))
+        .with_context("Failed to check merge safety")
 }
 
 /// Get conflict summary
@@ -689,7 +690,7 @@ pub fn conflicts_get_summary(
     state: State<ParallelState>,
     conflicts: Vec<MergeConflict>,
 ) -> Result<ConflictSummary, String> {
-    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let detector = state.detector.lock().with_context("Lock error")?;
 
     let detector = detector
         .as_ref()
@@ -706,14 +707,14 @@ pub fn conflicts_resolve(
     strategy: ConflictResolutionStrategy,
     base_branch: String,
 ) -> Result<ConflictResolutionResult, String> {
-    let detector = state.detector.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let detector = state.detector.lock().with_context("Lock error")?;
 
     let detector = detector
         .as_ref()
         .ok_or("Conflict detector not initialized")?;
 
     detector.resolve_conflict(&conflict, strategy, &base_branch)
-        .map_err(|e| format!("Failed to resolve conflict: {}", e))
+        .with_context("Failed to resolve conflict")
 }
 
 #[cfg(test)]

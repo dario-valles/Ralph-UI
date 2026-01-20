@@ -5,14 +5,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { projectApi } from '@/lib/tauri-api'
+import { asyncAction, type AsyncState } from '@/lib/store-utils'
 import type { Project } from '@/types'
 export type { Project }
 
-interface ProjectState {
+interface ProjectState extends AsyncState {
   projects: Project[]
   activeProjectId: string | null
-  loading: boolean
-  error: string | null
 }
 
 interface ProjectActions {
@@ -57,16 +56,10 @@ export const useProjectStore = create<ProjectStore>()(
 
       // Load all projects from backend
       loadProjects: async () => {
-        set({ loading: true, error: null })
-        try {
+        await asyncAction(set, async () => {
           const projects = await projectApi.getAll()
-          set({ projects, loading: false })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to load projects',
-            loading: false,
-          })
-        }
+          return { projects }
+        })
       },
 
       // Register (or get) a project from a folder path

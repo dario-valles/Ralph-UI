@@ -3,7 +3,7 @@
 use crate::database::Database;
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
 use crate::models::{Agent, AgentStatus, LogEntry};
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use sysinfo::{System, Pid};
@@ -17,7 +17,7 @@ pub fn create_agent(
 ) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.create_agent(&agent)
-        .map_err(|e| format!("Failed to create agent: {}", e))
+        .with_context("Failed to create agent")
 }
 
 /// Get an agent by ID
@@ -28,7 +28,7 @@ pub fn get_agent(
 ) -> Result<Option<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_agent(&agent_id)
-        .map_err(|e| format!("Failed to get agent: {}", e))
+        .with_context("Failed to get agent")
 }
 
 /// Get all agents for a session
@@ -39,7 +39,7 @@ pub fn get_agents_for_session(
 ) -> Result<Vec<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_agents_for_session(&session_id)
-        .map_err(|e| format!("Failed to get agents for session: {}", e))
+        .with_context("Failed to get agents for session")
 }
 
 /// Get all agents for a task
@@ -50,7 +50,7 @@ pub fn get_agents_for_task(
 ) -> Result<Vec<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_agents_for_task(&task_id)
-        .map_err(|e| format!("Failed to get agents for task: {}", e))
+        .with_context("Failed to get agents for task")
 }
 
 /// Get active agents for a session
@@ -61,7 +61,7 @@ pub fn get_active_agents(
 ) -> Result<Vec<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_active_agents(&session_id)
-        .map_err(|e| format!("Failed to get active agents: {}", e))
+        .with_context("Failed to get active agents")
 }
 
 /// Get ALL active agents across all sessions (for Mission Control dashboard)
@@ -71,7 +71,7 @@ pub fn get_all_active_agents(
 ) -> Result<Vec<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_all_active_agents()
-        .map_err(|e| format!("Failed to get all active agents: {}", e))
+        .with_context("Failed to get all active agents")
 }
 
 /// Update agent status
@@ -87,7 +87,7 @@ pub fn update_agent_status(
     // Get the current agent to capture old status and session_id
     let agent = db
         .get_agent(&agent_id)
-        .map_err(|e| format!("Failed to get agent: {}", e))?
+        .with_context("Failed to get agent")?
         .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
 
     let old_status = format!("{:?}", agent.status).to_lowercase();
@@ -95,7 +95,7 @@ pub fn update_agent_status(
 
     // Update the status in the database
     db.update_agent_status(&agent_id, &status)
-        .map_err(|e| format!("Failed to update agent status: {}", e))?;
+        .with_context("Failed to update agent status")?;
 
     // Emit the status changed event
     let payload = AgentStatusChangedPayload {
@@ -124,7 +124,7 @@ pub fn update_agent_metrics(
 ) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.update_agent_metrics(&agent_id, tokens, cost, iteration_count)
-        .map_err(|e| format!("Failed to update agent metrics: {}", e))
+        .with_context("Failed to update agent metrics")
 }
 
 /// Update agent process ID
@@ -136,7 +136,7 @@ pub fn update_agent_process_id(
 ) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.update_agent_process_id(&agent_id, process_id)
-        .map_err(|e| format!("Failed to update agent process ID: {}", e))
+        .with_context("Failed to update agent process ID")
 }
 
 /// Delete an agent
@@ -147,7 +147,7 @@ pub fn delete_agent(
 ) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.delete_agent(&agent_id)
-        .map_err(|e| format!("Failed to delete agent: {}", e))
+        .with_context("Failed to delete agent")
 }
 
 /// Add a log entry for an agent
@@ -159,7 +159,7 @@ pub fn add_agent_log(
 ) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.add_log(&agent_id, &log)
-        .map_err(|e| format!("Failed to add log: {}", e))
+        .with_context("Failed to add log")
 }
 
 /// Get all logs for an agent
@@ -170,7 +170,7 @@ pub fn get_agent_logs(
 ) -> Result<Vec<LogEntry>, String> {
     let db = lock_db(&db)?;
     db.get_logs_for_agent(&agent_id)
-        .map_err(|e| format!("Failed to get logs: {}", e))
+        .with_context("Failed to get logs")
 }
 
 /// Result of cleaning up stale agents
@@ -197,7 +197,7 @@ pub fn cleanup_stale_agents(
 
     // Get all active agents
     let active_agents = db.get_all_active_agents()
-        .map_err(|e| format!("Failed to get active agents: {}", e))?;
+        .with_context("Failed to get active agents")?;
 
     if active_agents.is_empty() {
         log::debug!("[Agents] No active agents to cleanup");

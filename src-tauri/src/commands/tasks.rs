@@ -5,7 +5,7 @@ use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
 use crate::session_files;
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
@@ -30,7 +30,7 @@ pub async fn create_task(
     let conn = db.get_connection();
 
     database::tasks::create_task(conn, &session_id, &task)
-        .map_err(|e| format!("Failed to create task: {}", e))?;
+        .with_context("Failed to create task")?;
 
     Ok(task)
 }
@@ -44,7 +44,7 @@ pub async fn get_task(
     let conn = db.get_connection();
 
     database::tasks::get_task(conn, &task_id)
-        .map_err(|e| format!("Failed to get task: {}", e))
+        .with_context("Failed to get task")
 }
 
 #[tauri::command]
@@ -56,7 +56,7 @@ pub async fn get_tasks_for_session(
     let conn = db.get_connection();
 
     database::tasks::get_tasks_for_session(conn, &session_id)
-        .map_err(|e| format!("Failed to get tasks: {}", e))
+        .with_context("Failed to get tasks")
 }
 
 #[tauri::command]
@@ -68,7 +68,7 @@ pub async fn update_task(
     let conn = db.get_connection();
 
     database::tasks::update_task(conn, &task)
-        .map_err(|e| format!("Failed to update task: {}", e))?;
+        .with_context("Failed to update task")?;
 
     Ok(task)
 }
@@ -82,7 +82,7 @@ pub async fn delete_task(
     let conn = db.get_connection();
 
     database::tasks::delete_task(conn, &task_id)
-        .map_err(|e| format!("Failed to delete task: {}", e))
+        .with_context("Failed to delete task")
 }
 
 #[tauri::command]
@@ -97,17 +97,17 @@ pub async fn update_task_status(
     let conn = db.get_connection();
 
     let current_task = database::tasks::get_task(conn, &task_id)
-        .map_err(|e| format!("Failed to get task: {}", e))?;
+        .with_context("Failed to get task")?;
 
     let old_status = format!("{:?}", current_task.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
     // Validate state transition
     crate::models::state_machine::transition_state(current_task.status, status)
-        .map_err(|e| format!("Invalid state transition: {}", e))?;
+        .with_context("Invalid state transition")?;
 
     database::tasks::update_task_status(conn, &task_id, status)
-        .map_err(|e| format!("Failed to update task status: {}", e))?;
+        .with_context("Failed to update task status")?;
 
     // Get the session_id for this task
     let session_id = database::tasks::get_session_id_for_task(conn, &task_id)
@@ -176,7 +176,7 @@ pub async fn import_prd(
     } else {
         parse_prd_auto(&content)
     }
-    .map_err(|e| format!("Failed to parse PRD: {}", e))?;
+    .with_context("Failed to parse PRD")?;
 
     // Convert PRD tasks to database tasks
     let db = lock_db(&db)?;
@@ -203,7 +203,7 @@ pub async fn import_prd(
         };
 
         database::tasks::create_task(conn, &session_id, &task)
-            .map_err(|e| format!("Failed to create task: {}", e))?;
+            .with_context("Failed to create task")?;
 
         tasks.push(task);
     }

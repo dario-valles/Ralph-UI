@@ -46,6 +46,16 @@ vi.mock('@/lib/parallel-api', () => ({
   parallelScheduleNext: vi.fn(),
   isGitRepository: vi.fn().mockResolvedValue(true),
   initGitRepository: vi.fn(),
+  getSchedulingStrategyLabel: vi.fn((strategy: string) => {
+    const labels: Record<string, string> = {
+      sequential: 'Sequential',
+      dependency_first: 'Dependency First',
+      priority: 'Priority Order',
+      fifo: 'First In First Out',
+      cost_first: 'Highest Cost First',
+    }
+    return labels[strategy] || strategy
+  }),
 }))
 
 // Mock useAvailableModels hook

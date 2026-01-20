@@ -2,7 +2,7 @@
 
 use crate::database::{Database, projects};
 use crate::session_files;
-use crate::utils::lock_db;
+use crate::utils::{lock_db, ResultExt};
 use std::path::Path;
 use std::sync::Mutex;
 use tauri::State;
@@ -21,7 +21,7 @@ pub fn register_project(
     let conn = db.get_connection();
 
     let project = projects::upsert_project(conn, &path, name.as_deref())
-        .map_err(|e| e.to_string())?;
+        .with_context("Failed to register project")?;
 
     // Import any sessions from the project's .ralph-ui/sessions/ directory
     // This ensures sessions saved to files are available in the database
@@ -58,7 +58,7 @@ pub fn get_project(
     let conn = db.get_connection();
 
     projects::get_project(conn, &project_id)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to get project")
 }
 
 /// Get a project by path
@@ -71,7 +71,7 @@ pub fn get_project_by_path(
     let conn = db.get_connection();
 
     projects::get_project_by_path(conn, &path)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to get project by path")
 }
 
 /// Get all projects
@@ -83,7 +83,7 @@ pub fn get_all_projects(
     let conn = db.get_connection();
 
     projects::get_all_projects(conn)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to get all projects")
 }
 
 /// Get recent projects (limited)
@@ -96,7 +96,7 @@ pub fn get_recent_projects(
     let conn = db.get_connection();
 
     projects::get_recent_projects(conn, limit.unwrap_or(5))
-        .map_err(|e| e.to_string())
+        .with_context("Failed to get recent projects")
 }
 
 /// Get favorite projects
@@ -108,7 +108,7 @@ pub fn get_favorite_projects(
     let conn = db.get_connection();
 
     projects::get_favorite_projects(conn)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to get favorite projects")
 }
 
 /// Update project name
@@ -122,7 +122,7 @@ pub fn update_project_name(
     let conn = db.get_connection();
 
     projects::update_project_name(conn, &project_id, &name)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to update project name")
 }
 
 /// Toggle project favorite status
@@ -135,7 +135,7 @@ pub fn toggle_project_favorite(
     let conn = db.get_connection();
 
     projects::toggle_project_favorite(conn, &project_id)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to toggle project favorite")
 }
 
 /// Set project favorite status explicitly
@@ -149,7 +149,7 @@ pub fn set_project_favorite(
     let conn = db.get_connection();
 
     projects::set_project_favorite(conn, &project_id, is_favorite)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to set project favorite")
 }
 
 /// Touch project (update last_used_at)
@@ -162,7 +162,7 @@ pub fn touch_project(
     let conn = db.get_connection();
 
     projects::touch_project(conn, &project_id)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to touch project")
 }
 
 /// Delete a project
@@ -175,5 +175,5 @@ pub fn delete_project(
     let conn = db.get_connection();
 
     projects::delete_project(conn, &project_id)
-        .map_err(|e| e.to_string())
+        .with_context("Failed to delete project")
 }
