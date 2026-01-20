@@ -253,6 +253,11 @@ pub async fn execute_prd(
     // 2. Get tasks from extracted_structure (AI-extracted during export) or parse markdown
     let tasks_from_structure = prd.extracted_structure.as_ref()
         .and_then(|json| serde_json::from_str::<crate::models::ExtractedPRDStructure>(json).ok())
+        .map(|mut s| {
+            // Apply post-processing to fix priorities and infer dependencies
+            crate::commands::prd_chat::post_process_extracted_tasks(&mut s);
+            s
+        })
         .filter(|s| !s.tasks.is_empty());
 
     let parsed_prd = if let Some(structure) = tasks_from_structure {
@@ -266,6 +271,8 @@ pub async fn execute_prd(
                     t.title.clone(),
                     t.description.clone(),
                 );
+                // Preserve the original task ID for dependency relationships
+                task = task.with_id(t.id.clone());
                 if let Some(p) = t.priority {
                     task = task.with_priority(p);
                 }
@@ -325,11 +332,28 @@ pub async fn execute_prd(
         return Err("No tasks found in PRD. Please add tasks with descriptions before executing.".to_string());
     }
 
+    // Prefix task IDs with short session ID to make them unique across executions
+    let short_session_id = &session_id[..8.min(session_id.len())];
+
+    // Build a map of original ID -> new session-prefixed ID for dependency remapping
+    let id_map: std::collections::HashMap<String, String> = parsed_prd.tasks.iter()
+        .filter_map(|t| t.id.as_ref().map(|id| (id.clone(), format!("{}-{}", short_session_id, id))))
+        .collect();
+
     let mut task_ids = vec![];
     let mut warnings: Vec<String> = vec![];
 
     for prd_task in parsed_prd.tasks {
-        let task_id = Uuid::new_v4().to_string();
+        // Use session-prefixed task ID if original ID available, otherwise generate new UUID
+        let task_id = match &prd_task.id {
+            Some(orig_id) => format!("{}-{}", short_session_id, orig_id),
+            None => Uuid::new_v4().to_string(),
+        };
+
+        // Remap dependencies to use new session-prefixed IDs
+        let remapped_deps: Vec<String> = prd_task.dependencies.iter()
+            .map(|dep| id_map.get(dep).cloned().unwrap_or_else(|| dep.clone()))
+            .collect();
 
         let description = if prd_task.description.trim().is_empty() {
             warnings.push(format!("Task '{}' has no description, using title as prompt", prd_task.title));
@@ -350,8 +374,8 @@ pub async fn execute_prd(
             title,
             description,
             status: crate::models::TaskStatus::Pending,
-            priority: prd_task.priority.unwrap_or(0),
-            dependencies: prd_task.dependencies,
+            priority: prd_task.priority.unwrap_or(3),
+            dependencies: remapped_deps,
             assigned_agent: None,
             estimated_tokens: prd_task.estimated_tokens,
             actual_tokens: None,

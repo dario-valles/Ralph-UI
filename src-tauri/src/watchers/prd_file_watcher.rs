@@ -251,10 +251,14 @@ fn handle_file_event(
 }
 
 /// Generate the plan file path for a session
+/// Each session gets a unique file by including the session ID in the filename
 pub fn get_prd_plan_file_path(project_path: &str, session_id: &str, title: Option<&str>) -> PathBuf {
+    // Use first 8 chars of session ID for uniqueness while keeping filename readable
+    let short_id = &session_id[..8.min(session_id.len())];
+
     let prd_name = title
-        .map(|t| sanitize_filename(t))
-        .unwrap_or_else(|| format!("prd-{}", session_id));
+        .map(|t| format!("{}-{}", sanitize_filename(t), short_id))
+        .unwrap_or_else(|| format!("prd-{}", short_id));
 
     Path::new(project_path)
         .join(".ralph-ui")
@@ -263,7 +267,7 @@ pub fn get_prd_plan_file_path(project_path: &str, session_id: &str, title: Optio
 }
 
 /// Sanitize a string for use as a filename
-fn sanitize_filename(name: &str) -> String {
+pub fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| {
             if c.is_alphanumeric() || c == '-' || c == '_' {
@@ -294,10 +298,16 @@ mod tests {
 
     #[test]
     fn test_get_prd_plan_file_path() {
-        let path = get_prd_plan_file_path("/projects/myapp", "session-123", Some("My Feature PRD"));
-        assert!(path.to_string_lossy().contains(".ralph-ui/prds/my-feature-prd.md"));
+        // With title: includes sanitized title + short session ID
+        let path = get_prd_plan_file_path("/projects/myapp", "session-123-abc", Some("My Feature PRD"));
+        assert!(path.to_string_lossy().contains(".ralph-ui/prds/my-feature-prd-session-.md"));
 
-        let path_no_title = get_prd_plan_file_path("/projects/myapp", "session-123", None);
-        assert!(path_no_title.to_string_lossy().contains("prd-session-123.md"));
+        // Without title: uses short session ID only
+        let path_no_title = get_prd_plan_file_path("/projects/myapp", "session-123-abc", None);
+        assert!(path_no_title.to_string_lossy().contains("prd-session-.md"));
+
+        // UUID-style session ID
+        let path_uuid = get_prd_plan_file_path("/projects/myapp", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Some("Test"));
+        assert!(path_uuid.to_string_lossy().contains("test-a1b2c3d4.md"));
     }
 }

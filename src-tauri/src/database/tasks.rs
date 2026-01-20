@@ -4,6 +4,88 @@ use crate::models::Task;
 use rusqlite::{params, Connection, Result};
 use chrono::Utc;
 
+/// Clean markdown table syntax from a description string
+/// This handles cases where the AI extracted raw table rows instead of clean descriptions
+fn clean_task_description(description: &str) -> String {
+    let trimmed = description.trim();
+
+    // If it doesn't contain table syntax, return as-is
+    if !trimmed.contains('|') {
+        return trimmed.to_string();
+    }
+
+    // Check if this looks like a markdown table
+    let looks_like_table = trimmed.starts_with('|')
+        || trimmed.contains("|---|")
+        || trimmed.contains("| # |")
+        || trimmed.contains("| Task ID |")
+        || trimmed.contains("| Status |");
+
+    if !looks_like_table {
+        return trimmed.to_string();
+    }
+
+    // Try to extract actual description from table format
+    let mut cleaned_parts: Vec<String> = Vec::new();
+
+    for line in trimmed.lines() {
+        let line = line.trim();
+
+        // Skip header/separator rows
+        if line.is_empty()
+            || line.contains("|---|")
+            || line.contains("| # |")
+            || line.contains("| Task ID |")
+            || line.contains("| Task |")
+            || line.contains("| Status |")
+            || line.starts_with("|---")
+        {
+            continue;
+        }
+
+        // Split by pipe and try to find meaningful content
+        if line.starts_with('|') {
+            let cells: Vec<&str> = line.split('|')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            // For a typical task table: [#, Task ID, Task Title, Description, Status]
+            // The Description is usually index 3 (4th column)
+            if cells.len() >= 4 {
+                let desc_candidate = cells[3];
+                if !desc_candidate.is_empty()
+                    && !desc_candidate.chars().all(|c| c == '-' || c.is_whitespace())
+                    && !desc_candidate.starts_with("P")
+                {
+                    cleaned_parts.push(desc_candidate.to_string());
+                }
+            } else if cells.len() >= 2 {
+                // Try to find the longest cell as it's likely the description
+                if let Some(longest) = cells.iter()
+                    .filter(|s| !s.chars().all(|c| c == '-' || c.is_whitespace() || c.is_numeric()))
+                    .max_by_key(|s| s.len())
+                {
+                    if longest.len() > 10 {
+                        cleaned_parts.push(longest.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if cleaned_parts.is_empty() {
+        // Fallback: strip all pipe characters and clean up
+        trimmed
+            .replace('|', " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        cleaned_parts.join(" ")
+    }
+}
+
 /// Create a new task in the database
 pub fn create_task(conn: &Connection, session_id: &str, task: &Task) -> Result<()> {
     let dependencies_json = serde_json::to_string(&task.dependencies)
@@ -57,10 +139,14 @@ pub fn get_task(conn: &Connection, task_id: &str) -> Result<Task> {
             let started_at: Option<String> = row.get(9)?;
             let completed_at: Option<String> = row.get(10)?;
 
+            // Clean description to remove any markdown table syntax
+            let raw_description: String = row.get(2)?;
+            let description = clean_task_description(&raw_description);
+
             Ok(Task {
                 id: row.get(0)?,
                 title: row.get(1)?,
-                description: row.get(2)?,
+                description,
                 status,
                 priority: row.get(4)?,
                 dependencies,
@@ -99,10 +185,14 @@ pub fn get_tasks_for_session(conn: &Connection, session_id: &str) -> Result<Vec<
         let started_at: Option<String> = row.get(9)?;
         let completed_at: Option<String> = row.get(10)?;
 
+        // Clean description to remove any markdown table syntax
+        let raw_description: String = row.get(2)?;
+        let description = clean_task_description(&raw_description);
+
         Ok(Task {
             id: row.get(0)?,
             title: row.get(1)?,
-            description: row.get(2)?,
+            description,
             status,
             priority: row.get(4)?,
             dependencies,

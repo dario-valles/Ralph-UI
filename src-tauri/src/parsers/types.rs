@@ -13,6 +13,7 @@ pub struct PRDDocument {
 /// Represents a task from a PRD
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PRDTask {
+    pub id: Option<String>,
     pub title: String,
     pub description: String,
     pub priority: Option<i32>,
@@ -24,6 +25,7 @@ pub struct PRDTask {
 impl PRDTask {
     pub fn new(title: String, description: String) -> Self {
         Self {
+            id: None,
             title,
             description,
             priority: None,
@@ -31,6 +33,11 @@ impl PRDTask {
             tags: Vec::new(),
             estimated_tokens: None,
         }
+    }
+
+    pub fn with_id(mut self, id: String) -> Self {
+        self.id = Some(id);
+        self
     }
 
     pub fn with_priority(mut self, priority: i32) -> Self {
