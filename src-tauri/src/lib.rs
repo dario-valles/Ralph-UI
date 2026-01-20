@@ -680,16 +680,20 @@ async fn forward_pty_data_events(
     mut rx: mpsc::UnboundedReceiver<agents::AgentPtyDataEvent>,
 ) {
     log::debug!("PTY data event forwarder started");
+    println!("[DEBUG] PTY data event forwarder started");
 
     while let Some(event) = rx.recv().await {
+        println!("[DEBUG] Forwarding PTY data event for agent {} ({} bytes)", event.agent_id, event.data.len());
         // Emit as Tauri event that the terminal component listens for
         if let Err(e) = app_handle.emit("agent-pty-data", serde_json::json!({
             "agentId": event.agent_id,
             "data": event.data,
         })) {
             log::warn!("Failed to emit PTY data event: {}", e);
+            println!("[DEBUG] Failed to emit PTY data event: {}", e);
         }
     }
 
     log::debug!("PTY data event forwarder stopped");
+    println!("[DEBUG] PTY data event forwarder stopped");
 }
