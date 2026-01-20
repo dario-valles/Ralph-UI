@@ -14,6 +14,8 @@
     "pty:allow-write",
     "pty:allow-resize",
     "pty:allow-kill",
-    "pty:allow-exitstatus"
+    "pty:allow-exitstatus",
+    "shell:default",
+    "shell:allow-open"
   ]
 }

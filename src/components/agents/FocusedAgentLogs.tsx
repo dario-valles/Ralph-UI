@@ -187,7 +187,7 @@ export function FocusedAgentLogs({
       minute: '2-digit',
       second: '2-digit',
       fractionalSecondDigits: 3,
-    })
+    } as Intl.DateTimeFormatOptions)
   }
 
   const selectedAgent = agents.find((a) => a.id === activeAgentId)

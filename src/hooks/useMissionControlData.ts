@@ -14,7 +14,6 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { missionControlApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import { cleanupStaleAgents } from '@/lib/agent-api'
-import { parallelPollCompleted, parallelHandleAgentResult } from '@/lib/parallel-api'
 import { isTauri } from '@/lib/tauri-check'
 
 // ============================================================================
@@ -326,7 +325,7 @@ export function useAllActiveAgents(): {
           sessionId: agent.sessionId,
           taskId: agent.taskId,
           status: agent.status as AgentStatus,
-          processId: agent.processId || null,
+          processId: agent.processId || undefined,
           worktreePath: agent.worktreePath,
           branch: agent.branch,
           iterationCount: agent.iterationCount,
@@ -504,47 +503,20 @@ export function useTauriEventListeners(onRefresh: () => void) {
       onRefresh()
     })
 
-    // Register agent completed listener - triggers retry logic and schedules next task
-    registerListener(TAURI_EVENTS.AGENT_COMPLETED, async (payload) => {
+    // Register agent completed listener
+    registerListener(TAURI_EVENTS.AGENT_COMPLETED, (payload) => {
       const event = payload as AgentCompletionEvent
       console.log('[MissionControl] Agent completed:', event)
-      try {
-        // Handle the completion through the scheduler (marks task complete, schedules next)
-        await parallelHandleAgentResult(
-          event.agentId,
-          event.taskId,
-          event.sessionId,
-          true // success
-        )
-        // Trigger refresh to update UI
-        onRefresh()
-      } catch (err) {
-        console.error('[MissionControl] Failed to handle agent completion:', err)
-        // Still refresh to show current state
-        onRefresh()
-      }
+      // Trigger refresh to update UI
+      onRefresh()
     })
 
-    // Register agent failed listener - triggers retry logic
-    registerListener(TAURI_EVENTS.AGENT_FAILED, async (payload) => {
+    // Register agent failed listener
+    registerListener(TAURI_EVENTS.AGENT_FAILED, (payload) => {
       const event = payload as AgentFailedEvent
       console.log('[MissionControl] Agent failed:', event)
-      try {
-        // Handle the failure through the scheduler (triggers retry if configured)
-        await parallelHandleAgentResult(
-          event.agentId,
-          event.taskId,
-          event.sessionId,
-          false, // failure
-          event.error
-        )
-        // Trigger refresh to update UI
-        onRefresh()
-      } catch (err) {
-        console.error('[MissionControl] Failed to handle agent failure:', err)
-        // Still refresh to show current state
-        onRefresh()
-      }
+      // Trigger refresh to update UI
+      onRefresh()
     })
 
     // Cleanup listeners on unmount
@@ -573,24 +545,15 @@ export function useMissionControlRefresh(refreshAgents: () => Promise<void>) {
   const fetchSessions = useSessionStore(s => s.fetchSessions)
 
   const refreshAll = useCallback(async () => {
-    // First try to poll completed agents via scheduler (saves logs to DB)
-    // This only works if the scheduler is initialized
+    // Clean up stale agents
     try {
-      const completed = await parallelPollCompleted()
-      if (completed.length > 0) {
-        console.log('[MissionControl] Completed agents (with logs):', completed)
+      const cleaned = await cleanupStaleAgents()
+      if (cleaned.length > 0) {
+        console.log('[MissionControl] Cleaned up stale agents:', cleaned)
       }
-    } catch {
-      // Scheduler not initialized, fall back to direct cleanup
-      try {
-        const cleaned = await cleanupStaleAgents()
-        if (cleaned.length > 0) {
-          console.log('[MissionControl] Cleaned up stale agents:', cleaned)
-        }
-      } catch (err) {
-        // Log but don't fail - cleanup is best-effort
-        console.debug('[MissionControl] Cleanup check:', err)
-      }
+    } catch (err) {
+      // Log but don't fail - cleanup is best-effort
+      console.debug('[MissionControl] Cleanup check:', err)
     }
 
     // Then refresh all data from stores

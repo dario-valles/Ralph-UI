@@ -7,7 +7,6 @@ mod github;
 mod agents;
 mod utils;
 pub mod parsers;
-mod parallel;
 mod session;
 mod templates;
 mod config;
@@ -15,11 +14,13 @@ pub mod events;
 pub mod shutdown;
 pub mod watchers;
 pub mod session_files;
+pub mod ralph_loop;
 
 // Re-export models for use in commands
 pub use models::*;
 
 use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// State for rate limit event forwarding to the frontend
@@ -76,15 +77,20 @@ impl PrdFileWatcherState {
 
 /// State for AgentManager - manages PTY associations and output processing for agents
 pub struct AgentManagerState {
-    /// The agent manager instance
-    pub manager: std::sync::Mutex<agents::AgentManager>,
+    /// The agent manager instance (Arc-wrapped for sharing with Ralph loop)
+    pub manager: Arc<std::sync::Mutex<agents::AgentManager>>,
 }
 
 impl AgentManagerState {
     pub fn new() -> Self {
         Self {
-            manager: std::sync::Mutex::new(agents::AgentManager::new()),
+            manager: Arc::new(std::sync::Mutex::new(agents::AgentManager::new())),
         }
+    }
+
+    /// Get a clone of the Arc for sharing with async tasks
+    pub fn clone_manager(&self) -> Arc<std::sync::Mutex<agents::AgentManager>> {
+        self.manager.clone()
     }
 }
 
@@ -125,9 +131,6 @@ pub fn run() {
     // Initialize git state
     let git_state = commands::git::GitState::new();
 
-    // Initialize parallel state
-    let parallel_state = commands::parallel::ParallelState::new();
-
     // Initialize config state
     let config_state = commands::config::ConfigState::new();
 
@@ -152,6 +155,9 @@ pub fn run() {
     // Initialize AgentManager state for PTY tracking
     let agent_manager_state = AgentManagerState::new();
 
+    // Initialize Ralph loop state for external loop orchestration
+    let ralph_loop_state = commands::ralph_loop::RalphLoopManagerState::new();
+
     // Log startup info
     log::info!("Ralph-UI starting up");
     log::info!("Database path: {}", db_path);
@@ -159,7 +165,6 @@ pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(db))
         .manage(git_state)
-        .manage(parallel_state)
         .manage(config_state)
         .manage(trace_state)
         .manage(shutdown_state)
@@ -168,6 +173,7 @@ pub fn run() {
         .manage(model_cache_state)
         .manage(prd_file_watcher_state)
         .manage(agent_manager_state)
+        .manage(ralph_loop_state)
         .setup(move |app| {
             // Spawn task to forward rate limit events to Tauri frontend events
             let app_handle = app.handle().clone();
@@ -189,6 +195,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_pty::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::greet,
             commands::create_session,
@@ -257,37 +264,12 @@ pub fn run() {
             commands::git_merge_branch,
             commands::git_merge_abort,
             commands::git_check_merge_conflicts,
-            // Auto-merge commands
-            commands::get_mergeable_branches,
-            commands::auto_merge_completed_branches,
-            commands::merge_branch_with_ai,
+            // GitHub commands
             commands::github_create_pull_request,
             commands::github_get_pull_request,
             commands::github_list_pull_requests,
             commands::github_get_issue,
             commands::github_list_issues,
-            commands::init_parallel_scheduler,
-            commands::parallel_add_task,
-            commands::parallel_add_tasks,
-            commands::parallel_schedule_next,
-            commands::parallel_complete_task,
-            commands::parallel_fail_task,
-            commands::parallel_handle_agent_result,
-            commands::parallel_stop_all,
-            commands::parallel_get_scheduler_stats,
-            commands::parallel_get_pool_stats,
-            commands::parallel_check_violations,
-            commands::parallel_poll_completed,
-            commands::parallel_get_agent_logs,
-            commands::worktree_allocate,
-            commands::worktree_deallocate,
-            commands::worktree_deallocate_by_agent,
-            commands::worktree_get_allocations,
-            commands::worktree_cleanup_orphaned,
-            commands::conflicts_detect,
-            commands::conflicts_can_merge_safely,
-            commands::conflicts_get_summary,
-            commands::conflicts_resolve,
             commands::export_session_json,
             commands::create_session_template,
             commands::get_session_templates,
@@ -364,6 +346,36 @@ pub fn run() {
             commands::start_watching_prd_file,
             commands::stop_watching_prd_file,
             commands::get_prd_plan_content,
+            // Ralph loop commands
+            commands::init_ralph_prd,
+            commands::get_ralph_prd,
+            commands::get_ralph_prd_status,
+            commands::mark_ralph_story_passing,
+            commands::mark_ralph_story_failing,
+            commands::add_ralph_story,
+            commands::remove_ralph_story,
+            commands::get_ralph_progress,
+            commands::get_ralph_progress_summary,
+            commands::add_ralph_progress_note,
+            commands::clear_ralph_progress,
+            commands::get_ralph_prompt,
+            commands::set_ralph_prompt,
+            commands::start_ralph_loop,
+            commands::stop_ralph_loop,
+            commands::get_ralph_loop_state,
+            commands::get_ralph_loop_metrics,
+            commands::list_ralph_loop_executions,
+            commands::get_ralph_loop_current_agent,
+            commands::get_ralph_loop_worktree_path,
+            commands::cleanup_ralph_worktree,
+            commands::list_ralph_worktrees,
+            commands::convert_prd_to_ralph,
+            commands::has_ralph_files,
+            commands::get_ralph_files,
+            commands::get_ralph_config,
+            commands::set_ralph_config,
+            commands::init_ralph_config,
+            commands::update_ralph_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

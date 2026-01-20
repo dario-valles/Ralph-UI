@@ -365,6 +365,14 @@ impl AgentManager {
             log::info!("[AgentManager] Process stored. Total running: {}", processes.len());
         }
 
+        // For PTY mode, register a pseudo-PTY so the Terminal can connect
+        // We use the agent_id as the pty_id and store output in pty_history
+        let is_pty_mode = config.spawn_mode == AgentSpawnMode::Pty;
+        if is_pty_mode {
+            log::info!("[AgentManager] PTY mode: registering pseudo-PTY for agent {}", agent_id);
+            self.register_pty(agent_id, agent_id);
+        }
+
         // Emit log
         self.emit_log(agent_id, LogLevel::Info, format!(
             "Agent spawned with PID {} for task {} in {}",
@@ -432,6 +440,8 @@ impl AgentManager {
         if let Some(stdout) = stdout {
             let log_tx = self.log_tx.clone();
             let agent_logs = self.agent_logs.clone();
+            let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
+            let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
             let agent_id_clone = agent_id.to_string();
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
@@ -439,6 +449,23 @@ impl AgentManager {
                     match line {
                         Ok(line) => {
                             log::info!("[Agent {}] {}", agent_id_clone, line);
+
+                            // For PTY mode, also write to pty_history with newline
+                            if let Some(ref pty_hist) = pty_history {
+                                let line_with_newline = format!("{}\r\n", line);
+                                let mut hist = lock_mutex_recover(pty_hist);
+                                hist.entry(agent_id_clone.clone())
+                                    .or_insert_with(|| RingBuffer::new(1024 * 1024)) // 1MB buffer
+                                    .write(line_with_newline.as_bytes());
+
+                                // Also send via PTY data channel for real-time updates
+                                if let Some(ref tx) = pty_data_tx {
+                                    let _ = tx.send(AgentPtyDataEvent {
+                                        agent_id: agent_id_clone.clone(),
+                                        data: line_with_newline.into_bytes(),
+                                    });
+                                }
+                            }
 
                             let log_entry = LogEntry {
                                 timestamp: Utc::now(),
@@ -478,6 +505,8 @@ impl AgentManager {
             let log_tx = self.log_tx.clone();
             let rate_limit_tx = self.rate_limit_tx.clone();
             let agent_logs = self.agent_logs.clone();
+            let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
+            let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
             // Create a new detector for the thread (uses static patterns internally)
             let rate_limit_detector = RateLimitDetector::new();
             let agent_id_clone = agent_id.to_string();
@@ -488,6 +517,24 @@ impl AgentManager {
                         Ok(line) => {
                             // Log stderr as warnings (they're often important)
                             log::warn!("[Agent {}] stderr: {}", agent_id_clone, line);
+
+                            // For PTY mode, also write to pty_history (stderr in red)
+                            if let Some(ref pty_hist) = pty_history {
+                                // Use ANSI red for stderr
+                                let line_with_color = format!("\x1b[31m{}\x1b[0m\r\n", line);
+                                let mut hist = lock_mutex_recover(pty_hist);
+                                hist.entry(agent_id_clone.clone())
+                                    .or_insert_with(|| RingBuffer::new(1024 * 1024))
+                                    .write(line_with_color.as_bytes());
+
+                                // Also send via PTY data channel for real-time updates
+                                if let Some(ref tx) = pty_data_tx {
+                                    let _ = tx.send(AgentPtyDataEvent {
+                                        agent_id: agent_id_clone.clone(),
+                                        data: line_with_color.into_bytes(),
+                                    });
+                                }
+                            }
 
                             // Check for rate limits
                             if let Some(info) = rate_limit_detector.detect_in_stderr(&line) {
@@ -669,9 +716,12 @@ impl AgentManager {
                     }
                 }
 
-                // Add max turns (iterations)
-                cmd.arg("--max-turns")
-                    .arg(config.max_iterations.to_string());
+                // Add max turns (iterations) - only if greater than 0
+                // max_iterations of 0 or negative means no limit (don't pass flag)
+                if config.max_iterations > 0 {
+                    cmd.arg("--max-turns")
+                        .arg(config.max_iterations.to_string());
+                }
 
                 // Add --yes to auto-accept prompts
                 cmd.arg("--yes");
@@ -799,8 +849,11 @@ impl AgentManager {
                     }
                 }
 
-                cmd.arg("--max-turns")
-                    .arg(config.max_iterations.to_string());
+                // Add max turns (iterations) - only if greater than 0
+                if config.max_iterations > 0 {
+                    cmd.arg("--max-turns")
+                        .arg(config.max_iterations.to_string());
+                }
 
                 // Add model if specified
                 if let Some(model) = &config.model {
@@ -953,6 +1006,24 @@ impl AgentManager {
         } else {
             Err(anyhow!("Agent process not found: {}", agent_id))
         }
+    }
+
+    /// Take a child process out of the manager for external waiting
+    ///
+    /// This allows the caller to wait on the process without holding
+    /// the manager lock, preventing UI freezes.
+    pub fn take_child_process(&mut self, agent_id: &str) -> Option<std::process::Child> {
+        let mut processes = lock_mutex_recover(&self.processes);
+        processes.remove(agent_id)
+    }
+
+    /// Emit a log event for agent exit (for use after take_child_process + wait)
+    pub fn emit_agent_exit(&self, agent_id: &str, exit_code: i32) {
+        self.emit_log(
+            agent_id,
+            if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
+            format!("Agent exited with code {}", exit_code)
+        );
     }
 
     /// Emit a log event

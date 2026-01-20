@@ -8,54 +8,29 @@ import { PRDExecutionDialog } from '../PRDExecutionDialog'
 import type { RalphConfig } from '@/types'
 
 // Create mock functions
-const mockExecutePRD = vi.fn()
-const mockFetchSession = vi.fn()
-const mockFetchSessions = vi.fn()
+const mockConvertPrdToRalph = vi.fn()
 const mockConfigGet = vi.fn()
 
 // Mock the stores
 vi.mock('@/stores/prdStore', () => ({
   usePRDStore: () => ({
-    executePRD: mockExecutePRD,
-    currentPRD: { id: 'test-prd-id', projectPath: '/test/project' },
-    prds: [{ id: 'test-prd-id', projectPath: '/test/project' }],
+    currentPRD: { id: 'test-prd-id', projectPath: '/test/project', title: 'Test PRD' },
+    prds: [{ id: 'test-prd-id', projectPath: '/test/project', title: 'Test PRD' }],
   }),
 }))
 
-vi.mock('@/stores/sessionStore', () => {
-  const store = () => ({
-    fetchSession: mockFetchSession,
-    fetchSessions: mockFetchSessions,
-    sessions: [],
-  })
-  store.getState = () => ({ currentSession: null })
-  return { useSessionStore: store }
-})
+// Mock the tauri-api
+vi.mock('@/lib/tauri-api', () => ({
+  ralphLoopApi: {
+    convertPrdToRalph: (args: unknown) => mockConvertPrdToRalph(args),
+  },
+}))
 
 // Mock the config API
 vi.mock('@/lib/config-api', () => ({
   configApi: {
     get: () => mockConfigGet(),
   },
-}))
-
-// Mock parallel-api
-vi.mock('@/lib/parallel-api', () => ({
-  initParallelScheduler: vi.fn(),
-  parallelAddTasks: vi.fn(),
-  parallelScheduleNext: vi.fn(),
-  isGitRepository: vi.fn().mockResolvedValue(true),
-  initGitRepository: vi.fn(),
-  getSchedulingStrategyLabel: vi.fn((strategy: string) => {
-    const labels: Record<string, string> = {
-      sequential: 'Sequential',
-      dependency_first: 'Dependency First',
-      priority: 'Priority Order',
-      fifo: 'First In First Out',
-      cost_first: 'Highest Cost First',
-    }
-    return labels[strategy] || strategy
-  }),
 }))
 
 // Mock useAvailableModels hook
@@ -123,7 +98,7 @@ describe('PRDExecutionDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockConfigGet.mockResolvedValue(mockConfig)
-    mockFetchSessions.mockResolvedValue(undefined)
+    mockConvertPrdToRalph.mockResolvedValue(undefined)
   })
 
   it('renders dialog when open', async () => {
@@ -151,176 +126,95 @@ describe('PRDExecutionDialog', () => {
     })
   })
 
-  it('displays correct strategy from config', async () => {
+  it('displays max iterations selector', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      const strategySelect = screen.getByLabelText('Execution Strategy')
-      expect(strategySelect).toHaveValue('dependency_first')
+      const iterationsSelect = screen.getByLabelText('Max Iterations')
+      expect(iterationsSelect).toBeInTheDocument()
     })
   })
 
-  it('renders all strategy options', async () => {
+  it('displays worktree isolation option', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      expect(screen.getByText('Sequential (One at a time)')).toBeInTheDocument()
-      expect(screen.getByText('Dependency First (Parallel)')).toBeInTheDocument()
-      expect(screen.getByText('Priority Order (Parallel)')).toBeInTheDocument()
-      expect(screen.getByText('FIFO (Parallel)')).toBeInTheDocument()
-      expect(screen.getByText('Highest Cost First (Parallel)')).toBeInTheDocument()
+      expect(screen.getByText('Use Worktree Isolation')).toBeInTheDocument()
     })
   })
 
-  it('shows max parallel slider for non-sequential strategies', async () => {
+  it('displays quality gates options', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      // Config has dependency_first strategy, so slider should be visible
-      expect(screen.getByText(/Max Parallel Agents/)).toBeInTheDocument()
+      expect(screen.getByText('Run tests before marking tasks complete')).toBeInTheDocument()
+      expect(screen.getByText('Run linter before marking tasks complete')).toBeInTheDocument()
     })
   })
 
-  it('hides max parallel slider for sequential strategy', async () => {
-    const sequentialConfig = {
-      ...mockConfig,
-      execution: { ...mockConfig.execution, strategy: 'sequential' },
-    }
-    mockConfigGet.mockResolvedValue(sequentialConfig)
-
+  it('displays summary section', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      // After config loads, strategy should be sequential
-      expect(screen.queryByText(/Max Parallel Agents/)).not.toBeInTheDocument()
+      expect(screen.getByText('Summary:')).toBeInTheDocument()
+      expect(screen.getByText(/PRD will be converted to .ralph\/prd.json/)).toBeInTheDocument()
     })
   })
 
-  it('displays correct max parallel value from config', async () => {
+  it('shows Start Ralph Loop button', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      expect(screen.getByText(/Max Parallel Agents: 4/)).toBeInTheDocument()
+      expect(screen.getByText('Start Ralph Loop')).toBeInTheDocument()
     })
   })
 
-  it('displays correct max iterations from config', async () => {
+  it('calls convertPrdToRalph when start is clicked', async () => {
     renderDialog(true)
 
     await waitFor(() => {
-      const iterationsSelect = screen.getByLabelText('Max Iterations per Task')
-      expect(iterationsSelect).toHaveValue('10')
-    })
-  })
-
-  it('displays correct max retries from config', async () => {
-    renderDialog(true)
-
-    await waitFor(() => {
-      const retriesSelect = screen.getByLabelText('Max Retries per Task')
-      expect(retriesSelect).toHaveValue('3')
-    })
-  })
-
-  it('displays correct git settings from config', async () => {
-    renderDialog(true)
-
-    await waitFor(() => {
-      // autoCreatePrs = true
-      const autoCreateCheckbox = screen.getByLabelText('Auto-create PRs when tasks complete')
-      expect(autoCreateCheckbox).toBeChecked()
-
-      // draftPrs = false
-      const draftCheckbox = screen.getByLabelText('Create draft PRs')
-      expect(draftCheckbox).not.toBeChecked()
-    })
-  })
-
-  it('displays correct validation settings from config', async () => {
-    renderDialog(true)
-
-    await waitFor(() => {
-      const testsCheckbox = screen.getByLabelText('Run tests before committing')
-      expect(testsCheckbox).toBeChecked()
-
-      const lintCheckbox = screen.getByLabelText('Run linter before committing')
-      expect(lintCheckbox).toBeChecked()
-    })
-  })
-
-  it('allows changing strategy', async () => {
-    renderDialog(true)
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Execution Strategy')).toBeInTheDocument()
+      expect(screen.getByText('Start Ralph Loop')).toBeInTheDocument()
     })
 
-    const strategySelect = screen.getByLabelText('Execution Strategy')
-    fireEvent.change(strategySelect, { target: { value: 'sequential' } })
-
-    expect(strategySelect).toHaveValue('sequential')
-  })
-
-  it('updates summary when strategy changes', async () => {
-    renderDialog(true)
+    fireEvent.click(screen.getByText('Start Ralph Loop'))
 
     await waitFor(() => {
-      expect(screen.getByText(/Strategy: Dependency First/)).toBeInTheDocument()
-    })
-
-    const strategySelect = screen.getByLabelText('Execution Strategy')
-    fireEvent.change(strategySelect, { target: { value: 'sequential' } })
-
-    await waitFor(() => {
-      expect(screen.getByText(/Strategy: Sequential/)).toBeInTheDocument()
-    })
-  })
-
-  it('shows loading state while config is loading', async () => {
-    // Make config loading slow
-    mockConfigGet.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(mockConfig), 100))
-    )
-
-    renderDialog(true)
-
-    // Should show loading initially
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
-    })
-  })
-
-  it('displays dry-run mode option', async () => {
-    renderDialog(true)
-
-    await waitFor(() => {
-      expect(screen.getByText('Dry-run Mode')).toBeInTheDocument()
-    })
-  })
-
-  it('calls executePRD when start execution is clicked', async () => {
-    mockExecutePRD.mockResolvedValue('session-123')
-    mockFetchSession.mockResolvedValue(undefined)
-
-    renderDialog(true)
-
-    await waitFor(() => {
-      expect(screen.getByText('Start Execution')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByText('Start Execution'))
-
-    await waitFor(() => {
-      expect(mockExecutePRD).toHaveBeenCalledWith(
-        'test-prd-id',
+      expect(mockConvertPrdToRalph).toHaveBeenCalledWith(
         expect.objectContaining({
-          strategy: 'dependency_first',
+          prdId: 'test-prd-id',
           agentType: 'opencode',
-          maxParallel: 4,
+          useWorktree: true,
         })
       )
     })
+  })
+
+  it('allows changing agent type', async () => {
+    renderDialog(true)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Agent Type')).toBeInTheDocument()
+    })
+
+    const agentSelect = screen.getByLabelText('Agent Type')
+    fireEvent.change(agentSelect, { target: { value: 'claude' } })
+
+    expect(agentSelect).toHaveValue('claude')
+  })
+
+  it('allows toggling worktree isolation', async () => {
+    renderDialog(true)
+
+    await waitFor(() => {
+      expect(screen.getByText('Use Worktree Isolation')).toBeInTheDocument()
+    })
+
+    // Find the checkbox by its label
+    const checkbox = screen.getByRole('checkbox', { name: /worktree isolation/i })
+    expect(checkbox).toBeChecked() // Default is true
+
+    fireEvent.click(checkbox)
+
+    expect(checkbox).not.toBeChecked()
   })
 })

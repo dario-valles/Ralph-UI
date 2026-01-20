@@ -26,6 +26,13 @@ export const MODELS_BY_AGENT: Record<AgentType, ModelOption[]> = {
     { value: 'gpt-4o', label: 'GPT-4o' },
     { value: 'o1', label: 'OpenAI o1' },
   ],
+  qwen: [
+    { value: 'qwen-coder-32b', label: 'Qwen Coder 32B' },
+    { value: 'qwen-coder-7b', label: 'Qwen Coder 7B' },
+  ],
+  droid: [
+    { value: 'default', label: 'Default' },
+  ],
 }
 
 // Get default model for an agent type

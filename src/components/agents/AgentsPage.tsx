@@ -11,8 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RefreshCw, Bot, Filter, FilterX, Info, Terminal } from 'lucide-react'
-import { cleanupStaleAgents, LogEntry } from '@/lib/agent-api'
-import { parallelPollCompleted, parallelGetAgentLogs } from '@/lib/parallel-api'
+import { cleanupStaleAgents, LogEntry, getAgentLogs } from '@/lib/agent-api'
 
 export function AgentsPage() {
   const { currentSession } = useSessionStore()
@@ -50,24 +49,15 @@ export function AgentsPage() {
 
     let needsRefresh = false
 
-    // First try poll_completed (saves logs if scheduler is running)
+    // Clean up stale agents (detects zombies)
     try {
-      const completed = await parallelPollCompleted()
-      if (completed.length > 0) {
-        console.log('[AgentsPage] Completed agents (with logs):', completed)
+      const cleaned = await cleanupStaleAgents()
+      if (cleaned.length > 0) {
+        console.log('[AgentsPage] Cleaned up stale agents:', cleaned)
         needsRefresh = true
       }
     } catch {
-      // Scheduler not initialized, try cleanup instead
-      try {
-        const cleaned = await cleanupStaleAgents()
-        if (cleaned.length > 0) {
-          console.log('[AgentsPage] Cleaned up stale agents:', cleaned)
-          needsRefresh = true
-        }
-      } catch {
-        // Cleanup may fail, which is fine
-      }
+      // Cleanup may fail, which is fine
     }
 
     if (needsRefresh) {
@@ -102,19 +92,17 @@ export function AgentsPage() {
   const fetchRealtimeLogs = useCallback(async () => {
     if (!activeAgentId) return
 
-    // Always try to fetch logs - the scheduler will return empty if agent isn't running
+    // Fetch logs from the database
     try {
-      const logs = await parallelGetAgentLogs(activeAgentId)
+      const logs = await getAgentLogs(activeAgentId)
       if (logs.length > 0) {
         setRealtimeLogsAgentId(activeAgentId)
-        setRealtimeLogs(logs as LogEntry[])
+        setRealtimeLogs(logs)
       } else {
-        // No logs from scheduler, clear realtime state (will fall back to DB logs)
         setRealtimeLogsAgentId(null)
         setRealtimeLogs([])
       }
     } catch {
-      // Scheduler not initialized or other error, fall back to DB logs
       setRealtimeLogsAgentId(null)
       setRealtimeLogs([])
     }

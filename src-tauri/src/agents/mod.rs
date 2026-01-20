@@ -14,6 +14,8 @@ pub mod ansi_stripper;
 pub use manager::{AgentManager, AgentSpawnConfig, AgentSpawnMode, RateLimitEvent, AgentCompletionEvent};
 // Note: CliPathResolver is used internally by providers, not re-exported
 // Note: RateLimitDetector, RateLimitInfo, RateLimitType accessible via full path (agents::rate_limiter::*)
+// Fallback infrastructure for future use (Phase 4)
+#[allow(unused_imports)]
 pub use fallback::{AgentFallbackManager, FallbackConfig};
 pub use trace_parser::{SubagentTraceParser, SubagentEvent, SubagentEventType, SubagentTree};
 pub use models::ModelInfo;

@@ -84,7 +84,9 @@ export function PRDTemplateSelector() {
         projectPath: undefined,
         prdType: selectedPrdType || undefined,
       })
-      navigate(`/prds/${prd.id}`)
+      if (prd) {
+        navigate(`/prds/${prd.id}`)
+      }
     } catch (err) {
       console.error('Failed to create PRD:', err)
     } finally {

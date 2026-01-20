@@ -11,6 +11,7 @@ import { PRDList } from './components/prd/PRDList'
 import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
+import { RalphLoopPage } from './components/ralph-loop'
 import { ToastContainer } from './components/ui/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useProjectStore } from './stores/projectStore'
@@ -35,6 +36,7 @@ function App() {
             <Route path="prds/new" element={<PRDTemplateSelector />} />
             <Route path="prds/chat" element={<PRDChatPanel />} />
             <Route path="prds/:id" element={<PRDEditor />} />
+            <Route path="ralph-loop" element={<RalphLoopPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

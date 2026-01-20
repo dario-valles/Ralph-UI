@@ -574,3 +574,225 @@ export type {
   SplitDirection,
   SpawnOptions,
 } from './terminal'
+
+// ============================================================================
+// Ralph Wiggum Loop Types
+// ============================================================================
+
+/** A story/task in the Ralph PRD */
+export interface RalphStory {
+  id: string
+  title: string
+  description?: string
+  /** Acceptance criteria that must be met */
+  acceptance: string
+  /** Whether this story passes all acceptance criteria */
+  passes: boolean
+  /** Priority level (lower = higher priority) */
+  priority: number
+  /** Dependencies on other story IDs */
+  dependencies: string[]
+  /** Tags for categorization */
+  tags: string[]
+  /** Estimated effort (S/M/L/XL) */
+  effort?: string
+}
+
+/** PRD metadata */
+export interface RalphPrdMetadata {
+  createdAt?: string
+  updatedAt?: string
+  sourceChatId?: string
+  totalIterations: number
+  lastExecutionId?: string
+}
+
+/** The PRD document stored in .ralph/prd.json */
+export interface RalphPrd {
+  title: string
+  description?: string
+  branch: string
+  stories: RalphStory[]
+  metadata?: RalphPrdMetadata
+}
+
+/** Status summary for a PRD */
+export interface RalphPrdStatus {
+  total: number
+  passed: number
+  failed: number
+  allPass: boolean
+  progressPercent: number
+  incompleteStoryIds: string[]
+  nextStoryId?: string
+}
+
+/** State of a running Ralph loop */
+export type RalphLoopState =
+  | { type: 'idle' }
+  | { type: 'running'; iteration: number }
+  | { type: 'retrying'; iteration: number; attempt: number; reason: string; delayMs: number }
+  | { type: 'paused'; iteration: number; reason: string }
+  | { type: 'completed'; totalIterations: number }
+  | { type: 'failed'; iteration: number; reason: string }
+  | { type: 'cancelled'; iteration: number }
+
+/** Metrics for a single iteration */
+export interface RalphIterationMetrics {
+  iteration: number
+  tokens: number
+  inputTokens: number
+  outputTokens: number
+  cost: number
+  durationSecs: number
+  storyId?: string
+  storyCompleted: boolean
+  exitCode: number
+  retryAttempts: number
+  wasRetried: boolean
+}
+
+/** Cumulative metrics for an entire Ralph loop execution */
+export interface RalphLoopMetrics {
+  totalIterations: number
+  totalTokens: number
+  totalCost: number
+  totalDurationSecs: number
+  storiesCompleted: number
+  storiesRemaining: number
+  iterations: RalphIterationMetrics[]
+}
+
+/** Status update event during Ralph loop execution */
+export interface RalphLoopStatusEvent {
+  executionId: string
+  state: RalphLoopState
+  prdStatus?: RalphPrdStatus
+  iterationMetrics?: RalphIterationMetrics
+  timestamp: string
+  /** Current agent ID for terminal connection */
+  currentAgentId?: string
+  /** Worktree path if using worktree isolation */
+  worktreePath?: string
+  /** Branch name for this execution */
+  branch?: string
+}
+
+/** Progress entry type */
+export type RalphProgressEntryType =
+  | 'iteration_start'
+  | 'iteration_end'
+  | 'learning'
+  | 'error'
+  | 'story_completed'
+  | 'note'
+
+/** A single entry in progress.txt */
+export interface RalphProgressEntry {
+  iteration: number
+  timestamp: string
+  entryType: RalphProgressEntryType
+  content: string
+}
+
+/** Summary of progress.txt */
+export interface RalphProgressSummary {
+  totalEntries: number
+  totalIterations: number
+  learningsCount: number
+  errorsCount: number
+  storiesCompleted: number
+}
+
+/** Information about Ralph loop files */
+export interface RalphFiles {
+  hasPrd: boolean
+  hasProgress: boolean
+  hasPrompt: boolean
+  hasConfig: boolean
+  prdPath: string
+  progressPath: string
+  promptPath: string
+  configPath: string
+}
+
+/** Project-specific configuration */
+export interface RalphProjectConfig {
+  name?: string
+  testCommand?: string
+  lintCommand?: string
+  buildCommand?: string
+}
+
+/** Loop-specific configuration */
+export interface RalphLoopConfig {
+  maxIterations: number
+  completionPromise: string
+  agent: string
+  model?: string
+  maxCost?: number
+}
+
+/** Ralph configuration from .ralph/config.yaml */
+export interface RalphConfig {
+  project: RalphProjectConfig
+  ralph: RalphLoopConfig
+}
+
+/** Request to initialize a Ralph PRD */
+export interface InitRalphPrdRequest {
+  projectPath: string
+  title: string
+  description?: string
+  branch: string
+  stories: RalphStoryInput[]
+}
+
+/** Input for creating a Ralph story */
+export interface RalphStoryInput {
+  id: string
+  title: string
+  description?: string
+  acceptance: string
+  priority?: number
+  dependencies?: string[]
+  tags?: string[]
+  effort?: string
+}
+
+/** Request to start a Ralph loop */
+export interface StartRalphLoopRequest {
+  projectPath: string
+  agentType: string
+  model?: string
+  maxIterations?: number
+  runTests?: boolean
+  runLint?: boolean
+  branch?: string
+  completionPromise?: string
+  maxCost?: number
+  /** Whether to use a worktree for isolation (default: true) */
+  useWorktree?: boolean
+}
+
+/** Request to convert a database PRD to Ralph format */
+export interface ConvertPrdToRalphRequest {
+  prdId: string
+  branch: string
+  agentType?: string
+  model?: string
+  maxIterations?: number
+  maxCost?: number
+  runTests?: boolean
+  runLint?: boolean
+  /** Whether to use a worktree for isolation (default: true) */
+  useWorktree?: boolean
+}
+
+/** Information about a Ralph worktree */
+export interface RalphWorktreeInfo {
+  name: string
+  path: string
+  branch?: string
+  isLocked: boolean
+}

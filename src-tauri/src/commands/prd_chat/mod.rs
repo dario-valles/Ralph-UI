@@ -482,44 +482,21 @@ pub async fn export_chat_to_prd(
                    The chat session was likely created without a project context.");
     }
 
-    // If we have extracted structure with tasks, create a Session and Task records
-    let (session_id, task_count) = if let Some(ref structure_json) = prd.extracted_structure {
-        if let Ok(mut structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
-            // Apply post-processing to fix priorities and infer dependencies
-            post_process_extracted_tasks(&mut structure);
-
-            if !structure.tasks.is_empty() {
-                // We have tasks to create - create a work session
-                match create_session_and_tasks_from_prd(&db_guard, &prd, &structure) {
-                    Ok((new_session_id, count)) => {
-                        log::info!("Created session {} with {} tasks from PRD export", new_session_id, count);
-                        (Some(new_session_id), count)
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to create session/tasks from PRD: {}", e);
-                        (None, 0)
-                    }
-                }
-            } else {
-                log::info!("No tasks in extracted structure, skipping session creation");
-                (None, 0)
-            }
-        } else {
-            log::warn!("Failed to parse extracted structure JSON");
-            (None, 0)
-        }
-    } else {
-        (None, 0)
-    };
+    // Note: Session and tasks are NOT created during export.
+    // The user should use the PRD Execution Dialog to create sessions/tasks
+    // via execute_prd (for parallel scheduler) or convert_prd_to_ralph (for Ralph Loop).
+    // This avoids duplicate session/task creation.
 
     Ok(ExportResult {
         prd,
-        session_id,
-        task_count,
+        session_id: None,
+        task_count: 0,
     })
 }
 
 /// Create a work session and tasks from an exported PRD with extracted structure
+/// Note: This is currently unused - session/task creation moved to execute_prd command
+#[allow(dead_code)]
 fn create_session_and_tasks_from_prd(
     db: &Database,
     prd: &crate::database::prd::PRDDocument,

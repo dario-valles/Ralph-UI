@@ -18,6 +18,8 @@ export interface AsyncState {
 export interface AsyncActionOptions {
   /** Re-throw error after setting error state (default: false) */
   rethrow?: boolean
+  /** Skip setting loading state (useful for background polling) */
+  silent?: boolean
 }
 
 /**
@@ -57,16 +59,26 @@ export async function asyncAction<TState extends AsyncState, TResult = void>(
   action: () => Promise<Partial<TState> & { __result?: TResult }>,
   options?: AsyncActionOptions,
 ): Promise<TResult | undefined> {
-  set({ loading: true, error: null } as Partial<TState>)
+  // Only set loading state if not silent (for background polling, skip loading)
+  if (!options?.silent) {
+    set({ loading: true, error: null } as Partial<TState>)
+  }
   try {
     const updates = await action()
     const { __result, ...stateUpdates } = updates
-    set({ ...stateUpdates, loading: false } as Partial<TState>)
+    if (options?.silent) {
+      // Silent mode: only update data, not loading state
+      set({ ...stateUpdates } as Partial<TState>)
+    } else {
+      set({ ...stateUpdates, loading: false } as Partial<TState>)
+    }
     return __result
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : String(error)
-    set({ error: errorMessage, loading: false } as Partial<TState>)
+    if (!options?.silent) {
+      set({ error: errorMessage, loading: false } as Partial<TState>)
+    }
     if (options?.rethrow) {
       throw error
     }

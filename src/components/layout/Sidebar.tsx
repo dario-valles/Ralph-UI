@@ -7,6 +7,7 @@ import {
   FolderGit2,
   FileText,
   MessageSquare,
+  Repeat,
 } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { usePRDChatStore } from '@/stores/prdChatStore'
@@ -15,6 +16,7 @@ const navigation = [
   { name: 'Mission Control', to: '/', icon: Gauge },
   { name: 'PRDs', to: '/prds', icon: FileText },
   { name: 'PRD Chat', to: '/prds/chat', icon: MessageSquare },
+  { name: 'Ralph Loop', to: '/ralph-loop', icon: Repeat },
   { name: 'Tasks', to: '/tasks', icon: ListTodo },
   { name: 'Agents', to: '/agents', icon: Bot },
   { name: 'Sessions', to: '/sessions', icon: FolderGit2 },

@@ -25,7 +25,7 @@ class ResizeObserverMock {
   unobserve = vi.fn()
   disconnect = vi.fn()
 }
-global.ResizeObserver = ResizeObserverMock
+globalThis.ResizeObserver = ResizeObserverMock
 
 // Mock localStorage
 const localStorageMock = {
@@ -46,7 +46,7 @@ const localStorageMock = {
   key: vi.fn((index: number) => Object.keys(localStorageMock.store)[index] ?? null),
 }
 
-Object.defineProperty(global, 'localStorage', {
+Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
   writable: true,
 })

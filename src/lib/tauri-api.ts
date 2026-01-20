@@ -370,3 +370,191 @@ export const missionControlApi = {
     return await invoke('get_global_stats')
   },
 }
+
+// Import Ralph Loop types
+import type {
+  RalphPrd,
+  RalphPrdStatus,
+  RalphProgressSummary,
+  RalphFiles,
+  RalphConfig,
+  InitRalphPrdRequest,
+  RalphStoryInput,
+  StartRalphLoopRequest,
+  RalphLoopState,
+  RalphLoopMetrics,
+  RalphWorktreeInfo,
+} from '@/types'
+
+// Ralph Wiggum Loop API
+export const ralphLoopApi = {
+  /** Initialize a Ralph PRD at .ralph/prd.json */
+  initPrd: async (request: InitRalphPrdRequest): Promise<RalphPrd> => {
+    return await invoke('init_ralph_prd', { request })
+  },
+
+  /** Read the Ralph PRD from .ralph/prd.json */
+  getPrd: async (projectPath: string): Promise<RalphPrd> => {
+    return await invoke('get_ralph_prd', { projectPath })
+  },
+
+  /** Get the status of the Ralph PRD */
+  getPrdStatus: async (projectPath: string): Promise<RalphPrdStatus> => {
+    return await invoke('get_ralph_prd_status', { projectPath })
+  },
+
+  /** Mark a story as passing in the PRD */
+  markStoryPassing: async (projectPath: string, storyId: string): Promise<boolean> => {
+    return await invoke('mark_ralph_story_passing', { projectPath, storyId })
+  },
+
+  /** Mark a story as failing in the PRD */
+  markStoryFailing: async (projectPath: string, storyId: string): Promise<boolean> => {
+    return await invoke('mark_ralph_story_failing', { projectPath, storyId })
+  },
+
+  /** Add a story to the PRD */
+  addStory: async (projectPath: string, story: RalphStoryInput): Promise<void> => {
+    return await invoke('add_ralph_story', { projectPath, story })
+  },
+
+  /** Remove a story from the PRD */
+  removeStory: async (projectPath: string, storyId: string): Promise<boolean> => {
+    return await invoke('remove_ralph_story', { projectPath, storyId })
+  },
+
+  /** Get progress.txt content */
+  getProgress: async (projectPath: string): Promise<string> => {
+    return await invoke('get_ralph_progress', { projectPath })
+  },
+
+  /** Get progress summary */
+  getProgressSummary: async (projectPath: string): Promise<RalphProgressSummary> => {
+    return await invoke('get_ralph_progress_summary', { projectPath })
+  },
+
+  /** Add a note to progress.txt */
+  addProgressNote: async (projectPath: string, iteration: number, note: string): Promise<void> => {
+    return await invoke('add_ralph_progress_note', { projectPath, iteration, note })
+  },
+
+  /** Clear progress.txt and reinitialize */
+  clearProgress: async (projectPath: string): Promise<void> => {
+    return await invoke('clear_ralph_progress', { projectPath })
+  },
+
+  /** Get the prompt.md content */
+  getPrompt: async (projectPath: string): Promise<string> => {
+    return await invoke('get_ralph_prompt', { projectPath })
+  },
+
+  /** Update the prompt.md content */
+  setPrompt: async (projectPath: string, content: string): Promise<void> => {
+    return await invoke('set_ralph_prompt', { projectPath, content })
+  },
+
+  /** Start a Ralph loop execution */
+  startLoop: async (request: StartRalphLoopRequest): Promise<string> => {
+    return await invoke('start_ralph_loop', { request })
+  },
+
+  /** Stop a running Ralph loop */
+  stopLoop: async (executionId: string): Promise<void> => {
+    return await invoke('stop_ralph_loop', { executionId })
+  },
+
+  /** Get the state of a Ralph loop execution */
+  getLoopState: async (executionId: string): Promise<RalphLoopState> => {
+    return await invoke('get_ralph_loop_state', { executionId })
+  },
+
+  /** Get metrics for a Ralph loop execution */
+  getLoopMetrics: async (executionId: string): Promise<RalphLoopMetrics> => {
+    return await invoke('get_ralph_loop_metrics', { executionId })
+  },
+
+  /** List all active Ralph loop executions */
+  listExecutions: async (): Promise<string[]> => {
+    return await invoke('list_ralph_loop_executions')
+  },
+
+  /** Get current agent ID for terminal connection */
+  getCurrentAgentId: async (executionId: string): Promise<string | null> => {
+    return await invoke('get_ralph_loop_current_agent', { executionId })
+  },
+
+  /** Get worktree path for a Ralph loop execution */
+  getWorktreePath: async (executionId: string): Promise<string | null> => {
+    return await invoke('get_ralph_loop_worktree_path', { executionId })
+  },
+
+  /** Cleanup a Ralph loop worktree */
+  cleanupWorktree: async (
+    projectPath: string,
+    worktreePath: string,
+    deleteDirectory?: boolean
+  ): Promise<void> => {
+    return await invoke('cleanup_ralph_worktree', { projectPath, worktreePath, deleteDirectory })
+  },
+
+  /** List all Ralph worktrees for a project */
+  listWorktrees: async (projectPath: string): Promise<RalphWorktreeInfo[]> => {
+    return await invoke('list_ralph_worktrees', { projectPath })
+  },
+
+  /** Convert PRD chat export to Ralph PRD format */
+  convertPrdToRalph: async (request: {
+    prdId: string
+    branch: string
+    agentType?: string
+    model?: string
+    maxIterations?: number
+    maxCost?: number
+    runTests?: boolean
+    runLint?: boolean
+    useWorktree?: boolean
+  }): Promise<RalphPrd> => {
+    return await invoke('convert_prd_to_ralph', { request })
+  },
+
+  /** Check if a project has Ralph loop files */
+  hasRalphFiles: async (projectPath: string): Promise<boolean> => {
+    return await invoke('has_ralph_files', { projectPath })
+  },
+
+  /** Get all Ralph files for a project */
+  getRalphFiles: async (projectPath: string): Promise<RalphFiles> => {
+    return await invoke('get_ralph_files', { projectPath })
+  },
+
+  /** Get Ralph config for a project */
+  getConfig: async (projectPath: string): Promise<RalphConfig> => {
+    return await invoke('get_ralph_config', { projectPath })
+  },
+
+  /** Set Ralph config for a project */
+  setConfig: async (projectPath: string, config: RalphConfig): Promise<void> => {
+    return await invoke('set_ralph_config', { projectPath, config })
+  },
+
+  /** Initialize Ralph config with defaults */
+  initConfig: async (projectPath: string): Promise<RalphConfig> => {
+    return await invoke('init_ralph_config', { projectPath })
+  },
+
+  /** Update specific Ralph config fields */
+  updateConfig: async (
+    projectPath: string,
+    updates: {
+      maxIterations?: number
+      maxCost?: number
+      agent?: string
+      model?: string
+      testCommand?: string
+      lintCommand?: string
+      buildCommand?: string
+    }
+  ): Promise<RalphConfig> => {
+    return await invoke('update_ralph_config', { projectPath, ...updates })
+  },
+}

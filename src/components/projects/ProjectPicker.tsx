@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FolderOpen, ChevronDown, Star, Clock, X, GitBranch, AlertCircle, Loader2 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
-import { isGitRepository, initGitRepository } from '@/lib/parallel-api'
+import { invoke } from '@tauri-apps/api/core'
 
 interface ProjectPickerProps {
   value?: string
@@ -61,7 +61,7 @@ export function ProjectPicker({
     }
     setCheckingGit(true)
     try {
-      const result = await isGitRepository(path)
+      const result = await invoke<boolean>('git_is_repository', { path })
       setIsGitRepo(result)
     } catch (error) {
       console.error('Failed to check git status:', error)
@@ -85,7 +85,7 @@ export function ProjectPicker({
     if (!value) return
     setInitializingGit(true)
     try {
-      await initGitRepository(value)
+      await invoke('git_init_repository', { path: value })
       setIsGitRepo(true)
     } catch (error) {
       console.error('Failed to initialize git:', error)
