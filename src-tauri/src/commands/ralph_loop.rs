@@ -4,9 +4,10 @@
 
 use crate::database::Database;
 use crate::ralph_loop::{
-    ConfigManager, ExecutionSnapshot, PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker,
-    PromptBuilder, RalphConfig, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
-    RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory, RetryConfig, SnapshotStore,
+    ConfigManager, ErrorStrategy, ExecutionSnapshot, PrdExecutor, PrdStatus, ProgressSummary,
+    ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig, RalphLoopMetrics,
+    RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory,
+    RetryConfig, SnapshotStore,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -284,12 +285,16 @@ pub fn set_ralph_prompt(project_path: String, content: String) -> Result<(), Str
     builder.write_prompt(&content)
 }
 
+/// Heartbeat interval in seconds (30 seconds)
+const HEARTBEAT_INTERVAL_SECS: u64 = 30;
+
 /// Start a Ralph loop execution
 #[tauri::command]
 pub async fn start_ralph_loop(
     request: StartRalphLoopRequest,
     ralph_state: State<'_, RalphLoopManagerState>,
     agent_manager_state: State<'_, crate::AgentManagerState>,
+    db: State<'_, Mutex<Database>>,
 ) -> Result<String, String> {
     use crate::models::AgentType;
     use std::io::Write;
@@ -305,7 +310,7 @@ pub async fn start_ralph_loop(
 
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
-        agent_type,
+        agent_type: agent_type.clone(),
         model: request.model,
         max_iterations: request.max_iterations.unwrap_or(50),
         run_tests: request.run_tests.unwrap_or(true),
@@ -315,6 +320,8 @@ pub async fn start_ralph_loop(
         max_cost: request.max_cost,
         use_worktree: request.use_worktree.unwrap_or(true), // Use worktree for isolation by default
         retry_config: RetryConfig::default(),
+        error_strategy: ErrorStrategy::default(),
+        fallback_config: None, // TODO: Add frontend UI to configure this
     };
 
     // Create orchestrator
@@ -342,6 +349,18 @@ pub async fn start_ralph_loop(
     let prd = executor.read_prd()?;
     orchestrator.initialize(&prd)?;
 
+    // Save initial execution state for crash recovery
+    {
+        let db_guard = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+        let initial_state = ExecutionStateSnapshot {
+            execution_id: execution_id.clone(),
+            state: serde_json::to_string(&RalphLoopExecutionState::Idle).unwrap_or_default(),
+            last_heartbeat: chrono::Utc::now().to_rfc3339(),
+        };
+        ralph_iterations::save_execution_state(db_guard.get_connection(), &initial_state)
+            .map_err(|e| format!("Failed to save initial execution state: {}", e))?;
+    }
+
     // Store orchestrator in state (using tokio::sync::Mutex for async access)
     let orchestrator_arc = Arc::new(tokio::sync::Mutex::new(orchestrator));
     {
@@ -352,18 +371,70 @@ pub async fn start_ralph_loop(
     // Clone the main app's agent manager Arc for the spawned task
     // This ensures PTYs are registered in the same place the frontend queries
     let agent_manager_arc = agent_manager_state.clone_manager();
-    let execution_id_clone = execution_id.clone();
+
+    // Get database path for spawned tasks
+    // Note: We can't pass the State directly, so we get the path and create new connections
+    let db_path: Option<PathBuf> = {
+        let db_guard = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+        // Get the database file path from the application data directory
+        // We'll use a shared connection approach via the database path
+        db_guard.get_connection().path().map(PathBuf::from)
+    };
 
     // Spawn the loop in background
     println!("[RalphLoop] Spawning background task for execution {}", execution_id);
     let _ = std::io::stdout().flush();
 
+    // Clone for heartbeat task
+    let execution_id_for_heartbeat = execution_id.clone();
+    let db_path_for_heartbeat = db_path.clone();
+    let orchestrator_arc_for_heartbeat = orchestrator_arc.clone();
+
+    // Spawn heartbeat task
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
+
+        loop {
+            interval.tick().await;
+
+            // Check if orchestrator is still running
+            let is_running = {
+                let orchestrator = orchestrator_arc_for_heartbeat.lock().await;
+                matches!(
+                    orchestrator.state(),
+                    RalphLoopExecutionState::Running { .. } | RalphLoopExecutionState::Retrying { .. }
+                )
+            };
+
+            if !is_running {
+                log::info!("[Heartbeat] Execution {} no longer running, stopping heartbeat", execution_id_for_heartbeat);
+                break;
+            }
+
+            // Update heartbeat in database
+            if let Some(ref path) = db_path_for_heartbeat {
+                if let Ok(conn) = rusqlite::Connection::open(path) {
+                    let heartbeat = chrono::Utc::now().to_rfc3339();
+                    if let Err(e) = ralph_iterations::update_heartbeat(&conn, &execution_id_for_heartbeat, &heartbeat) {
+                        log::warn!("[Heartbeat] Failed to update heartbeat for {}: {}", execution_id_for_heartbeat, e);
+                    } else {
+                        log::debug!("[Heartbeat] Updated heartbeat for {}", execution_id_for_heartbeat);
+                    }
+                }
+            }
+        }
+    });
+
+    // Clone for main loop task
+    let execution_id_for_loop = execution_id.clone();
+    let db_path_for_loop = db_path.clone();
+
     tauri::async_runtime::spawn(async move {
         use std::io::Write;
 
-        println!("[RalphLoop] Background task started for {}", execution_id_clone);
+        println!("[RalphLoop] Background task started for {}", execution_id_for_loop);
         let _ = std::io::stdout().flush();
-        log::info!("Ralph loop {} starting", execution_id_clone);
+        log::info!("Ralph loop {} starting", execution_id_for_loop);
 
         // Lock orchestrator, then run with the shared agent manager
         println!("[RalphLoop] Acquiring orchestrator lock...");
@@ -374,24 +445,35 @@ pub async fn start_ralph_loop(
 
         // Use the main app's agent manager (sync mutex, but operations are quick)
         // We lock/unlock for each operation within run() rather than holding lock
-        match orchestrator.run_with_shared_manager(agent_manager_arc).await {
+        let result = orchestrator.run_with_shared_manager(agent_manager_arc).await;
+
+        // Clean up execution state from database
+        if let Some(ref path) = db_path_for_loop {
+            if let Ok(conn) = rusqlite::Connection::open(path) {
+                if let Err(e) = ralph_iterations::delete_execution_state(&conn, &execution_id_for_loop) {
+                    log::warn!("[RalphLoop] Failed to delete execution state for {}: {}", execution_id_for_loop, e);
+                }
+            }
+        }
+
+        match result {
             Ok(metrics) => {
                 println!(
                     "[RalphLoop] Loop {} completed: {} iterations, ${:.2} total cost",
-                    execution_id_clone,
+                    execution_id_for_loop,
                     metrics.total_iterations,
                     metrics.total_cost
                 );
                 log::info!(
                     "Ralph loop {} completed: {} iterations, ${:.2} total cost",
-                    execution_id_clone,
+                    execution_id_for_loop,
                     metrics.total_iterations,
                     metrics.total_cost
                 );
             }
             Err(e) => {
-                println!("[RalphLoop] Loop {} failed: {}", execution_id_clone, e);
-                log::error!("Ralph loop {} failed: {}", execution_id_clone, e);
+                println!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
+                log::error!("Ralph loop {} failed: {}", execution_id_for_loop, e);
             }
         }
     });
@@ -816,4 +898,190 @@ pub fn update_ralph_config(
             config.project.build_command = build_command;
         }
     })
+}
+
+// ============================================================================
+// Iteration History Commands
+// ============================================================================
+
+use crate::database::ralph_iterations::{
+    self, IterationStats,
+};
+use crate::ralph_loop::{ExecutionStateSnapshot, IterationOutcome, IterationRecord};
+
+/// Get iteration history for an execution
+#[tauri::command]
+pub fn get_ralph_iteration_history(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<Vec<IterationRecord>, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    ralph_iterations::get_iterations_for_execution(db.get_connection(), &execution_id)
+        .map_err(|e| format!("Failed to get iteration history: {}", e))
+}
+
+/// Get iteration statistics for an execution
+#[tauri::command]
+pub fn get_ralph_iteration_stats(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<IterationStats, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    ralph_iterations::get_execution_stats(db.get_connection(), &execution_id)
+        .map_err(|e| format!("Failed to get iteration stats: {}", e))
+}
+
+/// Get all iteration history with optional filters
+#[tauri::command]
+pub fn get_all_ralph_iterations(
+    execution_id: Option<String>,
+    outcome_filter: Option<String>,
+    limit: Option<u32>,
+    db: State<'_, Mutex<Database>>,
+) -> Result<Vec<IterationRecord>, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+    let outcome = outcome_filter.and_then(|s| match s.as_str() {
+        "success" => Some(IterationOutcome::Success),
+        "failed" => Some(IterationOutcome::Failed),
+        "skipped" => Some(IterationOutcome::Skipped),
+        "interrupted" => Some(IterationOutcome::Interrupted),
+        _ => None,
+    });
+
+    ralph_iterations::get_iteration_history(
+        db.get_connection(),
+        execution_id.as_deref(),
+        outcome,
+        limit,
+    )
+    .map_err(|e| format!("Failed to get iteration history: {}", e))
+}
+
+/// Save an iteration record (used by orchestrator)
+#[tauri::command]
+pub fn save_ralph_iteration(
+    record: IterationRecord,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    ralph_iterations::insert_iteration(db.get_connection(), &record)
+        .map_err(|e| format!("Failed to save iteration: {}", e))
+}
+
+/// Update an iteration record (used by orchestrator on completion)
+#[tauri::command]
+pub fn update_ralph_iteration(
+    id: String,
+    outcome: String,
+    duration_secs: f64,
+    completed_at: String,
+    error_message: Option<String>,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+    let outcome_enum = match outcome.as_str() {
+        "success" => IterationOutcome::Success,
+        "failed" => IterationOutcome::Failed,
+        "skipped" => IterationOutcome::Skipped,
+        "interrupted" => IterationOutcome::Interrupted,
+        _ => return Err(format!("Invalid outcome: {}", outcome)),
+    };
+
+    ralph_iterations::update_iteration(
+        db.get_connection(),
+        &id,
+        outcome_enum,
+        duration_secs,
+        &completed_at,
+        error_message.as_deref(),
+    )
+    .map_err(|e| format!("Failed to update iteration: {}", e))?;
+
+    Ok(())
+}
+
+/// Save execution state snapshot (for heartbeat/crash recovery)
+#[tauri::command]
+pub fn save_ralph_execution_state(
+    snapshot: ExecutionStateSnapshot,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    ralph_iterations::save_execution_state(db.get_connection(), &snapshot)
+        .map_err(|e| format!("Failed to save execution state: {}", e))
+}
+
+/// Update heartbeat for an execution
+#[tauri::command]
+pub fn update_ralph_heartbeat(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<(), String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let heartbeat = chrono::Utc::now().to_rfc3339();
+    ralph_iterations::update_heartbeat(db.get_connection(), &execution_id, &heartbeat)
+        .map_err(|e| format!("Failed to update heartbeat: {}", e))?;
+    Ok(())
+}
+
+/// Get execution state snapshot
+#[tauri::command]
+pub fn get_ralph_execution_state(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<Option<ExecutionStateSnapshot>, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    ralph_iterations::get_execution_state(db.get_connection(), &execution_id)
+        .map_err(|e| format!("Failed to get execution state: {}", e))
+}
+
+/// Check for stale executions (crash recovery)
+#[tauri::command]
+pub fn check_stale_ralph_executions(
+    threshold_secs: Option<i64>,
+    db: State<'_, Mutex<Database>>,
+) -> Result<Vec<ExecutionStateSnapshot>, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let threshold = threshold_secs.unwrap_or(120); // Default 2 minutes
+    ralph_iterations::get_stale_executions(db.get_connection(), threshold)
+        .map_err(|e| format!("Failed to check stale executions: {}", e))
+}
+
+/// Mark stale iterations as interrupted (crash recovery)
+#[tauri::command]
+pub fn recover_stale_ralph_iterations(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<u32, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let completed_at = chrono::Utc::now().to_rfc3339();
+
+    let count = ralph_iterations::mark_interrupted_iterations(
+        db.get_connection(),
+        &execution_id,
+        &completed_at,
+    )
+    .map_err(|e| format!("Failed to recover iterations: {}", e))?;
+
+    // Clean up execution state
+    ralph_iterations::delete_execution_state(db.get_connection(), &execution_id)
+        .map_err(|e| format!("Failed to delete execution state: {}", e))?;
+
+    Ok(count as u32)
+}
+
+/// Delete iteration history for an execution (cleanup)
+#[tauri::command]
+pub fn delete_ralph_iteration_history(
+    execution_id: String,
+    db: State<'_, Mutex<Database>>,
+) -> Result<u32, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+
+    let count = ralph_iterations::delete_iterations_for_execution(db.get_connection(), &execution_id)
+        .map_err(|e| format!("Failed to delete iterations: {}", e))?;
+
+    Ok(count as u32)
 }

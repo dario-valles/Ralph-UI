@@ -6,11 +6,12 @@ pub mod agents;
 pub mod prd;
 pub mod prd_chat;
 pub mod projects;
+pub mod ralph_iterations;
 
 use rusqlite::{Connection, Result, params};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 9;
+const SCHEMA_VERSION: i32 = 10;
 
 pub struct Database {
     conn: Connection,
@@ -108,6 +109,9 @@ impl Database {
         }
         if from_version < 9 {
             self.migrate_to_v9()?;
+        }
+        if from_version < 10 {
+            self.migrate_to_v10()?;
         }
         // Future migrations will be added here
         Ok(())
@@ -505,6 +509,62 @@ impl Database {
         )?;
 
         self.set_schema_version(9)?;
+        Ok(())
+    }
+
+    fn migrate_to_v10(&self) -> Result<()> {
+        // Ralph Loop: Iteration history tracking for crash recovery and analytics
+
+        // Create ralph_iteration_history table
+        // Stores the outcome of each iteration for persistent history
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS ralph_iteration_history (
+                id TEXT PRIMARY KEY,
+                execution_id TEXT NOT NULL,
+                iteration INTEGER NOT NULL,
+                outcome TEXT NOT NULL,
+                duration_secs REAL NOT NULL,
+                agent_type TEXT NOT NULL,
+                rate_limit_encountered INTEGER DEFAULT 0,
+                error_message TEXT,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                UNIQUE(execution_id, iteration)
+            )",
+            [],
+        )?;
+
+        // Create ralph_execution_state table
+        // Stores execution state snapshots with heartbeat for crash detection
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS ralph_execution_state (
+                execution_id TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                last_heartbeat TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        // Create indexes for efficient queries
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ralph_iteration_history_execution_id
+             ON ralph_iteration_history(execution_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ralph_iteration_history_outcome
+             ON ralph_iteration_history(outcome)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ralph_execution_state_heartbeat
+             ON ralph_execution_state(last_heartbeat)",
+            [],
+        )?;
+
+        self.set_schema_version(10)?;
         Ok(())
     }
 

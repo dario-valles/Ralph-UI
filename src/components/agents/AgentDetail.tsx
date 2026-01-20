@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { useState, useMemo } from 'react'
 import { useTaskStore } from '@/stores/taskStore'
 import { TaskDetail } from '@/components/tasks/TaskDetail'
+import { SubagentTreePanel } from '@/components/agents/SubagentTreePanel'
 
 interface AgentDetailProps {
   agent: Agent | null
@@ -176,17 +177,17 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
 
         {/* Tabbed Information */}
         <Tabs defaultValue="git" className="w-full">
-          <TabsList className={cn(
-            "grid w-full",
-            agent.subagents && agent.subagents.length > 0 ? "grid-cols-3" : "grid-cols-2"
-          )}>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="git">Git</TabsTrigger>
             <TabsTrigger value="session">Session</TabsTrigger>
-            {agent.subagents && agent.subagents.length > 0 && (
-              <TabsTrigger value="subagents">
-                Subagents ({agent.subagents.length})
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="subagents">
+              Subagents
+              {agent.subagents && agent.subagents.length > 0 && (
+                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
+                  {agent.subagents.length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="git" className="mt-4">
@@ -248,9 +249,22 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
             </div>
           </TabsContent>
 
-          {agent.subagents && agent.subagents.length > 0 && (
-            <TabsContent value="subagents" className="mt-4">
+          {/* Subagents Tab - Show for both static subagents and live activity */}
+          <TabsContent value="subagents" className="mt-4">
+            {/* Live subagent activity panel (real-time events) */}
+            <SubagentTreePanel
+              agentId={agent.id}
+              defaultExpanded={true}
+              maxHeight="400px"
+              className="mb-4"
+            />
+
+            {/* Static subagent list from agent data (if available) */}
+            {agent.subagents && agent.subagents.length > 0 && (
               <div className="rounded-lg border divide-y">
+                <div className="px-3 py-2 bg-muted/30 text-xs text-muted-foreground font-medium">
+                  Static Subagent List
+                </div>
                 {agent.subagents.map((subagent) => (
                   <div
                     key={subagent.id}
@@ -263,8 +277,8 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
                   </div>
                 ))}
               </div>
-            </TabsContent>
-          )}
+            )}
+          </TabsContent>
         </Tabs>
       </CardContent>
 

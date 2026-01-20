@@ -24,6 +24,9 @@ import type {
   ExportResult,
   PRDTypeValue,
   Project,
+  IterationRecord,
+  ExecutionStateSnapshot,
+  IterationStats,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -556,5 +559,47 @@ export const ralphLoopApi = {
     }
   ): Promise<RalphConfig> => {
     return await invoke('update_ralph_config', { projectPath, ...updates })
+  },
+
+  // ============================================================================
+  // Iteration History API
+  // ============================================================================
+
+  /** Get iteration history for an execution */
+  getIterationHistory: async (executionId: string): Promise<IterationRecord[]> => {
+    return await invoke('get_ralph_iteration_history', { executionId })
+  },
+
+  /** Get iteration statistics for an execution */
+  getIterationStats: async (executionId: string): Promise<IterationStats> => {
+    return await invoke('get_ralph_iteration_stats', { executionId })
+  },
+
+  /** Get all iterations with optional filters */
+  getAllIterations: async (
+    executionId?: string,
+    outcomeFilter?: string,
+    limit?: number
+  ): Promise<IterationRecord[]> => {
+    return await invoke('get_all_ralph_iterations', {
+      executionId,
+      outcomeFilter,
+      limit,
+    })
+  },
+
+  /** Check for stale executions (crash recovery) */
+  checkStaleExecutions: async (thresholdSecs?: number): Promise<ExecutionStateSnapshot[]> => {
+    return await invoke('check_stale_ralph_executions', { thresholdSecs })
+  },
+
+  /** Recover stale iterations (mark as interrupted) */
+  recoverStaleIterations: async (executionId: string): Promise<number> => {
+    return await invoke('recover_stale_ralph_iterations', { executionId })
+  },
+
+  /** Delete iteration history for an execution */
+  deleteIterationHistory: async (executionId: string): Promise<number> => {
+    return await invoke('delete_ralph_iteration_history', { executionId })
   },
 }

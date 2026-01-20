@@ -10,6 +10,7 @@
 
 mod completion;
 mod config;
+pub mod fallback_orchestrator;
 mod prd_executor;
 mod progress_tracker;
 mod prompt_builder;
@@ -18,6 +19,7 @@ mod types;
 
 pub use completion::*;
 pub use config::*;
+pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
 pub use prd_executor::*;
 pub use progress_tracker::*;
 pub use prompt_builder::*;
@@ -70,6 +72,10 @@ pub struct RalphLoopConfig {
     pub use_worktree: bool,
     /// Retry configuration for transient errors (rate limits, timeouts)
     pub retry_config: RetryConfig,
+    /// Error handling strategy when iterations fail
+    pub error_strategy: ErrorStrategy,
+    /// Fallback chain configuration for rate limit handling
+    pub fallback_config: Option<FallbackChainConfig>,
 }
 
 impl Default for RalphLoopConfig {
@@ -86,6 +92,8 @@ impl Default for RalphLoopConfig {
             max_cost: None,
             use_worktree: false,
             retry_config: RetryConfig::default(),
+            error_strategy: ErrorStrategy::default(),
+            fallback_config: None,
         }
     }
 }
@@ -234,6 +242,10 @@ pub struct RalphLoopOrchestrator {
     working_path: PathBuf,
     /// Current progress message for UI
     progress_message: Option<String>,
+    /// Fallback orchestrator for managing agent fallbacks on rate limits
+    fallback_orchestrator: Option<FallbackOrchestrator>,
+    /// Currently active agent type (may differ from config due to fallback)
+    active_agent_type: AgentType,
 }
 
 impl RalphLoopOrchestrator {
@@ -247,6 +259,10 @@ impl RalphLoopOrchestrator {
             .completion_promise
             .clone()
             .unwrap_or_else(|| "<promise>COMPLETE</promise>".to_string());
+
+        // Initialize fallback orchestrator if config is provided
+        let fallback_orchestrator = config.fallback_config.clone().map(FallbackOrchestrator::new);
+        let active_agent_type = config.agent_type.clone();
 
         Self {
             prd_executor: PrdExecutor::new(&ralph_dir),
@@ -264,6 +280,50 @@ impl RalphLoopOrchestrator {
             worktree_path: None,
             working_path,
             progress_message: None,
+            fallback_orchestrator,
+            active_agent_type,
+        }
+    }
+
+    /// Get the currently active agent type (may differ from config due to fallback)
+    pub fn active_agent_type(&self) -> AgentType {
+        self.active_agent_type.clone()
+    }
+
+    /// Get fallback statistics if fallback orchestrator is enabled
+    pub fn fallback_stats(&self) -> Option<FallbackStats> {
+        self.fallback_orchestrator.as_ref().map(|fo| fo.get_stats())
+    }
+
+    /// Get the agent type to use for the next iteration
+    ///
+    /// If fallback orchestrator is enabled, consults it to handle rate limits.
+    /// Otherwise returns the configured agent type.
+    fn get_agent_for_iteration(&mut self) -> AgentType {
+        if let Some(ref mut fo) = self.fallback_orchestrator {
+            let agent = fo.get_agent_for_iteration();
+            self.active_agent_type = agent.clone();
+            agent
+        } else {
+            self.config.agent_type.clone()
+        }
+    }
+
+    /// Report a successful iteration to the fallback orchestrator
+    fn report_iteration_success(&mut self, agent: AgentType) {
+        if let Some(ref mut fo) = self.fallback_orchestrator {
+            fo.report_success(agent);
+        }
+    }
+
+    /// Report an error to the fallback orchestrator
+    ///
+    /// Returns the next agent to try if a fallback is available.
+    fn report_iteration_error(&mut self, agent: AgentType, is_rate_limit: bool) -> Option<AgentType> {
+        if let Some(ref mut fo) = self.fallback_orchestrator {
+            fo.report_error(agent, is_rate_limit)
+        } else {
+            None
         }
     }
 

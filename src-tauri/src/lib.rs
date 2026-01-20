@@ -383,6 +383,18 @@ pub fn run() {
             commands::set_ralph_config,
             commands::init_ralph_config,
             commands::update_ralph_config,
+            // Ralph iteration history commands
+            commands::get_ralph_iteration_history,
+            commands::get_ralph_iteration_stats,
+            commands::get_all_ralph_iterations,
+            commands::save_ralph_iteration,
+            commands::update_ralph_iteration,
+            commands::save_ralph_execution_state,
+            commands::update_ralph_heartbeat,
+            commands::get_ralph_execution_state,
+            commands::check_stale_ralph_executions,
+            commands::recover_stale_ralph_iterations,
+            commands::delete_ralph_iteration_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -467,6 +479,69 @@ fn perform_auto_recovery(db: &database::Database) {
         log::info!("Auto-recovery complete: {} sessions recovered", total_recovered);
     } else {
         log::debug!("Auto-recovery complete: no stale sessions found");
+    }
+
+    // Recover stale Ralph loop executions (crash recovery)
+    recover_stale_ralph_executions(conn);
+}
+
+/// Recover Ralph loop executions that were left running after a crash
+/// This checks for executions with stale heartbeats and marks their in-progress
+/// iterations as interrupted.
+fn recover_stale_ralph_executions(conn: &rusqlite::Connection) {
+    // Default threshold: 2 minutes (heartbeat interval is 30 seconds)
+    const STALE_THRESHOLD_SECS: i64 = 120;
+
+    let stale_executions = match database::ralph_iterations::get_stale_executions(conn, STALE_THRESHOLD_SECS) {
+        Ok(executions) => executions,
+        Err(e) => {
+            log::warn!("Failed to check for stale Ralph loop executions: {}", e);
+            return;
+        }
+    };
+
+    if stale_executions.is_empty() {
+        log::debug!("No stale Ralph loop executions found");
+        return;
+    }
+
+    log::info!("Found {} stale Ralph loop executions to recover", stale_executions.len());
+
+    for snapshot in stale_executions {
+        let completed_at = chrono::Utc::now().to_rfc3339();
+
+        // Mark in-progress iterations as interrupted
+        match database::ralph_iterations::mark_interrupted_iterations(
+            conn,
+            &snapshot.execution_id,
+            &completed_at,
+        ) {
+            Ok(count) => {
+                if count > 0 {
+                    log::info!(
+                        "Recovered Ralph loop execution {}: {} iterations marked as interrupted",
+                        snapshot.execution_id,
+                        count
+                    );
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to recover iterations for execution {}: {}",
+                    snapshot.execution_id,
+                    e
+                );
+            }
+        }
+
+        // Clean up the execution state
+        if let Err(e) = database::ralph_iterations::delete_execution_state(conn, &snapshot.execution_id) {
+            log::warn!(
+                "Failed to delete execution state for {}: {}",
+                snapshot.execution_id,
+                e
+            );
+        }
     }
 }
 

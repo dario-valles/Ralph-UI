@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Slider } from '@/components/ui/slider'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Save, RotateCcw, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
+import { Save, RotateCcw, RefreshCw, Loader2, AlertCircle, X, GripVertical, ArrowUp, ArrowDown } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
 import { isTauri } from '@/lib/tauri-check'
 import type {
@@ -540,11 +540,163 @@ export function SettingsPage() {
 
         {/* Fallback Settings */}
         <TabsContent value="fallback" className="space-y-4">
+          {/* Error Strategy Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Fallback Configuration</CardTitle>
+              <CardTitle>Error Handling Strategy</CardTitle>
               <CardDescription>
-                Configure fallback behavior when the primary agent fails
+                Configure how the system handles errors during Ralph Loop iterations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {config ? (
+                <>
+                  <div className="space-y-4">
+                    <Label>Error Strategy</Label>
+                    <div className="grid gap-3">
+                      <div
+                        className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-muted-foreground/50'
+                        }`}
+                        onClick={() =>
+                          updateFallbackConfig({
+                            errorStrategy: {
+                              type: 'retry',
+                              max_attempts: config.fallback.errorStrategy?.type === 'retry'
+                                ? config.fallback.errorStrategy.max_attempts
+                                : 3,
+                              backoff_ms: config.fallback.errorStrategy?.type === 'retry'
+                                ? config.fallback.errorStrategy.backoff_ms
+                                : 1000,
+                            },
+                          })
+                        }
+                      >
+                        <input
+                          type="radio"
+                          checked={config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy}
+                          readOnly
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium">Retry (Recommended)</div>
+                          <p className="text-sm text-muted-foreground">
+                            Retry failed iterations with exponential backoff before trying fallback agents
+                          </p>
+                          {(config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy) && (
+                            <div className="grid grid-cols-2 gap-4 mt-3">
+                              <div className="space-y-2">
+                                <Label className="text-xs">
+                                  Max Attempts: {config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.max_attempts : 3}
+                                </Label>
+                                <Slider
+                                  min={1}
+                                  max={10}
+                                  step={1}
+                                  value={[config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.max_attempts : 3]}
+                                  onValueChange={([v]) =>
+                                    updateFallbackConfig({
+                                      errorStrategy: {
+                                        type: 'retry',
+                                        max_attempts: v,
+                                        backoff_ms: config.fallback.errorStrategy?.type === 'retry'
+                                          ? config.fallback.errorStrategy.backoff_ms
+                                          : 1000,
+                                      },
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">
+                                  Backoff: {config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.backoff_ms : 1000}ms
+                                </Label>
+                                <Slider
+                                  min={100}
+                                  max={5000}
+                                  step={100}
+                                  value={[config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.backoff_ms : 1000]}
+                                  onValueChange={([v]) =>
+                                    updateFallbackConfig({
+                                      errorStrategy: {
+                                        type: 'retry',
+                                        max_attempts: config.fallback.errorStrategy?.type === 'retry'
+                                          ? config.fallback.errorStrategy.max_attempts
+                                          : 3,
+                                        backoff_ms: v,
+                                      },
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          config.fallback.errorStrategy?.type === 'skip'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-muted-foreground/50'
+                        }`}
+                        onClick={() => updateFallbackConfig({ errorStrategy: { type: 'skip' } })}
+                      >
+                        <input
+                          type="radio"
+                          checked={config.fallback.errorStrategy?.type === 'skip'}
+                          readOnly
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium">Skip</div>
+                          <p className="text-sm text-muted-foreground">
+                            Skip failed iterations and continue with the next one
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          config.fallback.errorStrategy?.type === 'abort'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-muted-foreground/50'
+                        }`}
+                        onClick={() => updateFallbackConfig({ errorStrategy: { type: 'abort' } })}
+                      >
+                        <input
+                          type="radio"
+                          checked={config.fallback.errorStrategy?.type === 'abort'}
+                          readOnly
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium">Abort</div>
+                          <p className="text-sm text-muted-foreground">
+                            Stop the entire Ralph Loop when an error occurs
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-muted-foreground">
+                  Backend configuration not available. Running in development mode.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Fallback Agent Chain Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Fallback Agent Chain</CardTitle>
+              <CardDescription>
+                Configure the order of agents to try when the primary agent fails. The first agent
+                is your primary, subsequent agents are fallbacks.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -561,92 +713,224 @@ export function SettingsPage() {
                     <Label htmlFor="fallbackEnabled">Enable fallback agents</Label>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  {/* Fallback Chain List */}
+                  <div className="space-y-3">
+                    <Label>Agent Priority Chain</Label>
                     <div className="space-y-2">
-                      <Label htmlFor="fallbackAgent">Fallback Agent (Optional)</Label>
-                      <Select
-                        id="fallbackAgent"
-                        value={config.fallback.fallbackAgent || ''}
-                        onChange={(e) =>
-                          updateFallbackConfig({
-                            fallbackAgent: e.target.value || undefined,
-                            // Reset model when agent changes
-                            fallbackModel: undefined,
-                          })
-                        }
-                        disabled={!config.fallback.enabled}
-                      >
-                        <option value="">None</option>
-                        <option value="claude">Claude</option>
-                        <option value="opencode">OpenCode</option>
-                        <option value="cursor">Cursor</option>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Agent to use when the primary agent fails.
-                      </p>
+                      {(config.fallback.fallbackChain || [config.execution.agentType as AgentType]).map((agent, index) => (
+                        <div
+                          key={`${agent}-${index}`}
+                          className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30"
+                        >
+                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                          <span className="flex-1 font-medium capitalize">
+                            {index === 0 ? `${agent} (Primary)` : agent}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={index === 0 || !config.fallback.enabled}
+                              onClick={() => {
+                                const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                                ;[chain[index - 1], chain[index]] = [chain[index], chain[index - 1]]
+                                updateFallbackConfig({ fallbackChain: chain })
+                              }}
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={
+                                index === (config.fallback.fallbackChain || []).length - 1 ||
+                                !config.fallback.enabled
+                              }
+                              onClick={() => {
+                                const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                                ;[chain[index], chain[index + 1]] = [chain[index + 1], chain[index]]
+                                updateFallbackConfig({ fallbackChain: chain })
+                              }}
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              disabled={(config.fallback.fallbackChain || []).length <= 1 || !config.fallback.enabled}
+                              onClick={() => {
+                                const chain = (config.fallback.fallbackChain || []).filter((_, i) => i !== index)
+                                updateFallbackConfig({ fallbackChain: chain })
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="fallbackModel">Fallback Model (Optional)</Label>
+                    {/* Add Agent Button */}
+                    <div className="flex items-center gap-2">
                       <Select
-                        id="fallbackModel"
-                        value={config.fallback.fallbackModel || fallbackDefaultModelId || ''}
-                        onChange={(e) =>
-                          updateFallbackConfig({
-                            fallbackModel: e.target.value || undefined,
-                          })
-                        }
-                        disabled={!config.fallback.enabled || !config.fallback.fallbackAgent || fallbackModelsLoading}
+                        id="addFallbackAgent"
+                        className="flex-1"
+                        disabled={!config.fallback.enabled}
+                        onChange={(e) => {
+                          const agent = e.target.value as AgentType
+                          if (agent) {
+                            const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                            if (!chain.includes(agent)) {
+                              chain.push(agent)
+                              updateFallbackConfig({ fallbackChain: chain })
+                            }
+                          }
+                          e.target.value = '' // Reset selection
+                        }}
                       >
-                        {fallbackModelsLoading ? (
-                          <option>Loading models...</option>
-                        ) : (
-                          fallbackModels.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
+                        <option value="">Add agent to chain...</option>
+                        {(['claude', 'opencode', 'cursor', 'codex'] as AgentType[])
+                          .filter((a) => !(config.fallback.fallbackChain || [config.execution.agentType as AgentType]).includes(a))
+                          .map((agent) => (
+                            <option key={agent} value={agent}>
+                              {agent.charAt(0).toUpperCase() + agent.slice(1)}
                             </option>
-                          ))
-                        )}
+                          ))}
                       </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Model to use for the fallback agent.
-                      </p>
+                    </div>
+                  </div>
+
+                  {/* Recovery Settings */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="text-sm font-medium">Primary Agent Recovery</h4>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="testPrimaryRecovery"
+                        checked={config.fallback.testPrimaryRecovery ?? true}
+                        onCheckedChange={(checked) =>
+                          updateFallbackConfig({ testPrimaryRecovery: checked as boolean })
+                        }
+                        disabled={!config.fallback.enabled}
+                      />
+                      <Label htmlFor="testPrimaryRecovery">
+                        Periodically test if primary agent has recovered
+                      </Label>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="baseBackoffMs">
-                        Base Backoff: {config.fallback.baseBackoffMs}ms
+                      <Label htmlFor="recoveryTestInterval">
+                        Recovery Test Interval: Every {config.fallback.recoveryTestInterval ?? 5} iterations
                       </Label>
                       <Slider
-                        id="baseBackoffMs"
-                        min={100}
-                        max={5000}
-                        step={100}
-                        value={[config.fallback.baseBackoffMs]}
-                        onValueChange={([v]) => updateFallbackConfig({ baseBackoffMs: v })}
-                        disabled={!config.fallback.enabled}
+                        id="recoveryTestInterval"
+                        min={1}
+                        max={20}
+                        step={1}
+                        value={[config.fallback.recoveryTestInterval ?? 5]}
+                        onValueChange={([v]) => updateFallbackConfig({ recoveryTestInterval: v })}
+                        disabled={!config.fallback.enabled || !config.fallback.testPrimaryRecovery}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Initial backoff delay before retrying.
+                        How often to check if the primary agent is available again after switching to a fallback.
                       </p>
                     </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="maxBackoffMs">
-                        Max Backoff: {config.fallback.maxBackoffMs}ms
-                      </Label>
-                      <Slider
-                        id="maxBackoffMs"
-                        min={1000}
-                        max={60000}
-                        step={1000}
-                        value={[config.fallback.maxBackoffMs]}
-                        onValueChange={([v]) => updateFallbackConfig({ maxBackoffMs: v })}
-                        disabled={!config.fallback.enabled}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Maximum backoff delay for exponential backoff.
-                      </p>
+                  {/* Backoff Settings */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="text-sm font-medium">Backoff Settings</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="baseBackoffMs">
+                          Base Backoff: {config.fallback.baseBackoffMs}ms
+                        </Label>
+                        <Slider
+                          id="baseBackoffMs"
+                          min={100}
+                          max={5000}
+                          step={100}
+                          value={[config.fallback.baseBackoffMs]}
+                          onValueChange={([v]) => updateFallbackConfig({ baseBackoffMs: v })}
+                          disabled={!config.fallback.enabled}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Initial backoff delay before retrying.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="maxBackoffMs">
+                          Max Backoff: {config.fallback.maxBackoffMs}ms
+                        </Label>
+                        <Slider
+                          id="maxBackoffMs"
+                          min={1000}
+                          max={60000}
+                          step={1000}
+                          value={[config.fallback.maxBackoffMs]}
+                          onValueChange={([v]) => updateFallbackConfig({ maxBackoffMs: v })}
+                          disabled={!config.fallback.enabled}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Maximum backoff delay for exponential backoff.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Legacy Single Fallback (for backward compatibility) */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="text-sm font-medium text-muted-foreground">Legacy Settings</h4>
+                    <p className="text-xs text-muted-foreground">
+                      These settings are for backward compatibility. Use the Agent Chain above for more control.
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="fallbackAgent">Fallback Agent (Legacy)</Label>
+                        <Select
+                          id="fallbackAgent"
+                          value={config.fallback.fallbackAgent || ''}
+                          onChange={(e) =>
+                            updateFallbackConfig({
+                              fallbackAgent: e.target.value || undefined,
+                              fallbackModel: undefined,
+                            })
+                          }
+                          disabled={!config.fallback.enabled}
+                        >
+                          <option value="">None</option>
+                          <option value="claude">Claude</option>
+                          <option value="opencode">OpenCode</option>
+                          <option value="cursor">Cursor</option>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="fallbackModel">Fallback Model (Legacy)</Label>
+                        <Select
+                          id="fallbackModel"
+                          value={config.fallback.fallbackModel || fallbackDefaultModelId || ''}
+                          onChange={(e) =>
+                            updateFallbackConfig({
+                              fallbackModel: e.target.value || undefined,
+                            })
+                          }
+                          disabled={!config.fallback.enabled || !config.fallback.fallbackAgent || fallbackModelsLoading}
+                        >
+                          {fallbackModelsLoading ? (
+                            <option>Loading models...</option>
+                          ) : (
+                            fallbackModels.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))
+                          )}
+                        </Select>
+                      </div>
                     </div>
                   </div>
                 </>

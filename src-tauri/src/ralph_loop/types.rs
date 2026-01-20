@@ -4,6 +4,7 @@
 //! - prd.json: Task list with pass/fail status
 //! - progress.txt: Learnings accumulated across iterations
 
+use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 
 /// A story/task in the PRD
@@ -345,6 +346,156 @@ impl Default for RalphConfig {
     }
 }
 
+// ============================================================================
+// Error Handling and Fallback Types
+// ============================================================================
+
+/// Error handling strategy for Ralph Loop iterations
+///
+/// Determines how the loop responds when an agent fails or encounters errors.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum ErrorStrategy {
+    /// Retry the iteration with exponential backoff
+    Retry {
+        /// Maximum number of retry attempts
+        max_attempts: u32,
+        /// Initial backoff delay in milliseconds
+        backoff_ms: u64,
+    },
+    /// Skip the failed iteration and continue to the next
+    Skip,
+    /// Abort the entire loop execution
+    Abort,
+}
+
+impl Default for ErrorStrategy {
+    fn default() -> Self {
+        Self::Retry {
+            max_attempts: 3,
+            backoff_ms: 5000,
+        }
+    }
+}
+
+/// Outcome of a single Ralph Loop iteration
+///
+/// Tracks what happened during an iteration for history and crash recovery.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IterationOutcome {
+    /// Iteration completed successfully
+    Success,
+    /// Iteration failed but was retried
+    Failed,
+    /// Iteration was skipped (error strategy: skip)
+    Skipped,
+    /// Iteration was interrupted (crash/manual stop)
+    Interrupted,
+}
+
+impl std::fmt::Display for IterationOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IterationOutcome::Success => write!(f, "success"),
+            IterationOutcome::Failed => write!(f, "failed"),
+            IterationOutcome::Skipped => write!(f, "skipped"),
+            IterationOutcome::Interrupted => write!(f, "interrupted"),
+        }
+    }
+}
+
+impl std::str::FromStr for IterationOutcome {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "success" => Ok(IterationOutcome::Success),
+            "failed" => Ok(IterationOutcome::Failed),
+            "skipped" => Ok(IterationOutcome::Skipped),
+            "interrupted" => Ok(IterationOutcome::Interrupted),
+            _ => Err(format!("Unknown iteration outcome: {}", s)),
+        }
+    }
+}
+
+/// Extended fallback configuration with chain support
+///
+/// Configures how the Ralph Loop handles rate limits by falling back to
+/// alternative agents in a defined order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FallbackChainConfig {
+    /// Ordered list of agents to try (e.g., [Claude, OpenCode, Cursor])
+    /// The first agent in the list is the primary; others are fallbacks.
+    pub fallback_chain: Vec<AgentType>,
+    /// Whether to test if the primary agent has recovered
+    pub test_primary_recovery: bool,
+    /// How often to test primary recovery (every N iterations)
+    pub recovery_test_interval: u32,
+    /// Base backoff time in milliseconds when an agent is rate-limited
+    pub base_backoff_ms: u64,
+    /// Maximum backoff time in milliseconds
+    pub max_backoff_ms: u64,
+    /// Whether fallback is enabled at all
+    pub enabled: bool,
+}
+
+impl Default for FallbackChainConfig {
+    fn default() -> Self {
+        Self {
+            fallback_chain: vec![AgentType::Claude, AgentType::Opencode],
+            test_primary_recovery: true,
+            recovery_test_interval: 5, // Test every 5 iterations
+            base_backoff_ms: 5000,
+            max_backoff_ms: 300_000, // 5 minutes
+            enabled: true,
+        }
+    }
+}
+
+/// Record of a single iteration stored in the database
+///
+/// Used for persistent history and crash recovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IterationRecord {
+    /// Unique identifier for this record
+    pub id: String,
+    /// Execution ID this iteration belongs to
+    pub execution_id: String,
+    /// Iteration number (1-indexed)
+    pub iteration: u32,
+    /// Outcome of this iteration
+    pub outcome: IterationOutcome,
+    /// Duration in seconds
+    pub duration_secs: f64,
+    /// Agent type used for this iteration
+    pub agent_type: AgentType,
+    /// Whether a rate limit was encountered
+    pub rate_limit_encountered: bool,
+    /// Error message if failed
+    pub error_message: Option<String>,
+    /// When the iteration started
+    pub started_at: String,
+    /// When the iteration completed (None if interrupted)
+    pub completed_at: Option<String>,
+}
+
+/// Execution state snapshot for crash recovery
+///
+/// Saved periodically during execution so we can detect and recover from crashes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionStateSnapshot {
+    /// Execution ID
+    pub execution_id: String,
+    /// Serialized state of the Ralph loop
+    pub state: String,
+    /// Last heartbeat timestamp (for crash detection)
+    pub last_heartbeat: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,5 +571,172 @@ mod tests {
 
         story_with_dep.dependencies = vec!["1".to_string(), "2".to_string()];
         assert!(!story_with_dep.dependencies_satisfied(&stories));
+    }
+
+    // =========================================================================
+    // Error Strategy Tests
+    // =========================================================================
+
+    #[test]
+    fn test_error_strategy_default() {
+        let strategy = ErrorStrategy::default();
+        match strategy {
+            ErrorStrategy::Retry { max_attempts, backoff_ms } => {
+                assert_eq!(max_attempts, 3);
+                assert_eq!(backoff_ms, 5000);
+            }
+            _ => panic!("Default should be Retry"),
+        }
+    }
+
+    #[test]
+    fn test_error_strategy_serialization() {
+        let retry = ErrorStrategy::Retry { max_attempts: 5, backoff_ms: 10000 };
+        let json = serde_json::to_string(&retry).unwrap();
+        assert!(json.contains("retry"));
+        assert!(json.contains("5"));
+        assert!(json.contains("10000"));
+
+        let skip = ErrorStrategy::Skip;
+        let json = serde_json::to_string(&skip).unwrap();
+        assert!(json.contains("skip"));
+
+        let abort = ErrorStrategy::Abort;
+        let json = serde_json::to_string(&abort).unwrap();
+        assert!(json.contains("abort"));
+    }
+
+    #[test]
+    fn test_error_strategy_deserialization() {
+        let json = r#"{"type":"retry","max_attempts":3,"backoff_ms":5000}"#;
+        let strategy: ErrorStrategy = serde_json::from_str(json).unwrap();
+        assert_eq!(strategy, ErrorStrategy::Retry { max_attempts: 3, backoff_ms: 5000 });
+
+        let json = r#"{"type":"skip"}"#;
+        let strategy: ErrorStrategy = serde_json::from_str(json).unwrap();
+        assert_eq!(strategy, ErrorStrategy::Skip);
+
+        let json = r#"{"type":"abort"}"#;
+        let strategy: ErrorStrategy = serde_json::from_str(json).unwrap();
+        assert_eq!(strategy, ErrorStrategy::Abort);
+    }
+
+    // =========================================================================
+    // Iteration Outcome Tests
+    // =========================================================================
+
+    #[test]
+    fn test_iteration_outcome_display() {
+        assert_eq!(IterationOutcome::Success.to_string(), "success");
+        assert_eq!(IterationOutcome::Failed.to_string(), "failed");
+        assert_eq!(IterationOutcome::Skipped.to_string(), "skipped");
+        assert_eq!(IterationOutcome::Interrupted.to_string(), "interrupted");
+    }
+
+    #[test]
+    fn test_iteration_outcome_from_str() {
+        assert_eq!("success".parse::<IterationOutcome>().unwrap(), IterationOutcome::Success);
+        assert_eq!("failed".parse::<IterationOutcome>().unwrap(), IterationOutcome::Failed);
+        assert_eq!("skipped".parse::<IterationOutcome>().unwrap(), IterationOutcome::Skipped);
+        assert_eq!("interrupted".parse::<IterationOutcome>().unwrap(), IterationOutcome::Interrupted);
+        assert_eq!("SUCCESS".parse::<IterationOutcome>().unwrap(), IterationOutcome::Success);
+        assert!("invalid".parse::<IterationOutcome>().is_err());
+    }
+
+    #[test]
+    fn test_iteration_outcome_serialization() {
+        let outcome = IterationOutcome::Success;
+        let json = serde_json::to_string(&outcome).unwrap();
+        assert_eq!(json, "\"success\"");
+
+        let parsed: IterationOutcome = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, IterationOutcome::Success);
+    }
+
+    // =========================================================================
+    // Fallback Chain Config Tests
+    // =========================================================================
+
+    #[test]
+    fn test_fallback_chain_config_default() {
+        let config = FallbackChainConfig::default();
+        assert!(config.enabled);
+        assert!(config.test_primary_recovery);
+        assert_eq!(config.recovery_test_interval, 5);
+        assert_eq!(config.fallback_chain.len(), 2);
+        assert_eq!(config.fallback_chain[0], AgentType::Claude);
+        assert_eq!(config.fallback_chain[1], AgentType::Opencode);
+    }
+
+    #[test]
+    fn test_fallback_chain_config_serialization() {
+        let config = FallbackChainConfig {
+            fallback_chain: vec![AgentType::Claude, AgentType::Opencode, AgentType::Cursor],
+            test_primary_recovery: false,
+            recovery_test_interval: 10,
+            base_backoff_ms: 10000,
+            max_backoff_ms: 600000,
+            enabled: true,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("fallbackChain"));
+        assert!(json.contains("testPrimaryRecovery"));
+
+        let parsed: FallbackChainConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.fallback_chain.len(), 3);
+        assert!(!parsed.test_primary_recovery);
+        assert_eq!(parsed.recovery_test_interval, 10);
+    }
+
+    // =========================================================================
+    // Iteration Record Tests
+    // =========================================================================
+
+    #[test]
+    fn test_iteration_record_serialization() {
+        let record = IterationRecord {
+            id: "rec-123".to_string(),
+            execution_id: "exec-456".to_string(),
+            iteration: 5,
+            outcome: IterationOutcome::Success,
+            duration_secs: 120.5,
+            agent_type: AgentType::Claude,
+            rate_limit_encountered: false,
+            error_message: None,
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:02:00Z".to_string()),
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("rec-123"));
+        assert!(json.contains("exec-456"));
+        assert!(json.contains("success"));
+
+        let parsed: IterationRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.iteration, 5);
+        assert_eq!(parsed.outcome, IterationOutcome::Success);
+        assert!(!parsed.rate_limit_encountered);
+    }
+
+    #[test]
+    fn test_iteration_record_with_error() {
+        let record = IterationRecord {
+            id: "rec-789".to_string(),
+            execution_id: "exec-456".to_string(),
+            iteration: 3,
+            outcome: IterationOutcome::Failed,
+            duration_secs: 45.0,
+            agent_type: AgentType::Opencode,
+            rate_limit_encountered: true,
+            error_message: Some("Rate limit exceeded".to_string()),
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:00:45Z".to_string()),
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("failed"));
+        assert!(json.contains("Rate limit exceeded"));
+        assert!(json.contains("rateLimitEncountered\":true"));
     }
 }

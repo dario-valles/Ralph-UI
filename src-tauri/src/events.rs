@@ -16,6 +16,12 @@ pub const EVENT_PRD_CHAT_CHUNK: &str = "prd:chat_chunk";
 pub const EVENT_AGENT_COMPLETED: &str = "agent:completed";
 pub const EVENT_AGENT_FAILED: &str = "agent:failed";
 
+// Subagent events (for real-time tree visualization)
+pub const EVENT_SUBAGENT_SPAWNED: &str = "subagent:spawned";
+pub const EVENT_SUBAGENT_PROGRESS: &str = "subagent:progress";
+pub const EVENT_SUBAGENT_COMPLETED: &str = "subagent:completed";
+pub const EVENT_SUBAGENT_FAILED: &str = "subagent:failed";
+
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +97,88 @@ pub struct AgentFailedPayload {
     pub task_id: String,
     pub session_id: String,
     pub exit_code: Option<i32>,
+    pub error: String,
+}
+
+// ============================================================================
+// Subagent Events (for real-time tree visualization)
+// ============================================================================
+
+/// Type of subagent event
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubagentEventType {
+    /// Subagent was spawned
+    Spawned,
+    /// Subagent made progress
+    Progress,
+    /// Subagent completed successfully
+    Completed,
+    /// Subagent failed
+    Failed,
+}
+
+/// Payload for subagent spawned events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentSpawnedPayload {
+    /// Unique ID of the subagent
+    pub subagent_id: String,
+    /// ID of the parent agent that spawned this subagent
+    pub parent_agent_id: String,
+    /// Description of what the subagent is doing
+    pub description: String,
+    /// Timestamp when spawned
+    pub timestamp: String,
+    /// Depth in the tree (0 = top-level agent)
+    pub depth: u32,
+    /// Subagent type (e.g., "Task", "Explore", "Plan")
+    pub subagent_type: Option<String>,
+}
+
+/// Payload for subagent progress events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentProgressPayload {
+    /// ID of the subagent
+    pub subagent_id: String,
+    /// ID of the parent agent
+    pub parent_agent_id: String,
+    /// Progress message
+    pub message: String,
+    /// Timestamp
+    pub timestamp: String,
+}
+
+/// Payload for subagent completed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentCompletedPayload {
+    /// ID of the subagent
+    pub subagent_id: String,
+    /// ID of the parent agent
+    pub parent_agent_id: String,
+    /// Duration in seconds
+    pub duration_secs: f64,
+    /// Timestamp when completed
+    pub timestamp: String,
+    /// Summary of what was accomplished (optional)
+    pub summary: Option<String>,
+}
+
+/// Payload for subagent failed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentFailedPayload {
+    /// ID of the subagent
+    pub subagent_id: String,
+    /// ID of the parent agent
+    pub parent_agent_id: String,
+    /// Duration in seconds
+    pub duration_secs: f64,
+    /// Timestamp when failed
+    pub timestamp: String,
+    /// Error message
     pub error: String,
 }
 
@@ -181,6 +269,50 @@ pub fn emit_agent_failed(
         .with_context("Failed to emit agent failed event")
 }
 
+// ============================================================================
+// Subagent Event Emitters
+// ============================================================================
+
+/// Emit a subagent spawned event
+pub fn emit_subagent_spawned(
+    app_handle: &tauri::AppHandle,
+    payload: SubagentSpawnedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_SUBAGENT_SPAWNED, payload)
+        .with_context("Failed to emit subagent spawned event")
+}
+
+/// Emit a subagent progress event
+pub fn emit_subagent_progress(
+    app_handle: &tauri::AppHandle,
+    payload: SubagentProgressPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_SUBAGENT_PROGRESS, payload)
+        .with_context("Failed to emit subagent progress event")
+}
+
+/// Emit a subagent completed event
+pub fn emit_subagent_completed(
+    app_handle: &tauri::AppHandle,
+    payload: SubagentCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_SUBAGENT_COMPLETED, payload)
+        .with_context("Failed to emit subagent completed event")
+}
+
+/// Emit a subagent failed event
+pub fn emit_subagent_failed(
+    app_handle: &tauri::AppHandle,
+    payload: SubagentFailedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_SUBAGENT_FAILED, payload)
+        .with_context("Failed to emit subagent failed event")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,6 +330,69 @@ mod tests {
         assert_eq!(EVENT_RATE_LIMIT_DETECTED, "agent:rate_limit_detected");
         assert_eq!(EVENT_PRD_FILE_UPDATED, "prd:file_updated");
         assert_eq!(EVENT_PRD_CHAT_CHUNK, "prd:chat_chunk");
+    }
+
+    #[test]
+    fn test_subagent_event_constants() {
+        assert_eq!(EVENT_SUBAGENT_SPAWNED, "subagent:spawned");
+        assert_eq!(EVENT_SUBAGENT_PROGRESS, "subagent:progress");
+        assert_eq!(EVENT_SUBAGENT_COMPLETED, "subagent:completed");
+        assert_eq!(EVENT_SUBAGENT_FAILED, "subagent:failed");
+    }
+
+    #[test]
+    fn test_subagent_event_type_serialization() {
+        assert_eq!(serde_json::to_string(&SubagentEventType::Spawned).unwrap(), "\"spawned\"");
+        assert_eq!(serde_json::to_string(&SubagentEventType::Progress).unwrap(), "\"progress\"");
+        assert_eq!(serde_json::to_string(&SubagentEventType::Completed).unwrap(), "\"completed\"");
+        assert_eq!(serde_json::to_string(&SubagentEventType::Failed).unwrap(), "\"failed\"");
+    }
+
+    #[test]
+    fn test_subagent_spawned_payload_serialization() {
+        let payload = SubagentSpawnedPayload {
+            subagent_id: "sub-123".to_string(),
+            parent_agent_id: "agent-456".to_string(),
+            description: "Searching codebase".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            depth: 1,
+            subagent_type: Some("Explore".to_string()),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"subagentId\":\"sub-123\""));
+        assert!(json.contains("\"parentAgentId\":\"agent-456\""));
+        assert!(json.contains("\"depth\":1"));
+        assert!(json.contains("\"subagentType\":\"Explore\""));
+    }
+
+    #[test]
+    fn test_subagent_completed_payload_serialization() {
+        let payload = SubagentCompletedPayload {
+            subagent_id: "sub-123".to_string(),
+            parent_agent_id: "agent-456".to_string(),
+            duration_secs: 45.5,
+            timestamp: "2024-01-01T00:00:45Z".to_string(),
+            summary: Some("Found 3 matching files".to_string()),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"durationSecs\":45.5"));
+        assert!(json.contains("\"summary\":\"Found 3 matching files\""));
+    }
+
+    #[test]
+    fn test_subagent_failed_payload_serialization() {
+        let payload = SubagentFailedPayload {
+            subagent_id: "sub-123".to_string(),
+            parent_agent_id: "agent-456".to_string(),
+            duration_secs: 10.0,
+            timestamp: "2024-01-01T00:00:10Z".to_string(),
+            error: "Network timeout".to_string(),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"error\":\"Network timeout\""));
     }
 
     // =========================================================================
