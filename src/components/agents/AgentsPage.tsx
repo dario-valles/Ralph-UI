@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useAgentStore } from '@/stores/agentStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useTaskStore } from '@/stores/taskStore'
 import { AgentList } from './AgentList'
 import { AgentDetail } from './AgentDetail'
 import { FocusedAgentLogs } from './FocusedAgentLogs'
@@ -26,16 +27,19 @@ export function AgentsPage() {
     clearError,
   } = useAgentStore()
 
+  const { fetchTasks } = useTaskStore()
+
   const [showActiveOnly, setShowActiveOnly] = useState(false)
   const [realtimeLogs, setRealtimeLogs] = useState<LogEntry[]>([])
   const [realtimeLogsAgentId, setRealtimeLogsAgentId] = useState<string | null>(null)
 
-  // Load agents when session changes
+  // Load agents and tasks when session changes
   useEffect(() => {
     if (currentSession?.id) {
       loadAgentsForSession(currentSession?.id)
+      fetchTasks(currentSession?.id)
     }
-  }, [currentSession?.id, loadAgentsForSession])
+  }, [currentSession?.id, loadAgentsForSession, fetchTasks])
 
   // Poll for completed agents (detects zombie processes and updates status)
   const pollIntervalRef = useRef<number | null>(null)
