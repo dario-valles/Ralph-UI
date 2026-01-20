@@ -1,5 +1,6 @@
 // Agent fallback management for rate limiting
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Fallback infrastructure (Phase 4)
 
 use crate::models::AgentType;
 use chrono::{DateTime, Duration, Utc};

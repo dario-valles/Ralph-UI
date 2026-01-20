@@ -1,5 +1,6 @@
 // Template resolution with cascading lookup
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Template resolver infrastructure
 
 use crate::templates::builtin;
 use anyhow::{Result, anyhow};

@@ -1,5 +1,6 @@
 // PRD database operations
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Database infrastructure (some methods not yet exposed via commands)
 
 use rusqlite::{params, Result};
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,7 @@
 // Agent process spawning and lifecycle management
-#![allow(dead_code)]
+// Note: Contains infrastructure code for future parallel agent execution
+
+#![allow(dead_code)] // Infrastructure for parallel agent orchestration (Phase 4)
 
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};

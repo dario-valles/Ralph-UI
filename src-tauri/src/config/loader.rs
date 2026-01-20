@@ -1,5 +1,6 @@
 // Configuration file loading
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Config loader infrastructure
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};

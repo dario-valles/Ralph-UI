@@ -1,5 +1,6 @@
 // PRD Chat database operations
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Database infrastructure
 
 use crate::models::{ChatMessage, ChatSession, MessageRole};
 use rusqlite::{params, Result};
@@ -34,8 +35,11 @@ impl super::Database {
     pub fn get_chat_session(&self, id: &str) -> Result<ChatSession> {
         self.get_connection().query_row(
             "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.structured_mode, s.extracted_structure, s.created_at, s.updated_at,
-                    (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
-             FROM chat_sessions s WHERE s.id = ?1",
+                    COUNT(m.id) as message_count
+             FROM chat_sessions s
+             LEFT JOIN chat_messages m ON s.id = m.session_id
+             WHERE s.id = ?1
+             GROUP BY s.id",
             params![id],
             |row| {
                 let guided_mode_int: i32 = row.get::<_, Option<i32>>(6)?.unwrap_or(1);
@@ -64,8 +68,10 @@ impl super::Database {
         let conn = self.get_connection();
         let mut stmt = conn.prepare(
             "SELECT s.id, s.agent_type, s.project_path, s.prd_id, s.title, s.prd_type, s.guided_mode, s.quality_score, s.template_id, s.structured_mode, s.extracted_structure, s.created_at, s.updated_at,
-                    (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
+                    COUNT(m.id) as message_count
              FROM chat_sessions s
+             LEFT JOIN chat_messages m ON s.id = m.session_id
+             GROUP BY s.id
              ORDER BY s.updated_at DESC",
         )?;
 

@@ -109,3 +109,168 @@ export function resetStore<T extends object>(
   const state = store.getState()
   Object.assign(state, initialState)
 }
+
+// ============================================================================
+// Common Initial States
+// ============================================================================
+
+/**
+ * Common initial state for stores with loading/error pattern.
+ * Extend this with store-specific fields.
+ */
+export const INITIAL_ASYNC_STATE = {
+  loading: false,
+  error: null,
+} as const
+
+/**
+ * Initial state for session store.
+ */
+export const SESSION_STORE_INITIAL_STATE = {
+  sessions: [],
+  currentSession: null,
+  ...INITIAL_ASYNC_STATE,
+}
+
+/**
+ * Initial state for task store.
+ */
+export const TASK_STORE_INITIAL_STATE = {
+  tasks: [],
+  currentTask: null,
+  ...INITIAL_ASYNC_STATE,
+}
+
+/**
+ * Initial state for agent store.
+ */
+export const AGENT_STORE_INITIAL_STATE = {
+  agents: [],
+  activeAgents: [],
+  currentAgent: null,
+  agentLogs: {},
+  ...INITIAL_ASYNC_STATE,
+}
+
+/**
+ * Initial state for PRD store.
+ */
+export const PRD_STORE_INITIAL_STATE = {
+  prds: [],
+  currentPRD: null,
+  templates: [],
+  ...INITIAL_ASYNC_STATE,
+}
+
+// ============================================================================
+// Mock API Factories
+// ============================================================================
+
+/**
+ * Creates a mock session API with all methods mocked.
+ * Use with vi.mock('@/lib/tauri-api', () => ({ sessionApi: createMockSessionApi() }))
+ */
+export function createMockSessionApi() {
+  return {
+    create: vi.fn(),
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    updateStatus: vi.fn(),
+  }
+}
+
+/**
+ * Creates a mock task API with all methods mocked.
+ */
+export function createMockTaskApi() {
+  return {
+    create: vi.fn(),
+    getBySession: vi.fn(),
+    getById: vi.fn(),
+    update: vi.fn(),
+    updateStatus: vi.fn(),
+    delete: vi.fn(),
+    bulkCreate: vi.fn(),
+    reorderTasks: vi.fn(),
+  }
+}
+
+/**
+ * Creates a mock agent API with all methods mocked.
+ */
+export function createMockAgentApi() {
+  return {
+    spawn: vi.fn(),
+    getBySession: vi.fn(),
+    getById: vi.fn(),
+    getActiveForSession: vi.fn(),
+    updateStatus: vi.fn(),
+    getLogs: vi.fn(),
+    stop: vi.fn(),
+    restart: vi.fn(),
+    cleanup: vi.fn(),
+  }
+}
+
+/**
+ * Creates a mock PRD API with all methods mocked.
+ */
+export function createMockPrdApi() {
+  return {
+    create: vi.fn(),
+    list: vi.fn(),
+    getById: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    listTemplates: vi.fn(),
+    analyzeQuality: vi.fn(),
+    execute: vi.fn(),
+  }
+}
+
+// ============================================================================
+// Test Assertion Helpers
+// ============================================================================
+
+/**
+ * Assert that a store is in loading state.
+ */
+export function expectLoading<T extends { loading: boolean; error: string | null }>(
+  store: { getState: () => T }
+): void {
+  const state = store.getState()
+  expect(state.loading).toBe(true)
+  expect(state.error).toBeNull()
+}
+
+/**
+ * Assert that a store has completed loading successfully.
+ */
+export function expectSuccess<T extends { loading: boolean; error: string | null }>(
+  store: { getState: () => T }
+): void {
+  const state = store.getState()
+  expect(state.loading).toBe(false)
+  expect(state.error).toBeNull()
+}
+
+/**
+ * Assert that a store has an error.
+ */
+export function expectError<T extends { loading: boolean; error: string | null }>(
+  store: { getState: () => T },
+  errorMessage?: string
+): void {
+  const state = store.getState()
+  expect(state.loading).toBe(false)
+  if (errorMessage) {
+    expect(state.error).toContain(errorMessage)
+  } else {
+    expect(state.error).not.toBeNull()
+  }
+}
+
+// Import vi from vitest for mock creation
+import { vi, expect } from 'vitest'

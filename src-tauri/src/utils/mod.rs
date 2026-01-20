@@ -3,6 +3,36 @@
 use chrono::Utc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+/// Extension trait for Result that provides convenient error context methods.
+/// Converts any error to a String with a descriptive message prefix.
+///
+/// # Example
+/// ```ignore
+/// use crate::utils::ResultExt;
+///
+/// let file = std::fs::read_to_string("config.json")
+///     .with_context("Failed to read config file")?;
+/// ```
+pub trait ResultExt<T> {
+    /// Converts the error to a String with context message.
+    fn with_context(self, msg: &str) -> Result<T, String>;
+}
+
+impl<T, E: std::fmt::Display> ResultExt<T> for Result<T, E> {
+    fn with_context(self, msg: &str) -> Result<T, String> {
+        self.map_err(|e| format!("{}: {}", msg, e))
+    }
+}
+
+/// Macro for common error mapping pattern.
+/// Converts `result.map_err(|e| format!("Message: {}", e))` to `map_err_str!(result, "Message")`.
+#[macro_export]
+macro_rules! map_err_str {
+    ($expr:expr, $msg:literal) => {
+        $expr.map_err(|e| format!("{}: {}", $msg, e))
+    };
+}
+
 /// Error type for mutex lock failures
 #[allow(dead_code)]
 #[derive(Debug)]

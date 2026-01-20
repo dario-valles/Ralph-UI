@@ -1,5 +1,6 @@
 // Git operations using git2-rs
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Git infrastructure (some methods not yet used)
 
 use git2::{
     Branch, BranchType, Commit, Delta, Diff, DiffOptions, Error as GitError, Oid, Repository,

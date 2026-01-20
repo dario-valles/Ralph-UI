@@ -1,40 +1,11 @@
 // Frontend API for agent management
 
-import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import { isTauri } from './tauri-check'
+import type { Agent, AgentStatus, LogEntry } from '@/types'
+import { invoke } from './invoke'
 
-// Safe invoke wrapper that handles the case when Tauri isn't available
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri || typeof tauriInvoke !== 'function') {
-    throw new Error(`Tauri is not available. Command '${cmd}' cannot be executed outside of Tauri.`)
-  }
-  return tauriInvoke<T>(cmd, args)
-}
-
-export interface Agent {
-  id: string
-  sessionId: string
-  taskId: string
-  status: AgentStatus
-  processId: number | null
-  worktreePath: string
-  branch: string
-  iterationCount: number
-  tokens: number
-  cost: number
-  logs: LogEntry[]
-  subagents: Agent[]
-}
-
-export type AgentStatus = 'idle' | 'thinking' | 'reading' | 'implementing' | 'testing' | 'committing'
-
+// Re-export types for backwards compatibility
+export type { Agent, AgentStatus, LogEntry }
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
-
-export interface LogEntry {
-  timestamp: string
-  level: LogLevel
-  message: string
-}
 
 export interface CreateAgentParams {
   id: string

@@ -1,5 +1,6 @@
 // Worktree isolation coordinator for parallel agents
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Worktree coordinator infrastructure (Phase 4)
 
 use crate::git::GitManager;
 use anyhow::{Result, anyhow};

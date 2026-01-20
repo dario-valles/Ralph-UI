@@ -1,6 +1,7 @@
 // Progress file tracking for session recovery
 // Maintains a progress.txt file that persists task state across interruptions
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Progress tracking infrastructure
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};

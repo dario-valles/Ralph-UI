@@ -6,6 +6,19 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Row};
 
 impl super::Database {
+    /// Hydrate a list of agents with their logs and subagents.
+    /// This is a helper to avoid N+1 queries when fetching agents.
+    fn hydrate_agents(&self, agents: Vec<Agent>) -> Result<Vec<Agent>> {
+        agents
+            .into_iter()
+            .map(|mut agent| {
+                agent.logs = self.get_logs_for_agent(&agent.id)?;
+                agent.subagents = self.get_subagents(&agent.id)?;
+                Ok(agent)
+            })
+            .collect()
+    }
+
     /// Create a new agent in the database
     pub fn create_agent(&self, agent: &Agent) -> Result<()> {
         self.get_connection().execute(
@@ -76,15 +89,7 @@ impl super::Database {
             .query_map(params![session_id], |row| Ok(row_to_agent(row)))?
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Load logs for each agent
-        let mut agents_with_logs = Vec::new();
-        for mut agent in agents {
-            agent.logs = self.get_logs_for_agent(&agent.id)?;
-            agent.subagents = self.get_subagents(&agent.id)?;
-            agents_with_logs.push(agent);
-        }
-
-        Ok(agents_with_logs)
+        self.hydrate_agents(agents)
     }
 
     /// Get all agents for a task
@@ -101,15 +106,7 @@ impl super::Database {
             .query_map(params![task_id], |row| Ok(row_to_agent(row)))?
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Load logs for each agent
-        let mut agents_with_logs = Vec::new();
-        for mut agent in agents {
-            agent.logs = self.get_logs_for_agent(&agent.id)?;
-            agent.subagents = self.get_subagents(&agent.id)?;
-            agents_with_logs.push(agent);
-        }
-
-        Ok(agents_with_logs)
+        self.hydrate_agents(agents)
     }
 
     /// Update an agent's status
@@ -223,14 +220,7 @@ impl super::Database {
             .query_map([], |row| Ok(row_to_agent(row)))?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut agents_with_logs = Vec::new();
-        for mut agent in agents {
-            agent.logs = self.get_logs_for_agent(&agent.id)?;
-            agent.subagents = self.get_subagents(&agent.id)?;
-            agents_with_logs.push(agent);
-        }
-
-        Ok(agents_with_logs)
+        self.hydrate_agents(agents)
     }
 
     /// Get active agents for a specific session (not idle or completed)
@@ -250,14 +240,7 @@ impl super::Database {
             .query_map(params![session_id], |row| Ok(row_to_agent(row)))?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut agents_with_logs = Vec::new();
-        for mut agent in agents {
-            agent.logs = self.get_logs_for_agent(&agent.id)?;
-            agent.subagents = self.get_subagents(&agent.id)?;
-            agents_with_logs.push(agent);
-        }
-
-        Ok(agents_with_logs)
+        self.hydrate_agents(agents)
     }
 }
 

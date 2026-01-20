@@ -1,5 +1,6 @@
 // Rate limit detection for agent processes
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Rate limiting infrastructure (Phase 4)
 
 use chrono::{DateTime, Utc};
 use regex::Regex;

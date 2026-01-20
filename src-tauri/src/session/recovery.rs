@@ -1,5 +1,6 @@
 // Session crash recovery
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Recovery infrastructure
 
 use crate::models::{SessionStatus, TaskStatus};
 use crate::session::lock::{find_stale_locks, remove_stale_lock, LockInfo};

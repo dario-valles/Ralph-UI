@@ -1,5 +1,6 @@
 // Merge conflict detection for parallel agent coordination
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Conflict detection infrastructure (Phase 4)
 
 use crate::git::GitManager;
 use anyhow::Result;

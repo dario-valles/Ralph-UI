@@ -1,5 +1,6 @@
 // Agent pool management with resource limits
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Parallel pool infrastructure (Phase 4)
 
 use crate::agents::{AgentManager, AgentSpawnConfig, RateLimitEvent};
 use crate::utils::lock_mutex_recover;

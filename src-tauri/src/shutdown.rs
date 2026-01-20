@@ -1,5 +1,6 @@
 // Graceful shutdown handling for signal trapping
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Shutdown handling infrastructure
 
 use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};

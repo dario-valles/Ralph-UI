@@ -1,5 +1,6 @@
 // Session lock file management for crash detection
-#![allow(dead_code)]
+
+#![allow(dead_code)] // Session lock infrastructure
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Duration, Utc};
