@@ -7,6 +7,7 @@ use crate::models::{
 };
 use crate::parsers::structured_output;
 use crate::session_files;
+use crate::utils::lock_db;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -75,7 +76,7 @@ pub async fn start_prd_chat_session(
     request: StartChatSessionRequest,
     db: State<'_, Mutex<Database>>,
 ) -> Result<ChatSession, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     // Validate agent type
     let _agent_type = parse_agent_type(&request.agent_type)?;
@@ -206,7 +207,7 @@ pub async fn send_prd_chat_message(
 ) -> Result<SendMessageResponse, String> {
     // First phase: read data and store user message (hold mutex briefly)
     let (session, history, user_message, prompt) = {
-        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let db_guard = lock_db(&db)?;
 
         // Get the session
         let session = db_guard.get_chat_session(&request.session_id)
@@ -253,7 +254,7 @@ pub async fn send_prd_chat_message(
 
     // Second phase: store response and parse structured output (hold mutex briefly)
     let assistant_message = {
-        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let db_guard = lock_db(&db)?;
 
         let response_now = chrono::Utc::now().to_rfc3339();
 
@@ -320,7 +321,7 @@ pub async fn get_prd_chat_history(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.get_messages_by_session(&session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))
@@ -331,7 +332,7 @@ pub async fn get_prd_chat_history(
 pub async fn list_prd_chat_sessions(
     db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<ChatSession>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.list_chat_sessions()
         .map_err(|e| format!("Failed to list chat sessions: {}", e))
@@ -343,7 +344,7 @@ pub async fn delete_prd_chat_session(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     // Delete messages first (foreign key constraint)
     db.delete_messages_by_session(&session_id)
@@ -364,7 +365,7 @@ pub async fn export_chat_to_prd(
     // First, get session data and determine content source
     // We need to release the lock before async AI call
     let (session, content, assessment, from_plan_file) = {
-        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let db_guard = lock_db(&db)?;
 
         // Get session
         let session = db_guard.get_chat_session(&request.session_id)
@@ -480,7 +481,7 @@ pub async fn export_chat_to_prd(
     };
 
     // Re-acquire lock to save to database
-    let db_guard = db.lock().map_err(|e| e.to_string())?;
+    let db_guard = lock_db(&db)?;
     db_guard.create_prd(&prd)
         .map_err(|e| format!("Failed to create PRD: {}", e))?;
 
@@ -700,7 +701,7 @@ pub async fn assess_prd_quality(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<QualityAssessment, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     // Get session
     let session = db.get_chat_session(&session_id)
@@ -769,7 +770,7 @@ pub async fn preview_prd_extraction(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<ExtractedPRDContent, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     // Get all messages
     let messages = db.get_messages_by_session(&session_id)
@@ -835,7 +836,7 @@ pub async fn get_extracted_structure(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<ExtractedPRDStructure, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     let session = db.get_chat_session(&session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
@@ -856,7 +857,7 @@ pub async fn set_structured_mode(
     enabled: bool,
     db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.update_chat_session_structured_mode(&session_id, enabled)
         .map_err(|e| format!("Failed to update structured mode: {}", e))?;
@@ -870,7 +871,7 @@ pub async fn clear_extracted_structure(
     session_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.update_chat_session_extracted_structure(&session_id, None)
         .map_err(|e| format!("Failed to clear structure: {}", e))?;
@@ -1320,7 +1321,7 @@ pub async fn start_watching_prd_file(
 ) -> Result<WatchFileResponse, String> {
     // Get the session to determine the file path
     let (project_path, title) = {
-        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let db_guard = lock_db(&db)?;
         let session = db_guard.get_chat_session(&session_id)
             .map_err(|e| format!("Session not found: {}", e))?;
         (session.project_path, session.title)
@@ -1377,7 +1378,7 @@ pub async fn get_prd_plan_content(
 ) -> Result<Option<String>, String> {
     // Get the session to determine the file path
     let (project_path, title) = {
-        let db_guard = db.lock().map_err(|e| e.to_string())?;
+        let db_guard = lock_db(&db)?;
         let session = db_guard.get_chat_session(&session_id)
             .map_err(|e| format!("Session not found: {}", e))?;
         (session.project_path, session.title)

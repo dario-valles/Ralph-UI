@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Save, RotateCcw, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
+import { isTauri } from '@/lib/tauri-check'
 import type {
   RalphConfig,
   RalphExecutionConfig,
@@ -35,9 +36,6 @@ const defaultUISettings: UISettings = {
 }
 
 const UI_SETTINGS_KEY = 'ralph-ui-settings'
-
-// Check if Tauri is available
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export function SettingsPage() {
   // Backend config state

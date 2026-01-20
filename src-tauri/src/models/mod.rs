@@ -72,6 +72,21 @@ pub struct SessionConfig {
     pub run_lint: bool,
 }
 
+impl Default for SessionConfig {
+    fn default() -> Self {
+        SessionConfig {
+            max_parallel: 3,
+            max_iterations: 10,
+            max_retries: 3,
+            agent_type: AgentType::Claude,
+            auto_create_prs: true,
+            draft_prs: false,
+            run_tests: true,
+            run_lint: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {

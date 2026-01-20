@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TaskList } from './TaskList'
 import { TaskDetail } from './TaskDetail'
 import { PRDImport } from './PRDImport'
 import { DependencyGraph } from './DependencyGraph'
+import { NoSessionState } from '@/components/shared/EmptyState'
+import { StatCard } from '@/components/shared/StatCard'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { Upload, Network } from 'lucide-react'
@@ -68,23 +69,10 @@ export function TasksPage() {
 
   if (!currentSession) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
-          <p className="text-muted-foreground">Manage your AI agent tasks</p>
-        </div>
-
-        <Card>
-          <CardContent className="flex items-center justify-center p-12">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">No Session Selected</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Please create or select a session first to manage tasks
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <NoSessionState
+        pageTitle="Tasks"
+        pageDescription="Manage your AI agent tasks"
+      />
     )
   }
 
@@ -116,47 +104,10 @@ export function TasksPage() {
 
       {/* Statistics */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tasks.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {tasks.filter((t) => t.status === 'pending').length}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {tasks.filter((t) => t.status === 'in_progress').length}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {tasks.filter((t) => t.status === 'completed').length}
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard title="Total Tasks" value={tasks.length} />
+        <StatCard title="Pending" value={tasks.filter((t) => t.status === 'pending').length} />
+        <StatCard title="In Progress" value={tasks.filter((t) => t.status === 'in_progress').length} />
+        <StatCard title="Completed" value={tasks.filter((t) => t.status === 'completed').length} />
       </div>
 
       {/* Dependency Graph (conditional) */}

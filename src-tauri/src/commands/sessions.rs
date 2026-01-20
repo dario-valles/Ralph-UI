@@ -2,7 +2,7 @@
 
 use crate::database::{self, Database};
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
-use crate::models::{AgentType, Session, SessionConfig, SessionStatus};
+use crate::models::{Session, SessionConfig, SessionStatus};
 use crate::session_files;
 use crate::utils::lock_db;
 use chrono::Utc;
@@ -23,16 +23,7 @@ pub async fn create_session(
         created_at: Utc::now(),
         last_resumed_at: None,
         status: SessionStatus::Active,
-        config: SessionConfig {
-            max_parallel: 3,
-            max_iterations: 10,
-            max_retries: 3,
-            agent_type: AgentType::Claude,
-            auto_create_prs: true,
-            draft_prs: false,
-            run_tests: true,
-            run_lint: true,
-        },
+        config: SessionConfig::default(),
         tasks: vec![],
         total_cost: 0.0,
         total_tokens: 0,
@@ -265,16 +256,7 @@ pub async fn get_session_templates(
         .query_map([], |row| {
             let config_str: String = row.get(3)?;
             let config: SessionConfig = serde_json::from_str(&config_str)
-                .unwrap_or_else(|_| SessionConfig {
-                    max_parallel: 3,
-                    max_iterations: 10,
-                    max_retries: 3,
-                    agent_type: AgentType::Claude,
-                    auto_create_prs: true,
-                    draft_prs: false,
-                    run_tests: true,
-                    run_lint: true,
-                });
+                .unwrap_or_default();
 
             let created_at: String = row.get(4)?;
 
@@ -312,16 +294,7 @@ pub async fn create_session_from_template(
             |row| {
                 let config_str: String = row.get(3)?;
                 let config: SessionConfig = serde_json::from_str(&config_str)
-                    .unwrap_or_else(|_| SessionConfig {
-                        max_parallel: 3,
-                        max_iterations: 10,
-                        max_retries: 3,
-                        agent_type: AgentType::Claude,
-                        auto_create_prs: true,
-                        draft_prs: false,
-                        run_tests: true,
-                        run_lint: true,
-                    });
+                    .unwrap_or_default();
 
                 let created_at: String = row.get(4)?;
 

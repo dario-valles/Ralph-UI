@@ -2,6 +2,7 @@
 
 use crate::database::{Database, projects};
 use crate::session_files;
+use crate::utils::lock_db;
 use std::path::Path;
 use std::sync::Mutex;
 use tauri::State;
@@ -16,7 +17,7 @@ pub fn register_project(
     path: String,
     name: Option<String>,
 ) -> Result<projects::Project, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let project = projects::upsert_project(conn, &path, name.as_deref())
@@ -53,7 +54,7 @@ pub fn get_project(
     db: State<DbState>,
     project_id: String,
 ) -> Result<projects::Project, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::get_project(conn, &project_id)
@@ -66,7 +67,7 @@ pub fn get_project_by_path(
     db: State<DbState>,
     path: String,
 ) -> Result<projects::Project, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::get_project_by_path(conn, &path)
@@ -78,7 +79,7 @@ pub fn get_project_by_path(
 pub fn get_all_projects(
     db: State<DbState>,
 ) -> Result<Vec<projects::Project>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::get_all_projects(conn)
@@ -91,7 +92,7 @@ pub fn get_recent_projects(
     db: State<DbState>,
     limit: Option<i32>,
 ) -> Result<Vec<projects::Project>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::get_recent_projects(conn, limit.unwrap_or(5))
@@ -103,7 +104,7 @@ pub fn get_recent_projects(
 pub fn get_favorite_projects(
     db: State<DbState>,
 ) -> Result<Vec<projects::Project>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::get_favorite_projects(conn)
@@ -117,7 +118,7 @@ pub fn update_project_name(
     project_id: String,
     name: String,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::update_project_name(conn, &project_id, &name)
@@ -130,7 +131,7 @@ pub fn toggle_project_favorite(
     db: State<DbState>,
     project_id: String,
 ) -> Result<bool, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::toggle_project_favorite(conn, &project_id)
@@ -144,7 +145,7 @@ pub fn set_project_favorite(
     project_id: String,
     is_favorite: bool,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::set_project_favorite(conn, &project_id, is_favorite)
@@ -157,7 +158,7 @@ pub fn touch_project(
     db: State<DbState>,
     project_id: String,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::touch_project(conn, &project_id)
@@ -170,7 +171,7 @@ pub fn delete_project(
     db: State<DbState>,
     project_id: String,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     projects::delete_project(conn, &project_id)

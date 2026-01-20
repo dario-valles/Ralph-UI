@@ -4,7 +4,8 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { AgentList } from './AgentList'
 import { AgentDetail } from './AgentDetail'
 import { FocusedAgentLogs } from './FocusedAgentLogs'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { NoSessionState } from '@/components/shared/EmptyState'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -169,21 +170,11 @@ export function AgentsPage() {
 
   if (!currentSession?.id) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
-          <p className="text-muted-foreground">Monitor your AI agents</p>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              No Session Selected
-            </CardTitle>
-            <CardDescription>Please select a session from the sidebar to view agents</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
+      <NoSessionState
+        pageTitle="Agents"
+        pageDescription="Monitor your AI agents"
+        icon={<Bot className="h-5 w-5" />}
+      />
     )
   }
 

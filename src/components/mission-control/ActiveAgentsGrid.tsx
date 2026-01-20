@@ -2,6 +2,7 @@
 
 import { Bot, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { AgentMiniCard } from './AgentMiniCard'
 import type { ActiveAgentWithContext } from '@/hooks/useMissionControlData'
 import { cn } from '@/lib/utils'
@@ -37,18 +38,6 @@ function AgentsSkeleton() {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-8 px-4 text-center border border-dashed rounded-lg">
-      <Bot className="h-8 w-8 text-muted-foreground mb-2" />
-      <h3 className="font-medium mb-1">No active agents</h3>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        All agents are idle. Start a session to spawn agents.
-      </p>
     </div>
   )
 }
@@ -155,7 +144,13 @@ export function ActiveAgentsGrid({
           ) : loading ? (
             <AgentsSkeleton />
           ) : agents.length === 0 ? (
-            <EmptyState />
+            <EmptyState
+              icon={<Bot className="h-8 w-8" />}
+              title="No active agents"
+              description="All agents are idle. Start a session to spawn agents."
+              card={false}
+              dashed
+            />
           ) : (
             <div className={cn(
               "grid gap-3",

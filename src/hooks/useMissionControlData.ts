@@ -15,9 +15,7 @@ import { missionControlApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import { cleanupStaleAgents } from '@/lib/agent-api'
 import { parallelPollCompleted } from '@/lib/parallel-api'
-
-// Check if we're running inside Tauri
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+import { isTauri } from '@/lib/tauri-check'
 
 // ============================================================================
 // Types

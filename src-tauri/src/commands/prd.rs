@@ -4,6 +4,7 @@
 use crate::database::{Database, prd::*};
 use crate::parsers;
 use crate::session_files;
+use crate::utils::lock_db;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use std::sync::Mutex;
@@ -60,7 +61,7 @@ pub async fn create_prd(
     request: CreatePRDRequest,
     db: State<'_, Mutex<Database>>,
 ) -> Result<PRDDocument, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let prd_id = Uuid::new_v4().to_string();
@@ -106,7 +107,7 @@ pub async fn get_prd(
     id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<PRDDocument, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.get_prd(&id)
         .map_err(|e| format!("PRD not found: {}", e))
@@ -118,7 +119,7 @@ pub async fn update_prd(
     request: UpdatePRDRequest,
     db: State<'_, Mutex<Database>>,
 ) -> Result<PRDDocument, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     let mut prd = db.get_prd(&request.id)
         .map_err(|e| format!("PRD not found: {}", e))?;
@@ -148,7 +149,7 @@ pub async fn delete_prd(
     id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.delete_prd(&id)
         .map_err(|e| format!("Failed to delete PRD: {}", e))
@@ -159,7 +160,7 @@ pub async fn delete_prd(
 pub async fn list_prds(
     db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<PRDDocument>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.list_prds()
         .map_err(|e| format!("Failed to list PRDs: {}", e))
@@ -170,7 +171,7 @@ pub async fn list_prds(
 pub async fn list_prd_templates(
     db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<PRDTemplate>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     db.list_templates()
         .map_err(|e| format!("Failed to list templates: {}", e))
@@ -183,7 +184,7 @@ pub async fn export_prd(
     format: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<String, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     let prd = db.get_prd(&prd_id)
         .map_err(|e| format!("PRD not found: {}", e))?;
@@ -217,7 +218,7 @@ pub async fn analyze_prd_quality(
     prd_id: String,
     db: State<'_, Mutex<Database>>,
 ) -> Result<PRDDocument, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = lock_db(&db)?;
 
     let mut prd = db.get_prd(&prd_id)
         .map_err(|e| format!("PRD not found: {}", e))?;
@@ -247,7 +248,7 @@ pub async fn execute_prd(
     config: ExecutionConfig,
     db: State<'_, Mutex<Database>>,
 ) -> Result<String, String> {
-    let db_guard = db.lock().map_err(|e| e.to_string())?;
+    let db_guard = lock_db(&db)?;
 
     // 1. Load PRD from database
     let prd = db_guard.get_prd(&prd_id)

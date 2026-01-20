@@ -2,9 +2,7 @@
 
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import type { Task, Agent, AgentType, SchedulingStrategy } from '../types'
-
-// Check if we're running inside Tauri
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+import { isTauri } from './tauri-check'
 
 // Safe invoke wrapper that handles the case when Tauri isn't available
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
