@@ -40,7 +40,13 @@ impl RalphLoopManagerState {
 
     /// Get a snapshot for an execution
     pub fn get_snapshot(&self, execution_id: &str) -> Option<ExecutionSnapshot> {
-        let snapshots = self.snapshots.lock().unwrap();
+        let snapshots = match self.snapshots.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                log::warn!("Snapshots mutex was poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
         snapshots.get(execution_id).cloned()
     }
 }
@@ -297,7 +303,6 @@ pub async fn start_ralph_loop(
     db: State<'_, Mutex<Database>>,
 ) -> Result<String, String> {
     use crate::models::AgentType;
-    use std::io::Write;
 
     // Parse agent type
     let agent_type = match request.agent_type.to_lowercase().as_str() {
@@ -334,7 +339,8 @@ pub async fn start_ralph_loop(
 
     // Initialize snapshot with idle state
     {
-        let mut snapshots = snapshots_arc.lock().unwrap();
+        let mut snapshots = snapshots_arc.lock()
+            .map_err(|e| format!("Snapshot lock error: {}", e))?;
         snapshots.insert(execution_id.clone(), ExecutionSnapshot {
             state: Some(RalphLoopExecutionState::Idle),
             metrics: None,
@@ -364,7 +370,8 @@ pub async fn start_ralph_loop(
     // Store orchestrator in state (using tokio::sync::Mutex for async access)
     let orchestrator_arc = Arc::new(tokio::sync::Mutex::new(orchestrator));
     {
-        let mut executions = ralph_state.executions.lock().unwrap();
+        let mut executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.insert(execution_id.clone(), orchestrator_arc.clone());
     }
 
@@ -382,8 +389,7 @@ pub async fn start_ralph_loop(
     };
 
     // Spawn the loop in background
-    println!("[RalphLoop] Spawning background task for execution {}", execution_id);
-    let _ = std::io::stdout().flush();
+    log::info!("[RalphLoop] Spawning background task for execution {}", execution_id);
 
     // Clone for heartbeat task
     let execution_id_for_heartbeat = execution_id.clone();
@@ -413,12 +419,17 @@ pub async fn start_ralph_loop(
 
             // Update heartbeat in database
             if let Some(ref path) = db_path_for_heartbeat {
-                if let Ok(conn) = rusqlite::Connection::open(path) {
-                    let heartbeat = chrono::Utc::now().to_rfc3339();
-                    if let Err(e) = ralph_iterations::update_heartbeat(&conn, &execution_id_for_heartbeat, &heartbeat) {
-                        log::warn!("[Heartbeat] Failed to update heartbeat for {}: {}", execution_id_for_heartbeat, e);
-                    } else {
-                        log::debug!("[Heartbeat] Updated heartbeat for {}", execution_id_for_heartbeat);
+                match rusqlite::Connection::open(path) {
+                    Ok(conn) => {
+                        let heartbeat = chrono::Utc::now().to_rfc3339();
+                        if let Err(e) = ralph_iterations::update_heartbeat(&conn, &execution_id_for_heartbeat, &heartbeat) {
+                            log::warn!("[Heartbeat] Failed to update heartbeat for {}: {}", execution_id_for_heartbeat, e);
+                        } else {
+                            log::debug!("[Heartbeat] Updated heartbeat for {}", execution_id_for_heartbeat);
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("[Heartbeat] Failed to open database for heartbeat update: {}", e);
                     }
                 }
             }
@@ -430,50 +441,42 @@ pub async fn start_ralph_loop(
     let db_path_for_loop = db_path.clone();
 
     tauri::async_runtime::spawn(async move {
-        use std::io::Write;
-
-        println!("[RalphLoop] Background task started for {}", execution_id_for_loop);
-        let _ = std::io::stdout().flush();
-        log::info!("Ralph loop {} starting", execution_id_for_loop);
+        log::info!("[RalphLoop] Background task started for {}", execution_id_for_loop);
 
         // Lock orchestrator, then run with the shared agent manager
-        println!("[RalphLoop] Acquiring orchestrator lock...");
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Acquiring orchestrator lock...");
         let mut orchestrator = orchestrator_arc.lock().await;
-        println!("[RalphLoop] Locks acquired, starting run()...");
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Locks acquired, starting run()...");
 
         // Use the main app's agent manager (sync mutex, but operations are quick)
         // We lock/unlock for each operation within run() rather than holding lock
-        let result = orchestrator.run_with_shared_manager(agent_manager_arc).await;
+        let result = orchestrator.run(agent_manager_arc).await;
 
         // Clean up execution state from database
         if let Some(ref path) = db_path_for_loop {
-            if let Ok(conn) = rusqlite::Connection::open(path) {
-                if let Err(e) = ralph_iterations::delete_execution_state(&conn, &execution_id_for_loop) {
-                    log::warn!("[RalphLoop] Failed to delete execution state for {}: {}", execution_id_for_loop, e);
+            match rusqlite::Connection::open(path) {
+                Ok(conn) => {
+                    if let Err(e) = ralph_iterations::delete_execution_state(&conn, &execution_id_for_loop) {
+                        log::warn!("[RalphLoop] Failed to delete execution state for {}: {}", execution_id_for_loop, e);
+                    }
+                }
+                Err(e) => {
+                    log::error!("[RalphLoop] Failed to open database for cleanup: {}", e);
                 }
             }
         }
 
         match result {
             Ok(metrics) => {
-                println!(
-                    "[RalphLoop] Loop {} completed: {} iterations, ${:.2} total cost",
-                    execution_id_for_loop,
-                    metrics.total_iterations,
-                    metrics.total_cost
-                );
                 log::info!(
-                    "Ralph loop {} completed: {} iterations, ${:.2} total cost",
+                    "[RalphLoop] Loop {} completed: {} iterations, ${:.2} total cost",
                     execution_id_for_loop,
                     metrics.total_iterations,
                     metrics.total_cost
                 );
             }
             Err(e) => {
-                println!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
-                log::error!("Ralph loop {} failed: {}", execution_id_for_loop, e);
+                log::error!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
             }
         }
     });
@@ -488,7 +491,8 @@ pub async fn stop_ralph_loop(
     ralph_state: State<'_, RalphLoopManagerState>,
 ) -> Result<(), String> {
     let orchestrator_arc = {
-        let executions = ralph_state.executions.lock().unwrap();
+        let executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.get(&execution_id).cloned()
     };
 
@@ -516,7 +520,8 @@ pub async fn get_ralph_loop_state(
 
     // Fallback: check if execution exists
     let exists = {
-        let executions = ralph_state.executions.lock().unwrap();
+        let executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.contains_key(&execution_id)
     };
 
@@ -543,7 +548,8 @@ pub async fn get_ralph_loop_metrics(
 
     // Fallback: check if execution exists and return empty metrics
     let exists = {
-        let executions = ralph_state.executions.lock().unwrap();
+        let executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.contains_key(&execution_id)
     };
 
@@ -560,7 +566,8 @@ pub async fn get_ralph_loop_metrics(
 pub fn list_ralph_loop_executions(
     ralph_state: State<'_, RalphLoopManagerState>,
 ) -> Result<Vec<String>, String> {
-    let executions = ralph_state.executions.lock().unwrap();
+    let executions = ralph_state.executions.lock()
+        .map_err(|e| format!("Executions lock error: {}", e))?;
     Ok(executions.keys().cloned().collect())
 }
 
@@ -579,7 +586,8 @@ pub async fn get_ralph_loop_current_agent(
 
     // Fallback: check if execution exists
     let exists = {
-        let executions = ralph_state.executions.lock().unwrap();
+        let executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.contains_key(&execution_id)
     };
 
@@ -603,7 +611,8 @@ pub async fn get_ralph_loop_worktree_path(
 
     // Fallback: check if execution exists
     let exists = {
-        let executions = ralph_state.executions.lock().unwrap();
+        let executions = ralph_state.executions.lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
         executions.contains_key(&execution_id)
     };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,7 @@ import {
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import type { CommitInfo } from '@/lib/git-api'
 import { AgentTerminalInstance } from '@/components/terminal/AgentTerminalInstance'
+import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
 
@@ -59,6 +60,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     loading,
     error,
     worktreePath,
+    iterationHistory,
     setProjectPath,
     loadPrd,
     loadPrdStatus,
@@ -72,6 +74,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     stopLoop,
     loadLoopState,
     loadLoopMetrics,
+    loadIterationHistory,
     markStoryPassing,
     markStoryFailing,
     refreshAll,
@@ -81,21 +84,32 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
 
-  // Local state for config editing - initialized on first render or config load
-  // Using config values directly as controlled inputs with fallbacks
-  const [localMaxIterations, setLocalMaxIterations] = useState<string | null>(null)
-  const [localMaxCost, setLocalMaxCost] = useState<string | null>(null)
-  const [localAgent, setLocalAgent] = useState<string | null>(null)
-  const [localModel, setLocalModel] = useState<string | null>(null)
-  const [localRunTests, setLocalRunTests] = useState<boolean | null>(null)
-  const [localRunLint, setLocalRunLint] = useState<boolean | null>(null)
+  // Local state for config overrides - consolidated into single object
+  interface ConfigOverrides {
+    maxIterations?: string
+    maxCost?: string
+    agent?: string
+    model?: string
+    runTests?: boolean
+    runLint?: boolean
+  }
+  const [configOverrides, setConfigOverrides] = useState<ConfigOverrides>({})
 
-  // Derive effective values: use local state if set, otherwise fall back to config
-  const effectiveMaxIterations = localMaxIterations ?? (config?.ralph.maxIterations != null ? String(config.ralph.maxIterations) : '50')
-  const effectiveMaxCost = localMaxCost ?? (config?.ralph.maxCost != null ? String(config.ralph.maxCost) : '')
-  const effectiveAgent = localAgent ?? (config?.ralph.agent || 'claude')
-  const effectiveRunTests = localRunTests ?? true // Default to true
-  const effectiveRunLint = localRunLint ?? true // Default to true
+  // Derive effective config: merge saved config with local overrides
+  const effectiveConfig = useMemo(() => ({
+    maxIterations: configOverrides.maxIterations ?? (config?.ralph.maxIterations != null ? String(config.ralph.maxIterations) : '50'),
+    maxCost: configOverrides.maxCost ?? (config?.ralph.maxCost != null ? String(config.ralph.maxCost) : ''),
+    agent: configOverrides.agent ?? (config?.ralph.agent || 'claude'),
+    runTests: configOverrides.runTests ?? true,
+    runLint: configOverrides.runLint ?? true,
+  }), [config, configOverrides])
+
+  // Shorthand for effective values (maintains backwards compatibility with existing JSX)
+  const effectiveMaxIterations = effectiveConfig.maxIterations
+  const effectiveMaxCost = effectiveConfig.maxCost
+  const effectiveAgent = effectiveConfig.agent
+  const effectiveRunTests = effectiveConfig.runTests
+  const effectiveRunLint = effectiveConfig.runLint
 
   // Use dynamic models hook instead of static fallback
   const {
@@ -108,7 +122,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   // If agent changed and saved model isn't in the available models, ignore it
   const savedModel = config?.ralph.model || ''
   const isSavedModelCompatible = !savedModel || availableModels.some(m => m.id === savedModel)
-  const effectiveModel = localModel ?? (isSavedModelCompatible ? savedModel : '')
+  const effectiveModel = configOverrides.model ?? (isSavedModelCompatible ? savedModel : '')
 
   // Load data when project path changes
   useEffect(() => {
@@ -137,19 +151,21 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     // Poll immediately (not silent), then silently every 2 seconds
     loadLoopState()
     loadLoopMetrics()
+    loadIterationHistory()
     loadPrdStatus(projectPath)
 
     // Silent polling to avoid re-render storms
     const poll = () => {
       loadLoopState(true) // silent
       loadLoopMetrics(true) // silent
+      loadIterationHistory(true) // silent
       loadPrdStatusSilent(projectPath)
     }
 
     const interval = setInterval(poll, 2000)
 
     return () => clearInterval(interval)
-  }, [activeExecutionId, loadLoopState, loadLoopMetrics, loadPrdStatus, loadPrdStatusSilent, projectPath])
+  }, [activeExecutionId, loadLoopState, loadLoopMetrics, loadIterationHistory, loadPrdStatus, loadPrdStatusSilent, projectPath])
 
   const handleStartLoop = async () => {
     console.log('[RalphLoop] handleStartLoop called', { prd, projectPath, effectiveAgent })
@@ -208,13 +224,8 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     }
 
     await updateConfig(updates)
-    // Reset local state to sync with saved config
-    setLocalMaxIterations(null)
-    setLocalMaxCost(null)
-    setLocalAgent(null)
-    setLocalModel(null)
-    setLocalRunTests(null)
-    setLocalRunLint(null)
+    // Reset local overrides to sync with saved config
+    setConfigOverrides({})
   }
 
   const handleStopLoop = async () => {
@@ -338,7 +349,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     max={1000}
                     placeholder="50"
                     value={effectiveMaxIterations}
-                    onChange={(e) => setLocalMaxIterations(e.target.value)}
+                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, maxIterations: e.target.value }))}
                   />
                   <p className="text-xs text-muted-foreground">
                     Maximum loop iterations before stopping
@@ -353,7 +364,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     step={0.5}
                     placeholder="No limit"
                     value={effectiveMaxCost}
-                    onChange={(e) => setLocalMaxCost(e.target.value)}
+                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, maxCost: e.target.value }))}
                   />
                   <p className="text-xs text-muted-foreground">
                     Stop when API costs exceed this limit
@@ -365,9 +376,8 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     id="agent"
                     value={effectiveAgent}
                     onChange={(e) => {
-                      setLocalAgent(e.target.value)
-                      // Reset model when agent changes
-                      setLocalModel(null)
+                      // Reset model when agent changes (set model to undefined to clear override)
+                      setConfigOverrides(prev => ({ ...prev, agent: e.target.value, model: undefined }))
                     }}
                   >
                     <option value="claude">Claude Code</option>
@@ -392,7 +402,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <Select
                     id="model"
                     value={effectiveModel || getDefaultModel(effectiveAgent as AgentType)}
-                    onChange={(e) => setLocalModel(e.target.value)}
+                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, model: e.target.value }))}
                     disabled={modelsLoading}
                   >
                     {modelsLoading ? (
@@ -440,14 +450,14 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <label className="flex items-center gap-2">
                     <Checkbox
                       checked={effectiveRunTests}
-                      onCheckedChange={(checked) => setLocalRunTests(checked as boolean)}
+                      onCheckedChange={(checked) => setConfigOverrides(prev => ({ ...prev, runTests: checked as boolean }))}
                     />
                     <span className="text-sm">Run tests before marking tasks complete</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <Checkbox
                       checked={effectiveRunLint}
-                      onCheckedChange={(checked) => setLocalRunLint(checked as boolean)}
+                      onCheckedChange={(checked) => setConfigOverrides(prev => ({ ...prev, runLint: checked as boolean }))}
                     />
                     <span className="text-sm">Run linter before marking tasks complete</span>
                   </label>
@@ -559,6 +569,10 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
               <GitCommit className="mr-2 h-4 w-4" />
               Commits
             </TabsTrigger>
+            <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+              <Clock className="mr-2 h-4 w-4" />
+              History ({iterationHistory.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="stories" className="p-0 mt-0">
@@ -622,6 +636,14 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     <CommitCard key={commit.id} commit={commit} />
                   ))
                 )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="history" className="p-0 mt-0">
+            <ScrollArea className="h-[400px]">
+              <div className="p-4">
+                <IterationHistoryView iterations={iterationHistory} />
               </div>
             </ScrollArea>
           </TabsContent>

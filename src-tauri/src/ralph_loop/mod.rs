@@ -26,8 +26,10 @@ pub use prompt_builder::*;
 pub use retry::{is_retryable_error, RetryConfig, RetryResult};
 pub use types::*;
 
-use crate::agents::{AgentManager, AgentSpawnConfig, AgentSpawnMode};
+use crate::agents::manager::AgentManager;
+use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
 use crate::models::AgentType;
+use crate::utils::lock_mutex_recover;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -100,7 +102,7 @@ impl Default for RalphLoopConfig {
 
 /// State of a running Ralph loop
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum RalphLoopState {
     /// Loop has not started
     Idle,
@@ -400,56 +402,39 @@ impl RalphLoopOrchestrator {
     /// which ensures PTYs are registered in the same place the frontend queries.
     ///
     /// NOTE: This method locks the agent manager for each operation rather than
-    /// holding the lock for the entire duration, since the operations are
-    /// blocking and we're in an async context.
-    pub async fn run_with_shared_manager(
+    /// holding the lock for the entire duration, allowing the UI to query state
+    /// during long agent operations.
+    pub async fn run(
         &mut self,
         agent_manager_arc: std::sync::Arc<std::sync::Mutex<AgentManager>>,
     ) -> Result<RalphLoopMetrics, String> {
-        // We use a SharedAgentManager wrapper that locks/unlocks for each operation
-        self.run_shared(agent_manager_arc).await
-    }
-
-    /// Internal run implementation that works with the shared agent manager
-    async fn run_shared(
-        &mut self,
-        agent_manager_arc: std::sync::Arc<std::sync::Mutex<AgentManager>>,
-    ) -> Result<RalphLoopMetrics, String> {
-        use std::io::Write;
-
-        println!("[RalphLoop] run_shared() called for execution {}", self.execution_id);
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] run() starting for execution {}", self.execution_id);
         let start_time = std::time::Instant::now();
         let mut iteration: u32 = 1;
 
         // Setup worktree if enabled
         if self.config.use_worktree {
-            println!("[RalphLoop] Setting up worktree (use_worktree=true)...");
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Setting up worktree (use_worktree=true)...");
             self.setup_worktree()?;
-            println!("[RalphLoop] Worktree setup complete");
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Worktree setup complete");
         } else {
-            println!("[RalphLoop] Skipping worktree setup (use_worktree=false)");
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Skipping worktree setup (use_worktree=false)");
         }
 
-        println!("[RalphLoop] Entering main loop, iteration {}", iteration);
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Entering main loop, iteration {}", iteration);
         self.state = RalphLoopState::Running { iteration };
         self.emit_status();
+        log::debug!("[RalphLoop] State set to Running, emitted status");
 
         loop {
-            println!("[RalphLoop] Loop iteration {} starting", iteration);
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Loop iteration {} starting", iteration);
 
             // Check for cancellation
-            if *self.cancelled.lock().unwrap() {
-                println!("[RalphLoop] Cancelled at iteration {}", iteration);
-                let _ = std::io::stdout().flush();
+            if *lock_mutex_recover(&self.cancelled) {
+                log::debug!("[RalphLoop] Cancelled at iteration {}", iteration);
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
-                    let manager = agent_manager_arc.lock().unwrap();
+                    let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
                 }
                 self.state = RalphLoopState::Cancelled { iteration };
@@ -459,11 +444,10 @@ impl RalphLoopOrchestrator {
 
             // Check max iterations
             if iteration > self.config.max_iterations {
-                println!("[RalphLoop] Max iterations ({}) reached", self.config.max_iterations);
-                let _ = std::io::stdout().flush();
+                log::debug!("[RalphLoop] Max iterations ({}) reached", self.config.max_iterations);
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
-                    let manager = agent_manager_arc.lock().unwrap();
+                    let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
                 }
                 self.state = RalphLoopState::Failed {
@@ -477,11 +461,10 @@ impl RalphLoopOrchestrator {
             // Check max cost
             if let Some(max_cost) = self.config.max_cost {
                 if self.metrics.total_cost >= max_cost {
-                    println!("[RalphLoop] Max cost exceeded");
-                    let _ = std::io::stdout().flush();
+                    log::debug!("[RalphLoop] Max cost exceeded");
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
-                        let manager = agent_manager_arc.lock().unwrap();
+                        let manager = lock_mutex_recover(&agent_manager_arc);
                         manager.unregister_pty(&agent_id);
                     }
                     self.state = RalphLoopState::Failed {
@@ -494,35 +477,31 @@ impl RalphLoopOrchestrator {
             }
 
             // Read current PRD status
-            println!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
             let prd = match self.prd_executor.read_prd() {
                 Ok(p) => {
-                    println!("[RalphLoop] PRD read successfully");
-                    let _ = std::io::stdout().flush();
+                    log::debug!("[RalphLoop] PRD read successfully with {} stories", p.stories.len());
                     p
                 }
                 Err(e) => {
-                    println!("[RalphLoop] ERROR reading PRD: {}", e);
-                    let _ = std::io::stdout().flush();
+                    log::error!("[RalphLoop] ERROR reading PRD: {}", e);
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
-                        let manager = agent_manager_arc.lock().unwrap();
+                        let manager = lock_mutex_recover(&agent_manager_arc);
                         manager.unregister_pty(&agent_id);
                     }
                     return Err(e);
                 }
             };
             let prd_status = self.prd_executor.get_status(&prd);
-            println!("[RalphLoop] PRD status: {}/{} passing, all_pass={}", prd_status.passed, prd_status.total, prd_status.all_pass);
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] PRD status: {}/{} passing, all_pass={}", prd_status.passed, prd_status.total, prd_status.all_pass);
 
             // Check if all stories pass
             if prd_status.all_pass {
-                println!("[RalphLoop] All stories pass! Completing.");
+                log::debug!("[RalphLoop] All stories pass! Completing.");
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
-                    let manager = agent_manager_arc.lock().unwrap();
+                    let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
                 }
                 self.state = RalphLoopState::Completed {
@@ -539,12 +518,20 @@ impl RalphLoopOrchestrator {
             // Update state
             self.state = RalphLoopState::Running { iteration };
             self.emit_status();
+
+            // Determine which agent to use (primary or fallback)
+            let agent_to_use = self.get_agent_for_iteration();
+            if agent_to_use != self.config.agent_type {
+                log::debug!("[RalphLoop] Using fallback agent {:?} (primary {:?} may be rate-limited)",
+                    agent_to_use, self.config.agent_type);
+                self.active_agent_type = agent_to_use.clone();
+            }
 
             // Run one iteration with the shared manager
-            println!("[RalphLoop] Starting iteration {} execution...", iteration);
+            log::debug!("[RalphLoop] Starting iteration {} execution with agent {:?}...", iteration, agent_to_use);
             let iteration_start = std::time::Instant::now();
-            let iteration_result = self.run_iteration_shared(iteration, &agent_manager_arc).await?;
-            println!("[RalphLoop] Iteration {} completed with exit_code={}", iteration, iteration_result.exit_code);
+            let iteration_result = self.run_iteration(iteration, &agent_manager_arc, agent_to_use.clone()).await?;
+            log::debug!("[RalphLoop] Iteration {} completed with exit_code={}", iteration, iteration_result.exit_code);
 
             // Update metrics
             let iteration_metrics = IterationMetrics {
@@ -566,6 +553,17 @@ impl RalphLoopOrchestrator {
             self.metrics.total_cost += iteration_metrics.cost;
             self.metrics.iterations.push(iteration_metrics);
 
+            // Report iteration outcome to fallback orchestrator
+            if iteration_result.exit_code == 0 {
+                // Success - report to orchestrator
+                self.report_iteration_success(agent_to_use.clone());
+            } else if iteration_result.rate_limit_detected {
+                // Rate limit detected - report error and potentially switch agents
+                if let Some(next_agent) = self.report_iteration_error(agent_to_use.clone(), true) {
+                    log::debug!("[RalphLoop] Switching to fallback agent {:?} due to rate limit", next_agent);
+                }
+            }
+
             // Check for completion promise in output
             if iteration_result.completion_detected {
                 // Double-check PRD status
@@ -575,7 +573,7 @@ impl RalphLoopOrchestrator {
                 if prd_status.all_pass {
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
-                        let manager = agent_manager_arc.lock().unwrap();
+                        let manager = lock_mutex_recover(&agent_manager_arc);
                         manager.unregister_pty(&agent_id);
                     }
                     self.state = RalphLoopState::Completed {
@@ -593,220 +591,42 @@ impl RalphLoopOrchestrator {
         }
     }
 
-    /// Run the Ralph loop
+
+    /// Run a single iteration of the Ralph loop
     ///
-    /// This is the main entry point that orchestrates the entire execution.
-    /// It spawns fresh agent instances for each iteration until:
-    /// - All stories pass (success)
-    /// - Max iterations reached (failure)
-    /// - Max cost exceeded (failure)
-    /// - User cancellation
-    pub async fn run(&mut self, agent_manager: &mut AgentManager) -> Result<RalphLoopMetrics, String> {
-        use std::io::Write;
-
-        println!("[RalphLoop] run() called for execution {}", self.execution_id);
-        let _ = std::io::stdout().flush();
-        let start_time = std::time::Instant::now();
-        let mut iteration: u32 = 1;
-
-        // Setup worktree if enabled
-        if self.config.use_worktree {
-            println!("[RalphLoop] Setting up worktree (use_worktree=true)...");
-            let _ = std::io::stdout().flush();
-            self.setup_worktree()?;
-            println!("[RalphLoop] Worktree setup complete");
-            let _ = std::io::stdout().flush();
-        } else {
-            println!("[RalphLoop] Skipping worktree setup (use_worktree=false)");
-            let _ = std::io::stdout().flush();
-        }
-
-        // Update state to running
-        println!("[RalphLoop] Entering main loop, iteration {}", iteration);
-        let _ = std::io::stdout().flush();
-        self.state = RalphLoopState::Running { iteration };
-        self.emit_status();
-
-        loop {
-            println!("[RalphLoop] Loop iteration {} starting", iteration);
-            let _ = std::io::stdout().flush();
-
-            // Check for cancellation
-            if *self.cancelled.lock().unwrap() {
-                println!("[RalphLoop] Cancelled at iteration {}", iteration);
-                let _ = std::io::stdout().flush();
-                // Clean up current agent PTY before returning
-                if let Some(agent_id) = self.current_agent_id.take() {
-                    agent_manager.unregister_pty(&agent_id);
-                }
-                self.state = RalphLoopState::Cancelled { iteration };
-                self.emit_status();
-                return Ok(self.metrics.clone());
-            }
-
-            // Check max iterations
-            if iteration > self.config.max_iterations {
-                println!("[RalphLoop] Max iterations ({}) reached", self.config.max_iterations);
-                let _ = std::io::stdout().flush();
-                // Clean up current agent PTY before returning
-                if let Some(agent_id) = self.current_agent_id.take() {
-                    agent_manager.unregister_pty(&agent_id);
-                }
-                self.state = RalphLoopState::Failed {
-                    iteration,
-                    reason: format!("Max iterations ({}) reached", self.config.max_iterations),
-                };
-                self.emit_status();
-                return Ok(self.metrics.clone());
-            }
-
-            // Check max cost
-            if let Some(max_cost) = self.config.max_cost {
-                if self.metrics.total_cost >= max_cost {
-                    println!("[RalphLoop] Max cost exceeded");
-                    let _ = std::io::stdout().flush();
-                    // Clean up current agent PTY before returning
-                    if let Some(agent_id) = self.current_agent_id.take() {
-                        agent_manager.unregister_pty(&agent_id);
-                    }
-                    self.state = RalphLoopState::Failed {
-                        iteration,
-                        reason: format!("Max cost (${:.2}) exceeded", max_cost),
-                    };
-                    self.emit_status();
-                    return Ok(self.metrics.clone());
-                }
-            }
-
-            // Read current PRD status
-            println!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
-            let _ = std::io::stdout().flush();
-            let prd = match self.prd_executor.read_prd() {
-                Ok(p) => {
-                    println!("[RalphLoop] PRD read successfully");
-                    let _ = std::io::stdout().flush();
-                    p
-                }
-                Err(e) => {
-                    println!("[RalphLoop] ERROR reading PRD: {}", e);
-                    let _ = std::io::stdout().flush();
-                    // Clean up current agent PTY before returning
-                    if let Some(agent_id) = self.current_agent_id.take() {
-                        agent_manager.unregister_pty(&agent_id);
-                    }
-                    return Err(e);
-                }
-            };
-            let prd_status = self.prd_executor.get_status(&prd);
-            println!("[RalphLoop] PRD status: {}/{} passing, all_pass={}", prd_status.passed, prd_status.total, prd_status.all_pass);
-            let _ = std::io::stdout().flush();
-
-            // Check if all stories pass
-            if prd_status.all_pass {
-                println!("[RalphLoop] All stories pass! Completing.");
-                // Clean up current agent PTY before returning
-                if let Some(agent_id) = self.current_agent_id.take() {
-                    agent_manager.unregister_pty(&agent_id);
-                }
-                self.state = RalphLoopState::Completed {
-                    total_iterations: iteration - 1,
-                };
-                self.metrics.total_iterations = iteration - 1;
-                self.metrics.stories_completed = prd_status.passed as u32;
-                self.metrics.stories_remaining = 0;
-                self.metrics.total_duration_secs = start_time.elapsed().as_secs_f64();
-                self.emit_status();
-                return Ok(self.metrics.clone());
-            }
-
-            // Update state
-            self.state = RalphLoopState::Running { iteration };
-            self.emit_status();
-
-            // Run one iteration
-            println!("[RalphLoop] Starting iteration {} execution...", iteration);
-            let iteration_start = std::time::Instant::now();
-            let iteration_result = self.run_iteration(iteration, agent_manager).await?;
-            println!("[RalphLoop] Iteration {} completed with exit_code={}", iteration, iteration_result.exit_code);
-
-            // Update metrics
-            let iteration_metrics = IterationMetrics {
-                iteration,
-                tokens: iteration_result.token_metrics.total_tokens,
-                input_tokens: iteration_result.token_metrics.input_tokens,
-                output_tokens: iteration_result.token_metrics.output_tokens,
-                cost: iteration_result.token_metrics.estimated_cost,
-                duration_secs: iteration_start.elapsed().as_secs_f64(),
-                story_id: iteration_result.story_id,
-                story_completed: iteration_result.story_completed,
-                exit_code: iteration_result.exit_code,
-                retry_attempts: iteration_result.retry_attempts,
-                was_retried: iteration_result.was_retried,
-            };
-
-            self.metrics.total_iterations = iteration;
-            self.metrics.total_tokens += iteration_metrics.tokens;
-            self.metrics.total_cost += iteration_metrics.cost;
-            self.metrics.iterations.push(iteration_metrics);
-
-            // Check for completion promise in output
-            if iteration_result.completion_detected {
-                // Double-check PRD status
-                let prd = self.prd_executor.read_prd()?;
-                let prd_status = self.prd_executor.get_status(&prd);
-
-                if prd_status.all_pass {
-                    // Clean up current agent PTY before returning
-                    if let Some(agent_id) = self.current_agent_id.take() {
-                        agent_manager.unregister_pty(&agent_id);
-                    }
-                    self.state = RalphLoopState::Completed {
-                        total_iterations: iteration,
-                    };
-                    self.metrics.stories_completed = prd_status.passed as u32;
-                    self.metrics.stories_remaining = 0;
-                    self.metrics.total_duration_secs = start_time.elapsed().as_secs_f64();
-                    self.emit_status();
-                    return Ok(self.metrics.clone());
-                }
-            }
-
-            iteration += 1;
-        }
-    }
-
-    /// Run a single iteration of the Ralph loop with retry support
+    /// Uses Arc<Mutex<AgentManager>> to share the manager with the main app's state,
+    /// ensuring PTYs are registered in the same place the frontend queries.
+    ///
+    /// The `agent_type` parameter specifies which agent to use for this iteration,
+    /// allowing the fallback orchestrator to switch agents on rate limits.
     async fn run_iteration(
         &mut self,
         iteration: u32,
-        agent_manager: &mut AgentManager,
+        agent_manager_arc: &std::sync::Arc<std::sync::Mutex<AgentManager>>,
+        agent_type: AgentType,
     ) -> Result<IterationResult, String> {
-        use std::io::Write;
+        log::debug!("[RalphLoop] run_iteration() entered for iteration {} with agent {:?}", iteration, agent_type);
 
-        println!("[RalphLoop] run_iteration() entered for iteration {}", iteration);
-        let _ = std::io::stdout().flush();
+        // Track if rate limit is detected during this iteration
+        let mut rate_limit_detected = false;
 
         // Clean up previous agent's PTY if there was one
         // (We keep it around after iteration completes so terminal can still show output)
         if let Some(prev_agent_id) = self.current_agent_id.take() {
-            println!("[RalphLoop] Cleaning up previous agent PTY: {}", prev_agent_id);
-            let _ = std::io::stdout().flush();
-            agent_manager.unregister_pty(&prev_agent_id);
+            log::debug!("[RalphLoop] Cleaning up previous agent PTY: {}", prev_agent_id);
+            let manager = lock_mutex_recover(&agent_manager_arc);
+            manager.unregister_pty(&prev_agent_id);
         }
 
         // Record start of iteration in progress.txt
-        println!("[RalphLoop] Recording iteration start in progress.txt...");
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Recording iteration start in progress.txt...");
         self.progress_tracker.start_iteration(iteration)?;
-        println!("[RalphLoop] Progress tracker updated");
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Progress tracker updated");
 
         // Generate the prompt for this iteration
-        println!("[RalphLoop] Building iteration prompt...");
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Building iteration prompt...");
         let prompt = self.prompt_builder.build_iteration_prompt(iteration)?;
-        println!("[RalphLoop] Prompt built ({} chars)", prompt.len());
-        let _ = std::io::stdout().flush();
+        log::debug!("[RalphLoop] Prompt built ({} chars)", prompt.len());
 
         let mut attempt = 0u32;
         let mut current_delay_ms = self.config.retry_config.initial_delay_ms;
@@ -814,26 +634,24 @@ impl RalphLoopOrchestrator {
 
         loop {
             attempt += 1;
-            println!("[RalphLoop] Attempt {} of {}", attempt, max_attempts);
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Attempt {} of {}", attempt, max_attempts);
 
             // Emit progress for agent start
             self.set_progress(format!(
-                "Starting agent for iteration {} (attempt {})",
-                iteration, attempt
+                "Starting {:?} agent for iteration {} (attempt {})",
+                agent_type, iteration, attempt
             ));
 
             // Generate unique agent ID for this iteration/attempt
             let agent_id = format!("{}-iter-{}-attempt-{}", self.execution_id, iteration, attempt);
             let task_id = agent_id.clone();
-            println!("[RalphLoop] Agent ID: {}", agent_id);
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Agent ID: {}", agent_id);
 
             // Build agent spawn config - use working_path (worktree if enabled)
-            println!("[RalphLoop] Building spawn config for {:?} agent...", self.config.agent_type);
-            let _ = std::io::stdout().flush();
+            // Use the passed agent_type (may be primary or fallback)
+            log::debug!("[RalphLoop] Building spawn config for {:?} agent...", agent_type);
             let spawn_config = AgentSpawnConfig {
-                agent_type: self.config.agent_type.clone(),
+                agent_type: agent_type.clone(),
                 task_id,
                 worktree_path: self.working_path.to_string_lossy().to_string(),
                 branch: self.config.branch.clone().unwrap_or_else(|| "main".to_string()),
@@ -842,16 +660,17 @@ impl RalphLoopOrchestrator {
                 model: self.config.model.clone(),
                 spawn_mode: AgentSpawnMode::Pty,
             };
-            println!("[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
+            log::debug!("[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
                 spawn_config.worktree_path, spawn_config.branch, spawn_config.model);
-            let _ = std::io::stdout().flush();
 
             // Spawn fresh agent instance (creates PTY)
-            println!("[RalphLoop] Calling agent_manager.spawn_agent()...");
-            let _ = std::io::stdout().flush();
-            let spawn_result = agent_manager.spawn_agent(&agent_id, spawn_config);
-            println!("[RalphLoop] spawn_agent returned: {:?}", spawn_result.is_ok());
-            let _ = std::io::stdout().flush();
+            // Lock, spawn, unlock
+            log::debug!("[RalphLoop] Calling agent_manager.spawn_agent()...");
+            let spawn_result = {
+                let mut manager = lock_mutex_recover(&agent_manager_arc);
+                manager.spawn_agent(&agent_id, spawn_config)
+            };
+            log::debug!("[RalphLoop] spawn_agent returned: {:?}", spawn_result.is_ok());
 
             if let Err(e) = spawn_result {
                 let error_str = e.to_string();
@@ -891,43 +710,103 @@ impl RalphLoopOrchestrator {
             }
 
             // Set current agent ID and emit status AFTER successful spawn (PTY now exists)
+            log::debug!("[RalphLoop] Setting current_agent_id to {}", agent_id);
             self.current_agent_id = Some(agent_id.clone());
             self.emit_status();
-            println!("[RalphLoop] Agent spawned successfully, emitted status with agent_id");
-            let _ = std::io::stdout().flush();
+            log::debug!("[RalphLoop] Agent spawned successfully, emitted status with agent_id");
 
             self.set_progress(format!("Agent running (iteration {})", iteration));
 
             // Wait for agent to complete
-            println!("[RalphLoop] Calling wait_for_agent({})...", agent_id);
-            let _ = std::io::stdout().flush();
-            let exit_code = match agent_manager.wait_for_agent(&agent_id) {
-                Ok(code) => code,
-                Err(e) => {
+            // IMPORTANT: We take the child process out first, then wait WITHOUT holding the lock.
+            // This prevents the UI from freezing while waiting for the agent.
+            log::debug!("[RalphLoop] Taking child process for waiting...");
+
+            // Step 1: Take the child process out (quick lock/unlock)
+            let child_process = {
+                let mut manager = lock_mutex_recover(&agent_manager_arc);
+                manager.take_child_process(&agent_id)
+            };
+            log::debug!("[RalphLoop] Got child_process: {:?}", child_process.is_some());
+
+            // Step 2: Wait on the process WITHOUT holding the manager lock
+            // Use timeout to prevent indefinite blocking (5 minute timeout)
+            const AGENT_TIMEOUT_SECS: u64 = 300;
+
+            let exit_code = match child_process {
+                Some(mut child) => {
+                    log::debug!("[RalphLoop] Waiting for agent process (timeout: {}s)...", AGENT_TIMEOUT_SECS);
+
+                    // Use polling-based wait with timeout
+                    match AgentManager::wait_with_timeout(&mut child, AGENT_TIMEOUT_SECS) {
+                        Ok(Some(code)) => code,
+                        Ok(None) => {
+                            // Timeout - kill the process
+                            log::warn!("[RalphLoop] Agent timed out after {}s, killing process", AGENT_TIMEOUT_SECS);
+                            let _ = child.kill();
+                            let _ = child.wait(); // Clean up zombie
+
+                            // Clean up agent PTY
+                            let manager = lock_mutex_recover(&agent_manager_arc);
+                            manager.unregister_pty(&agent_id);
+                            self.current_agent_id = None;
+                            return Err(format!("Agent timed out after {} seconds", AGENT_TIMEOUT_SECS));
+                        }
+                        Err(e) => {
+                            // Clean up agent PTY before returning error
+                            let manager = lock_mutex_recover(&agent_manager_arc);
+                            manager.unregister_pty(&agent_id);
+                            self.current_agent_id = None;
+                            return Err(format!("Failed to wait for agent: {}", e));
+                        }
+                    }
+                }
+                None => {
                     // Clean up agent PTY before returning error
-                    agent_manager.unregister_pty(&agent_id);
+                    let manager = lock_mutex_recover(&agent_manager_arc);
+                    manager.unregister_pty(&agent_id);
                     self.current_agent_id = None;
-                    return Err(format!("Failed to wait for agent: {}", e));
+                    return Err(format!("Agent process not found: {}", agent_id));
                 }
             };
-            println!("[RalphLoop] Agent finished with exit_code={}", exit_code);
-            let _ = std::io::stdout().flush();
+
+            // Step 3: Emit the exit log (quick lock/unlock)
+            {
+                let manager = lock_mutex_recover(&agent_manager_arc);
+                manager.emit_agent_exit(&agent_id, exit_code);
+            }
+
+            log::debug!("[RalphLoop] Agent finished with exit_code={}", exit_code);
 
             // Get agent output for completion detection and metrics
-            let output = agent_manager.get_pty_history(&agent_id);
+            let output = {
+                let manager = lock_mutex_recover(&agent_manager_arc);
+                manager.get_pty_history(&agent_id)
+            };
             let output_str = String::from_utf8_lossy(&output);
 
             // Debug: Log agent output when it fails
             if exit_code != 0 {
-                println!("[RalphLoop] Agent failed! Output ({} bytes):", output.len());
-                // Print first 2000 chars of output for debugging
+                log::debug!("[RalphLoop] Agent failed! Output ({} bytes):", output.len());
+                // Log first 2000 chars of output for debugging
                 let truncated = if output_str.len() > 2000 {
                     format!("{}... [truncated]", &output_str[..2000])
                 } else {
                     output_str.to_string()
                 };
-                println!("{}", truncated);
-                let _ = std::io::stdout().flush();
+                log::debug!("{}", truncated);
+            }
+
+            // Check for rate limit in output
+            let output_lower = output_str.to_lowercase();
+            let is_rate_limit_error = output_lower.contains("rate limit")
+                || output_lower.contains("429")
+                || output_lower.contains("too many requests")
+                || output_lower.contains("overloaded");
+
+            if is_rate_limit_error {
+                rate_limit_detected = true;
+                log::debug!("[RalphLoop] Rate limit detected in agent output");
             }
 
             // Check if we should retry based on exit code and output
@@ -952,7 +831,10 @@ impl RalphLoopOrchestrator {
                 let _ = self.progress_tracker.add_note(iteration, &retry_note);
 
                 // Clean up this agent attempt
-                agent_manager.unregister_pty(&agent_id);
+                {
+                    let manager = lock_mutex_recover(&agent_manager_arc);
+                    manager.unregister_pty(&agent_id);
+                }
 
                 // Wait before retrying
                 tokio::time::sleep(std::time::Duration::from_millis(current_delay_ms)).await;
@@ -990,271 +872,7 @@ impl RalphLoopOrchestrator {
                 completion_detected,
                 retry_attempts: attempt,
                 was_retried: attempt > 1,
-            });
-        }
-    }
-
-    /// Run a single iteration of the Ralph loop with shared agent manager
-    ///
-    /// This version uses Arc<Mutex<AgentManager>> to share the manager with
-    /// the main app's state, ensuring PTYs are registered in the same place
-    /// the frontend queries.
-    async fn run_iteration_shared(
-        &mut self,
-        iteration: u32,
-        agent_manager_arc: &std::sync::Arc<std::sync::Mutex<AgentManager>>,
-    ) -> Result<IterationResult, String> {
-        use std::io::Write;
-
-        println!("[RalphLoop] run_iteration_shared() entered for iteration {}", iteration);
-        let _ = std::io::stdout().flush();
-
-        // Clean up previous agent's PTY if there was one
-        // (We keep it around after iteration completes so terminal can still show output)
-        if let Some(prev_agent_id) = self.current_agent_id.take() {
-            println!("[RalphLoop] Cleaning up previous agent PTY: {}", prev_agent_id);
-            let _ = std::io::stdout().flush();
-            let manager = agent_manager_arc.lock().unwrap();
-            manager.unregister_pty(&prev_agent_id);
-        }
-
-        // Record start of iteration in progress.txt
-        println!("[RalphLoop] Recording iteration start in progress.txt...");
-        let _ = std::io::stdout().flush();
-        self.progress_tracker.start_iteration(iteration)?;
-        println!("[RalphLoop] Progress tracker updated");
-        let _ = std::io::stdout().flush();
-
-        // Generate the prompt for this iteration
-        println!("[RalphLoop] Building iteration prompt...");
-        let _ = std::io::stdout().flush();
-        let prompt = self.prompt_builder.build_iteration_prompt(iteration)?;
-        println!("[RalphLoop] Prompt built ({} chars)", prompt.len());
-        let _ = std::io::stdout().flush();
-
-        let mut attempt = 0u32;
-        let mut current_delay_ms = self.config.retry_config.initial_delay_ms;
-        let max_attempts = self.config.retry_config.max_attempts;
-
-        loop {
-            attempt += 1;
-            println!("[RalphLoop] Attempt {} of {}", attempt, max_attempts);
-            let _ = std::io::stdout().flush();
-
-            // Emit progress for agent start
-            self.set_progress(format!(
-                "Starting agent for iteration {} (attempt {})",
-                iteration, attempt
-            ));
-
-            // Generate unique agent ID for this iteration/attempt
-            let agent_id = format!("{}-iter-{}-attempt-{}", self.execution_id, iteration, attempt);
-            let task_id = agent_id.clone();
-            println!("[RalphLoop] Agent ID: {}", agent_id);
-            let _ = std::io::stdout().flush();
-
-            // Build agent spawn config - use working_path (worktree if enabled)
-            println!("[RalphLoop] Building spawn config for {:?} agent...", self.config.agent_type);
-            let _ = std::io::stdout().flush();
-            let spawn_config = AgentSpawnConfig {
-                agent_type: self.config.agent_type.clone(),
-                task_id,
-                worktree_path: self.working_path.to_string_lossy().to_string(),
-                branch: self.config.branch.clone().unwrap_or_else(|| "main".to_string()),
-                max_iterations: 0, // Let agent run until completion
-                prompt: Some(prompt.clone()),
-                model: self.config.model.clone(),
-                spawn_mode: AgentSpawnMode::Pty,
-            };
-            println!("[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
-                spawn_config.worktree_path, spawn_config.branch, spawn_config.model);
-            let _ = std::io::stdout().flush();
-
-            // Spawn fresh agent instance (creates PTY)
-            // Lock, spawn, unlock
-            println!("[RalphLoop] Calling agent_manager.spawn_agent()...");
-            let _ = std::io::stdout().flush();
-            let spawn_result = {
-                let mut manager = agent_manager_arc.lock().unwrap();
-                manager.spawn_agent(&agent_id, spawn_config)
-            };
-            println!("[RalphLoop] spawn_agent returned: {:?}", spawn_result.is_ok());
-            let _ = std::io::stdout().flush();
-
-            if let Err(e) = spawn_result {
-                let error_str = e.to_string();
-
-                // Check if spawn error is retryable
-                if attempt < max_attempts && is_retryable_error(&error_str) {
-                    log::warn!(
-                        "[RalphLoop] Spawn failed on attempt {}/{}: {}. Retrying in {}ms...",
-                        attempt, max_attempts, error_str, current_delay_ms
-                    );
-
-                    // Update state to retrying and emit status
-                    self.state = RalphLoopState::Retrying {
-                        iteration,
-                        attempt,
-                        reason: error_str.clone(),
-                        delay_ms: current_delay_ms,
-                    };
-                    self.set_progress(format!("Retrying after error: {}", error_str));
-
-                    // Record retry in progress file
-                    let retry_note = retry::format_retry_note(attempt, &error_str, current_delay_ms);
-                    let _ = self.progress_tracker.add_note(iteration, &retry_note);
-
-                    // Wait before retrying
-                    tokio::time::sleep(std::time::Duration::from_millis(current_delay_ms)).await;
-
-                    // Calculate next delay with exponential backoff
-                    current_delay_ms = ((current_delay_ms as f64
-                        * self.config.retry_config.backoff_multiplier)
-                        as u64)
-                        .min(self.config.retry_config.max_delay_ms);
-
-                    continue;
-                }
-                return Err(format!("Failed to spawn agent: {}", error_str));
-            }
-
-            // Set current agent ID and emit status AFTER successful spawn (PTY now exists)
-            self.current_agent_id = Some(agent_id.clone());
-            self.emit_status();
-            println!("[RalphLoop] Agent spawned successfully, emitted status with agent_id");
-            let _ = std::io::stdout().flush();
-
-            self.set_progress(format!("Agent running (iteration {})", iteration));
-
-            // Wait for agent to complete
-            // IMPORTANT: We take the child process out first, then wait WITHOUT holding the lock.
-            // This prevents the UI from freezing while waiting for the agent.
-            println!("[RalphLoop] Taking child process for waiting...", );
-            let _ = std::io::stdout().flush();
-
-            // Step 1: Take the child process out (quick lock/unlock)
-            let child_process = {
-                let mut manager = agent_manager_arc.lock().unwrap();
-                manager.take_child_process(&agent_id)
-            };
-
-            // Step 2: Wait on the process WITHOUT holding the manager lock
-            let exit_code = match child_process {
-                Some(mut child) => {
-                    println!("[RalphLoop] Waiting for agent process...");
-                    let _ = std::io::stdout().flush();
-                    match child.wait() {
-                        Ok(status) => status.code().unwrap_or(-1),
-                        Err(e) => {
-                            // Clean up agent PTY before returning error
-                            let manager = agent_manager_arc.lock().unwrap();
-                            manager.unregister_pty(&agent_id);
-                            self.current_agent_id = None;
-                            return Err(format!("Failed to wait for agent: {}", e));
-                        }
-                    }
-                }
-                None => {
-                    // Clean up agent PTY before returning error
-                    let manager = agent_manager_arc.lock().unwrap();
-                    manager.unregister_pty(&agent_id);
-                    self.current_agent_id = None;
-                    return Err(format!("Agent process not found: {}", agent_id));
-                }
-            };
-
-            // Step 3: Emit the exit log (quick lock/unlock)
-            {
-                let manager = agent_manager_arc.lock().unwrap();
-                manager.emit_agent_exit(&agent_id, exit_code);
-            }
-
-            println!("[RalphLoop] Agent finished with exit_code={}", exit_code);
-            let _ = std::io::stdout().flush();
-
-            // Get agent output for completion detection and metrics
-            let output = {
-                let manager = agent_manager_arc.lock().unwrap();
-                manager.get_pty_history(&agent_id)
-            };
-            let output_str = String::from_utf8_lossy(&output);
-
-            // Debug: Log agent output when it fails
-            if exit_code != 0 {
-                println!("[RalphLoop] Agent failed! Output ({} bytes):", output.len());
-                // Print first 2000 chars of output for debugging
-                let truncated = if output_str.len() > 2000 {
-                    format!("{}... [truncated]", &output_str[..2000])
-                } else {
-                    output_str.to_string()
-                };
-                println!("{}", truncated);
-                let _ = std::io::stdout().flush();
-            }
-
-            // Check if we should retry based on exit code and output
-            if exit_code != 0 && attempt < max_attempts && retry::should_retry_agent(exit_code, &output_str) {
-                log::warn!(
-                    "[RalphLoop] Agent failed on attempt {}/{} with exit code {}. Retrying in {}ms...",
-                    attempt, max_attempts, exit_code, current_delay_ms
-                );
-
-                // Update state to retrying
-                let error_reason = format!("Agent exited with code {} (retryable error detected)", exit_code);
-                self.state = RalphLoopState::Retrying {
-                    iteration,
-                    attempt,
-                    reason: error_reason.clone(),
-                    delay_ms: current_delay_ms,
-                };
-                self.set_progress(format!("Retrying after agent failure (exit code {})", exit_code));
-
-                // Record retry in progress file
-                let retry_note = retry::format_retry_note(attempt, &error_reason, current_delay_ms);
-                let _ = self.progress_tracker.add_note(iteration, &retry_note);
-
-                // Clean up this agent attempt
-                {
-                    let manager = agent_manager_arc.lock().unwrap();
-                    manager.unregister_pty(&agent_id);
-                }
-
-                // Wait before retrying
-                tokio::time::sleep(std::time::Duration::from_millis(current_delay_ms)).await;
-
-                // Calculate next delay with exponential backoff
-                current_delay_ms = ((current_delay_ms as f64
-                    * self.config.retry_config.backoff_multiplier)
-                    as u64)
-                    .min(self.config.retry_config.max_delay_ms);
-
-                continue;
-            }
-
-            // Check for completion promise
-            let completion_detected = self.completion_detector.check(&output_str);
-
-            // Parse token metrics from output
-            let token_metrics = self.parse_metrics_from_output(&output_str);
-
-            // Record end of iteration in progress.txt
-            self.progress_tracker.end_iteration(iteration, exit_code == 0)?;
-
-            // Note: We intentionally keep current_agent_id set and don't unregister the PTY yet.
-            // This allows the terminal to continue displaying the agent's output after it completes.
-            // The PTY will be unregistered when a new iteration starts (or loop ends).
-            // Old agent cleanup happens at the START of run_iteration_shared, not at the end.
-
-            self.set_progress(format!("Iteration {} complete (exit code {})", iteration, exit_code));
-
-            return Ok(IterationResult {
-                exit_code,
-                token_metrics,
-                story_id: None, // Would need to parse from output
-                story_completed: exit_code == 0,
-                completion_detected,
-                retry_attempts: attempt,
-                was_retried: attempt > 1,
+                rate_limit_detected,
             });
         }
     }
@@ -1337,18 +955,18 @@ impl RalphLoopOrchestrator {
     fn emit_status(&self) {
         // Update snapshot store directly (bypasses async channel issues)
         if let Some(store) = &self.snapshot_store {
-            let mut snapshots = store.lock().unwrap();
+            let mut snapshots = lock_mutex_recover(store);
             if let Some(snapshot) = snapshots.get_mut(&self.execution_id) {
                 snapshot.state = Some(self.state.clone());
                 snapshot.current_agent_id = self.current_agent_id.clone();
                 snapshot.worktree_path = self.worktree_path.as_ref().map(|p| p.to_string_lossy().to_string());
                 snapshot.metrics = Some(self.metrics.clone());
-                println!("[DEBUG] emit_status: updated snapshot agent_id={:?}", snapshot.current_agent_id);
+                log::debug!("[DEBUG] emit_status: updated snapshot agent_id={:?}", snapshot.current_agent_id);
             } else {
-                println!("[DEBUG] emit_status: snapshot NOT FOUND for {}", self.execution_id);
+                log::debug!("[DEBUG] emit_status: snapshot NOT FOUND for {}", self.execution_id);
             }
         } else {
-            println!("[DEBUG] emit_status: NO snapshot_store!");
+            log::debug!("[DEBUG] emit_status: NO snapshot_store!");
         }
 
         // Also send to channel for compatibility
@@ -1390,7 +1008,7 @@ impl RalphLoopOrchestrator {
 
     /// Cancel the current execution
     pub fn cancel(&mut self) {
-        *self.cancelled.lock().unwrap() = true;
+        *lock_mutex_recover(&self.cancelled) = true;
     }
 
     /// Setup worktree for isolated execution
@@ -1531,6 +1149,8 @@ struct IterationResult {
     completion_detected: bool,
     retry_attempts: u32,
     was_retried: bool,
+    /// Whether a rate limit was detected during this iteration
+    rate_limit_detected: bool,
 }
 
 #[cfg(test)]

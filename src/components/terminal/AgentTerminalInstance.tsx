@@ -23,6 +23,13 @@ interface AgentTerminalInstanceProps {
   isActive: boolean
 }
 
+/** Result of a PTY connection attempt */
+interface PtyConnectionResult {
+  ptyId: string | null
+  unlisten: (() => void) | null
+  unlistenExit: (() => void) | null
+}
+
 export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -34,6 +41,116 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
   const unlistenRef = useRef<(() => void) | null>(null)
   const unlistenExitRef = useRef<(() => void) | null>(null)
   const { updateTerminalTitle, updateAgentTerminalStatus } = useTerminalStore()
+
+  /**
+   * Connect a terminal to a PTY for a specific agent.
+   * Handles both local PTY connections and remote event-based fallback.
+   */
+  const connectToPty = useCallback(async (
+    terminal: Terminal,
+    targetAgentId: string,
+    options: { isTransition?: boolean } = {}
+  ): Promise<PtyConnectionResult> => {
+    const { isTransition = false } = options
+    let unlisten: (() => void) | null = null
+    let unlistenExit: (() => void) | null = null
+
+    // Get the PTY ID for this agent
+    console.log('[AgentTerminal] Getting PTY ID for agent:', targetAgentId)
+    const ptyId = await getAgentPtyId(targetAgentId)
+    console.log('[AgentTerminal] Got PTY ID:', ptyId)
+
+    if (!ptyId) {
+      if (isTransition) {
+        terminal.write('\x1b[33mWaiting for agent terminal...\x1b[0m\r\n')
+      } else {
+        terminal.write('\x1b[33mNo active terminal for this agent.\x1b[0m\r\n')
+        terminal.write('\x1b[90mThe agent may not have been spawned in PTY mode.\x1b[0m\r\n')
+      }
+      return { ptyId: null, unlisten: null, unlistenExit: null }
+    }
+
+    // Get and replay history
+    const history = await getAgentPtyHistory(targetAgentId)
+    if (history.length > 0) {
+      terminal.write(decodeTerminalData(history))
+    }
+
+    // Get the PTY instance to wire up events
+    const pty = getPty(ptyId)
+    if (pty) {
+      // Wire PTY output to xterm
+      pty.onData((data: unknown) => {
+        try {
+          let dataBytes: Uint8Array
+          if (typeof data === 'string') {
+            dataBytes = new TextEncoder().encode(data)
+            terminal.write(data)
+          } else if (data instanceof Uint8Array) {
+            dataBytes = data
+            terminal.write(decodeTerminalData(data))
+          } else if (Array.isArray(data)) {
+            dataBytes = new Uint8Array(data)
+            terminal.write(decodeTerminalData(dataBytes))
+          } else {
+            console.warn('Unknown PTY data type:', typeof data, data)
+            return
+          }
+          // Forward to backend for log parsing and history storage
+          processAgentPtyData(targetAgentId, dataBytes).catch(console.error)
+        } catch (err) {
+          console.error('Error processing PTY data:', err)
+        }
+      })
+
+      // Wire xterm input to PTY
+      terminal.onData((data: string) => {
+        writeToTerminal(ptyId, data)
+      })
+
+      // Handle terminal resize
+      terminal.onResize(({ cols, rows }) => {
+        resizeTerminal(ptyId, cols, rows)
+      })
+
+      // Handle PTY exit
+      pty.onExit(({ exitCode }: { exitCode: number }) => {
+        terminal.write(`\r\n\x1b[90mAgent process exited with code ${exitCode}\x1b[0m\r\n`)
+        updateAgentTerminalStatus(targetAgentId, 'exited')
+        notifyAgentPtyExit(targetAgentId, exitCode).catch(console.error)
+      })
+    } else {
+      // PTY not found locally - listen for events from backend
+      if (!isTransition) {
+        terminal.write('\x1b[90mConnecting to agent terminal...\x1b[0m\r\n')
+      }
+      console.log('[AgentTerminal] PTY not found locally, listening for agent-pty-data events for agent:', targetAgentId)
+
+      // Listen for PTY data events
+      unlisten = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
+        if (!isTransition) {
+          console.log('[AgentTerminal] Received agent-pty-data event:', event.payload.agentId, 'bytes:', event.payload.data.length)
+        }
+        if (event.payload.agentId === targetAgentId) {
+          if (!isTransition) {
+            console.log('[AgentTerminal] Event matches our agentId, writing to terminal')
+          }
+          const data = new Uint8Array(event.payload.data)
+          terminal.write(decodeTerminalData(data))
+        }
+      })
+
+      // Listen for PTY exit events
+      unlistenExit = await listen<{ agentId: string; exitCode: number }>('agent-pty-exit', (event) => {
+        if (event.payload.agentId === targetAgentId) {
+          terminal.write(`\r\n\x1b[90mAgent process exited with code ${event.payload.exitCode}\x1b[0m\r\n`)
+          updateAgentTerminalStatus(targetAgentId, 'exited')
+        }
+      })
+    }
+
+    return { ptyId, unlisten, unlistenExit }
+  }, [updateAgentTerminalStatus])
 
   // Initialize terminal and connect to agent PTY
   const initTerminal = useCallback(async () => {
@@ -107,86 +224,11 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
     currentAgentIdRef.current = agentId
 
     try {
-      // Get the PTY ID for this agent
-      const ptyId = await getAgentPtyId(agentId)
-      if (!ptyId) {
-        terminal.write('\x1b[33mNo active terminal for this agent.\x1b[0m\r\n')
-        terminal.write('\x1b[90mThe agent may not have been spawned in PTY mode.\x1b[0m\r\n')
-        return
-      }
-
+      // Connect to agent PTY using shared helper
+      const { ptyId, unlisten, unlistenExit } = await connectToPty(terminal, agentId)
       ptyIdRef.current = ptyId
-
-      // Get and replay history
-      const history = await getAgentPtyHistory(agentId)
-      if (history.length > 0) {
-        terminal.write(decodeTerminalData(history))
-      }
-
-      // Get the PTY instance to wire up events
-      const pty = getPty(ptyId)
-      if (pty) {
-        // Wire PTY output to xterm
-        pty.onData((data: unknown) => {
-          try {
-            let dataBytes: Uint8Array
-            if (typeof data === 'string') {
-              dataBytes = new TextEncoder().encode(data)
-              terminal.write(data)
-            } else if (data instanceof Uint8Array) {
-              dataBytes = data
-              terminal.write(decodeTerminalData(data))
-            } else if (Array.isArray(data)) {
-              dataBytes = new Uint8Array(data)
-              terminal.write(decodeTerminalData(dataBytes))
-            } else {
-              console.warn('Unknown PTY data type:', typeof data, data)
-              return
-            }
-            // Forward to backend for log parsing and history storage
-            processAgentPtyData(agentId, dataBytes).catch(console.error)
-          } catch (err) {
-            console.error('Error processing PTY data:', err)
-          }
-        })
-
-        // Wire xterm input to PTY
-        terminal.onData((data: string) => {
-          writeToTerminal(ptyId, data)
-        })
-
-        // Handle terminal resize
-        terminal.onResize(({ cols, rows }) => {
-          resizeTerminal(ptyId, cols, rows)
-        })
-
-        // Handle PTY exit
-        pty.onExit(({ exitCode }: { exitCode: number }) => {
-          terminal.write(`\r\n\x1b[90mAgent process exited with code ${exitCode}\x1b[0m\r\n`)
-          updateAgentTerminalStatus(agentId, 'exited')
-          notifyAgentPtyExit(agentId, exitCode).catch(console.error)
-        })
-      } else {
-        // PTY not found locally - listen for events from backend
-        terminal.write('\x1b[90mConnecting to agent terminal...\x1b[0m\r\n')
-
-        // Listen for PTY data events
-        const unlisten = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
-          if (event.payload.agentId === agentId) {
-            const data = new Uint8Array(event.payload.data)
-            terminal.write(decodeTerminalData(data))
-          }
-        })
-        unlistenRef.current = unlisten
-
-        // Listen for PTY exit events
-        await listen<{ agentId: string; exitCode: number }>('agent-pty-exit', (event) => {
-          if (event.payload.agentId === agentId) {
-            terminal.write(`\r\n\x1b[90mAgent process exited with code ${event.payload.exitCode}\x1b[0m\r\n`)
-            updateAgentTerminalStatus(agentId, 'exited')
-          }
-        })
-      }
+      unlistenRef.current = unlisten
+      unlistenExitRef.current = unlistenExit
 
       // Listen for title changes
       terminal.onTitleChange((title) => {
@@ -196,7 +238,7 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
       console.error('Failed to connect to agent PTY:', error)
       terminal.write(`\x1b[31mFailed to connect to agent terminal: ${error}\x1b[0m\r\n`)
     }
-  }, [agentId, terminalId, updateTerminalTitle, updateAgentTerminalStatus])
+  }, [agentId, terminalId, connectToPty, updateTerminalTitle])
 
   // Initialize on mount
   useEffect(() => {
@@ -256,82 +298,11 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
       terminal.write('\x1b[90m─────────────────────────────────────────\x1b[0m\r\n\r\n')
 
       try {
-        // Get the PTY ID for the new agent
-        const ptyId = await getAgentPtyId(agentId)
-        if (!ptyId) {
-          terminal.write('\x1b[33mWaiting for agent terminal...\x1b[0m\r\n')
-          return
-        }
-
+        // Connect to new agent PTY using shared helper
+        const { ptyId, unlisten, unlistenExit } = await connectToPty(terminal, agentId, { isTransition: true })
         ptyIdRef.current = ptyId
-
-        // Get and replay history for the new agent
-        const history = await getAgentPtyHistory(agentId)
-        if (history.length > 0) {
-          terminal.write(decodeTerminalData(history))
-        }
-
-        // Get the PTY instance to wire up events
-        const pty = getPty(ptyId)
-        if (pty) {
-          // Wire PTY output to xterm
-          pty.onData((data: unknown) => {
-            try {
-              let dataBytes: Uint8Array
-              if (typeof data === 'string') {
-                dataBytes = new TextEncoder().encode(data)
-                terminal.write(data)
-              } else if (data instanceof Uint8Array) {
-                dataBytes = data
-                terminal.write(decodeTerminalData(data))
-              } else if (Array.isArray(data)) {
-                dataBytes = new Uint8Array(data)
-                terminal.write(decodeTerminalData(dataBytes))
-              } else {
-                console.warn('Unknown PTY data type:', typeof data, data)
-                return
-              }
-              // Forward to backend for log parsing and history storage
-              processAgentPtyData(agentId, dataBytes).catch(console.error)
-            } catch (err) {
-              console.error('Error processing PTY data:', err)
-            }
-          })
-
-          // Wire xterm input to PTY
-          terminal.onData((data: string) => {
-            writeToTerminal(ptyId, data)
-          })
-
-          // Handle terminal resize
-          terminal.onResize(({ cols, rows }) => {
-            resizeTerminal(ptyId, cols, rows)
-          })
-
-          // Handle PTY exit
-          pty.onExit(({ exitCode }: { exitCode: number }) => {
-            terminal.write(`\r\n\x1b[90mAgent process exited with code ${exitCode}\x1b[0m\r\n`)
-            updateAgentTerminalStatus(agentId, 'exited')
-            notifyAgentPtyExit(agentId, exitCode).catch(console.error)
-          })
-        } else {
-          // PTY not found locally - listen for events from backend
-          const unlisten = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
-            if (event.payload.agentId === agentId) {
-              const data = new Uint8Array(event.payload.data)
-              terminal.write(decodeTerminalData(data))
-            }
-          })
-          unlistenRef.current = unlisten
-
-          const unlistenExit = await listen<{ agentId: string; exitCode: number }>('agent-pty-exit', (event) => {
-            if (event.payload.agentId === agentId) {
-              terminal.write(`\r\n\x1b[90mAgent process exited with code ${event.payload.exitCode}\x1b[0m\r\n`)
-              updateAgentTerminalStatus(agentId, 'exited')
-            }
-          })
-          unlistenExitRef.current = unlistenExit
-        }
+        unlistenRef.current = unlisten
+        unlistenExitRef.current = unlistenExit
       } catch (error) {
         console.error('Failed to connect to agent PTY:', error)
         terminal.write(`\x1b[31mFailed to connect to agent terminal: ${error}\x1b[0m\r\n`)
@@ -339,7 +310,7 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
     }
 
     transitionToNewAgent()
-  }, [agentId, updateAgentTerminalStatus])
+  }, [agentId, connectToPty])
 
   // Handle container resize
   useEffect(() => {

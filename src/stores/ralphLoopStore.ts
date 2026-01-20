@@ -14,6 +14,7 @@ import type {
   InitRalphPrdRequest,
   RalphStoryInput,
   StartRalphLoopRequest,
+  IterationRecord,
 } from '@/types'
 
 interface RalphLoopStore extends AsyncState {
@@ -36,6 +37,7 @@ interface RalphLoopStore extends AsyncState {
   currentAgentId: string | null
   worktreePath: string | null
   executionBranch: string | null
+  iterationHistory: IterationRecord[]
 
   // Actions - PRD Management
   setProjectPath: (path: string | null) => void
@@ -62,6 +64,7 @@ interface RalphLoopStore extends AsyncState {
   stopLoop: () => Promise<void>
   loadLoopState: (silent?: boolean) => Promise<void>
   loadLoopMetrics: (silent?: boolean) => Promise<void>
+  loadIterationHistory: (silent?: boolean) => Promise<void>
   loadPrdStatusSilent: (projectPath: string) => Promise<void>
   listExecutions: () => Promise<void>
 
@@ -99,6 +102,24 @@ interface RalphLoopStore extends AsyncState {
   clearError: () => void
 }
 
+// Helper: reload PRD and status data for a project
+const reloadPrdData = async (projectPath: string) => {
+  const [prd, prdStatus] = await Promise.all([
+    ralphLoopApi.getPrd(projectPath),
+    ralphLoopApi.getPrdStatus(projectPath),
+  ])
+  return { prd, prdStatus }
+}
+
+// Helper: reload progress data for a project
+const reloadProgressData = async (projectPath: string) => {
+  const [progress, progressSummary] = await Promise.all([
+    ralphLoopApi.getProgress(projectPath),
+    ralphLoopApi.getProgressSummary(projectPath),
+  ])
+  return { progress, progressSummary }
+}
+
 export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   // Initial state
   currentProjectPath: null,
@@ -117,6 +138,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   currentAgentId: null,
   worktreePath: null,
   executionBranch: null,
+  iterationHistory: [],
   loading: false,
   error: null,
 
@@ -173,10 +195,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       async () => {
         const success = await ralphLoopApi.markStoryPassing(projectPath, storyId)
         if (success) {
-          // Reload PRD and status
-          const prd = await ralphLoopApi.getPrd(projectPath)
-          const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-          return { prd, prdStatus, __result: success }
+          return { ...await reloadPrdData(projectPath), __result: success }
         }
         return { __result: success }
       },
@@ -195,10 +214,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       async () => {
         const success = await ralphLoopApi.markStoryFailing(projectPath, storyId)
         if (success) {
-          // Reload PRD and status
-          const prd = await ralphLoopApi.getPrd(projectPath)
-          const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-          return { prd, prdStatus, __result: success }
+          return { ...await reloadPrdData(projectPath), __result: success }
         }
         return { __result: success }
       },
@@ -216,10 +232,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       set,
       async () => {
         await ralphLoopApi.addStory(projectPath, story)
-        // Reload PRD and status
-        const prd = await ralphLoopApi.getPrd(projectPath)
-        const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-        return { prd, prdStatus }
+        return await reloadPrdData(projectPath)
       },
       { rethrow: true }
     )
@@ -235,10 +248,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       async () => {
         const success = await ralphLoopApi.removeStory(projectPath, storyId)
         if (success) {
-          // Reload PRD and status
-          const prd = await ralphLoopApi.getPrd(projectPath)
-          const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-          return { prd, prdStatus, __result: success }
+          return { ...await reloadPrdData(projectPath), __result: success }
         }
         return { __result: success }
       },
@@ -272,10 +282,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       set,
       async () => {
         await ralphLoopApi.addProgressNote(projectPath, iteration, note)
-        // Reload progress
-        const progress = await ralphLoopApi.getProgress(projectPath)
-        const progressSummary = await ralphLoopApi.getProgressSummary(projectPath)
-        return { progress, progressSummary }
+        return await reloadProgressData(projectPath)
       },
       { rethrow: true }
     )
@@ -380,6 +387,17 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     await asyncAction(set, async () => {
       const executionMetrics = await ralphLoopApi.getLoopMetrics(executionId)
       return { executionMetrics }
+    }, { silent })
+  },
+
+  // Load iteration history for the active execution
+  loadIterationHistory: async (silent?: boolean) => {
+    const executionId = get().activeExecutionId
+    if (!executionId) return
+
+    await asyncAction(set, async () => {
+      const iterationHistory = await ralphLoopApi.getIterationHistory(executionId)
+      return { iterationHistory }
     }, { silent })
   },
 
