@@ -561,3 +561,16 @@ export interface ExtractedPRDStructure {
   tasks: StructuredPRDItem[]
   acceptanceCriteria: StructuredPRDItem[]
 }
+
+// ============================================================================
+// Terminal Types (re-exported from terminal.ts)
+// ============================================================================
+
+export type {
+  TerminalInstance,
+  TerminalPane,
+  TerminalPanelMode,
+  TerminalState,
+  SplitDirection,
+  SpawnOptions,
+} from './terminal'

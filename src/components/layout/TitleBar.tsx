@@ -1,13 +1,27 @@
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { PanelLeft, Settings } from 'lucide-react'
+import { PanelLeft, Settings, Terminal } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
+import { useTerminalStore } from '@/stores/terminalStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { ProjectSwitcher } from '@/components/projects/ProjectSwitcher'
 import { Tooltip } from '@/components/ui/tooltip'
 
 export function TitleBar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { terminals, panelMode, togglePanel, createTerminal } = useTerminalStore()
+  const { getActiveProject } = useProjectStore()
   const navigate = useNavigate()
+
+  const handleTerminalClick = () => {
+    if (terminals.length === 0) {
+      // Create terminal in active project's directory
+      const activeProject = getActiveProject()
+      createTerminal(activeProject?.path)
+    } else {
+      togglePanel()
+    }
+  }
 
   return (
     <div
@@ -31,8 +45,19 @@ export function TitleBar() {
         <ProjectSwitcher compact />
       </div>
 
-      {/* Right section - Settings */}
-      <div className="flex items-center pr-3">
+      {/* Right section - Terminal and Settings */}
+      <div className="flex items-center gap-1 pr-3">
+        <Tooltip content="Terminal" side="bottom">
+          <button
+            onClick={handleTerminalClick}
+            className={cn(
+              'flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
+              panelMode !== 'closed' && 'text-primary'
+            )}
+          >
+            <Terminal className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
         <Tooltip content="Settings" side="bottom">
           <button
             onClick={() => navigate('/settings')}

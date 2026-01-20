@@ -77,6 +77,9 @@ toml = "0.8"
 # File system watching
 notify = "6.1"
 
+# Terminal PTY support
+tauri-plugin-pty = "0.2"
+
 # Signal handling for graceful shutdown
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
