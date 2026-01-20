@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Play, Eye, RefreshCw } from 'lucide-react'
+import { Loader2, Play, Eye, RefreshCw, FolderOpen } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
@@ -27,7 +27,7 @@ import {
 } from '@/lib/parallel-api'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { configApi } from '@/lib/config-api'
-import type { ExecutionConfig, SchedulingStrategy, AgentType, RalphConfig } from '@/types'
+import type { ExecutionConfig, SchedulingStrategy, AgentType, RalphConfig, Session } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getModelName } from '@/lib/model-api'
 
@@ -39,10 +39,28 @@ interface PRDExecutionDialogProps {
 
 export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDialogProps) {
   const navigate = useNavigate()
-  const { executePRD } = usePRDStore()
-  const { fetchSession } = useSessionStore()
+  const { executePRD, currentPRD, prds } = usePRDStore()
+  const { fetchSession, sessions, fetchSessions } = useSessionStore()
   const [executing, setExecuting] = useState(false)
   const [configLoading, setConfigLoading] = useState(true)
+
+  // Get the PRD being executed
+  const prd = currentPRD?.id === prdId ? currentPRD : prds.find(p => p.id === prdId)
+
+  // Find existing active session for this project
+  const existingActiveSession: Session | undefined = useMemo(() => {
+    if (!prd?.projectPath) return undefined
+    return sessions.find(
+      s => s.projectPath === prd.projectPath && s.status === 'active'
+    )
+  }, [sessions, prd?.projectPath])
+
+  // Fetch sessions when dialog opens
+  useEffect(() => {
+    if (open) {
+      fetchSessions()
+    }
+  }, [open, fetchSessions])
 
   // Git initialization dialog state
   const [showGitInitDialog, setShowGitInitDialog] = useState(false)
@@ -63,6 +81,7 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
     runLint: true,
     dryRun: false,
     model: undefined,
+    reuseSession: false,
   })
 
   // Load saved config when dialog opens
@@ -520,6 +539,30 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
             </div>
           </div>
 
+          {/* Reuse Session Option - only show if an active session exists */}
+          {existingActiveSession && (
+            <div className="rounded-md border border-dashed border-blue-500/50 bg-blue-500/5 p-4">
+              <label className="flex items-center gap-3">
+                <Checkbox
+                  checked={config.reuseSession}
+                  onCheckedChange={(checked) =>
+                    setConfig({ ...config, reuseSession: checked as boolean })
+                  }
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4" />
+                    Use Existing Session
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Add tasks to the existing active session &quot;{existingActiveSession.name}&quot; instead of creating a new one.
+                    This is useful for iterating on the same PRD without fragmenting your work across multiple sessions.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
           {/* Dry-run Mode */}
           <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-4">
             <label className="flex items-center gap-3">
@@ -561,8 +604,15 @@ export function PRDExecutionDialog({ prdId, open, onOpenChange }: PRDExecutionDi
                   <li className="text-yellow-600">• DRY-RUN: No agents will be spawned</li>
                   <li className="text-yellow-600">• DRY-RUN: No branches will be created</li>
                 </>
+              ) : config.reuseSession && existingActiveSession ? (
+                <>
+                  <li className="text-blue-600">• Reusing session: {existingActiveSession.name}</li>
+                  <li>• Tasks will be added to the existing session</li>
+                  <li>• Agents will launch immediately after task creation</li>
+                </>
               ) : (
                 <>
+                  <li>• A new session will be created</li>
                   <li>• Tasks will be created automatically from PRD</li>
                   <li>• Agents will launch immediately after creation</li>
                 </>

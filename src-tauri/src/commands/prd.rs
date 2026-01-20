@@ -49,6 +49,9 @@ pub struct ExecutionConfig {
     /// Optional model to use for agents
     #[serde(default)]
     pub model: Option<String>,
+    /// If true and an active session exists for this project, reuse it instead of creating a new one
+    #[serde(default)]
+    pub reuse_session: Option<bool>,
 }
 
 /// Create a new PRD document
@@ -290,9 +293,9 @@ pub async fn execute_prd(
             .map_err(|e| format!("Failed to parse PRD: {}", e))?
     };
 
-    // 3. Create session for this execution
-    let session_id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now();
+    // 3. Get or create session for this execution
+    let project_path = prd.project_path.clone().unwrap_or_else(|| ".".to_string());
+    let conn = db_guard.get_connection();
 
     let agent_type = match config.agent_type.as_str() {
         "claude" => crate::models::AgentType::Claude,
@@ -301,31 +304,26 @@ pub async fn execute_prd(
         _ => crate::models::AgentType::Claude,
     };
 
-    let session = crate::models::Session {
-        id: session_id.clone(),
-        name: config.session_name.clone().unwrap_or_else(|| format!("{} Execution", prd.title)),
-        project_path: prd.project_path.clone().unwrap_or_else(|| ".".to_string()),
-        created_at: now,
-        last_resumed_at: None,
-        status: crate::models::SessionStatus::Active,
-        config: crate::models::SessionConfig {
-            max_parallel: config.max_parallel as i32,
-            max_iterations: config.max_iterations as i32,
-            max_retries: config.max_retries as i32,
-            agent_type,
-            auto_create_prs: config.auto_create_prs,
-            draft_prs: config.draft_prs,
-            run_tests: config.run_tests,
-            run_lint: config.run_lint,
-        },
-        tasks: vec![],
-        total_cost: 0.0,
-        total_tokens: 0,
+    // Check if we should reuse an existing session
+    let session_id = if config.reuse_session.unwrap_or(false) {
+        // Try to find an existing active session for this project
+        if let Ok(Some(existing)) = crate::database::sessions::find_active_session_for_project(conn, &project_path) {
+            log::info!("[PRD Execute] Reusing existing session: {}", existing.id);
+            existing.id
+        } else {
+            // No existing session found, create a new one
+            log::info!("[PRD Execute] No existing active session found, creating new session");
+            create_new_session_for_prd(conn, &config, &prd, &project_path, agent_type)?
+        }
+    } else {
+        // Create a new session
+        create_new_session_for_prd(conn, &config, &prd, &project_path, agent_type)?
     };
 
-    let conn = db_guard.get_connection();
-    crate::database::sessions::create_session(conn, &session)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
+    // Enforce single-active-session-per-project: pause any other active sessions
+    if let Err(e) = crate::database::sessions::pause_other_sessions_in_project(conn, &project_path, &session_id) {
+        log::warn!("Failed to pause other sessions: {}", e);
+    }
 
     // 4. Validate and create tasks
     if parsed_prd.tasks.is_empty() {
@@ -402,6 +400,7 @@ pub async fn execute_prd(
     }
 
     // 6. Create PRD execution record
+    let now = chrono::Utc::now();
     let execution = PRDExecution {
         id: Uuid::new_v4().to_string(),
         prd_id: prd_id.clone(),
@@ -424,6 +423,45 @@ pub async fn execute_prd(
 }
 
 // Helper functions
+
+/// Create a new session for PRD execution
+fn create_new_session_for_prd(
+    conn: &rusqlite::Connection,
+    config: &ExecutionConfig,
+    prd: &PRDDocument,
+    project_path: &str,
+    agent_type: crate::models::AgentType,
+) -> Result<String, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now();
+
+    let session = crate::models::Session {
+        id: session_id.clone(),
+        name: config.session_name.clone().unwrap_or_else(|| format!("{} Execution", prd.title)),
+        project_path: project_path.to_string(),
+        created_at: now,
+        last_resumed_at: None,
+        status: crate::models::SessionStatus::Active,
+        config: crate::models::SessionConfig {
+            max_parallel: config.max_parallel as i32,
+            max_iterations: config.max_iterations as i32,
+            max_retries: config.max_retries as i32,
+            agent_type,
+            auto_create_prs: config.auto_create_prs,
+            draft_prs: config.draft_prs,
+            run_tests: config.run_tests,
+            run_lint: config.run_lint,
+        },
+        tasks: vec![],
+        total_cost: 0.0,
+        total_tokens: 0,
+    };
+
+    crate::database::sessions::create_session(conn, &session)
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+
+    Ok(session_id)
+}
 
 /// Format PRD as markdown with title
 fn format_prd_markdown(prd: &PRDDocument) -> String {

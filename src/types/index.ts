@@ -238,6 +238,8 @@ export interface ExecutionConfig {
   dryRun?: boolean
   /** Model to use for agents (e.g., "anthropic/claude-sonnet-4-5", "claude-sonnet-4-5") */
   model?: string
+  /** If true and an active session exists for this project, reuse it instead of creating a new one */
+  reuseSession?: boolean
 }
 
 /** Result of a dry-run schedule preview */

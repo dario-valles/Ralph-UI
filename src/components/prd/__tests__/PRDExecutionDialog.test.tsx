@@ -10,18 +10,23 @@ import type { RalphConfig } from '@/types'
 // Create mock functions
 const mockExecutePRD = vi.fn()
 const mockFetchSession = vi.fn()
+const mockFetchSessions = vi.fn()
 const mockConfigGet = vi.fn()
 
 // Mock the stores
 vi.mock('@/stores/prdStore', () => ({
   usePRDStore: () => ({
     executePRD: mockExecutePRD,
+    currentPRD: { id: 'test-prd-id', projectPath: '/test/project' },
+    prds: [{ id: 'test-prd-id', projectPath: '/test/project' }],
   }),
 }))
 
 vi.mock('@/stores/sessionStore', () => {
   const store = () => ({
     fetchSession: mockFetchSession,
+    fetchSessions: mockFetchSessions,
+    sessions: [],
   })
   store.getState = () => ({ currentSession: null })
   return { useSessionStore: store }
@@ -108,6 +113,7 @@ describe('PRDExecutionDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockConfigGet.mockResolvedValue(mockConfig)
+    mockFetchSessions.mockResolvedValue(undefined)
   })
 
   it('renders dialog when open', async () => {

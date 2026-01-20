@@ -18,7 +18,7 @@ pub async fn create_session(
     let session = Session {
         id: Uuid::new_v4().to_string(),
         name,
-        project_path,
+        project_path: project_path.clone(),
         created_at: Utc::now(),
         last_resumed_at: None,
         status: SessionStatus::Active,
@@ -42,6 +42,11 @@ pub async fn create_session(
 
     database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
+
+    // Enforce single-active-session-per-project: pause any other active sessions
+    if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
+        log::warn!("Failed to pause other sessions: {}", e);
+    }
 
     // Export session to file immediately after creation for git tracking
     // This provides a safety net for all session creation paths
@@ -137,8 +142,19 @@ pub async fn update_session_status(
     let old_status = format!("{:?}", current_session.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
-    database::sessions::update_session_status(conn, &session_id, status)
+    database::sessions::update_session_status(conn, &session_id, status.clone())
         .map_err(|e| format!("Failed to update session status: {}", e))?;
+
+    // If activating a session, pause any other active sessions in the same project
+    if matches!(status, SessionStatus::Active) {
+        if let Err(e) = database::sessions::pause_other_sessions_in_project(
+            conn,
+            &current_session.project_path,
+            &session_id,
+        ) {
+            log::warn!("Failed to pause other sessions: {}", e);
+        }
+    }
 
     // Export session to file on status change (for persistence)
     // This ensures session state is saved to .ralph-ui/sessions/ for git tracking
@@ -323,7 +339,7 @@ pub async fn create_session_from_template(
     let session = Session {
         id: Uuid::new_v4().to_string(),
         name,
-        project_path,
+        project_path: project_path.clone(),
         created_at: Utc::now(),
         last_resumed_at: None,
         status: SessionStatus::Active,
@@ -335,6 +351,11 @@ pub async fn create_session_from_template(
 
     database::sessions::create_session(conn, &session)
         .map_err(|e| format!("Failed to create session: {}", e))?;
+
+    // Enforce single-active-session-per-project: pause any other active sessions
+    if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
+        log::warn!("Failed to pause other sessions: {}", e);
+    }
 
     Ok(session)
 }
