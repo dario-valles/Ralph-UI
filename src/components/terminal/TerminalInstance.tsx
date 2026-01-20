@@ -34,7 +34,7 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       cursorBlink: true,
       cursorStyle: 'block',
       fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: '"MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", "JetBrainsMono Nerd Font", Menlo, Monaco, "Courier New", monospace',
       theme: {
         background: '#1a1a1a',
         foreground: '#e0e0e0',
