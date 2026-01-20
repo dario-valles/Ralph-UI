@@ -204,8 +204,30 @@ export const useTerminalStore = create<TerminalStore>()(
         let newSplitGroups: SplitGroup[]
 
         if (groupIndex >= 0) {
-          // Add to existing group
           const group = splitGroups[groupIndex]
+
+          // If trying to split in a different direction than the group,
+          // create a new separate tab/group instead of changing existing layout
+          if (group.terminalIds.length > 1 && group.direction !== direction) {
+            // Create a new independent group (new tab)
+            const newGroup: SplitGroup = {
+              id: generateGroupId(),
+              direction,
+              terminalIds: [newId],
+              sizes: [100],
+            }
+            newSplitGroups = [...splitGroups, newGroup]
+
+            set({
+              terminals: [...terminals, newTerminal],
+              activeTerminalId: newId,
+              splitGroups: newSplitGroups,
+              activeSplitGroupId: newGroup.id,
+            })
+            return newId
+          }
+
+          // Same direction or single terminal - add to existing group
           const terminalIndex = group.terminalIds.indexOf(id)
 
           // Insert new terminal after the current one
@@ -219,9 +241,12 @@ export const useTerminalStore = create<TerminalStore>()(
           newSizes[terminalIndex] = newSize
           newSizes.splice(terminalIndex + 1, 0, newSize)
 
+          // Only update direction if it was a single terminal (first split)
+          const newDirection = group.terminalIds.length === 1 ? direction : group.direction
+
           newSplitGroups = splitGroups.map((g, i) =>
             i === groupIndex
-              ? { ...g, direction, terminalIds: newTerminalIds, sizes: newSizes }
+              ? { ...g, direction: newDirection, terminalIds: newTerminalIds, sizes: newSizes }
               : g
           )
         } else {
