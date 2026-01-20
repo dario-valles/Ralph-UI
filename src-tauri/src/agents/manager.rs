@@ -723,10 +723,8 @@ impl AgentManager {
                         .arg(config.max_iterations.to_string());
                 }
 
-                // Add --yes to auto-accept prompts
-                cmd.arg("--yes");
-
                 // Add --dangerously-skip-permissions to skip permission prompts
+                // Note: Claude Code doesn't have --yes flag, this is the equivalent
                 cmd.arg("--dangerously-skip-permissions");
 
                 // Add model if specified

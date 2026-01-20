@@ -857,6 +857,19 @@ impl RalphLoopOrchestrator {
             let output = agent_manager.get_pty_history(&agent_id);
             let output_str = String::from_utf8_lossy(&output);
 
+            // Debug: Log agent output when it fails
+            if exit_code != 0 {
+                println!("[RalphLoop] Agent failed! Output ({} bytes):", output.len());
+                // Print first 2000 chars of output for debugging
+                let truncated = if output_str.len() > 2000 {
+                    format!("{}... [truncated]", &output_str[..2000])
+                } else {
+                    output_str.to_string()
+                };
+                println!("{}", truncated);
+                let _ = std::io::stdout().flush();
+            }
+
             // Check if we should retry based on exit code and output
             if exit_code != 0 && attempt < max_attempts && retry::should_retry_agent(exit_code, &output_str) {
                 log::warn!(
@@ -1105,6 +1118,19 @@ impl RalphLoopOrchestrator {
                 manager.get_pty_history(&agent_id)
             };
             let output_str = String::from_utf8_lossy(&output);
+
+            // Debug: Log agent output when it fails
+            if exit_code != 0 {
+                println!("[RalphLoop] Agent failed! Output ({} bytes):", output.len());
+                // Print first 2000 chars of output for debugging
+                let truncated = if output_str.len() > 2000 {
+                    format!("{}... [truncated]", &output_str[..2000])
+                } else {
+                    output_str.to_string()
+                };
+                println!("{}", truncated);
+                let _ = std::io::stdout().flush();
+            }
 
             // Check if we should retry based on exit code and output
             if exit_code != 0 && attempt < max_attempts && retry::should_retry_agent(exit_code, &output_str) {
