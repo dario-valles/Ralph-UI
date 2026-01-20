@@ -3,6 +3,7 @@
 
 #![allow(dead_code)] // Infrastructure for parallel agent orchestration (Phase 4)
 
+use crate::agents::ansi_stripper::{LineBuffer, RingBuffer};
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
 use crate::models::{AgentType, LogEntry, LogLevel};
@@ -17,9 +18,19 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::sync::mpsc;
 
+/// Agent spawn mode - determines how the agent process is spawned
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentSpawnMode {
+    /// Piped mode - separate stdout/stderr, current behavior
+    Piped,
+    /// PTY mode - interactive terminal with combined output
+    #[default]
+    Pty,
+}
+
 /// Agent lifecycle manager
 pub struct AgentManager {
-    /// Map of agent ID to running process
+    /// Map of agent ID to running process (for piped mode)
     processes: Arc<Mutex<HashMap<String, Child>>>,
     /// Event sender for agent logs
     log_tx: Option<mpsc::UnboundedSender<AgentLogEvent>>,
@@ -27,8 +38,18 @@ pub struct AgentManager {
     rate_limit_detector: RateLimitDetector,
     /// Event sender for rate limit events
     rate_limit_tx: Option<mpsc::UnboundedSender<RateLimitEvent>>,
+    /// Event sender for agent completion events
+    completion_tx: Option<mpsc::UnboundedSender<AgentCompletionEvent>>,
     /// In-memory log storage for each agent (for retrieval via command)
     agent_logs: Arc<Mutex<HashMap<String, Vec<LogEntry>>>>,
+    /// Map of agent ID to PTY ID (for PTY mode)
+    pty_ids: Arc<Mutex<HashMap<String, String>>>,
+    /// Raw PTY output history per agent (ring buffer for replay)
+    pty_history: Arc<Mutex<HashMap<String, RingBuffer>>>,
+    /// Event sender for PTY data events
+    pty_data_tx: Option<mpsc::UnboundedSender<AgentPtyDataEvent>>,
+    /// Event sender for PTY exit events
+    pty_exit_tx: Option<mpsc::UnboundedSender<AgentPtyExitEvent>>,
 }
 
 /// Event emitted when a rate limit is detected
@@ -38,11 +59,35 @@ pub struct RateLimitEvent {
     pub rate_limit_info: RateLimitInfo,
 }
 
+/// Event emitted when an agent process completes
+#[derive(Debug, Clone)]
+pub struct AgentCompletionEvent {
+    pub agent_id: String,
+    pub task_id: String,
+    pub success: bool,
+    pub exit_code: Option<i32>,
+    pub error: Option<String>,
+}
+
 /// Event emitted when an agent produces a log
 #[derive(Debug, Clone)]
 pub struct AgentLogEvent {
     pub agent_id: String,
     pub log: LogEntry,
+}
+
+/// Event emitted when PTY produces output data
+#[derive(Debug, Clone)]
+pub struct AgentPtyDataEvent {
+    pub agent_id: String,
+    pub data: Vec<u8>,
+}
+
+/// Event emitted when PTY exits
+#[derive(Debug, Clone)]
+pub struct AgentPtyExitEvent {
+    pub agent_id: String,
+    pub exit_code: i32,
 }
 
 /// Configuration for spawning an agent
@@ -56,6 +101,8 @@ pub struct AgentSpawnConfig {
     pub prompt: Option<String>,
     /// Model to use for the agent (e.g., "anthropic/claude-sonnet-4-5", "claude-sonnet-4-5")
     pub model: Option<String>,
+    /// Spawn mode - PTY (interactive) or Piped (separate streams)
+    pub spawn_mode: AgentSpawnMode,
 }
 
 impl AgentManager {
@@ -65,7 +112,12 @@ impl AgentManager {
             log_tx: None,
             rate_limit_detector: RateLimitDetector::new(),
             rate_limit_tx: None,
+            completion_tx: None,
             agent_logs: Arc::new(Mutex::new(HashMap::new())),
+            pty_ids: Arc::new(Mutex::new(HashMap::new())),
+            pty_history: Arc::new(Mutex::new(HashMap::new())),
+            pty_data_tx: None,
+            pty_exit_tx: None,
         }
     }
 
@@ -89,6 +141,183 @@ impl AgentManager {
     /// Set the rate limit event sender for rate limit notifications
     pub fn set_rate_limit_sender(&mut self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
         self.rate_limit_tx = Some(tx);
+    }
+
+    /// Set the completion event sender for agent completion notifications
+    pub fn set_completion_sender(&mut self, tx: mpsc::UnboundedSender<AgentCompletionEvent>) {
+        self.completion_tx = Some(tx);
+    }
+
+    /// Set the PTY data event sender for streaming PTY output
+    pub fn set_pty_data_sender(&mut self, tx: mpsc::UnboundedSender<AgentPtyDataEvent>) {
+        self.pty_data_tx = Some(tx);
+    }
+
+    /// Set the PTY exit event sender for PTY termination notifications
+    pub fn set_pty_exit_sender(&mut self, tx: mpsc::UnboundedSender<AgentPtyExitEvent>) {
+        self.pty_exit_tx = Some(tx);
+    }
+
+    /// Check if an agent has an associated PTY
+    pub fn has_pty(&self, agent_id: &str) -> bool {
+        let pty_ids = lock_mutex_recover(&self.pty_ids);
+        pty_ids.contains_key(agent_id)
+    }
+
+    /// Get the PTY ID for an agent
+    pub fn get_pty_id(&self, agent_id: &str) -> Option<String> {
+        let pty_ids = lock_mutex_recover(&self.pty_ids);
+        pty_ids.get(agent_id).cloned()
+    }
+
+    /// Get the PTY history (raw output) for an agent
+    pub fn get_pty_history(&self, agent_id: &str) -> Vec<u8> {
+        let pty_history = lock_mutex_recover(&self.pty_history);
+        pty_history.get(agent_id)
+            .map(|buf| buf.get_data())
+            .unwrap_or_default()
+    }
+
+    /// Clear PTY tracking data for an agent
+    pub fn clear_pty_data(&self, agent_id: &str) {
+        {
+            let mut pty_ids = lock_mutex_recover(&self.pty_ids);
+            pty_ids.remove(agent_id);
+        }
+        {
+            let mut pty_history = lock_mutex_recover(&self.pty_history);
+            pty_history.remove(agent_id);
+        }
+    }
+
+    /// Register a PTY association for an agent
+    /// Called by frontend after spawning a PTY for an agent
+    pub fn register_pty(&self, agent_id: &str, pty_id: &str) {
+        {
+            let mut pty_ids = lock_mutex_recover(&self.pty_ids);
+            pty_ids.insert(agent_id.to_string(), pty_id.to_string());
+        }
+        {
+            let mut pty_history = lock_mutex_recover(&self.pty_history);
+            // Create a 1MB ring buffer for history
+            pty_history.insert(agent_id.to_string(), RingBuffer::new(1024 * 1024));
+        }
+        log::info!("[AgentManager] Registered PTY {} for agent {}", pty_id, agent_id);
+    }
+
+    /// Unregister a PTY association for an agent
+    /// Called when PTY exits or agent stops
+    pub fn unregister_pty(&self, agent_id: &str) {
+        let pty_id = {
+            let mut pty_ids = lock_mutex_recover(&self.pty_ids);
+            pty_ids.remove(agent_id)
+        };
+        // Keep history for a while after exit (don't clear immediately)
+        // The history can be cleared explicitly via clear_pty_data
+        if let Some(id) = pty_id {
+            log::info!("[AgentManager] Unregistered PTY {} for agent {}", id, agent_id);
+        }
+    }
+
+    /// Process PTY data from an agent
+    /// Stores in history buffer, parses for logs, and checks for rate limits
+    pub fn process_pty_data(&self, agent_id: &str, data: &[u8]) {
+        // Store raw data in history buffer
+        {
+            let mut pty_history = lock_mutex_recover(&self.pty_history);
+            if let Some(buffer) = pty_history.get_mut(agent_id) {
+                buffer.write(data);
+            }
+        }
+
+        // Convert to string for log parsing
+        let text = String::from_utf8_lossy(data);
+
+        // Strip ANSI codes for clean log parsing
+        let clean_text = crate::agents::ansi_stripper::strip_ansi(&text);
+
+        // Process each line for logs and rate limit detection
+        for line in clean_text.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            // Check for rate limits
+            if let Some(info) = self.rate_limit_detector.detect_in_stderr(line) {
+                log::warn!("[Agent {}] Rate limit detected: {:?}", agent_id, info);
+                if let Some(tx) = &self.rate_limit_tx {
+                    let event = RateLimitEvent {
+                        agent_id: agent_id.to_string(),
+                        rate_limit_info: info,
+                    };
+                    let _ = tx.send(event);
+                }
+            }
+
+            // Create log entry (default to Info level since PTY combines streams)
+            let log_entry = LogEntry {
+                timestamp: Utc::now(),
+                level: LogLevel::Info,
+                message: line.to_string(),
+            };
+
+            // Store in memory
+            {
+                let mut logs = lock_mutex_recover(&self.agent_logs);
+                logs.entry(agent_id.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(log_entry.clone());
+            }
+
+            // Send via channel if available
+            if let Some(tx) = &self.log_tx {
+                let event = AgentLogEvent {
+                    agent_id: agent_id.to_string(),
+                    log: log_entry,
+                };
+                let _ = tx.send(event);
+            }
+        }
+
+        // Emit PTY data event for terminal streaming
+        if let Some(tx) = &self.pty_data_tx {
+            let event = AgentPtyDataEvent {
+                agent_id: agent_id.to_string(),
+                data: data.to_vec(),
+            };
+            let _ = tx.send(event);
+        }
+    }
+
+    /// Notify that an agent's PTY has exited
+    pub fn notify_pty_exit(&self, agent_id: &str, exit_code: i32) {
+        log::info!("[AgentManager] PTY exit for agent {} with code {}", agent_id, exit_code);
+
+        // Emit exit event
+        if let Some(tx) = &self.pty_exit_tx {
+            let event = AgentPtyExitEvent {
+                agent_id: agent_id.to_string(),
+                exit_code,
+            };
+            let _ = tx.send(event);
+        }
+
+        // Add exit log entry
+        self.emit_log(
+            agent_id,
+            if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
+            format!("Agent exited with code {}", exit_code),
+        );
+    }
+
+    /// Build command line arguments for an agent (for PTY spawning on frontend)
+    /// Returns (program, args, cwd)
+    pub fn build_agent_command_line(&self, config: &AgentSpawnConfig) -> Result<(String, Vec<String>, String)> {
+        let cmd = self.build_command(config)?;
+        let program = cmd.get_program().to_string_lossy().to_string();
+        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        let cwd = config.worktree_path.clone();
+        Ok((program, args, cwd))
     }
 
     /// Spawn a new agent process
@@ -302,6 +531,104 @@ impl AgentManager {
                     }
                 }
                 log::debug!("[Agent {}] stderr reader finished", agent_id_clone);
+            });
+        }
+
+        // Spawn background thread to monitor process completion
+        {
+            let processes = self.processes.clone();
+            let completion_tx = self.completion_tx.clone();
+            let agent_logs = self.agent_logs.clone();
+            let agent_id_clone = agent_id.to_string();
+            let task_id_clone = config.task_id.clone();
+            let log_tx = self.log_tx.clone();
+
+            thread::spawn(move || {
+                // Poll every 500ms to check if process has exited
+                loop {
+                    thread::sleep(std::time::Duration::from_millis(500));
+
+                    let should_exit = {
+                        let mut processes_guard = lock_mutex_recover(&processes);
+                        if let Some(child) = processes_guard.get_mut(&agent_id_clone) {
+                            match child.try_wait() {
+                                Ok(Some(status)) => {
+                                    // Process has exited
+                                    let exit_code = status.code();
+                                    let success = exit_code == Some(0);
+
+                                    log::info!(
+                                        "[AgentManager] Process for agent {} exited with code {:?}",
+                                        agent_id_clone, exit_code
+                                    );
+
+                                    // Remove from processes map
+                                    processes_guard.remove(&agent_id_clone);
+
+                                    // Emit completion event
+                                    if let Some(tx) = &completion_tx {
+                                        let event = AgentCompletionEvent {
+                                            agent_id: agent_id_clone.clone(),
+                                            task_id: task_id_clone.clone(),
+                                            success,
+                                            exit_code,
+                                            error: if success {
+                                                None
+                                            } else {
+                                                Some(format!("Process exited with code {:?}", exit_code))
+                                            },
+                                        };
+                                        let _ = tx.send(event);
+                                    }
+
+                                    // Log the exit
+                                    let log_entry = LogEntry {
+                                        timestamp: Utc::now(),
+                                        level: if success { LogLevel::Info } else { LogLevel::Error },
+                                        message: format!("Agent process exited with code {:?}", exit_code),
+                                    };
+                                    {
+                                        let mut logs = lock_mutex_recover(&agent_logs);
+                                        logs.entry(agent_id_clone.clone())
+                                            .or_insert_with(Vec::new)
+                                            .push(log_entry.clone());
+                                    }
+                                    if let Some(tx) = &log_tx {
+                                        let _ = tx.send(AgentLogEvent {
+                                            agent_id: agent_id_clone.clone(),
+                                            log: log_entry,
+                                        });
+                                    }
+
+                                    true // Exit the monitoring loop
+                                }
+                                Ok(None) => {
+                                    // Process is still running
+                                    false
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "[AgentManager] Error checking process status for agent {}: {}",
+                                        agent_id_clone, e
+                                    );
+                                    false
+                                }
+                            }
+                        } else {
+                            // Process was removed (killed externally), exit loop
+                            log::debug!(
+                                "[AgentManager] Process for agent {} no longer in tracking map",
+                                agent_id_clone
+                            );
+                            true
+                        }
+                    };
+
+                    if should_exit {
+                        break;
+                    }
+                }
+                log::debug!("[AgentManager] Process monitor for agent {} finished", agent_id_clone);
             });
         }
 
@@ -772,6 +1099,7 @@ mod tests {
             max_iterations: 10,
             prompt: Some("Fix bug".to_string()),
             model: None,
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if claude is not installed, which is expected
@@ -793,6 +1121,7 @@ mod tests {
             max_iterations: 5,
             prompt: Some("Implement feature".to_string()),
             model: Some("anthropic/claude-sonnet-4-5".to_string()),
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if opencode is not installed, which is expected
@@ -814,6 +1143,7 @@ mod tests {
             max_iterations: 3,
             prompt: Some("Refactor code".to_string()),
             model: None,
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if cursor-agent is not installed, which is expected
@@ -835,6 +1165,7 @@ mod tests {
             max_iterations: 8,
             prompt: Some("Add unit tests".to_string()),
             model: Some("gpt-4o".to_string()),
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if codex is not installed, which is expected
@@ -856,6 +1187,7 @@ mod tests {
             max_iterations: 5,
             prompt: Some("Implement feature".to_string()),
             model: None,
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if qwen is not installed, which is expected
@@ -877,6 +1209,7 @@ mod tests {
             max_iterations: 5,
             prompt: Some("Fix bug".to_string()),
             model: Some("droid-model".to_string()),
+            spawn_mode: AgentSpawnMode::Piped,
         };
 
         // This test may fail if droid is not installed, which is expected

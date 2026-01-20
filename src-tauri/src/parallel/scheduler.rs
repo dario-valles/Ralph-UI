@@ -3,7 +3,7 @@
 #![allow(dead_code)] // Parallel scheduler infrastructure (Phase 4)
 
 use crate::models::{Task, TaskStatus, Agent, AgentStatus, AgentType};
-use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig, RateLimitEvent};
+use crate::agents::{AgentSpawnConfig, AgentFallbackManager, FallbackConfig, RateLimitEvent, AgentCompletionEvent};
 use crate::parallel::pool::{AgentPool, ResourceLimits};
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -228,6 +228,12 @@ impl ParallelScheduler {
     /// Events will be forwarded to the frontend via Tauri events
     pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
         self.pool.set_rate_limit_sender(tx);
+    }
+
+    /// Set the completion event sender for agent completion notifications
+    /// Events will be forwarded to the frontend via Tauri events
+    pub fn set_completion_sender(&self, tx: mpsc::UnboundedSender<AgentCompletionEvent>) {
+        self.pool.set_completion_sender(tx);
     }
 
     /// Handle rate limit error for a task
@@ -535,6 +541,7 @@ impl ParallelScheduler {
             max_iterations: self.config.max_iterations,
             prompt: Some(prompt),
             model: self.config.model.clone(),
+            spawn_mode: crate::agents::AgentSpawnMode::Piped, // Use piped mode for scheduler
         };
 
         log::info!("[Scheduler] Spawning {:?} agent...", self.config.agent_type);

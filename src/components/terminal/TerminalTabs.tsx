@@ -1,6 +1,6 @@
 // Terminal tabs component
 
-import { X, Plus } from 'lucide-react'
+import { X, Plus, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -20,8 +20,13 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
     createTerminal(activeProject?.path)
   }
 
-  const handleCloseTerminal = (e: React.MouseEvent, id: string) => {
+  const handleCloseTerminal = (e: React.MouseEvent, id: string, isAgent: boolean) => {
     e.stopPropagation()
+    // Warn before closing active agent terminal
+    if (isAgent) {
+      // Agent terminals don't kill the process when closed, just the view
+      // No warning needed as it's non-destructive
+    }
     closeTerminal(id)
   }
 
@@ -47,9 +52,17 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
               : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
+          {/* Agent indicator */}
+          {terminal.terminalType === 'agent' && (
+            <Bot className="h-3 w-3 flex-shrink-0 text-blue-400" />
+          )}
           <span className="truncate max-w-[120px]">{terminal.title}</span>
+          {/* Exited status indicator for agent terminals */}
+          {terminal.terminalType === 'agent' && terminal.agentStatus === 'exited' && (
+            <span className="text-[10px] text-gray-500">(exited)</span>
+          )}
           <button
-            onClick={(e) => handleCloseTerminal(e, terminal.id)}
+            onClick={(e) => handleCloseTerminal(e, terminal.id, terminal.terminalType === 'agent')}
             className={cn(
               'flex-shrink-0 p-0.5 rounded hover:bg-muted-foreground/20',
               'opacity-0 group-hover:opacity-100 transition-opacity',

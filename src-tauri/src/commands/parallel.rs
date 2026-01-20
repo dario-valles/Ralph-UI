@@ -9,7 +9,7 @@ use crate::parallel::{
     conflicts::{ConflictDetector, MergeConflict, ConflictResolutionStrategy, ConflictSummary, ConflictResolutionResult},
 };
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload, emit_task_status_changed, TaskStatusChangedPayload};
-use crate::RateLimitEventState;
+use crate::{RateLimitEventState, CompletionEventState};
 use std::sync::Mutex;
 use tauri::State;
 
@@ -41,6 +41,7 @@ impl Default for ParallelState {
 pub fn init_parallel_scheduler(
     state: State<ParallelState>,
     rate_limit_state: State<RateLimitEventState>,
+    completion_state: State<CompletionEventState>,
     config: SchedulerConfig,
     repo_path: String,
 ) -> Result<(), String> {
@@ -51,6 +52,10 @@ pub fn init_parallel_scheduler(
     // Wire up rate limit event sender so agents can report rate limits to frontend
     let rate_limit_sender = rate_limit_state.get_sender();
     scheduler.set_rate_limit_sender(rate_limit_sender);
+
+    // Wire up completion event sender so agents can report completions to frontend
+    let completion_sender = completion_state.get_sender();
+    scheduler.set_completion_sender(completion_sender);
 
     let coordinator = WorktreeCoordinator::new(&repo_path);
     let detector = ConflictDetector::new(&repo_path);
@@ -246,6 +251,146 @@ pub fn parallel_fail_task(
 
     scheduler.fail_task(&task_id, error)
         .map_err(|e| format!("Failed to mark task as failed: {}", e))
+}
+
+/// Handle agent completion result (success or failure)
+/// This is called when an agent process completes to trigger retry logic
+#[tauri::command]
+pub fn parallel_handle_agent_result(
+    app_handle: tauri::AppHandle,
+    state: State<ParallelState>,
+    db: State<Mutex<Database>>,
+    agent_id: String,
+    task_id: String,
+    session_id: String,
+    success: bool,
+    error: Option<String>,
+) -> Result<Option<Agent>, String> {
+    log::info!(
+        "[Parallel] Handling agent result: agent={}, task={}, success={}",
+        agent_id, task_id, success
+    );
+
+    // Track if there might be a next task to schedule
+    let has_next_task: bool;
+
+    // Scope for scheduler and DB locks
+    {
+        let mut scheduler_guard = state.scheduler.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let scheduler = scheduler_guard
+            .as_mut()
+            .ok_or("Scheduler not initialized")?;
+
+        // Get the database connection
+        let db_guard = db.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let conn = db_guard.get_connection();
+
+        if success {
+            // Mark task as completed in scheduler
+            if let Err(e) = scheduler.complete_task(&task_id) {
+                log::warn!("[Parallel] Failed to complete task in scheduler: {}", e);
+            }
+
+            // Update task status in database
+            if let Err(e) = db_tasks::update_task_status(conn, &task_id, TaskStatus::Completed) {
+                log::warn!("[Parallel] Failed to update task status in database: {}", e);
+            } else {
+                // Emit task status changed event
+                let payload = TaskStatusChangedPayload {
+                    task_id: task_id.clone(),
+                    session_id: session_id.clone(),
+                    old_status: "in_progress".to_string(),
+                    new_status: "completed".to_string(),
+                };
+                if let Err(e) = emit_task_status_changed(&app_handle, payload) {
+                    log::warn!("[Parallel] Failed to emit task status changed event: {}", e);
+                }
+            }
+
+            // Update agent status to Idle (represents completed/done state in this codebase)
+            if let Err(e) = db_guard.update_agent_status(&agent_id, &AgentStatus::Idle) {
+                log::warn!("[Parallel] Failed to update agent status: {}", e);
+            } else {
+                let payload = AgentStatusChangedPayload {
+                    agent_id: agent_id.clone(),
+                    session_id: session_id.clone(),
+                    old_status: "running".to_string(),
+                    new_status: "idle".to_string(), // Idle represents completed state
+                };
+                if let Err(e) = emit_agent_status_changed(&app_handle, payload) {
+                    log::warn!("[Parallel] Failed to emit agent status changed event: {}", e);
+                }
+            }
+
+            log::info!("[Parallel] Task {} completed successfully", task_id);
+        } else {
+            // Mark task as failed in scheduler (this triggers retry logic)
+            let error_msg = error.unwrap_or_else(|| "Unknown error".to_string());
+            if let Err(e) = scheduler.fail_task(&task_id, error_msg.clone()) {
+                log::warn!("[Parallel] Failed to fail task in scheduler: {}", e);
+            }
+
+            // Check if task was re-queued for retry
+            let stats = scheduler.get_stats();
+            let task_was_retried = stats.ready > 0; // Simplified check - task moved back to ready queue
+
+            if task_was_retried {
+                log::info!("[Parallel] Task {} queued for retry", task_id);
+
+                // Update task status to pending for retry
+                if let Err(e) = db_tasks::update_task_status(conn, &task_id, TaskStatus::Pending) {
+                    log::warn!("[Parallel] Failed to update task status for retry: {}", e);
+                }
+
+                // Update agent status to idle (agent is done, task may retry)
+                if let Err(e) = db_guard.update_agent_status(&agent_id, &AgentStatus::Idle) {
+                    log::warn!("[Parallel] Failed to update agent status: {}", e);
+                }
+            } else {
+                log::info!("[Parallel] Task {} failed permanently (max retries exceeded)", task_id);
+
+                // Update task status to failed
+                if let Err(e) = db_tasks::update_task_status(conn, &task_id, TaskStatus::Failed) {
+                    log::warn!("[Parallel] Failed to update task status: {}", e);
+                } else {
+                    let payload = TaskStatusChangedPayload {
+                        task_id: task_id.clone(),
+                        session_id: session_id.clone(),
+                        old_status: "in_progress".to_string(),
+                        new_status: "failed".to_string(),
+                    };
+                    if let Err(e) = emit_task_status_changed(&app_handle, payload) {
+                        log::warn!("[Parallel] Failed to emit task status changed event: {}", e);
+                    }
+                }
+
+                // Update agent status to idle (agent is done, task failed permanently)
+                if let Err(e) = db_guard.update_agent_status(&agent_id, &AgentStatus::Idle) {
+                    log::warn!("[Parallel] Failed to update agent status: {}", e);
+                } else {
+                    let payload = AgentStatusChangedPayload {
+                        agent_id: agent_id.clone(),
+                        session_id: session_id.clone(),
+                        old_status: "running".to_string(),
+                        new_status: "idle".to_string(), // Agent is done, task failed
+                    };
+                    if let Err(e) = emit_agent_status_changed(&app_handle, payload) {
+                        log::warn!("[Parallel] Failed to emit agent status changed event: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Check if there's a next task before releasing locks
+        has_next_task = scheduler.peek_next_task().is_some();
+    }
+    // Scheduler and DB locks are released here
+
+    if has_next_task {
+        log::info!("[Parallel] Next task available - frontend should call parallel_schedule_next");
+    }
+
+    Ok(None)
 }
 
 /// Stop all running tasks

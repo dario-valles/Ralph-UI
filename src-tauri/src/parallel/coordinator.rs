@@ -48,6 +48,11 @@ impl WorktreeCoordinator {
         self
     }
 
+    /// Get the repository path
+    pub fn repo_path(&self) -> &Path {
+        &self.repo_path
+    }
+
     /// Allocate a new worktree for an agent
     pub fn allocate_worktree(
         &mut self,

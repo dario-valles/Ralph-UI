@@ -168,6 +168,26 @@ export async function parallelFailTask(
 }
 
 /**
+ * Handle agent completion result (success or failure)
+ * This triggers retry logic and schedules next tasks
+ */
+export async function parallelHandleAgentResult(
+  agentId: string,
+  taskId: string,
+  sessionId: string,
+  success: boolean,
+  error?: string
+): Promise<Agent | null> {
+  return invoke('parallel_handle_agent_result', {
+    agentId,
+    taskId,
+    sessionId,
+    success,
+    error: error || null,
+  })
+}
+
+/**
  * Stop all running tasks
  */
 export async function parallelStopAll(): Promise<void> {

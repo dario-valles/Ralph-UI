@@ -2,7 +2,7 @@
 
 #![allow(dead_code)] // Parallel pool infrastructure (Phase 4)
 
-use crate::agents::{AgentManager, AgentSpawnConfig, RateLimitEvent};
+use crate::agents::{AgentManager, AgentSpawnConfig, RateLimitEvent, AgentCompletionEvent};
 use crate::utils::lock_mutex_recover;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -95,6 +95,13 @@ impl AgentPool {
     pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
         let mut manager = lock_mutex_recover(&self.manager);
         manager.set_rate_limit_sender(tx);
+    }
+
+    /// Set the completion event sender for agent completion notifications
+    /// Events will be forwarded to the frontend via Tauri events
+    pub fn set_completion_sender(&self, tx: mpsc::UnboundedSender<AgentCompletionEvent>) {
+        let mut manager = lock_mutex_recover(&self.manager);
+        manager.set_completion_sender(tx);
     }
 
     /// Check if the pool can accept a new agent

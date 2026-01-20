@@ -14,7 +14,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { missionControlApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import { cleanupStaleAgents } from '@/lib/agent-api'
-import { parallelPollCompleted } from '@/lib/parallel-api'
+import { parallelPollCompleted, parallelHandleAgentResult } from '@/lib/parallel-api'
 import { isTauri } from '@/lib/tauri-check'
 
 // ============================================================================
@@ -427,7 +427,25 @@ const TAURI_EVENTS = {
   SESSION_STATUS_CHANGED: 'session:status_changed',
   MISSION_CONTROL_REFRESH: 'mission_control:refresh',
   RATE_LIMIT_DETECTED: 'agent:rate_limit_detected',
+  AGENT_COMPLETED: 'agent:completed',
+  AGENT_FAILED: 'agent:failed',
 } as const
+
+// Type for agent completion/failure events
+interface AgentCompletionEvent {
+  agentId: string
+  taskId: string
+  sessionId: string
+  exitCode: number | null
+}
+
+interface AgentFailedEvent {
+  agentId: string
+  taskId: string
+  sessionId: string
+  exitCode: number | null
+  error: string
+}
 
 /**
  * Hook to listen for Tauri events and trigger refreshes
@@ -484,6 +502,49 @@ export function useTauriEventListeners(onRefresh: () => void) {
       toast.rateLimitWarning(event)
       // Also trigger refresh to update UI
       onRefresh()
+    })
+
+    // Register agent completed listener - triggers retry logic and schedules next task
+    registerListener(TAURI_EVENTS.AGENT_COMPLETED, async (payload) => {
+      const event = payload as AgentCompletionEvent
+      console.log('[MissionControl] Agent completed:', event)
+      try {
+        // Handle the completion through the scheduler (marks task complete, schedules next)
+        await parallelHandleAgentResult(
+          event.agentId,
+          event.taskId,
+          event.sessionId,
+          true // success
+        )
+        // Trigger refresh to update UI
+        onRefresh()
+      } catch (err) {
+        console.error('[MissionControl] Failed to handle agent completion:', err)
+        // Still refresh to show current state
+        onRefresh()
+      }
+    })
+
+    // Register agent failed listener - triggers retry logic
+    registerListener(TAURI_EVENTS.AGENT_FAILED, async (payload) => {
+      const event = payload as AgentFailedEvent
+      console.log('[MissionControl] Agent failed:', event)
+      try {
+        // Handle the failure through the scheduler (triggers retry if configured)
+        await parallelHandleAgentResult(
+          event.agentId,
+          event.taskId,
+          event.sessionId,
+          false, // failure
+          event.error
+        )
+        // Trigger refresh to update UI
+        onRefresh()
+      } catch (err) {
+        console.error('[MissionControl] Failed to handle agent failure:', err)
+        // Still refresh to show current state
+        onRefresh()
+      }
     })
 
     // Cleanup listeners on unmount

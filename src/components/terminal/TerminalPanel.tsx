@@ -5,15 +5,24 @@ import { Minus, Maximize2, Minimize2, X, SplitSquareHorizontal, SplitSquareVerti
 import { cn } from '@/lib/utils'
 import { useTerminalStore, type PaneNode } from '@/stores/terminalStore'
 import { TerminalInstance } from './TerminalInstance'
+import { AgentTerminalInstance } from './AgentTerminalInstance'
 import { TerminalTabs } from './TerminalTabs'
 import { ResizeHandle } from './ResizeHandle'
 import { SplitResizeHandle } from './SplitResizeHandle'
 import { Tooltip } from '@/components/ui/tooltip'
 
+// Terminal info for rendering
+interface TerminalInfo {
+  id: string
+  cwd: string
+  terminalType: 'shell' | 'agent'
+  agentId?: string
+}
+
 // Recursive pane renderer
 interface PaneRendererProps {
   node: PaneNode
-  terminals: { id: string; cwd: string }[]
+  terminals: TerminalInfo[]
   activeTerminalId: string | null
   onSelectTerminal: (id: string) => void
   onUpdateSizes: (paneId: string, sizes: number[]) => void
@@ -34,11 +43,19 @@ function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onU
         )}
         onClick={() => onSelectTerminal(node.terminalId)}
       >
-        <TerminalInstance
-          terminalId={node.terminalId}
-          cwd={terminal.cwd}
-          isActive={true}
-        />
+        {terminal.terminalType === 'agent' && terminal.agentId ? (
+          <AgentTerminalInstance
+            terminalId={node.terminalId}
+            agentId={terminal.agentId}
+            isActive={true}
+          />
+        ) : (
+          <TerminalInstance
+            terminalId={node.terminalId}
+            cwd={terminal.cwd}
+            isActive={true}
+          />
+        )}
       </div>
     )
   }
@@ -231,7 +248,12 @@ export function TerminalPanel() {
           ) : (
             <PaneRenderer
               node={rootPane}
-              terminals={terminals.map(t => ({ id: t.id, cwd: t.cwd }))}
+              terminals={terminals.map(t => ({
+                id: t.id,
+                cwd: t.cwd,
+                terminalType: t.terminalType,
+                agentId: t.agentId,
+              }))}
               activeTerminalId={activeTerminalId}
               onSelectTerminal={setActiveTerminal}
               onUpdateSizes={updatePaneSizes}

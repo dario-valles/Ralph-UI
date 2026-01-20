@@ -6,6 +6,7 @@ import type {
   TerminalInstance,
   TerminalPanelMode,
   SplitDirection,
+  AgentTerminalStatus,
 } from '@/types/terminal'
 
 // A pane can either be a terminal or a split container
@@ -47,6 +48,11 @@ interface TerminalStore {
   maximizePanel: () => void
   closePanel: () => void
   getRootPane: () => PaneNode | null
+
+  // Agent terminal actions
+  createAgentTerminal: (agentId: string, title: string, cwd?: string) => string
+  updateAgentTerminalStatus: (agentId: string, status: AgentTerminalStatus) => void
+  getTerminalForAgent: (agentId: string) => string | null
 }
 
 const generateTerminalId = () => `term-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -159,6 +165,7 @@ export const useTerminalStore = create<TerminalStore>()(
           cwd: workingDir,
           isActive: true,
           createdAt: new Date().toISOString(),
+          terminalType: 'shell',
         }
 
         // Create a terminal pane
@@ -270,6 +277,7 @@ export const useTerminalStore = create<TerminalStore>()(
           cwd: existingTerminal.cwd,
           isActive: false,
           createdAt: new Date().toISOString(),
+          terminalType: 'shell',
         }
 
         const newTerminalPane: TerminalPane = {
@@ -300,7 +308,18 @@ export const useTerminalStore = create<TerminalStore>()(
         } else {
           const { parent, index } = parentInfo
 
-          if (parent.direction === direction) {
+          // Parent should never be null here, but TypeScript doesn't know that
+          if (!parent) {
+            // Fallback to root wrapping case
+            const newSplit: SplitPane = {
+              id: generatePaneId(),
+              type: 'split',
+              direction,
+              children: [terminalPane, newTerminalPane],
+              sizes: [50, 50],
+            }
+            newRoot = newSplit
+          } else if (parent.direction === direction) {
             // Same direction - add to parent
             const newChildren = [...parent.children]
             newChildren.splice(index + 1, 0, newTerminalPane)
@@ -401,6 +420,78 @@ export const useTerminalStore = create<TerminalStore>()(
       },
 
       getRootPane: () => get().rootPane,
+
+      // Agent terminal functions
+      createAgentTerminal: (agentId: string, title: string, cwd?: string) => {
+        const { terminals, panelMode } = get()
+
+        // Check if a terminal already exists for this agent
+        const existingTerminal = terminals.find(
+          (t) => t.terminalType === 'agent' && t.agentId === agentId
+        )
+        if (existingTerminal) {
+          // Just activate the existing terminal
+          set({ activeTerminalId: existingTerminal.id })
+          // Create pane for it if needed
+          const newPane: TerminalPane = {
+            id: generatePaneId(),
+            type: 'terminal',
+            terminalId: existingTerminal.id,
+          }
+          set({
+            rootPane: newPane,
+            panelMode: panelMode === 'closed' ? 'panel' : panelMode,
+          })
+          return existingTerminal.id
+        }
+
+        // Create new agent terminal
+        const id = generateTerminalId()
+        const newTerminal: TerminalInstance = {
+          id,
+          title,
+          cwd: cwd || '',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          terminalType: 'agent',
+          agentId,
+          agentStatus: 'running',
+        }
+
+        const newPane: TerminalPane = {
+          id: generatePaneId(),
+          type: 'terminal',
+          terminalId: id,
+        }
+
+        set({
+          terminals: [...terminals, newTerminal],
+          activeTerminalId: id,
+          rootPane: newPane,
+          panelMode: panelMode === 'closed' ? 'panel' : panelMode,
+        })
+
+        return id
+      },
+
+      updateAgentTerminalStatus: (agentId: string, status: AgentTerminalStatus) => {
+        const { terminals } = get()
+        set({
+          terminals: terminals.map((t) =>
+            t.terminalType === 'agent' && t.agentId === agentId
+              ? { ...t, agentStatus: status }
+              : t
+          ),
+        })
+      },
+
+      getTerminalForAgent: (agentId: string) => {
+        const { terminals } = get()
+        const terminal = terminals.find(
+          (t) => t.terminalType === 'agent' && t.agentId === agentId
+        )
+        return terminal?.id || null
+      },
     }),
     {
       name: 'ralph-terminal-storage',

@@ -13,6 +13,8 @@ pub const EVENT_MISSION_CONTROL_REFRESH: &str = "mission_control:refresh";
 pub const EVENT_RATE_LIMIT_DETECTED: &str = "agent:rate_limit_detected";
 pub const EVENT_PRD_FILE_UPDATED: &str = "prd:file_updated";
 pub const EVENT_PRD_CHAT_CHUNK: &str = "prd:chat_chunk";
+pub const EVENT_AGENT_COMPLETED: &str = "agent:completed";
+pub const EVENT_AGENT_FAILED: &str = "agent:failed";
 
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +71,27 @@ pub struct PrdFileUpdatedPayload {
 pub struct PrdChatChunkPayload {
     pub session_id: String,
     pub content: String,
+}
+
+/// Payload for agent completed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCompletedPayload {
+    pub agent_id: String,
+    pub task_id: String,
+    pub session_id: String,
+    pub exit_code: Option<i32>,
+}
+
+/// Payload for agent failed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentFailedPayload {
+    pub agent_id: String,
+    pub task_id: String,
+    pub session_id: String,
+    pub exit_code: Option<i32>,
+    pub error: String,
 }
 
 /// Emit an agent status changed event
@@ -136,6 +159,26 @@ pub fn emit_prd_chat_chunk(
     app_handle
         .emit(EVENT_PRD_CHAT_CHUNK, payload)
         .with_context("Failed to emit PRD chat chunk event")
+}
+
+/// Emit an agent completed event
+pub fn emit_agent_completed(
+    app_handle: &tauri::AppHandle,
+    payload: AgentCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_AGENT_COMPLETED, payload)
+        .with_context("Failed to emit agent completed event")
+}
+
+/// Emit an agent failed event
+pub fn emit_agent_failed(
+    app_handle: &tauri::AppHandle,
+    payload: AgentFailedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_AGENT_FAILED, payload)
+        .with_context("Failed to emit agent failed event")
 }
 
 #[cfg(test)]

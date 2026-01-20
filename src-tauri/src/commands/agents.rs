@@ -231,9 +231,20 @@ pub fn cleanup_stale_agents(
                 }
             }
             None => {
-                // No process ID means the agent was never properly started or is stale
-                log::info!("[Agents] Agent {} has no process ID, marking as stale", agent.id);
-                true
+                // No process ID - check if agent is still in spawning state
+                // Agents with active work statuses (non-Idle) but no process_id are still spawning
+                // and should not be cleaned up prematurely
+                if agent.status != AgentStatus::Idle {
+                    log::debug!(
+                        "[Agents] Agent {} has no process ID but status is {:?}, likely still spawning - skipping cleanup",
+                        agent.id, agent.status
+                    );
+                    false
+                } else {
+                    // Status is Idle, so this agent is truly stale
+                    log::info!("[Agents] Agent {} has no process ID and status {:?}, marking as stale", agent.id, agent.status);
+                    true
+                }
             }
         };
 
@@ -264,6 +275,153 @@ pub fn cleanup_stale_agents(
 
     log::info!("[Agents] Cleaned up {} stale agents", cleaned_up.len());
     Ok(cleaned_up)
+}
+
+// ============================================================================
+// Agent PTY Commands - for interactive terminal support
+// ============================================================================
+
+use crate::AgentManagerState;
+use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+use crate::models::AgentType;
+
+/// Check if an agent has an associated PTY
+#[tauri::command]
+pub fn agent_has_pty(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+) -> Result<bool, String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    Ok(manager.has_pty(&agent_id))
+}
+
+/// Get the PTY ID for an agent
+#[tauri::command]
+pub fn get_agent_pty_id(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+) -> Result<Option<String>, String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    Ok(manager.get_pty_id(&agent_id))
+}
+
+/// Get the PTY history (raw output) for an agent
+#[tauri::command]
+pub fn get_agent_pty_history(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+) -> Result<Vec<u8>, String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    Ok(manager.get_pty_history(&agent_id))
+}
+
+/// Register a PTY association for an agent
+/// Called by frontend after spawning a PTY for an agent
+#[tauri::command]
+pub fn register_agent_pty(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+    pty_id: String,
+) -> Result<(), String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    manager.register_pty(&agent_id, &pty_id);
+    Ok(())
+}
+
+/// Unregister a PTY association for an agent
+/// Called when PTY exits or agent stops
+#[tauri::command]
+pub fn unregister_agent_pty(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+) -> Result<(), String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    manager.unregister_pty(&agent_id);
+    Ok(())
+}
+
+/// Process PTY data from an agent
+/// Called by frontend to forward PTY output for log parsing and history storage
+#[tauri::command]
+pub fn process_agent_pty_data(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    manager.process_pty_data(&agent_id, &data);
+    Ok(())
+}
+
+/// Notify that an agent's PTY has exited
+#[tauri::command]
+pub fn notify_agent_pty_exit(
+    agent_manager: State<AgentManagerState>,
+    agent_id: String,
+    exit_code: i32,
+) -> Result<(), String> {
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    manager.notify_pty_exit(&agent_id, exit_code);
+    Ok(())
+}
+
+/// Build command line for spawning an agent in PTY mode
+/// Returns (program, args, cwd)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommandLine {
+    pub program: String,
+    pub args: Vec<String>,
+    pub cwd: String,
+}
+
+#[tauri::command]
+pub fn get_agent_command_line(
+    agent_manager: State<AgentManagerState>,
+    agent_type: String,
+    task_id: String,
+    worktree_path: String,
+    branch: String,
+    max_iterations: i32,
+    prompt: Option<String>,
+    model: Option<String>,
+) -> Result<AgentCommandLine, String> {
+    // Parse agent type string to enum
+    let agent_type_enum = match agent_type.to_lowercase().as_str() {
+        "claude" => AgentType::Claude,
+        "opencode" => AgentType::Opencode,
+        "cursor" => AgentType::Cursor,
+        "codex" => AgentType::Codex,
+        "qwen" => AgentType::Qwen,
+        "droid" => AgentType::Droid,
+        _ => return Err(format!("Unknown agent type: {}", agent_type)),
+    };
+
+    let config = AgentSpawnConfig {
+        agent_type: agent_type_enum,
+        task_id,
+        worktree_path: worktree_path.clone(),
+        branch,
+        max_iterations,
+        prompt,
+        model,
+        spawn_mode: AgentSpawnMode::Pty,
+    };
+
+    let manager = agent_manager.manager.lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+
+    let (program, args, cwd) = manager.build_agent_command_line(&config)
+        .map_err(|e| e.to_string())?;
+
+    Ok(AgentCommandLine { program, args, cwd })
 }
 
 #[cfg(test)]

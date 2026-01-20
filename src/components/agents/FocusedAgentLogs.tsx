@@ -15,6 +15,7 @@ import {
   Info,
   Bug,
   Download,
+  SquareTerminal,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -22,7 +23,8 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { LogEntry, getLogLevelColor } from '@/lib/agent-api'
+import { LogEntry, getLogLevelColor, agentHasPty } from '@/lib/agent-api'
+import { useTerminalStore } from '@/stores/terminalStore'
 import type { Agent } from '@/types'
 
 interface FocusedAgentLogsProps {
@@ -51,9 +53,46 @@ export function FocusedAgentLogs({
   const [enabledLevels, setEnabledLevels] = useState<Set<LogLevel>>(
     new Set(['info', 'warn', 'error', 'debug'])
   )
+  const [hasPty, setHasPty] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const wasNearBottomRef = useRef(true)
+  const { createAgentTerminal } = useTerminalStore()
+
+  // Check if the active agent has a PTY
+  useEffect(() => {
+    let cancelled = false
+
+    const checkPty = async () => {
+      if (!activeAgentId) {
+        if (!cancelled) setHasPty(false)
+        return
+      }
+      try {
+        const result = await agentHasPty(activeAgentId)
+        if (!cancelled) setHasPty(result)
+      } catch {
+        if (!cancelled) setHasPty(false)
+      }
+    }
+
+    checkPty()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeAgentId])
+
+  // Handle opening the agent terminal
+  const handleOpenTerminal = useCallback(() => {
+    if (!activeAgentId) return
+    const agent = agents.find((a) => a.id === activeAgentId)
+    if (!agent) return
+    const title = agent.taskId
+      ? `Agent: ${agent.taskId.slice(0, 8)}`
+      : `Agent ${agent.id.slice(0, 8)}`
+    createAgentTerminal(activeAgentId, title, agent.worktreePath)
+  }, [activeAgentId, agents, createAgentTerminal])
 
   // Get active agents (not idle)
   const activeAgents = useMemo(() => {
@@ -194,6 +233,20 @@ export function FocusedAgentLogs({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Open Terminal button - only show if agent has PTY and is not idle */}
+            {hasPty && selectedAgent?.status !== 'idle' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleOpenTerminal}
+                title="Open interactive terminal for this agent"
+              >
+                <SquareTerminal className="h-4 w-4 mr-1" />
+                Terminal
+              </Button>
+            )}
 
             {/* Download button */}
             <Button

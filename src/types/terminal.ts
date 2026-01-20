@@ -1,6 +1,16 @@
 // Terminal feature types
 
 /**
+ * Terminal type - shell (normal) or agent (connected to an agent process)
+ */
+export type TerminalType = 'shell' | 'agent'
+
+/**
+ * Agent terminal status
+ */
+export type AgentTerminalStatus = 'running' | 'exited'
+
+/**
  * Represents a single terminal instance
  */
 export interface TerminalInstance {
@@ -9,6 +19,12 @@ export interface TerminalInstance {
   cwd: string
   isActive: boolean
   createdAt: string
+  /** Type of terminal - 'shell' for normal terminals, 'agent' for agent terminals */
+  terminalType: TerminalType
+  /** Agent ID if this is an agent terminal */
+  agentId?: string
+  /** Status of the agent terminal */
+  agentStatus?: AgentTerminalStatus
 }
 
 /**

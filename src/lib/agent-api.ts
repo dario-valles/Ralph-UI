@@ -94,6 +94,96 @@ export async function cleanupStaleAgents(): Promise<StaleAgentCleanupResult[]> {
   return invoke('cleanup_stale_agents')
 }
 
+// ============================================================================
+// Agent PTY (Interactive Terminal) Operations
+// ============================================================================
+
+/**
+ * Check if an agent has an associated PTY (interactive terminal)
+ */
+export async function agentHasPty(agentId: string): Promise<boolean> {
+  return invoke('agent_has_pty', { agentId })
+}
+
+/**
+ * Get the PTY ID for an agent (for connecting to the terminal)
+ */
+export async function getAgentPtyId(agentId: string): Promise<string | null> {
+  return invoke('get_agent_pty_id', { agentId })
+}
+
+/**
+ * Get the PTY history (raw output) for an agent
+ * Used to replay output when opening a terminal late
+ */
+export async function getAgentPtyHistory(agentId: string): Promise<Uint8Array> {
+  const data = await invoke<number[]>('get_agent_pty_history', { agentId })
+  return new Uint8Array(data)
+}
+
+/**
+ * Register a PTY association for an agent
+ * Called after spawning a PTY for an agent on the frontend
+ */
+export async function registerAgentPty(agentId: string, ptyId: string): Promise<void> {
+  return invoke('register_agent_pty', { agentId, ptyId })
+}
+
+/**
+ * Unregister a PTY association for an agent
+ * Called when the PTY exits or the agent stops
+ */
+export async function unregisterAgentPty(agentId: string): Promise<void> {
+  return invoke('unregister_agent_pty', { agentId })
+}
+
+/**
+ * Process PTY data from an agent
+ * Called to forward PTY output to the backend for log parsing and history storage
+ */
+export async function processAgentPtyData(agentId: string, data: Uint8Array): Promise<void> {
+  return invoke('process_agent_pty_data', { agentId, data: Array.from(data) })
+}
+
+/**
+ * Notify that an agent's PTY has exited
+ */
+export async function notifyAgentPtyExit(agentId: string, exitCode: number): Promise<void> {
+  return invoke('notify_agent_pty_exit', { agentId, exitCode })
+}
+
+/**
+ * Command line info for spawning an agent in PTY mode
+ */
+export interface AgentCommandLine {
+  program: string
+  args: string[]
+  cwd: string
+}
+
+/**
+ * Get the command line for spawning an agent in PTY mode
+ */
+export async function getAgentCommandLine(
+  agentType: string,
+  taskId: string,
+  worktreePath: string,
+  branch: string,
+  maxIterations: number,
+  prompt?: string,
+  model?: string
+): Promise<AgentCommandLine> {
+  return invoke('get_agent_command_line', {
+    agentType,
+    taskId,
+    worktreePath,
+    branch,
+    maxIterations,
+    prompt,
+    model,
+  })
+}
+
 // Helper functions
 
 export function getStatusColor(status: AgentStatus): string {

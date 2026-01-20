@@ -39,6 +39,23 @@ impl RateLimitEventState {
     }
 }
 
+/// State for agent completion event forwarding to the frontend
+pub struct CompletionEventState {
+    /// Sender for completion events (used by AgentManager)
+    pub sender: mpsc::UnboundedSender<agents::AgentCompletionEvent>,
+}
+
+impl CompletionEventState {
+    pub fn new(sender: mpsc::UnboundedSender<agents::AgentCompletionEvent>) -> Self {
+        Self { sender }
+    }
+
+    /// Get a clone of the sender for passing to scheduler/pool
+    pub fn get_sender(&self) -> mpsc::UnboundedSender<agents::AgentCompletionEvent> {
+        self.sender.clone()
+    }
+}
+
 /// State for PRD file watcher manager
 pub struct PrdFileWatcherState {
     /// Manager for PRD file watchers
@@ -54,6 +71,26 @@ impl PrdFileWatcherState {
             manager: std::sync::Mutex::new(Some(manager)),
             sender,
         }
+    }
+}
+
+/// State for AgentManager - manages PTY associations and output processing for agents
+pub struct AgentManagerState {
+    /// The agent manager instance
+    pub manager: std::sync::Mutex<agents::AgentManager>,
+}
+
+impl AgentManagerState {
+    pub fn new() -> Self {
+        Self {
+            manager: std::sync::Mutex::new(agents::AgentManager::new()),
+        }
+    }
+}
+
+impl Default for AgentManagerState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -104,9 +141,16 @@ pub fn run() {
     let (rate_limit_tx, rate_limit_rx) = mpsc::unbounded_channel::<agents::RateLimitEvent>();
     let rate_limit_state = RateLimitEventState::new(rate_limit_tx);
 
+    // Create agent completion event channel for forwarding to frontend
+    let (completion_tx, completion_rx) = mpsc::unbounded_channel::<agents::AgentCompletionEvent>();
+    let completion_state = CompletionEventState::new(completion_tx);
+
     // Create PRD file watcher event channel for forwarding to frontend
     let (prd_file_tx, prd_file_rx) = mpsc::unbounded_channel::<watchers::PrdFileUpdate>();
     let prd_file_watcher_state = PrdFileWatcherState::new(prd_file_tx);
+
+    // Initialize AgentManager state for PTY tracking
+    let agent_manager_state = AgentManagerState::new();
 
     // Log startup info
     log::info!("Ralph-UI starting up");
@@ -120,18 +164,25 @@ pub fn run() {
         .manage(trace_state)
         .manage(shutdown_state)
         .manage(rate_limit_state)
+        .manage(completion_state)
         .manage(model_cache_state)
         .manage(prd_file_watcher_state)
+        .manage(agent_manager_state)
         .setup(move |app| {
             // Spawn task to forward rate limit events to Tauri frontend events
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
+            let app_handle_clone2 = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 forward_rate_limit_events(app_handle, rate_limit_rx).await;
             });
+            // Spawn task to forward agent completion events to Tauri frontend events
+            tauri::async_runtime::spawn(async move {
+                forward_completion_events(app_handle_clone, completion_rx).await;
+            });
             // Spawn task to forward PRD file update events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
-                forward_prd_file_events(app_handle_clone, prd_file_rx).await;
+                forward_prd_file_events(app_handle_clone2, prd_file_rx).await;
             });
             Ok(())
         })
@@ -175,6 +226,15 @@ pub fn run() {
             commands::add_agent_log,
             commands::get_agent_logs,
             commands::cleanup_stale_agents,
+            // Agent PTY commands
+            commands::agent_has_pty,
+            commands::get_agent_pty_id,
+            commands::get_agent_pty_history,
+            commands::register_agent_pty,
+            commands::unregister_agent_pty,
+            commands::process_agent_pty_data,
+            commands::notify_agent_pty_exit,
+            commands::get_agent_command_line,
             commands::git_create_branch,
             commands::git_create_branch_from_commit,
             commands::git_delete_branch,
@@ -212,6 +272,7 @@ pub fn run() {
             commands::parallel_schedule_next,
             commands::parallel_complete_task,
             commands::parallel_fail_task,
+            commands::parallel_handle_agent_result,
             commands::parallel_stop_all,
             commands::parallel_get_scheduler_stats,
             commands::parallel_get_pool_stats,
@@ -433,6 +494,58 @@ async fn forward_rate_limit_events(
     }
 
     log::debug!("Rate limit event forwarder stopped");
+}
+
+/// Forward agent completion events to Tauri frontend events
+/// This runs as a background task that listens for completion events on the channel
+/// and emits them to the frontend via Tauri's event system.
+async fn forward_completion_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::AgentCompletionEvent>,
+) {
+    log::debug!("Completion event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        if event.success {
+            let payload = events::AgentCompletedPayload {
+                agent_id: event.agent_id.clone(),
+                task_id: event.task_id.clone(),
+                session_id: String::new(), // Session ID not available from AgentCompletionEvent
+                exit_code: event.exit_code,
+            };
+
+            if let Err(e) = events::emit_agent_completed(&app_handle, payload) {
+                log::warn!("Failed to emit agent completed event: {}", e);
+            } else {
+                log::info!(
+                    "Agent {} completed successfully (task {})",
+                    event.agent_id,
+                    event.task_id
+                );
+            }
+        } else {
+            let payload = events::AgentFailedPayload {
+                agent_id: event.agent_id.clone(),
+                task_id: event.task_id.clone(),
+                session_id: String::new(), // Session ID not available from AgentCompletionEvent
+                exit_code: event.exit_code,
+                error: event.error.unwrap_or_else(|| "Unknown error".to_string()),
+            };
+
+            if let Err(e) = events::emit_agent_failed(&app_handle, payload) {
+                log::warn!("Failed to emit agent failed event: {}", e);
+            } else {
+                log::info!(
+                    "Agent {} failed (task {}): exit code {:?}",
+                    event.agent_id,
+                    event.task_id,
+                    event.exit_code
+                );
+            }
+        }
+    }
+
+    log::debug!("Completion event forwarder stopped");
 }
 
 /// Forward PRD file update events to Tauri frontend events
