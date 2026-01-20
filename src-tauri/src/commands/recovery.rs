@@ -5,6 +5,7 @@ use crate::session::{
     lock::{find_stale_locks, remove_stale_lock, SessionLock, LockInfo},
     recovery::SessionRecovery,
 };
+use crate::utils::lock_db;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -61,7 +62,7 @@ pub async fn recover_stale_session(
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<RecoveryResult, String> {
     let path = Path::new(&project_path);
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let recovery = SessionRecovery::new(path);
@@ -91,7 +92,7 @@ pub async fn recover_all_stale_sessions(
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Vec<RecoveryResult>, String> {
     let path = Path::new(&project_path);
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let recovery = SessionRecovery::new(path);

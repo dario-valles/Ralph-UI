@@ -4,19 +4,13 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useTaskStore } from '@/stores/taskStore'
+import { taskStatusConfig } from '@/lib/status-config'
 import type { TaskStatus } from '@/types'
-import { CheckCircle2, Circle, XCircle, Clock, Search } from 'lucide-react'
+import { Circle, Search } from 'lucide-react'
 
 interface TaskListProps {
   sessionId: string
   onTaskClick?: (taskId: string) => void
-}
-
-const statusConfig = {
-  pending: { icon: Circle, variant: 'secondary' as const, label: 'Pending' },
-  in_progress: { icon: Clock, variant: 'info' as const, label: 'In Progress' },
-  completed: { icon: CheckCircle2, variant: 'success' as const, label: 'Completed' },
-  failed: { icon: XCircle, variant: 'destructive' as const, label: 'Failed' },
 }
 
 export function TaskList({ sessionId: _sessionId, onTaskClick }: TaskListProps) {
@@ -111,7 +105,7 @@ export function TaskList({ sessionId: _sessionId, onTaskClick }: TaskListProps) 
           </Card>
         ) : (
           tasks.map((task) => {
-            const statusInfo = statusConfig[task.status]
+            const statusInfo = taskStatusConfig[task.status]
             const StatusIcon = statusInfo.icon
 
             return (

@@ -1,13 +1,11 @@
 // Active agents grid for Mission Control dashboard
 
-import { useNavigate } from 'react-router-dom'
 import { Bot, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AgentMiniCard } from './AgentMiniCard'
 import type { ActiveAgentWithContext } from '@/hooks/useMissionControlData'
 import { cn } from '@/lib/utils'
-import { useSessionStore } from '@/stores/sessionStore'
-import { useProjectStore } from '@/stores/projectStore'
+import { useNavigateWithContext } from '@/hooks/useNavigateWithContext'
 
 interface ActiveAgentsGridProps {
   agents: ActiveAgentWithContext[]
@@ -82,22 +80,13 @@ export function ActiveAgentsGrid({
   onRefresh,
   onRetry,
 }: ActiveAgentsGridProps) {
-  const navigate = useNavigate()
-  const { sessions, setCurrentSession } = useSessionStore()
-  const { projects, setActiveProject } = useProjectStore()
+  const { navigateWithSessionId } = useNavigateWithContext()
 
   const handleAgentClick = (agent: ActiveAgentWithContext) => {
-    // Set session and project context before navigating
-    const session = sessions.find((s) => s.id === agent.sessionId)
-    if (session) {
-      setCurrentSession(session)
-      const project = projects.find((p) => p.path === session.projectPath)
-      if (project) {
-        setActiveProject(project.id)
-      }
-    }
-    // Navigate to the agents page with the agent selected
-    navigate('/agents', { state: { agentId: agent.id, sessionId: agent.sessionId } })
+    // Navigate to the agents page with context set
+    navigateWithSessionId(agent.sessionId, '/agents', {
+      state: { agentId: agent.id, sessionId: agent.sessionId },
+    })
   }
 
   // Sort agents by status (active states first) then by cost (higher first)

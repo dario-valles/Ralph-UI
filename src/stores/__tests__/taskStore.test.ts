@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { useTaskStore } from '../taskStore'
 import { taskApi } from '@/lib/tauri-api'
-import type { Task, TaskStatus } from '@/types'
+import { createMockTask } from '@/test/store-test-utils'
+import type { TaskStatus } from '@/types'
 
 // Mock the Tauri API
 vi.mock('@/lib/tauri-api', () => ({
@@ -16,30 +17,13 @@ vi.mock('@/lib/tauri-api', () => ({
 }))
 
 describe('taskStore', () => {
-  const mockTask: Task = {
-    id: 'task-1',
-    title: 'Test Task',
-    description: 'Test task description',
-    status: 'pending' as TaskStatus,
-    priority: 1,
-    dependencies: [],
-    assignedAgent: undefined,
-    estimatedTokens: 1000,
-    actualTokens: 0,
-    startedAt: undefined,
-    completedAt: undefined,
-    branch: undefined,
-    worktreePath: undefined,
-    error: undefined,
-  }
-
-  const mockTask2: Task = {
-    ...mockTask,
+  const mockTask = createMockTask()
+  const mockTask2 = createMockTask({
     id: 'task-2',
     title: 'Second Task',
     priority: 2,
     status: 'in_progress' as TaskStatus,
-  }
+  })
 
   beforeEach(() => {
     // Reset store state

@@ -4,6 +4,7 @@ use crate::database::{self, Database};
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::models::{AgentType, Session, SessionConfig, SessionStatus};
 use crate::session_files;
+use crate::utils::lock_db;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -37,7 +38,7 @@ pub async fn create_session(
         total_tokens: 0,
     };
 
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::sessions::create_session(conn, &session)
@@ -61,7 +62,7 @@ pub async fn create_session(
 pub async fn get_sessions(
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Vec<Session>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::sessions::get_all_sessions(conn)
@@ -73,7 +74,7 @@ pub async fn get_session(
     id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Session, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::sessions::get_session_with_tasks(conn, &id)
@@ -85,7 +86,7 @@ pub async fn update_session(
     session: Session,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Session, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::sessions::update_session(conn, &session)
@@ -104,7 +105,7 @@ pub async fn delete_session(
     id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Get session to find project path before deletion
@@ -132,7 +133,7 @@ pub async fn update_session_status(
     status: SessionStatus,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Get the current session to capture the old status
@@ -188,7 +189,7 @@ pub async fn export_session_json(
     session_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<String, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let session = database::sessions::get_session_with_tasks(conn, &session_id)
@@ -217,7 +218,7 @@ pub async fn create_session_template(
     description: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<SessionTemplate, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let session = database::sessions::get_session(conn, &session_id)
@@ -253,7 +254,7 @@ pub async fn create_session_template(
 pub async fn get_session_templates(
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Vec<SessionTemplate>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let mut stmt = conn
@@ -300,7 +301,7 @@ pub async fn create_session_from_template(
     project_path: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Session, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Get template
@@ -375,7 +376,7 @@ pub async fn save_recovery_state(
     session_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Get active tasks
@@ -428,7 +429,7 @@ pub async fn get_recovery_state(
     session_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Option<SessionRecoveryState>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let result = conn.query_row(
@@ -472,7 +473,7 @@ pub async fn compare_sessions(
     session2_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<SessionComparison, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let session1 = database::sessions::get_session_with_tasks(conn, &session1_id)
@@ -569,7 +570,7 @@ pub async fn get_session_analytics(
     session_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<SessionAnalytics, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let session = database::sessions::get_session_with_tasks(conn, &session_id)

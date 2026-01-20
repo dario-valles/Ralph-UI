@@ -2,6 +2,7 @@
 
 use crate::database::Database;
 use crate::models::{ActivityEvent, ActivityEventType};
+use crate::utils::lock_db;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -13,7 +14,7 @@ pub fn get_activity_feed(
     limit: Option<i32>,
     offset: Option<i32>,
 ) -> Result<Vec<ActivityEvent>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let limit = limit.unwrap_or(50);
@@ -158,7 +159,7 @@ pub fn get_activity_feed(
 pub fn get_global_stats(
     db: State<Mutex<Database>>,
 ) -> Result<GlobalStats, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Count active agents

@@ -91,6 +91,29 @@ function getProjectName(path: string): string {
   return parts[parts.length - 1] || path
 }
 
+/**
+ * Enrich an agent with contextual information from sessions, projects, and tasks.
+ */
+function enrichAgentWithContext(
+  agent: Agent,
+  sessions: Session[],
+  projects: Project[],
+  tasks: { id: string; title?: string }[]
+): ActiveAgentWithContext {
+  const session = sessions.find(s => s.id === agent.sessionId)
+  const project = projects.find(p => p.path === session?.projectPath)
+  const task = tasks.find(t => t.id === agent.taskId)
+
+  return {
+    ...agent,
+    projectPath: session?.projectPath || '',
+    projectName: project?.name || getProjectName(session?.projectPath || ''),
+    sessionName: session?.name || 'Unknown Session',
+    taskTitle: task?.title || 'Unknown Task',
+    duration: Date.now() - new Date(agent.logs[0]?.timestamp || Date.now()).getTime(),
+  }
+}
+
 // ============================================================================
 // Custom Hooks
 // ============================================================================
@@ -288,20 +311,9 @@ export function useAllActiveAgents(): {
       const agents = await invoke<Agent[]>('get_all_active_agents')
 
       // Enrich with context
-      const enrichedAgents: ActiveAgentWithContext[] = agents.map(agent => {
-        const session = sessions.find(s => s.id === agent.sessionId)
-        const project = projects.find(p => p.path === session?.projectPath)
-        const task = tasks.find(t => t.id === agent.taskId)
-
-        return {
-          ...agent,
-          projectPath: session?.projectPath || '',
-          projectName: project?.name || getProjectName(session?.projectPath || ''),
-          sessionName: session?.name || 'Unknown Session',
-          taskTitle: task?.title || 'Unknown Task',
-          duration: Date.now() - new Date(agent.logs[0]?.timestamp || Date.now()).getTime(),
-        }
-      })
+      const enrichedAgents = agents.map(agent =>
+        enrichAgentWithContext(agent, sessions, projects, tasks)
+      )
 
       setActiveAgents(enrichedAgents)
     } catch (err) {
@@ -309,12 +321,9 @@ export function useAllActiveAgents(): {
       // Fall back to using store data
       const storeAgents = useAgentStore.getState().agents
       const activeFromStore = storeAgents.filter(a => a.status !== 'idle')
-      const enrichedAgents: ActiveAgentWithContext[] = activeFromStore.map(agent => {
-        const session = sessions.find(s => s.id === agent.sessionId)
-        const project = projects.find(p => p.path === session?.projectPath)
-        const task = tasks.find(t => t.id === agent.taskId)
-
-        return {
+      const enrichedAgents = activeFromStore.map(agent => {
+        // Convert store agent to Agent type for enrichment
+        const agentData: Agent = {
           id: agent.id,
           sessionId: agent.sessionId,
           taskId: agent.taskId,
@@ -331,12 +340,8 @@ export function useAllActiveAgents(): {
             message: l.message,
           })),
           subagents: [],
-          projectPath: session?.projectPath || '',
-          projectName: project?.name || getProjectName(session?.projectPath || ''),
-          sessionName: session?.name || 'Unknown Session',
-          taskTitle: task?.title || 'Unknown Task',
-          duration: 0,
         }
+        return enrichAgentWithContext(agentData, sessions, projects, tasks)
       })
       setActiveAgents(enrichedAgents)
     } finally {

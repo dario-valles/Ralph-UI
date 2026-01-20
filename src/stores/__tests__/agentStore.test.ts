@@ -9,10 +9,9 @@ import {
   updateAgentMetrics,
   addAgentLog,
   getAgentLogs,
-  type Agent,
   type AgentStatus,
-  type LogEntry,
 } from '@/lib/agent-api'
+import { createMockAgent, createMockLogEntry } from '@/test/store-test-utils'
 
 // Mock the agent API
 vi.mock('@/lib/agent-api', () => ({
@@ -27,32 +26,9 @@ vi.mock('@/lib/agent-api', () => ({
 }))
 
 describe('agentStore', () => {
-  const mockAgent: Agent = {
-    id: 'agent-1',
-    sessionId: 'session-1',
-    taskId: 'task-1',
-    status: 'idle' as AgentStatus,
-    processId: 12345,
-    worktreePath: '/path/to/worktree',
-    branch: 'feature/test',
-    iterationCount: 0,
-    tokens: 0,
-    cost: 0,
-    logs: [],
-    subagents: [],
-  }
-
-  const mockAgent2: Agent = {
-    ...mockAgent,
-    id: 'agent-2',
-    status: 'thinking' as AgentStatus,
-  }
-
-  const mockLogEntry: LogEntry = {
-    timestamp: new Date().toISOString(),
-    level: 'info',
-    message: 'Test log message',
-  }
+  const mockAgent = createMockAgent()
+  const mockAgent2 = createMockAgent({ id: 'agent-2', status: 'thinking' as AgentStatus })
+  const mockLogEntry = createMockLogEntry()
 
   beforeEach(() => {
     // Reset store state

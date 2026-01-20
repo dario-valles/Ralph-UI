@@ -5,6 +5,7 @@ use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
 use crate::session_files;
+use crate::utils::lock_db;
 use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
@@ -25,7 +26,7 @@ pub async fn create_task(
     task: Task,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Task, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::tasks::create_task(conn, &session_id, &task)
@@ -39,7 +40,7 @@ pub async fn get_task(
     task_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Task, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::tasks::get_task(conn, &task_id)
@@ -51,7 +52,7 @@ pub async fn get_tasks_for_session(
     session_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Vec<Task>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::tasks::get_tasks_for_session(conn, &session_id)
@@ -63,7 +64,7 @@ pub async fn update_task(
     task: Task,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Task, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::tasks::update_task(conn, &task)
@@ -77,7 +78,7 @@ pub async fn delete_task(
     task_id: String,
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     database::tasks::delete_task(conn, &task_id)
@@ -92,7 +93,7 @@ pub async fn update_task_status(
     db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<(), String> {
     // First validate the state transition
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let current_task = database::tasks::get_task(conn, &task_id)
@@ -178,7 +179,7 @@ pub async fn import_prd(
     .map_err(|e| format!("Failed to parse PRD: {}", e))?;
 
     // Convert PRD tasks to database tasks
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     let mut tasks = Vec::new();

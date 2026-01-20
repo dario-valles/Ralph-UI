@@ -13,20 +13,14 @@ import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
 import { useTaskStore } from '@/stores/taskStore'
 import { formatBackendDateTime } from '@/lib/date-utils'
+import { taskStatusConfig } from '@/lib/status-config'
 import type { Task, TaskStatus } from '@/types'
-import { CheckCircle2, Circle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 
 interface TaskDetailProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   taskId: string | null
-}
-
-const statusConfig = {
-  pending: { icon: Circle, variant: 'secondary' as const, label: 'Pending' },
-  in_progress: { icon: Clock, variant: 'info' as const, label: 'In Progress' },
-  completed: { icon: CheckCircle2, variant: 'success' as const, label: 'Completed' },
-  failed: { icon: XCircle, variant: 'destructive' as const, label: 'Failed' },
 }
 
 export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
@@ -49,7 +43,7 @@ export function TaskDetail({ open, onOpenChange, taskId }: TaskDetailProps) {
 
   if (!task || !displayTask) return null
 
-  const statusInfo = statusConfig[task.status]
+  const statusInfo = taskStatusConfig[task.status]
   const StatusIcon = statusInfo.icon
 
   const handleSave = async () => {

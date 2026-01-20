@@ -1,8 +1,46 @@
 // Session database operations
 
 use crate::models::{Session, SessionConfig, SessionStatus};
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, Result, Row};
 use chrono::Utc;
+
+/// Parse a session from a database row.
+/// Expects columns in order: id, name, project_path, created_at, last_resumed_at, status,
+///   max_parallel, max_iterations, max_retries, agent_type,
+///   auto_create_prs, draft_prs, run_tests, run_lint, total_cost, total_tokens
+fn parse_session_row(row: &Row) -> rusqlite::Result<Session> {
+    let status_str: String = row.get(5)?;
+    let status = serde_json::from_str(&status_str).unwrap_or(SessionStatus::Active);
+
+    let agent_type_str: String = row.get(9)?;
+    let agent_type =
+        serde_json::from_str(&agent_type_str).unwrap_or(crate::models::AgentType::Claude);
+
+    let created_at: String = row.get(3)?;
+    let last_resumed_at: Option<String> = row.get(4)?;
+
+    Ok(Session {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        project_path: row.get(2)?,
+        created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
+        last_resumed_at: last_resumed_at.and_then(|s| s.parse().ok()),
+        status,
+        config: SessionConfig {
+            max_parallel: row.get(6)?,
+            max_iterations: row.get(7)?,
+            max_retries: row.get(8)?,
+            agent_type,
+            auto_create_prs: row.get::<_, i32>(10)? != 0,
+            draft_prs: row.get::<_, i32>(11)? != 0,
+            run_tests: row.get::<_, i32>(12)? != 0,
+            run_lint: row.get::<_, i32>(13)? != 0,
+        },
+        tasks: vec![], // Tasks loaded separately
+        total_cost: row.get(14)?,
+        total_tokens: row.get(15)?,
+    })
+}
 
 /// Create a new session in the database
 pub fn create_session(conn: &Connection, session: &Session) -> Result<()> {
@@ -45,40 +83,7 @@ pub fn get_session(conn: &Connection, session_id: &str) -> Result<Session> {
                 total_cost, total_tokens
          FROM sessions WHERE id = ?1",
         params![session_id],
-        |row| {
-            let status_str: String = row.get(5)?;
-            let status = serde_json::from_str(&status_str)
-                .unwrap_or(SessionStatus::Active);
-
-            let agent_type_str: String = row.get(9)?;
-            let agent_type = serde_json::from_str(&agent_type_str)
-                .unwrap_or(crate::models::AgentType::Claude);
-
-            let created_at: String = row.get(3)?;
-            let last_resumed_at: Option<String> = row.get(4)?;
-
-            Ok(Session {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                project_path: row.get(2)?,
-                created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
-                last_resumed_at: last_resumed_at.and_then(|s| s.parse().ok()),
-                status,
-                config: SessionConfig {
-                    max_parallel: row.get(6)?,
-                    max_iterations: row.get(7)?,
-                    max_retries: row.get(8)?,
-                    agent_type,
-                    auto_create_prs: row.get::<_, i32>(10)? != 0,
-                    draft_prs: row.get::<_, i32>(11)? != 0,
-                    run_tests: row.get::<_, i32>(12)? != 0,
-                    run_lint: row.get::<_, i32>(13)? != 0,
-                },
-                tasks: vec![], // Tasks loaded separately
-                total_cost: row.get(14)?,
-                total_tokens: row.get(15)?,
-            })
-        },
+        parse_session_row,
     )
 }
 
@@ -93,41 +98,7 @@ pub fn get_all_sessions(conn: &Connection) -> Result<Vec<Session>> {
          ORDER BY created_at DESC",
     )?;
 
-    let sessions = stmt.query_map([], |row| {
-        let status_str: String = row.get(5)?;
-        let status = serde_json::from_str(&status_str)
-            .unwrap_or(SessionStatus::Active);
-
-        let agent_type_str: String = row.get(9)?;
-        let agent_type = serde_json::from_str(&agent_type_str)
-            .unwrap_or(crate::models::AgentType::Claude);
-
-        let created_at: String = row.get(3)?;
-        let last_resumed_at: Option<String> = row.get(4)?;
-
-        Ok(Session {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            project_path: row.get(2)?,
-            created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
-            last_resumed_at: last_resumed_at.and_then(|s| s.parse().ok()),
-            status,
-            config: SessionConfig {
-                max_parallel: row.get(6)?,
-                max_iterations: row.get(7)?,
-                max_retries: row.get(8)?,
-                agent_type,
-                auto_create_prs: row.get::<_, i32>(10)? != 0,
-                draft_prs: row.get::<_, i32>(11)? != 0,
-                run_tests: row.get::<_, i32>(12)? != 0,
-                run_lint: row.get::<_, i32>(13)? != 0,
-            },
-            tasks: vec![], // Tasks loaded separately
-            total_cost: row.get(14)?,
-            total_tokens: row.get(15)?,
-        })
-    })?;
-
+    let sessions = stmt.query_map([], parse_session_row)?;
     sessions.collect()
 }
 
@@ -227,40 +198,7 @@ pub fn find_active_session_for_project(
          ORDER BY created_at DESC
          LIMIT 1",
         params![project_path, active_status],
-        |row| {
-            let status_str: String = row.get(5)?;
-            let status = serde_json::from_str(&status_str)
-                .unwrap_or(SessionStatus::Active);
-
-            let agent_type_str: String = row.get(9)?;
-            let agent_type = serde_json::from_str(&agent_type_str)
-                .unwrap_or(crate::models::AgentType::Claude);
-
-            let created_at: String = row.get(3)?;
-            let last_resumed_at: Option<String> = row.get(4)?;
-
-            Ok(Session {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                project_path: row.get(2)?,
-                created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
-                last_resumed_at: last_resumed_at.and_then(|s| s.parse().ok()),
-                status,
-                config: SessionConfig {
-                    max_parallel: row.get(6)?,
-                    max_iterations: row.get(7)?,
-                    max_retries: row.get(8)?,
-                    agent_type,
-                    auto_create_prs: row.get::<_, i32>(10)? != 0,
-                    draft_prs: row.get::<_, i32>(11)? != 0,
-                    run_tests: row.get::<_, i32>(12)? != 0,
-                    run_lint: row.get::<_, i32>(13)? != 0,
-                },
-                tasks: vec![], // Tasks loaded separately
-                total_cost: row.get(14)?,
-                total_tokens: row.get(15)?,
-            })
-        },
+        parse_session_row,
     );
 
     match result {

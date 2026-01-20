@@ -5,6 +5,7 @@ use crate::templates::{
     builtin::get_builtin_templates,
     resolver::{TemplateResolver, TemplateSource},
 };
+use crate::utils::lock_db;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
@@ -149,7 +150,7 @@ pub async fn render_task_prompt(
     project_path: Option<String>,
     db: State<'_, std::sync::Mutex<crate::database::Database>>,
 ) -> Result<String, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let db = lock_db(&db)?;
     let conn = db.get_connection();
 
     // Get task

@@ -1,10 +1,10 @@
 // Utility functions
-#![allow(dead_code)]
 
 use chrono::Utc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Error type for mutex lock failures
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct LockError(String);
 
@@ -24,6 +24,7 @@ impl<T> From<PoisonError<T>> for LockError {
 
 /// Safely acquire a mutex lock, returning a Result instead of panicking.
 /// Use this instead of `.lock().unwrap()` or `.lock().expect(...)`.
+#[allow(dead_code)]
 pub fn lock_mutex<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, LockError> {
     mutex.lock().map_err(|e| LockError(format!("Failed to acquire lock: {}", e)))
 }
@@ -47,12 +48,14 @@ pub fn lock_db<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
     mutex.lock().map_err(|e| format!("Database lock error: {}", e))
 }
 
+#[allow(dead_code)]
 pub fn generate_id() -> String {
     // Generate a unique ID (using timestamp + random string for now)
     let now = Utc::now().timestamp_millis();
     format!("{}-{}", now, rand_string(8))
 }
 
+#[allow(dead_code)]
 fn rand_string(len: usize) -> String {
     use std::iter;
     use rand::Rng;
@@ -64,6 +67,7 @@ fn rand_string(len: usize) -> String {
         .collect()
 }
 
+#[allow(dead_code)]
 pub fn format_cost(tokens: i32, cost_per_million: f64) -> f64 {
     (tokens as f64 / 1_000_000.0) * cost_per_million
 }
