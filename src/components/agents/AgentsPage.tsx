@@ -7,7 +7,8 @@ import { FocusedAgentLogs } from './FocusedAgentLogs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, Bot, Filter, FilterX } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RefreshCw, Bot, Filter, FilterX, Info, Terminal } from 'lucide-react'
 import { cleanupStaleAgents, LogEntry } from '@/lib/agent-api'
 import { parallelPollCompleted, parallelGetAgentLogs } from '@/lib/parallel-api'
 
@@ -265,26 +266,44 @@ export function AgentsPage() {
         </div>
 
         {/* Agent Detail and Logs - wider */}
-        <div className="lg:col-span-8 xl:col-span-9 space-y-6">
-          <AgentDetail
-            agent={selectedAgent}
-            onStop={handleStopAgent}
-            onRestart={handleRestartAgent}
-          />
-          <FocusedAgentLogs
-            agents={agents}
-            activeAgentId={activeAgentId}
-            onAgentSelect={setActiveAgent}
-            getLogs={(agentId) => {
-              // If we have realtime logs for this specific agent, use them
-              if (realtimeLogsAgentId === agentId && realtimeLogs.length > 0) {
-                return realtimeLogs
-              }
-              // Fall back to DB logs
-              const agent = agents.find((a) => a.id === agentId)
-              return agent?.logs || []
-            }}
-          />
+        <div className="lg:col-span-8 xl:col-span-9">
+          <Tabs defaultValue="details" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="details" className="flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                Details
+              </TabsTrigger>
+              <TabsTrigger value="logs" className="flex items-center gap-2">
+                <Terminal className="h-4 w-4" />
+                Logs
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="details">
+              <AgentDetail
+                agent={selectedAgent}
+                onStop={handleStopAgent}
+                onRestart={handleRestartAgent}
+              />
+            </TabsContent>
+
+            <TabsContent value="logs">
+              <FocusedAgentLogs
+                agents={agents}
+                activeAgentId={activeAgentId}
+                onAgentSelect={setActiveAgent}
+                getLogs={(agentId) => {
+                  // If we have realtime logs for this specific agent, use them
+                  if (realtimeLogsAgentId === agentId && realtimeLogs.length > 0) {
+                    return realtimeLogs
+                  }
+                  // Fall back to DB logs
+                  const agent = agents.find((a) => a.id === agentId)
+                  return agent?.logs || []
+                }}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>

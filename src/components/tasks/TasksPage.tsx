@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,8 +11,9 @@ import { useTaskStore } from '@/stores/taskStore'
 import { Upload, Network } from 'lucide-react'
 
 export function TasksPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const sessionIdFromUrl = searchParams.get('sessionId')
+  const taskIdFromUrl = searchParams.get('taskId')
 
   const { currentSession, fetchSession } = useSessionStore()
   const { fetchTasks, tasks } = useTaskStore()
@@ -20,12 +21,43 @@ export function TasksPage() {
   const [showImport, setShowImport] = useState(false)
   const [showGraph, setShowGraph] = useState(false)
 
+  // Track if we've handled the URL taskId param
+  const handledTaskIdRef = useRef<string | null>(null)
+
   // Fetch session from URL param if currentSession is not set
   useEffect(() => {
     if (!currentSession && sessionIdFromUrl) {
       fetchSession(sessionIdFromUrl)
     }
   }, [currentSession, sessionIdFromUrl, fetchSession])
+
+  // Memoized handler for task selection from URL
+  const handleTaskIdFromUrl = useCallback(() => {
+    if (taskIdFromUrl && tasks.length > 0 && handledTaskIdRef.current !== taskIdFromUrl) {
+      const matchedTask = tasks.find(
+        (t) => t.id === taskIdFromUrl || t.id.startsWith(taskIdFromUrl)
+      )
+      if (matchedTask) {
+        handledTaskIdRef.current = taskIdFromUrl
+        // Clear the taskId from URL
+        const newParams = new URLSearchParams(searchParams)
+        newParams.delete('taskId')
+        setSearchParams(newParams, { replace: true })
+        return matchedTask.id
+      }
+    }
+    return null
+  }, [taskIdFromUrl, tasks, searchParams, setSearchParams])
+
+  // Handle taskId from URL params once tasks are loaded
+  useEffect(() => {
+    const taskId = handleTaskIdFromUrl()
+    if (taskId) {
+      // Defer state update to avoid cascading renders
+      const timer = setTimeout(() => setSelectedTaskId(taskId), 0)
+      return () => clearTimeout(timer)
+    }
+  }, [handleTaskIdFromUrl])
 
   // Fetch tasks when session is available
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Agent, getStatusColor, getStatusLabel, formatCost, formatTokens } from '@/lib/agent-api'
 import {
   Activity,
@@ -14,9 +15,12 @@ import {
   Bot,
   Copy,
   Check,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useTaskStore } from '@/stores/taskStore'
+import { TaskDetail } from '@/components/tasks/TaskDetail'
 
 interface AgentDetailProps {
   agent: Agent | null
@@ -52,6 +56,20 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
+  const { tasks } = useTaskStore()
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false)
+
+  // Find the task associated with this agent
+  const taskId = agent?.taskId
+  const task = useMemo(() => {
+    if (!taskId) return null
+    return tasks.find((t) => t.id === taskId) || null
+  }, [taskId, tasks])
+
+  const handleTaskClick = () => {
+    setTaskDetailOpen(true)
+  }
+
   if (!agent) {
     return (
       <Card className="h-full">
@@ -82,7 +100,19 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
               </Badge>
             </div>
             <CardDescription className="flex items-center gap-2">
-              Task: <code className="font-mono">{agent.taskId ? agent.taskId.slice(0, 12) : 'N/A'}</code>
+              Task:{' '}
+              {agent.taskId ? (
+                <button
+                  onClick={handleTaskClick}
+                  className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer max-w-[300px] truncate"
+                  title={task?.title || agent.taskId}
+                >
+                  <span className="truncate">{task?.title || agent.taskId}</span>
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                </button>
+              ) : (
+                <span className="text-muted-foreground">N/A</span>
+              )}
               {agent.taskId && <CopyButton text={agent.taskId} label="Task ID" />}
             </CardDescription>
           </div>
@@ -144,86 +174,106 @@ export function AgentDetail({ agent, onStop, onRestart }: AgentDetailProps) {
           </div>
         </div>
 
-        {/* Git Information */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Git Information
-          </h3>
-          <div className="rounded-lg border divide-y">
-            <div className="flex items-center justify-between p-3">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Branch</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{agent.branch}</code>
-                <CopyButton text={agent.branch} label="branch" />
-              </div>
-            </div>
-            <div className="flex items-start justify-between p-3">
-              <div className="flex items-center gap-2">
-                <FolderTree className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Worktree</span>
-              </div>
-              <div className="flex items-center gap-2 max-w-[60%]">
-                <code className="text-sm bg-muted px-2 py-1 rounded font-mono break-all text-right">
-                  {agent.worktreePath}
-                </code>
-                <CopyButton text={agent.worktreePath} label="worktree path" />
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Tabbed Information */}
+        <Tabs defaultValue="git" className="w-full">
+          <TabsList className={cn(
+            "grid w-full",
+            agent.subagents && agent.subagents.length > 0 ? "grid-cols-3" : "grid-cols-2"
+          )}>
+            <TabsTrigger value="git">Git</TabsTrigger>
+            <TabsTrigger value="session">Session</TabsTrigger>
+            {agent.subagents && agent.subagents.length > 0 && (
+              <TabsTrigger value="subagents">
+                Subagents ({agent.subagents.length})
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        {/* Subagents (if any) */}
-        {agent.subagents && agent.subagents.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Subagents ({agent.subagents.length})
-            </h3>
+          <TabsContent value="git" className="mt-4">
             <div className="rounded-lg border divide-y">
-              {agent.subagents.map((subagent) => (
-                <div
-                  key={subagent.id}
-                  className="flex items-center justify-between p-3"
-                >
-                  <span className="text-sm font-mono">{subagent.id.slice(0, 8)}</span>
-                  <Badge className={getStatusColor(subagent.status)}>
-                    {getStatusLabel(subagent.status)}
-                  </Badge>
+              <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Branch</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{agent.branch}</code>
+                  <CopyButton text={agent.branch} label="branch" />
+                </div>
+              </div>
+              <div className="flex items-start justify-between p-3">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Worktree</span>
+                </div>
+                <div className="flex items-center gap-2 max-w-[60%]">
+                  <code className="text-sm bg-muted px-2 py-1 rounded font-mono break-all text-right">
+                    {agent.worktreePath}
+                  </code>
+                  <CopyButton text={agent.worktreePath} label="worktree path" />
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Session Information */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Session Information
-          </h3>
-          <div className="rounded-lg border divide-y">
-            <div className="flex items-center justify-between p-3">
-              <span className="text-sm font-medium">Session ID</span>
-              <div className="flex items-center gap-2">
-                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
-                  {agent.sessionId}
-                </code>
-                <CopyButton text={agent.sessionId} label="session ID" />
+          <TabsContent value="session" className="mt-4">
+            <div className="rounded-lg border divide-y">
+              <div className="flex items-center justify-between p-3">
+                <span className="text-sm font-medium">Session ID</span>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
+                    {agent.sessionId}
+                  </code>
+                  <CopyButton text={agent.sessionId} label="session ID" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-3">
+                <span className="text-sm font-medium">Task</span>
+                <div className="flex items-center gap-2">
+                  {agent.taskId ? (
+                    <button
+                      onClick={handleTaskClick}
+                      className="text-sm bg-muted px-2 py-1 rounded inline-flex items-center gap-1 text-primary hover:bg-muted/80 cursor-pointer max-w-[250px]"
+                      title={task?.title || agent.taskId}
+                    >
+                      <span className="truncate">{task?.title || agent.taskId}</span>
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    </button>
+                  ) : (
+                    <code className="text-sm bg-muted px-2 py-1 rounded font-mono">N/A</code>
+                  )}
+                  {agent.taskId && <CopyButton text={agent.taskId} label="task ID" />}
+                </div>
               </div>
             </div>
-            <div className="flex items-center justify-between p-3">
-              <span className="text-sm font-medium">Task ID</span>
-              <div className="flex items-center gap-2">
-                <code className="text-sm bg-muted px-2 py-1 rounded font-mono">
-                  {agent.taskId || 'N/A'}
-                </code>
-                {agent.taskId && <CopyButton text={agent.taskId} label="task ID" />}
+          </TabsContent>
+
+          {agent.subagents && agent.subagents.length > 0 && (
+            <TabsContent value="subagents" className="mt-4">
+              <div className="rounded-lg border divide-y">
+                {agent.subagents.map((subagent) => (
+                  <div
+                    key={subagent.id}
+                    className="flex items-center justify-between p-3"
+                  >
+                    <span className="text-sm font-mono">{subagent.id.slice(0, 8)}</span>
+                    <Badge className={getStatusColor(subagent.status)}>
+                      {getStatusLabel(subagent.status)}
+                    </Badge>
+                  </div>
+                ))}
               </div>
-            </div>
-          </div>
-        </div>
+            </TabsContent>
+          )}
+        </Tabs>
       </CardContent>
+
+      {/* Task Detail Modal */}
+      <TaskDetail
+        open={taskDetailOpen}
+        onOpenChange={setTaskDetailOpen}
+        taskId={agent.taskId || null}
+      />
     </Card>
   )
 }
