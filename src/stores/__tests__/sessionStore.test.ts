@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { useSessionStore } from '../sessionStore'
 import { sessionApi } from '@/lib/tauri-api'
-import { createMockSession } from '@/test/store-test-utils'
+import { createMockSession, resetStore } from '@/test/store-test-utils'
 
 // Mock the Tauri API
 vi.mock('@/lib/tauri-api', () => ({
@@ -20,12 +20,12 @@ describe('sessionStore', () => {
   const mockSession2 = createMockSession({ id: 'session-2', name: 'Test Session 2' })
 
   beforeEach(() => {
-    // Reset store state before each test
-    const store = useSessionStore.getState()
-    store.sessions = []
-    store.currentSession = null
-    store.loading = false
-    store.error = null
+    resetStore(useSessionStore, {
+      sessions: [],
+      currentSession: null,
+      loading: false,
+      error: null,
+    })
     vi.clearAllMocks()
   })
 

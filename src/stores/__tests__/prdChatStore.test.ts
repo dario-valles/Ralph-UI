@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { usePRDChatStore } from '../prdChatStore'
 import { prdChatApi } from '@/lib/tauri-api'
+import { resetStore } from '@/test/store-test-utils'
 import type { ChatSession, ChatMessage, PRDDocument, ExtractedPRDStructure } from '@/types'
 
 // Mock the tauri API
@@ -96,14 +97,15 @@ describe('prdChatStore', () => {
   }
 
   beforeEach(() => {
-    const store = usePRDChatStore.getState()
-    store.sessions = []
-    store.currentSession = null
-    store.messages = []
-    store.loading = false
-    store.streaming = false
-    store.error = null
-    store.extractedStructure = null
+    resetStore(usePRDChatStore, {
+      sessions: [],
+      currentSession: null,
+      messages: [],
+      loading: false,
+      streaming: false,
+      error: null,
+      extractedStructure: null,
+    })
     vi.clearAllMocks()
   })
 

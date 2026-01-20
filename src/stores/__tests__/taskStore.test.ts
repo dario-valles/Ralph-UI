@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { useTaskStore } from '../taskStore'
 import { taskApi } from '@/lib/tauri-api'
-import { createMockTask } from '@/test/store-test-utils'
+import { createMockTask, resetStore } from '@/test/store-test-utils'
 import type { TaskStatus } from '@/types'
 
 // Mock the Tauri API
@@ -26,15 +26,15 @@ describe('taskStore', () => {
   })
 
   beforeEach(() => {
-    // Reset store state
-    const store = useTaskStore.getState()
-    store.tasks = []
-    store.loading = false
-    store.error = null
-    store.filter = {
-      sortBy: 'priority',
-      sortOrder: 'asc',
-    }
+    resetStore(useTaskStore, {
+      tasks: [],
+      loading: false,
+      error: null,
+      filter: {
+        sortBy: 'priority',
+        sortOrder: 'asc',
+      },
+    })
     vi.clearAllMocks()
   })
 

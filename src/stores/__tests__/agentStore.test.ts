@@ -11,7 +11,7 @@ import {
   getAgentLogs,
   type AgentStatus,
 } from '@/lib/agent-api'
-import { createMockAgent, createMockLogEntry } from '@/test/store-test-utils'
+import { createMockAgent, createMockLogEntry, resetStore } from '@/test/store-test-utils'
 
 // Mock the agent API
 vi.mock('@/lib/agent-api', () => ({
@@ -31,12 +31,12 @@ describe('agentStore', () => {
   const mockLogEntry = createMockLogEntry()
 
   beforeEach(() => {
-    // Reset store state
-    const store = useAgentStore.getState()
-    store.agents = []
-    store.activeAgentId = null
-    store.loading = false
-    store.error = null
+    resetStore(useAgentStore, {
+      agents: [],
+      activeAgentId: null,
+      loading: false,
+      error: null,
+    })
     vi.clearAllMocks()
   })
 
