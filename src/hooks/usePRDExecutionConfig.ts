@@ -84,7 +84,7 @@ export function usePRDExecutionConfig(
   defaultModelId: string
 ): UsePRDExecutionConfigReturn {
   const [config, setConfig] = useState<ExecutionConfig>(DEFAULT_EXECUTION_CONFIG)
-  const [configLoading, setConfigLoading] = useState(true)
+  const [configLoading, setConfigLoading] = useState(false)
 
   // Track if we've already loaded config for current open state
   const loadedRef = useRef(false)
@@ -95,6 +95,7 @@ export function usePRDExecutionConfig(
     // Reset loaded state when dialog closes
     if (!open && prevOpenRef.current) {
       loadedRef.current = false
+      setConfigLoading(false)
     }
     prevOpenRef.current = open
 
@@ -104,6 +105,7 @@ export function usePRDExecutionConfig(
     }
 
     loadedRef.current = true
+    setConfigLoading(true)
     let cancelled = false
 
     const loadConfig = async (): Promise<void> => {
