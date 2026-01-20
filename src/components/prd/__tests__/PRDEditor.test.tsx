@@ -36,17 +36,18 @@ vi.mock('../QualityScoreCard', () => ({
   ),
 }))
 
-// Sample test data
+// Sample test data - PRD content is now markdown format
 const mockPRD: PRDDocument = {
   id: 'prd-1',
   title: 'Test PRD',
   description: 'A test PRD description',
-  content: JSON.stringify({
-    sections: [
-      { id: 'overview', title: 'Overview', content: 'Overview content', required: true },
-      { id: 'requirements', title: 'Requirements', content: 'Requirements content', required: true },
-    ],
-  }),
+  content: `# Overview
+
+Overview content goes here.
+
+# Requirements
+
+Requirements content goes here.`,
   qualityScoreCompleteness: 85,
   qualityScoreClarity: 90,
   qualityScoreActionability: 80,
