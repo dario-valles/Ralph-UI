@@ -410,9 +410,12 @@ pub async fn export_chat_to_prd(
         (session, content, assessment, from_plan_file)
     }; // Release db lock here before async AI call
 
-    // Extract structured items via AI if we have substantial content from the plan file
-    let extracted_structure = if from_plan_file && !content.trim().is_empty() && content.len() > 100 {
-        log::info!("Extracting structured items via AI for export...");
+    // Extract structured items via AI if we have substantial content
+    // Run extraction for any substantial content (plan file or messages)
+    let has_substantial_content = !content.trim().is_empty() && content.len() > 100;
+
+    let extracted_structure = if has_substantial_content {
+        log::info!("Extracting structured items via AI for export (from_plan_file: {})...", from_plan_file);
 
         // Parse the agent type for the session
         let agent_type = parse_agent_type(&session.agent_type)
@@ -431,21 +434,23 @@ pub async fn export_chat_to_prd(
                     Ok(json) => Some(json),
                     Err(e) => {
                         log::warn!("Failed to serialize extracted structure: {}", e);
-                        None
+                        // Fall back to session's existing structure
+                        session.extracted_structure.clone()
                     }
                 }
             }
             Ok(_) => {
-                log::info!("AI extraction returned no items");
-                None
+                log::info!("AI extraction returned no items, using session's existing structure");
+                session.extracted_structure.clone()
             }
             Err(e) => {
-                log::warn!("AI extraction failed, continuing without extracted items: {}", e);
-                None
+                log::warn!("AI extraction failed ({}), using session's existing structure", e);
+                session.extracted_structure.clone()
             }
         }
     } else {
-        // For message-based exports or short content, check if session already has extracted structure
+        // For short content, check if session already has extracted structure
+        log::info!("Content too short for AI extraction, using session's existing structure");
         session.extracted_structure.clone()
     };
 
@@ -479,9 +484,53 @@ pub async fn export_chat_to_prd(
     db_guard.create_prd(&prd)
         .map_err(|e| format!("Failed to create PRD: {}", e))?;
 
+    // Save PRD content to file for debugging/inspection
+    if let Some(ref project_path) = prd.project_path {
+        log::info!("Saving PRD files to project path: {}", project_path);
+        let prds_dir = std::path::Path::new(project_path).join(".ralph-ui").join("prds");
+        if let Err(e) = std::fs::create_dir_all(&prds_dir) {
+            log::warn!("Failed to create prds directory: {}", e);
+        } else {
+            // Save PRD markdown content
+            // Include short ID (first 8 chars of UUID) to make filename unique
+            let title_part = crate::watchers::sanitize_filename(&prd.title);
+            let short_id = &prd.id[..8.min(prd.id.len())];
+            let prd_filename = format!("{}-{}", title_part, short_id);
+            let prd_path = prds_dir.join(format!("{}.md", prd_filename));
+            if let Err(e) = std::fs::write(&prd_path, &prd.content) {
+                log::warn!("Failed to write PRD file: {}", e);
+            } else {
+                log::info!("Saved PRD to {:?}", prd_path);
+            }
+
+            // Save extracted structure JSON for debugging
+            if let Some(ref structure_json) = prd.extracted_structure {
+                let structure_path = prds_dir.join(format!("{}-structure.json", prd_filename));
+                // Pretty-print the JSON for readability
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(structure_json) {
+                    if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
+                        if let Err(e) = std::fs::write(&structure_path, &pretty) {
+                            log::warn!("Failed to write structure file: {}", e);
+                        } else {
+                            log::info!("Saved extracted structure to {:?}", structure_path);
+                        }
+                    }
+                }
+            } else {
+                log::info!("No extracted structure JSON to save");
+            }
+        }
+    } else {
+        log::warn!("PRD has no project_path set - cannot save files to .ralph-ui/prds/. \
+                   The chat session was likely created without a project context.");
+    }
+
     // If we have extracted structure with tasks, create a Session and Task records
     let (session_id, task_count) = if let Some(ref structure_json) = prd.extracted_structure {
-        if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
+        if let Ok(mut structure) = serde_json::from_str::<ExtractedPRDStructure>(structure_json) {
+            // Apply post-processing to fix priorities and infer dependencies
+            post_process_extracted_tasks(&mut structure);
+
             if !structure.tasks.is_empty() {
                 // We have tasks to create - create a work session
                 match create_session_and_tasks_from_prd(&db_guard, &prd, &structure) {
@@ -555,15 +604,35 @@ fn create_session_and_tasks_from_prd(
         .map_err(|e| format!("Failed to create session: {}", e))?;
 
     // Convert extracted tasks to Task records
+    // Prefix task IDs with short session ID to make them unique across sessions
+    // while preserving the meaningful ID structure (e.g., "abc12345-T-1.1")
+    let short_session_id = &session_id[..8.min(session_id.len())];
+
+    // Build a map of original ID -> new ID for dependency remapping
+    let id_map: std::collections::HashMap<String, String> = structure.tasks.iter()
+        .map(|t| (t.id.clone(), format!("{}-{}", short_session_id, t.id)))
+        .collect();
+
     let mut task_count = 0;
-    for (index, prd_item) in structure.tasks.iter().enumerate() {
+    for prd_item in structure.tasks.iter() {
+        // Remap dependencies to use new prefixed IDs
+        let remapped_deps = prd_item.dependencies.as_ref()
+            .map(|deps| deps.iter()
+                .map(|dep| id_map.get(dep).cloned().unwrap_or_else(|| dep.clone()))
+                .collect())
+            .unwrap_or_default();
+
         let task = Task {
-            id: Uuid::new_v4().to_string(),
+            // Use session-prefixed ID to ensure uniqueness across executions
+            id: format!("{}-{}", short_session_id, prd_item.id),
             title: prd_item.title.clone(),
             description: prd_item.description.clone(),
             status: TaskStatus::Pending,
-            priority: prd_item.priority.unwrap_or((index + 1) as i32),
-            dependencies: prd_item.dependencies.clone().unwrap_or_default(),
+            priority: match prd_item.priority {
+                Some(p) if p >= 1 && p <= 5 => p,
+                _ => 3, // Default to medium priority (3) if invalid or missing
+            },
+            dependencies: remapped_deps,
             assigned_agent: None,
             estimated_tokens: None,
             actual_tokens: None,
@@ -722,6 +791,8 @@ pub async fn check_agent_availability(
         AgentType::Opencode => "opencode",
         AgentType::Cursor => "cursor-agent",
         AgentType::Codex => "codex",
+        AgentType::Qwen => "qwen",
+        AgentType::Droid => "droid",
     };
 
     // Check if the program exists in PATH using `which` on Unix or `where` on Windows
@@ -839,6 +910,19 @@ Analyze the PRD and extract these types of items:
 3. **Tasks**: Implementation tasks, often with IDs like T-1.2.3 or numbered items
 4. **Acceptance Criteria**: Quality criteria, success conditions, or testing requirements
 
+**CRITICAL - Markdown Table Parsing:**
+If the PRD contains tasks in markdown table format like:
+| # | Task ID | Task | Description | Status |
+|---|---------|------|-------------|--------|
+| 1 | T-1.1.1 | Initialize scene | Create WebGL renderer | ⬜ |
+
+You MUST:
+- Extract the "Task" column as the title (e.g., "Initialize scene")
+- Extract the "Description" column as the description (e.g., "Create WebGL renderer")
+- DO NOT include raw markdown table syntax in title or description fields
+- Parse each row into a separate task object
+- Infer priority from the Task ID pattern (lower numbers = higher priority): T-1.x.x = priority 1-2, T-2.x.x = priority 2-3, etc.
+
 Return a JSON object with this exact structure (no markdown formatting, just raw JSON):
 {{
   "epics": [
@@ -903,8 +987,34 @@ Important:
 - Use hierarchical parentId relationships (tasks belong to stories, stories to epics)
 - Generate meaningful IDs that reflect hierarchy (Phase-1, US-1.1, T-1.1.1)
 - estimatedEffort can only be: "small", "medium", or "large" (or null)
-- priority is 1-5 (1 being highest priority)
 - Return ONLY the JSON object, no explanatory text or markdown code blocks
+
+CRITICAL RULES FOR TASKS:
+
+**Task Filtering - ONLY extract actual implementation tasks:**
+- ONLY extract items from "Tasks:" tables or lists with IDs like T-X.Y.Z or similar numbered patterns
+- DO NOT extract section headers (e.g., "Product Vision", "Solution", "Problem Statement")
+- DO NOT extract technology recommendations (e.g., "Recommended: Three.js")
+- DO NOT extract executive summaries, alternatives considered, or informational sections
+- A valid task MUST have an implementation description describing code/work to be done
+
+**Priority Rules (MANDATORY):**
+- Priority MUST be a value from 1 to 5:
+  - 1 = Critical/blocking tasks (must be done first, blocks everything)
+  - 2 = Core functionality (essential features)
+  - 3 = Standard features (normal priority)
+  - 4 = Enhancements (nice improvements)
+  - 5 = Low priority (polish, optional)
+- NEVER use 0 as a priority value
+- When unsure, default to priority 3
+
+**Dependency Rules:**
+- For tasks with sequential IDs (T-1.1.1, T-1.1.2, T-1.1.3), each task depends on the prior one:
+  - T-1.1.2 should have dependencies: ["T-1.1.1"]
+  - T-1.1.3 should have dependencies: ["T-1.1.2"]
+- The first task in a sequence (e.g., T-1.1.1) may have no dependencies or depend on setup tasks
+- Tasks in different user stories are generally independent unless explicitly stated
+- Use the task ID format to infer sequential dependencies within the same user story
 "#);
 
     // Use a dummy session ID for extraction (not stored)
@@ -923,8 +1033,13 @@ Important:
     // Try to extract JSON from the response (AI might add extra text)
     let json_str = extract_json_from_response(&response)?;
 
-    serde_json::from_str(&json_str)
-        .map_err(|e| format!("Failed to parse AI extraction response: {}. Response was: {}", e, json_str))
+    let mut structure: ExtractedPRDStructure = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse AI extraction response: {}. Response was: {}", e, json_str))?;
+
+    // Post-process extracted tasks to fix common issues
+    post_process_extracted_tasks(&mut structure);
+
+    Ok(structure)
 }
 
 /// Extract JSON object from AI response that might contain extra text
@@ -965,6 +1080,221 @@ fn extract_json_from_response(response: &str) -> Result<String, String> {
     }
 
     Err(format!("No valid JSON found in response: {}", trimmed.chars().take(200).collect::<String>()))
+}
+
+// ============================================================================
+// Post-Processing for Extracted Tasks
+// ============================================================================
+
+/// Check if a task title represents a valid implementation task
+/// Returns false for section headers, recommendations, and informational items
+fn is_valid_task(title: &str) -> bool {
+    let invalid_patterns = [
+        "Product Vision",
+        "Problem Statement",
+        "Solution",
+        "Executive Summary",
+        "Alternatives Considered",
+        "Technology Decision",
+        "Target Platform",
+        "Target Audience",
+        "Technical Architecture",
+        "Overview",
+        "Background",
+        "Goals",
+        "Non-Goals",
+        "Success Metrics",
+        "Timeline",
+        "Risks",
+        "Open Questions",
+    ];
+
+    // Check for exact or partial matches with invalid patterns
+    for pattern in invalid_patterns.iter() {
+        if title.contains(pattern) {
+            return false;
+        }
+    }
+
+    // Check for recommendation notes (e.g., "Recommended: Three.js")
+    if title.starts_with("Recommended:") || title.starts_with("Recommendation:") {
+        return false;
+    }
+
+    // Check for common section header patterns (single words that are likely headers)
+    let header_words = ["Introduction", "Conclusion", "Summary", "Appendix", "References"];
+    for word in header_words.iter() {
+        if title.trim() == *word {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Infer sequential dependencies from task IDs
+/// Tasks with IDs like T-1.1.2 will depend on T-1.1.1
+fn infer_sequential_dependencies(tasks: &mut [crate::models::StructuredPRDItem]) {
+    use std::collections::HashMap;
+
+    // Build a map of task IDs for quick lookup
+    let task_ids: HashMap<String, usize> = tasks
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.id.clone(), i))
+        .collect();
+
+    // Regex to match task IDs like T-1.1.1, T-1.2.3, etc.
+    let task_id_regex = Regex::new(r"^T-(\d+)\.(\d+)\.(\d+)$").ok();
+
+    for i in 0..tasks.len() {
+        let task = &tasks[i];
+
+        // Skip if task already has dependencies
+        if task.dependencies.as_ref().map(|d| !d.is_empty()).unwrap_or(false) {
+            continue;
+        }
+
+        // Try to parse the task ID
+        if let Some(ref regex) = task_id_regex {
+            if let Some(captures) = regex.captures(&task.id) {
+                if let (Some(x), Some(y), Some(z)) = (
+                    captures.get(1).and_then(|m| m.as_str().parse::<u32>().ok()),
+                    captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok()),
+                    captures.get(3).and_then(|m| m.as_str().parse::<u32>().ok()),
+                ) {
+                    // If z > 1, this task should depend on T-X.Y.(Z-1)
+                    if z > 1 {
+                        let prev_id = format!("T-{}.{}.{}", x, y, z - 1);
+                        if task_ids.contains_key(&prev_id) {
+                            tasks[i].dependencies = Some(vec![prev_id]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Clean markdown table syntax from a description string
+/// This handles cases where the AI extracted raw table rows instead of clean descriptions
+fn clean_description(description: &str) -> String {
+    let trimmed = description.trim();
+
+    // If it doesn't contain table syntax, return as-is
+    if !trimmed.contains('|') {
+        return trimmed.to_string();
+    }
+
+    // Check if this looks like a markdown table (starts with | or contains table patterns)
+    let looks_like_table = trimmed.starts_with('|')
+        || trimmed.contains("|---|")
+        || trimmed.contains("| # |")
+        || trimmed.contains("| Task ID |")
+        || trimmed.contains("| Status |");
+
+    if !looks_like_table {
+        return trimmed.to_string();
+    }
+
+    // Try to extract actual description from table format
+    // Tables typically have format: | # | Task ID | Task | Description | Status |
+    // We want to extract the Description column content
+
+    let mut cleaned_parts: Vec<String> = Vec::new();
+
+    for line in trimmed.lines() {
+        let line = line.trim();
+
+        // Skip header/separator rows
+        if line.is_empty()
+            || line.contains("|---|")
+            || line.contains("| # |")
+            || line.contains("| Task ID |")
+            || line.contains("| Task |")
+            || line.contains("| Status |")
+            || line.starts_with("|---")
+        {
+            continue;
+        }
+
+        // Split by pipe and try to find meaningful content
+        if line.starts_with('|') {
+            let cells: Vec<&str> = line.split('|')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            // For a typical task table: [#, Task ID, Task Title, Description, Status]
+            // The Description is usually index 3 (4th column)
+            if cells.len() >= 4 {
+                // Get the description column (index 3) if it looks like actual content
+                let desc_candidate = cells[3];
+                if !desc_candidate.is_empty()
+                    && !desc_candidate.chars().all(|c| c == '-' || c.is_whitespace())
+                    && !desc_candidate.starts_with("P")  // Not a status like "Pending"
+                {
+                    cleaned_parts.push(desc_candidate.to_string());
+                }
+            } else if cells.len() >= 2 {
+                // Try to find the longest cell as it's likely the description
+                if let Some(longest) = cells.iter()
+                    .filter(|s| !s.chars().all(|c| c == '-' || c.is_whitespace() || c.is_numeric()))
+                    .max_by_key(|s| s.len())
+                {
+                    if longest.len() > 10 {  // Only if substantial
+                        cleaned_parts.push(longest.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if cleaned_parts.is_empty() {
+        // Fallback: strip all pipe characters and clean up
+        trimmed
+            .replace('|', " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        cleaned_parts.join(" ")
+    }
+}
+
+/// Post-process extracted tasks to fix common issues:
+/// 1. Filter out invalid tasks (headers, recommendations)
+/// 2. Clean descriptions (remove markdown table syntax)
+/// 3. Ensure priority > 0 (default to 3 if 0 or null)
+/// 4. Infer sequential dependencies from task IDs
+pub fn post_process_extracted_tasks(structure: &mut ExtractedPRDStructure) {
+    // Filter out invalid tasks
+    structure.tasks.retain(|t| is_valid_task(&t.title));
+
+    // Fix tasks: clean descriptions and ensure valid priorities
+    for task in structure.tasks.iter_mut() {
+        // Clean description (remove markdown table syntax)
+        task.description = clean_description(&task.description);
+
+        // Also clean title if it contains table syntax
+        if task.title.contains('|') {
+            task.title = clean_description(&task.title);
+        }
+
+        // Fix priorities (ensure they're between 1-5, default to 3)
+        match task.priority {
+            Some(p) if p >= 1 && p <= 5 => {
+                // Valid priority, keep it
+            }
+            _ => {
+                // Invalid or missing priority, default to 3 (standard)
+                task.priority = Some(3);
+            }
+        }
+    }
+
+    // Infer dependencies from task IDs if not already set
+    infer_sequential_dependencies(&mut structure.tasks);
 }
 
 // ============================================================================
@@ -2465,6 +2795,14 @@ async fn execute_chat_agent(
         AgentType::Codex => {
             // Use codex CLI
             ("codex", vec!["--prompt".to_string(), prompt.to_string()])
+        }
+        AgentType::Qwen => {
+            // Use qwen CLI
+            ("qwen", vec!["--prompt".to_string(), prompt.to_string()])
+        }
+        AgentType::Droid => {
+            // Use droid CLI
+            ("droid", vec!["chat".to_string(), "--prompt".to_string(), prompt.to_string()])
         }
     };
 

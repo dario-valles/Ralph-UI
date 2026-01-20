@@ -55,6 +55,8 @@ pub enum AgentType {
     Opencode,
     Cursor,
     Codex,
+    Qwen,
+    Droid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

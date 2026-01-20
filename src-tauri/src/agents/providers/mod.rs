@@ -30,6 +30,9 @@ pub fn get_provider(agent_type: &AgentType) -> Box<dyn ModelProvider> {
         AgentType::Opencode => Box::new(OpencodeProvider::new()),
         AgentType::Codex => Box::new(CodexProvider::new()),
         AgentType::Cursor => Box::new(CursorProvider::new()),
+        // Qwen and Droid use Claude provider as fallback for model discovery
+        AgentType::Qwen => Box::new(ClaudeProvider::new()),
+        AgentType::Droid => Box::new(ClaudeProvider::new()),
     }
 }
 

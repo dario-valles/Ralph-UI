@@ -15,6 +15,7 @@ pub mod traces;
 pub mod projects;
 pub mod mission_control;
 pub mod models;
+pub mod auto_merge;
 
 // Re-export all commands for easy registration
 pub use sessions::*;
@@ -32,6 +33,7 @@ pub use prd_chat::*;
 pub use projects::*;
 pub use mission_control::*;
 pub use models::*;
+pub use auto_merge::*;
 
 #[tauri::command]
 pub fn greet(name: &str) -> String {

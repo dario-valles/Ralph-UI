@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { FolderOpen, ChevronDown, Star, Clock, X } from 'lucide-react'
+import { FolderOpen, ChevronDown, Star, Clock, X, GitBranch, AlertCircle, Loader2 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
+import { isGitRepository, initGitRepository } from '@/lib/parallel-api'
 
 interface ProjectPickerProps {
   value?: string
@@ -26,6 +27,9 @@ export function ProjectPicker({
   disabled = false,
 }: ProjectPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isGitRepo, setIsGitRepo] = useState<boolean | null>(null)
+  const [checkingGit, setCheckingGit] = useState(false)
+  const [initializingGit, setInitializingGit] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const { registerProject, getRecentProjects, getFavoriteProjects, getActiveProject } =
@@ -48,6 +52,47 @@ export function ProjectPicker({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
+
+  // Check if selected path is a git repository
+  const checkGitStatus = useCallback(async (path: string) => {
+    if (!path) {
+      setIsGitRepo(null)
+      return
+    }
+    setCheckingGit(true)
+    try {
+      const result = await isGitRepository(path)
+      setIsGitRepo(result)
+    } catch (error) {
+      console.error('Failed to check git status:', error)
+      setIsGitRepo(null)
+    } finally {
+      setCheckingGit(false)
+    }
+  }, [])
+
+  // Check git status when value changes
+  useEffect(() => {
+    if (value) {
+      checkGitStatus(value)
+    } else {
+      setIsGitRepo(null)
+    }
+  }, [value, checkGitStatus])
+
+  // Initialize git repository
+  const handleInitGit = async () => {
+    if (!value) return
+    setInitializingGit(true)
+    try {
+      await initGitRepository(value)
+      setIsGitRepo(true)
+    } catch (error) {
+      console.error('Failed to initialize git:', error)
+    } finally {
+      setInitializingGit(false)
+    }
+  }
 
   const handleSelectFolder = async () => {
     try {
@@ -207,6 +252,54 @@ export function ProjectPicker({
       {value && (
         <div className="text-xs text-muted-foreground truncate" title={value}>
           {value}
+        </div>
+      )}
+
+      {/* Git repository status indicator */}
+      {value && (
+        <div className="mt-2">
+          {checkingGit ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Checking repository status...
+            </div>
+          ) : isGitRepo === true ? (
+            <div className="flex items-center gap-2 text-xs text-green-600">
+              <GitBranch className="h-3 w-3" />
+              Git repository detected
+            </div>
+          ) : isGitRepo === false ? (
+            <div className="p-2 rounded-md bg-amber-50 border border-amber-200">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-700">Not a git repository</p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Ralph UI works best with git-enabled projects. Initialize git to enable parallel execution with worktrees.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 text-xs"
+                    onClick={handleInitGit}
+                    disabled={initializingGit || disabled}
+                  >
+                    {initializingGit ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Initializing...
+                      </>
+                    ) : (
+                      <>
+                        <GitBranch className="h-3 w-3 mr-1" />
+                        Initialize Git Repository
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

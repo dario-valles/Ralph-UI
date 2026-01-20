@@ -445,3 +445,82 @@ export async function isGitRepository(path: string): Promise<boolean> {
 export async function initGitRepository(path: string): Promise<void> {
   return invoke('git_init_repository', { path })
 }
+
+// ===== Auto-Merge Types =====
+
+export type MergeMode = 'auto_merge' | 'create_prs' | 'manual'
+
+export interface MergeBranchResult {
+  taskId: string
+  branch: string
+  success: boolean
+  message: string
+  conflictFiles?: string[]
+}
+
+export interface AutoMergeResult {
+  totalBranches: number
+  merged: number
+  failed: number
+  skipped: number
+  results: MergeBranchResult[]
+}
+
+export interface AutoMergeConfig {
+  /** Target branch to merge into (default: main) */
+  targetBranch: string
+  /** Whether to delete branches after successful merge */
+  deleteBranches: boolean
+  /** Whether to cleanup worktrees after merge */
+  cleanupWorktrees: boolean
+  /** Whether to use AI for conflict resolution */
+  useAiConflictResolution: boolean
+}
+
+// ===== Auto-Merge API =====
+
+/**
+ * Merge all completed task branches back to target branch
+ * This is the Ralphy-style auto-merge that happens after all tasks complete
+ */
+export async function autoMergeCompletedBranches(
+  sessionId: string,
+  repoPath: string,
+  config: AutoMergeConfig
+): Promise<AutoMergeResult> {
+  return invoke('auto_merge_completed_branches', { sessionId, repoPath, config })
+}
+
+/**
+ * Get list of branches ready for merge (completed tasks)
+ */
+export async function getMergeableBranches(
+  sessionId: string,
+  repoPath: string
+): Promise<{ taskId: string; branch: string; completedAt: string }[]> {
+  return invoke('get_mergeable_branches', { sessionId, repoPath })
+}
+
+/**
+ * Merge a single branch with AI conflict resolution if needed
+ */
+export async function mergeBranchWithAi(
+  repoPath: string,
+  sourceBranch: string,
+  targetBranch: string,
+  taskId: string
+): Promise<MergeBranchResult> {
+  return invoke('merge_branch_with_ai', { repoPath, sourceBranch, targetBranch, taskId })
+}
+
+/**
+ * Create default auto-merge config
+ */
+export function createDefaultAutoMergeConfig(): AutoMergeConfig {
+  return {
+    targetBranch: 'main',
+    deleteBranches: true,
+    cleanupWorktrees: true,
+    useAiConflictResolution: true,
+  }
+}

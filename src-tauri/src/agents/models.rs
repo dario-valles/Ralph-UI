@@ -91,6 +91,14 @@ pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
             ModelInfo::new("gpt-4o", "GPT-4o", "openai", true),
             ModelInfo::new("o1", "OpenAI o1", "openai", false),
         ],
+        AgentType::Qwen => vec![
+            ModelInfo::new("qwen-2.5-coder", "Qwen 2.5 Coder", "qwen", true),
+            ModelInfo::new("qwen-2.5", "Qwen 2.5", "qwen", false),
+        ],
+        AgentType::Droid => vec![
+            ModelInfo::new("claude-sonnet-4-5", "Claude Sonnet 4.5", "anthropic", true),
+            ModelInfo::new("gpt-4o", "GPT-4o", "openai", false),
+        ],
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::git::{BranchInfo, CommitInfo, DiffInfo, FileStatus, GitManager, WorktreeInfo};
+use crate::git::{BranchInfo, CommitInfo, DiffInfo, FileStatus, GitManager, MergeResult, WorktreeInfo};
 use tauri::State;
 use std::sync::Mutex;
 use std::collections::HashMap;
@@ -272,6 +272,43 @@ pub fn git_init_repository(path: String) -> Result<(), String> {
 
     log::info!("[Git] Initialized new repository at: {}", path);
     Ok(())
+}
+
+/// Merge a source branch into a target branch
+#[tauri::command]
+pub fn git_merge_branch(
+    repo_path: String,
+    source_branch: String,
+    target_branch: String,
+    state: State<GitState>,
+) -> Result<MergeResult, String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.merge_branch(&source_branch, &target_branch)
+    })
+}
+
+/// Abort an ongoing merge
+#[tauri::command]
+pub fn git_merge_abort(
+    repo_path: String,
+    state: State<GitState>,
+) -> Result<(), String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.merge_abort()
+    })
+}
+
+/// Check for merge conflicts between two branches without actually merging
+#[tauri::command]
+pub fn git_check_merge_conflicts(
+    repo_path: String,
+    source_branch: String,
+    target_branch: String,
+    state: State<GitState>,
+) -> Result<Vec<String>, String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.check_merge_conflicts(&source_branch, &target_branch)
+    })
 }
 
 #[cfg(test)]

@@ -193,6 +193,13 @@ pub fn run() {
             commands::git_get_working_diff,
             commands::git_is_repository,
             commands::git_init_repository,
+            commands::git_merge_branch,
+            commands::git_merge_abort,
+            commands::git_check_merge_conflicts,
+            // Auto-merge commands
+            commands::get_mergeable_branches,
+            commands::auto_merge_completed_branches,
+            commands::merge_branch_with_ai,
             commands::github_create_pull_request,
             commands::github_get_pull_request,
             commands::github_list_pull_requests,

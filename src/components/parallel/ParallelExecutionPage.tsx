@@ -1,12 +1,16 @@
 // Parallel execution page with scheduler controls and monitoring
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { Switch } from '../ui/switch'
+import { Label } from '../ui/label'
 import { AgentComparison } from './AgentComparison'
 import { ConflictResolution } from './ConflictResolution'
+import { AutoMergePanel } from './AutoMergePanel'
 import type { Agent, AgentType } from '../../types'
 import type {
   SchedulerConfig,
@@ -36,9 +40,10 @@ import {
 import { ConfirmDialog } from '../ui/confirm-dialog'
 
 export function ParallelExecutionPage() {
+  const [searchParams] = useSearchParams()
   const [initialized, setInitialized] = useState(false)
   const [projectPath, setProjectPath] = useState('')
-  const [sessionId, setSessionId] = useState('')
+  const [sessionId, setSessionId] = useState(() => searchParams.get('sessionId') || '')
   const [config, setConfig] = useState<SchedulerConfig>(
     createDefaultSchedulerConfig()
   )
@@ -53,6 +58,15 @@ export function ParallelExecutionPage() {
 
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Auto-start mode: automatically schedule tasks when slots available
+  // Initialize from URL param if present (e.g., from QuickFixButton)
+  const [autoStart, setAutoStart] = useState(() => searchParams.get('autoStart') === 'true')
+  const autoStartRef = useRef(searchParams.get('autoStart') === 'true')
+
+  // Keep ref in sync with state for use in intervals
+  useEffect(() => {
+    autoStartRef.current = autoStart
+  }, [autoStart])
 
   // Git initialization dialog state
   const [showGitInitDialog, setShowGitInitDialog] = useState(false)
@@ -203,6 +217,26 @@ export function ParallelExecutionPage() {
             return agent
           })
         )
+
+        // Auto-schedule next tasks if auto-start is enabled
+        if (autoStartRef.current && completed.length > 0) {
+          // Schedule as many tasks as completed agents (freed up slots)
+          for (let i = 0; i < completed.length; i++) {
+            try {
+              const newAgent = await parallelScheduleNext(sessionId, projectPath)
+              if (newAgent) {
+                setAgents((prev) => [...prev, newAgent])
+                console.log('[ParallelExecution] Auto-scheduled task:', newAgent.taskId)
+              } else {
+                // No more tasks to schedule
+                break
+              }
+            } catch (scheduleErr) {
+              console.error('Failed to auto-schedule:', scheduleErr)
+              break
+            }
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to poll completed agents:', err)
@@ -363,6 +397,16 @@ export function ParallelExecutionPage() {
                 <Badge>{getSchedulingStrategyLabel(config.strategy)}</Badge>
               </div>
             </div>
+            <div className="flex items-center space-x-2 pt-4">
+              <Switch
+                id="auto-start"
+                checked={autoStart}
+                onCheckedChange={setAutoStart}
+              />
+              <Label htmlFor="auto-start" className="text-sm">
+                Auto-start tasks when slots available
+              </Label>
+            </div>
           </div>
         </Card>
       )}
@@ -376,6 +420,75 @@ export function ParallelExecutionPage() {
       {/* Status Dashboard */}
       {initialized && (
         <>
+          {/* Overall Progress Section */}
+          {schedulerStats && schedulerStats.total > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-semibold">Session Progress</h3>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    {schedulerStats.completed + schedulerStats.failed} of {schedulerStats.total} tasks finished
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-bold text-primary">
+                    {Math.round(((schedulerStats.completed + schedulerStats.failed) / schedulerStats.total) * 100)}%
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {schedulerStats.completed} completed, {schedulerStats.failed} failed
+                  </p>
+                </div>
+              </div>
+
+              {/* Main Progress Bar */}
+              <div className="relative h-4 bg-gray-200 rounded-full overflow-hidden">
+                {/* Completed section (green) */}
+                <div
+                  className="absolute h-full bg-green-500 transition-all duration-500"
+                  style={{ width: `${(schedulerStats.completed / schedulerStats.total) * 100}%` }}
+                />
+                {/* Failed section (red) - starts after completed */}
+                <div
+                  className="absolute h-full bg-red-500 transition-all duration-500"
+                  style={{
+                    left: `${(schedulerStats.completed / schedulerStats.total) * 100}%`,
+                    width: `${(schedulerStats.failed / schedulerStats.total) * 100}%`
+                  }}
+                />
+                {/* Running section (blue animated) - starts after completed+failed */}
+                <div
+                  className="absolute h-full bg-blue-500 animate-pulse transition-all duration-500"
+                  style={{
+                    left: `${((schedulerStats.completed + schedulerStats.failed) / schedulerStats.total) * 100}%`,
+                    width: `${(schedulerStats.running / schedulerStats.total) * 100}%`
+                  }}
+                />
+              </div>
+
+              {/* Legend */}
+              <div className="flex gap-6 mt-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span>Completed ({schedulerStats.completed})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span>Running ({schedulerStats.running})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-gray-400" />
+                  <span>Pending ({schedulerStats.pending + (schedulerStats.ready || 0)})</span>
+                </div>
+                {schedulerStats.failed > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span>Failed ({schedulerStats.failed})</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-4 gap-4">
             <Card className="p-4">
@@ -386,13 +499,13 @@ export function ParallelExecutionPage() {
             </Card>
             <Card className="p-4">
               <div className="text-sm text-muted-foreground">Running</div>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-blue-600">
                 {schedulerStats?.running || 0}
               </div>
             </Card>
             <Card className="p-4">
               <div className="text-sm text-muted-foreground">Completed</div>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-green-600">
                 {schedulerStats?.completed || 0}
               </div>
             </Card>
@@ -493,6 +606,16 @@ export function ParallelExecutionPage() {
                 onResolve={handleResolveConflict}
               />
             </div>
+          )}
+
+          {/* Auto-Merge Panel - Shows when there are completed tasks */}
+          {schedulerStats && (schedulerStats.completed > 0 || schedulerStats.failed > 0) && (
+            <AutoMergePanel
+              sessionId={sessionId}
+              repoPath={projectPath}
+              schedulerStats={schedulerStats}
+              onMergeComplete={() => refreshStats()}
+            />
           )}
         </>
       )}

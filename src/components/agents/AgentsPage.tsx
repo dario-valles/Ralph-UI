@@ -3,7 +3,7 @@ import { useAgentStore } from '@/stores/agentStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { AgentList } from './AgentList'
 import { AgentDetail } from './AgentDetail'
-import { AgentLogViewer } from './AgentLogViewer'
+import { FocusedAgentLogs } from './FocusedAgentLogs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -141,19 +141,6 @@ export function AgentsPage() {
     return agents.find((a) => a.id === activeAgentId) || null
   }, [agents, activeAgentId])
 
-  // Effective logs to display - realtime logs if available, else DB logs
-  const effectiveLogs = useMemo(() => {
-    if (!selectedAgent) return []
-
-    // If we have realtime logs for this specific agent, use them
-    if (realtimeLogsAgentId === selectedAgent.id && realtimeLogs.length > 0) {
-      return realtimeLogs
-    }
-
-    // Fall back to DB logs
-    return selectedAgent.logs || []
-  }, [selectedAgent, realtimeLogs, realtimeLogsAgentId])
-
   // Status summary
   const statusSummary = useMemo(() => {
     const active = agents.filter((a) => a.status !== 'idle').length
@@ -284,9 +271,19 @@ export function AgentsPage() {
             onStop={handleStopAgent}
             onRestart={handleRestartAgent}
           />
-          <AgentLogViewer
-            logs={effectiveLogs}
-            agentId={selectedAgent?.id}
+          <FocusedAgentLogs
+            agents={agents}
+            activeAgentId={activeAgentId}
+            onAgentSelect={setActiveAgent}
+            getLogs={(agentId) => {
+              // If we have realtime logs for this specific agent, use them
+              if (realtimeLogsAgentId === agentId && realtimeLogs.length > 0) {
+                return realtimeLogs
+              }
+              // Fall back to DB logs
+              const agent = agents.find((a) => a.id === agentId)
+              return agent?.logs || []
+            }}
           />
         </div>
       </div>

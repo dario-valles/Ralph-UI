@@ -32,6 +32,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
+  CheckCircle2,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -43,10 +44,11 @@ import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionItem } from './SessionItem'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
+import { TaskPreviewDialog } from './TaskPreviewDialog'
 import { prdChatApi } from '@/lib/tauri-api'
 import { listen } from '@tauri-apps/api/event'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
+import type { PRDTypeValue, ChatSession, AgentType, ExtractedPRDStructure } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 
@@ -88,6 +90,10 @@ export function PRDChatPanel() {
     step: number
     message: string
   } | null>(null)
+  // Task preview dialog state
+  const [showTaskPreview, setShowTaskPreview] = useState(false)
+  const [previewStructure, setPreviewStructure] = useState<ExtractedPRDStructure | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const {
     sessions,
@@ -153,9 +159,14 @@ export function PRDChatPanel() {
   // Handle prdId URL param for "Continue in Chat" functionality
   useEffect(() => {
     if (prdIdFromUrl && !currentSession) {
-      startSession({ agentType: 'claude', prdId: prdIdFromUrl, guidedMode: true })
+      startSession({
+        agentType: 'claude',
+        prdId: prdIdFromUrl,
+        guidedMode: true,
+        projectPath: activeProject?.path,
+      })
     }
-  }, [prdIdFromUrl, currentSession, startSession])
+  }, [prdIdFromUrl, currentSession, startSession, activeProject?.path])
 
   // Load history when session changes
   useEffect(() => {
@@ -340,10 +351,12 @@ export function PRDChatPanel() {
 
   const handleQuickStart = () => {
     // Quick start without type selection (general type)
+    // Always pass projectPath to ensure files can be saved
     startSession({
       agentType: 'claude',
       prdType: 'general',
       guidedMode: true,
+      projectPath: activeProject?.path,
     })
     setShowTypeSelector(false)
   }
@@ -371,82 +384,125 @@ export function PRDChatPanel() {
     setCurrentSession(session)
   }
 
+  // Load extracted structure and show preview dialog
   const handleExportToPRD = async () => {
-    if (currentSession) {
-      // Step 1: Assess quality
-      setExportProgress({ active: true, step: 1, message: 'Checking PRD quality...' })
-      const assessment = await assessQuality()
-      if (assessment && !assessment.readyForExport) {
-        setExportProgress(null)
-        setShowQualityPanel(true)
-        return
-      }
+    if (!currentSession) return
 
-      try {
-        // Step 2: Export PRD and extract tasks
-        setExportProgress({ active: true, step: 2, message: 'Exporting PRD and extracting tasks...' })
-        const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+    // Step 1: Assess quality
+    setExportProgress({ active: true, step: 1, message: 'Checking PRD quality...' })
+    const assessment = await assessQuality()
+    if (assessment && !assessment.readyForExport) {
+      setExportProgress(null)
+      setShowQualityPanel(true)
+      return
+    }
 
-        if (result) {
-          if (result.sessionId && result.taskCount > 0) {
-            // Step 3: Set up session
-            setExportProgress({ active: true, step: 3, message: `Created ${result.taskCount} tasks. Setting up session...` })
-            await useSessionStore.getState().fetchSession(result.sessionId)
+    try {
+      // Step 2: Load extracted structure for preview
+      setExportProgress({ active: true, step: 2, message: 'Extracting tasks from PRD...' })
+      setPreviewLoading(true)
+      const structure = await prdChatApi.getExtractedStructure(currentSession.id)
+      setPreviewStructure(structure)
+      setPreviewLoading(false)
+      setExportProgress(null)
 
-            // Step 4: Navigate - pass sessionId in URL for reliable loading
-            setExportProgress({ active: true, step: 4, message: 'Navigating to tasks...' })
-            toast.success(
-              `Created ${result.taskCount} tasks from PRD`,
-              'Your tasks are ready to assign to agents.'
-            )
-            navigate(`/tasks?sessionId=${result.sessionId}`)
-          } else {
-            // No tasks extracted - navigate to PRD editor
-            setExportProgress(null)
-            toast.success('PRD exported successfully', 'Your PRD has been created.')
-            navigate(`/prds/${result.prd.id}`)
-          }
-        }
-      } catch (err) {
-        setExportProgress(null)
-        throw err
-      }
+      // Step 3: Show preview dialog
+      setShowTaskPreview(true)
+    } catch (err) {
+      setExportProgress(null)
+      setPreviewLoading(false)
+      // If extraction fails, show error but allow direct export
+      console.error('Failed to extract tasks for preview:', err)
+      toast.error('Preview failed', 'Could not extract tasks. You can still export directly.')
+      setShowQualityPanel(true)
     }
   }
 
-  const handleForceExport = async () => {
-    if (currentSession) {
-      setShowQualityPanel(false)
+  // Called when user confirms tasks in preview dialog
+  const handleConfirmTaskPreview = async (_structure: ExtractedPRDStructure) => {
+    if (!currentSession) return
+    // TODO: Pass the modified _structure to exportToPRD when backend supports it
+    void _structure // Silence unused warning until backend integration
 
-      try {
-        // Step 1: Export PRD and extract tasks
-        setExportProgress({ active: true, step: 1, message: 'Exporting PRD and extracting tasks...' })
-        const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+    setShowTaskPreview(false)
 
-        if (result) {
-          if (result.sessionId && result.taskCount > 0) {
-            // Step 2: Set up session
-            setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
-            await useSessionStore.getState().fetchSession(result.sessionId)
+    try {
+      // Step 1: Export PRD and create tasks with the confirmed structure
+      setExportProgress({ active: true, step: 1, message: 'Creating PRD and tasks...' })
 
-            // Step 3: Navigate - pass sessionId in URL for reliable loading
-            setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
-            toast.success(
-              `Created ${result.taskCount} tasks from PRD`,
-              'Your tasks are ready to assign to agents.'
-            )
-            navigate(`/tasks?sessionId=${result.sessionId}`)
-          } else {
-            // No tasks extracted - navigate to PRD editor
-            setExportProgress(null)
-            toast.success('PRD exported successfully', 'Your PRD has been created.')
-            navigate(`/prds/${result.prd.id}`)
-          }
+      // For now, export uses the structure stored in the session
+      const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+
+      if (result) {
+        if (result.sessionId && result.taskCount > 0) {
+          // Step 2: Set up session
+          setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
+          await useSessionStore.getState().fetchSession(result.sessionId)
+
+          // Step 3: Navigate
+          setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
+          toast.success(
+            `Created ${result.taskCount} tasks from PRD`,
+            'Your tasks are ready to assign to agents.'
+          )
+          navigate(`/tasks?sessionId=${result.sessionId}`)
+        } else {
+          // No tasks extracted - navigate to PRD editor
+          setExportProgress(null)
+          toast.success('PRD exported successfully', 'Your PRD has been created.')
+          navigate(`/prds/${result.prd.id}`)
         }
-      } catch (err) {
-        setExportProgress(null)
-        throw err
       }
+    } catch (err) {
+      setExportProgress(null)
+      throw err
+    }
+  }
+
+  // Force export without preview (from quality warning dialog)
+  const handleForceExport = async () => {
+    if (!currentSession) return
+
+    setShowQualityPanel(false)
+
+    try {
+      // Try to show preview first
+      setPreviewLoading(true)
+      try {
+        const structure = await prdChatApi.getExtractedStructure(currentSession.id)
+        setPreviewStructure(structure)
+        setPreviewLoading(false)
+        setShowTaskPreview(true)
+        return
+      } catch {
+        // If preview fails, do direct export
+        setPreviewLoading(false)
+      }
+
+      // Direct export without preview
+      setExportProgress({ active: true, step: 1, message: 'Exporting PRD and extracting tasks...' })
+      const result = await exportToPRD(currentSession.title || 'Untitled PRD')
+
+      if (result) {
+        if (result.sessionId && result.taskCount > 0) {
+          setExportProgress({ active: true, step: 2, message: `Created ${result.taskCount} tasks. Setting up session...` })
+          await useSessionStore.getState().fetchSession(result.sessionId)
+
+          setExportProgress({ active: true, step: 3, message: 'Navigating to tasks...' })
+          toast.success(
+            `Created ${result.taskCount} tasks from PRD`,
+            'Your tasks are ready to assign to agents.'
+          )
+          navigate(`/tasks?sessionId=${result.sessionId}`)
+        } else {
+          setExportProgress(null)
+          toast.success('PRD exported successfully', 'Your PRD has been created.')
+          navigate(`/prds/${result.prd.id}`)
+        }
+      }
+    } catch (err) {
+      setExportProgress(null)
+      throw err
     }
   }
 
@@ -456,6 +512,12 @@ export function PRDChatPanel() {
 
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
+
+  // Ready to export: quality >= 70% and has messages
+  const isReadyToExport = hasMessages &&
+    qualityAssessment &&
+    qualityAssessment.readyForExport &&
+    qualityAssessment.overall >= 70
 
   // Show type selector when creating a new session
   if (showTypeSelector) {
@@ -686,9 +748,21 @@ export function PRDChatPanel() {
                         )}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleExportToPRD}>
-                        <FileText className="h-4 w-4 mr-2" />
+                      <DropdownMenuItem
+                        onClick={handleExportToPRD}
+                        className={isReadyToExport ? 'bg-green-50 text-green-700' : ''}
+                      >
+                        {isReadyToExport ? (
+                          <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                        ) : (
+                          <FileText className="h-4 w-4 mr-2" />
+                        )}
                         Export to PRD
+                        {isReadyToExport && (
+                          <Badge variant="secondary" className="ml-auto bg-green-100 text-green-700 text-xs">
+                            Ready
+                          </Badge>
+                        )}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -912,6 +986,15 @@ export function PRDChatPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Task Preview Dialog */}
+      <TaskPreviewDialog
+        open={showTaskPreview}
+        onOpenChange={setShowTaskPreview}
+        extractedStructure={previewStructure}
+        onConfirm={handleConfirmTaskPreview}
+        loading={previewLoading}
+      />
     </div>
   )
 }

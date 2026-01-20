@@ -19,6 +19,27 @@ export interface Project {
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
+// Error categories for task failures
+export type ErrorCategory =
+  | 'test_failure'      // Test assertions failed
+  | 'lint_error'        // Linting/formatting errors
+  | 'build_error'       // Compilation/build failures
+  | 'timeout'           // Task exceeded time limit
+  | 'crash'             // Process crash or unexpected termination
+  | 'rate_limit'        // API rate limiting
+  | 'conflict'          // Git merge conflicts
+  | 'dependency'        // Missing or incompatible dependencies
+  | 'unknown'           // Uncategorized errors
+
+export interface CategorizedError {
+  category: ErrorCategory
+  message: string
+  details?: string
+  file?: string
+  line?: number
+  suggestedFix?: string
+}
+
 export interface Task {
   id: string
   title: string
@@ -37,7 +58,7 @@ export interface Task {
 }
 
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed'
-export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex'
+export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex' | 'qwen' | 'droid'
 
 export interface SessionConfig {
   maxParallel: number

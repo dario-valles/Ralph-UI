@@ -346,6 +346,9 @@ impl AgentManager {
                 // Add --yes to auto-accept prompts
                 cmd.arg("--yes");
 
+                // Add --dangerously-skip-permissions to skip permission prompts
+                cmd.arg("--dangerously-skip-permissions");
+
                 // Add model if specified
                 if let Some(model) = &config.model {
                     cmd.arg("--model").arg(model);
@@ -371,8 +374,8 @@ impl AgentManager {
                     log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
                 }
 
-                // Use the 'run' subcommand for non-interactive execution
-                cmd.arg("run");
+                // Use the 'full-auto' subcommand for fully autonomous execution
+                cmd.arg("full-auto");
 
                 // Add the prompt as the message - opencode requires a non-empty message
                 match &config.prompt {
@@ -428,6 +431,9 @@ impl AgentManager {
                     }
                 }
 
+                // Add --force to skip confirmation prompts
+                cmd.arg("--force");
+
                 // Add model if specified (Cursor may support model selection)
                 if let Some(model) = &config.model {
                     cmd.arg("--model").arg(model);
@@ -465,6 +471,85 @@ impl AgentManager {
 
                 cmd.arg("--max-turns")
                     .arg(config.max_iterations.to_string());
+
+                // Add model if specified
+                if let Some(model) = &config.model {
+                    cmd.arg("--model").arg(model);
+                }
+
+                Ok(cmd)
+            }
+            AgentType::Qwen => {
+                // Resolve Qwen CLI path
+                let qwen_path = CliPathResolver::resolve_qwen()
+                    .ok_or_else(|| anyhow!("Qwen CLI not found."))?;
+
+                log::info!("[AgentManager] Qwen path: {:?}", qwen_path);
+
+                let mut cmd = Command::new(&qwen_path);
+
+                // Set working directory
+                let worktree = Path::new(&config.worktree_path);
+                if worktree.exists() {
+                    cmd.current_dir(&config.worktree_path);
+                }
+
+                // Add the prompt - requires non-empty prompt
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg("--prompt").arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Qwen requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
+                }
+
+                // Permission: --approval-mode yolo for fully autonomous execution
+                cmd.arg("--approval-mode").arg("yolo");
+
+                // Add model if specified
+                if let Some(model) = &config.model {
+                    cmd.arg("--model").arg(model);
+                }
+
+                Ok(cmd)
+            }
+            AgentType::Droid => {
+                // Resolve Droid CLI path
+                let droid_path = CliPathResolver::resolve_droid()
+                    .ok_or_else(|| anyhow!("Droid CLI not found."))?;
+
+                log::info!("[AgentManager] Droid path: {:?}", droid_path);
+
+                let mut cmd = Command::new(&droid_path);
+
+                // Droid uses "exec" subcommand
+                cmd.arg("exec");
+
+                // Set working directory
+                let worktree = Path::new(&config.worktree_path);
+                if worktree.exists() {
+                    cmd.current_dir(&config.worktree_path);
+                }
+
+                // Add the prompt - requires non-empty prompt
+                match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => {
+                        cmd.arg("--prompt").arg(prompt);
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Droid requires a non-empty prompt. Task description is empty for task {}",
+                            config.task_id
+                        ));
+                    }
+                }
+
+                // Permission: --auto medium for autonomous execution
+                cmd.arg("--auto").arg("medium");
 
                 // Add model if specified
                 if let Some(model) = &config.model {
@@ -754,6 +839,48 @@ mod tests {
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
             assert!(program.contains("codex"));
+        }
+    }
+
+    #[test]
+    fn test_build_qwen_command() {
+        let manager = AgentManager::new();
+        let config = AgentSpawnConfig {
+            agent_type: AgentType::Qwen,
+            task_id: "task1".to_string(),
+            worktree_path: "/tmp/worktree".to_string(),
+            branch: "feature/test".to_string(),
+            max_iterations: 5,
+            prompt: Some("Implement feature".to_string()),
+            model: None,
+        };
+
+        // This test may fail if qwen is not installed, which is expected
+        let result = manager.build_command(&config);
+        if let Ok(cmd) = result {
+            let program = cmd.get_program().to_string_lossy();
+            assert!(program.contains("qwen"));
+        }
+    }
+
+    #[test]
+    fn test_build_droid_command() {
+        let manager = AgentManager::new();
+        let config = AgentSpawnConfig {
+            agent_type: AgentType::Droid,
+            task_id: "task1".to_string(),
+            worktree_path: "/tmp/worktree".to_string(),
+            branch: "feature/test".to_string(),
+            max_iterations: 5,
+            prompt: Some("Fix bug".to_string()),
+            model: Some("droid-model".to_string()),
+        };
+
+        // This test may fail if droid is not installed, which is expected
+        let result = manager.build_command(&config);
+        if let Ok(cmd) = result {
+            let program = cmd.get_program().to_string_lossy();
+            assert!(program.contains("droid"));
         }
     }
 

@@ -85,6 +85,42 @@ impl CliPathResolver {
         Self::which("codex")
     }
 
+    /// Resolve Qwen CLI binary path
+    pub fn resolve_qwen() -> Option<PathBuf> {
+        let common_paths = [
+            dirs::home_dir().map(|h| h.join(".npm-global/bin/qwen")),
+            Some(PathBuf::from("/usr/local/bin/qwen")),
+            Some(PathBuf::from("/opt/homebrew/bin/qwen")),
+        ];
+
+        for path in common_paths.into_iter().flatten() {
+            if path.exists() {
+                log::info!("[CliPathResolver] Found Qwen at: {:?}", path);
+                return Some(path);
+            }
+        }
+
+        Self::which("qwen")
+    }
+
+    /// Resolve Droid CLI binary path
+    pub fn resolve_droid() -> Option<PathBuf> {
+        let common_paths = [
+            dirs::home_dir().map(|h| h.join(".npm-global/bin/droid")),
+            Some(PathBuf::from("/usr/local/bin/droid")),
+            Some(PathBuf::from("/opt/homebrew/bin/droid")),
+        ];
+
+        for path in common_paths.into_iter().flatten() {
+            if path.exists() {
+                log::info!("[CliPathResolver] Found Droid at: {:?}", path);
+                return Some(path);
+            }
+        }
+
+        Self::which("droid")
+    }
+
     /// Use the `which` command to find a binary in PATH
     fn which(cmd: &str) -> Option<PathBuf> {
         Command::new("which")
@@ -149,5 +185,17 @@ mod tests {
     fn test_resolve_codex_returns_path_or_none() {
         // This test just ensures the function doesn't panic
         let _ = CliPathResolver::resolve_codex();
+    }
+
+    #[test]
+    fn test_resolve_qwen_returns_path_or_none() {
+        // This test just ensures the function doesn't panic
+        let _ = CliPathResolver::resolve_qwen();
+    }
+
+    #[test]
+    fn test_resolve_droid_returns_path_or_none() {
+        // This test just ensures the function doesn't panic
+        let _ = CliPathResolver::resolve_droid();
     }
 }

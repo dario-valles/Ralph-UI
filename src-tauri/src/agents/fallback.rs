@@ -175,6 +175,8 @@ impl AgentFallbackManager {
                 AgentType::Opencode => Some(AgentType::Claude),
                 AgentType::Cursor => Some(AgentType::Claude),
                 AgentType::Codex => Some(AgentType::Claude), // Codex falls back to Claude
+                AgentType::Qwen => Some(AgentType::Claude),  // Qwen falls back to Claude
+                AgentType::Droid => Some(AgentType::Claude), // Droid falls back to Claude
             }
         });
 
