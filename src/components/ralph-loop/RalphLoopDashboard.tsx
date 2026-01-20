@@ -94,7 +94,6 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   const effectiveMaxIterations = localMaxIterations ?? (config?.ralph.maxIterations != null ? String(config.ralph.maxIterations) : '50')
   const effectiveMaxCost = localMaxCost ?? (config?.ralph.maxCost != null ? String(config.ralph.maxCost) : '')
   const effectiveAgent = localAgent ?? (config?.ralph.agent || 'claude')
-  const effectiveModel = localModel ?? (config?.ralph.model || '')
   const effectiveRunTests = localRunTests ?? true // Default to true
   const effectiveRunLint = localRunLint ?? true // Default to true
 
@@ -104,6 +103,12 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     loading: modelsLoading,
     refresh: refreshModels,
   } = useAvailableModels(effectiveAgent as AgentType)
+
+  // Determine effective model - check if saved model is compatible with current agent
+  // If agent changed and saved model isn't in the available models, ignore it
+  const savedModel = config?.ralph.model || ''
+  const isSavedModelCompatible = !savedModel || availableModels.some(m => m.id === savedModel)
+  const effectiveModel = localModel ?? (isSavedModelCompatible ? savedModel : '')
 
   // Load data when project path changes
   useEffect(() => {
