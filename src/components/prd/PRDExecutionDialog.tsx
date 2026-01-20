@@ -66,7 +66,7 @@ export function PRDExecutionDialog({
   } = useAvailableModels(initialAgentType)
 
   // Use the config hook
-  const { config, setConfig, configLoading, handleAgentTypeChange } = usePRDExecutionConfig(
+  const { config, setConfig, handleAgentTypeChange } = usePRDExecutionConfig(
     open,
     defaultModelId
   )
@@ -399,17 +399,12 @@ export function PRDExecutionDialog({
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={executing || configLoading}
+              disabled={executing}
             >
               Cancel
             </Button>
-            <Button onClick={handleExecute} disabled={executing || configLoading}>
-              {configLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading...
-                </>
-              ) : executing ? (
+            <Button onClick={handleExecute} disabled={executing}>
+              {executing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {config.dryRun ? 'Previewing...' : 'Starting...'}
