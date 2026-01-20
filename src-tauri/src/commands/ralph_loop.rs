@@ -81,6 +81,8 @@ pub struct StartRalphLoopRequest {
     pub max_cost: Option<f64>,
     /// Whether to use a worktree for isolation (default: true)
     pub use_worktree: Option<bool>,
+    /// Agent timeout in seconds (default: 1800 = 30 minutes, 0 = no timeout)
+    pub agent_timeout_secs: Option<u64>,
 }
 
 /// Response from starting a Ralph loop
@@ -327,6 +329,7 @@ pub async fn start_ralph_loop(
         retry_config: RetryConfig::default(),
         error_strategy: ErrorStrategy::default(),
         fallback_config: None, // TODO: Add frontend UI to configure this
+        agent_timeout_secs: request.agent_timeout_secs.unwrap_or(1800), // 30 minutes default
     };
 
     // Create orchestrator

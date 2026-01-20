@@ -78,6 +78,9 @@ pub struct RalphLoopConfig {
     pub error_strategy: ErrorStrategy,
     /// Fallback chain configuration for rate limit handling
     pub fallback_config: Option<FallbackChainConfig>,
+    /// Timeout in seconds for each agent iteration (default: 1800 = 30 minutes)
+    /// Set to 0 for no timeout (wait indefinitely)
+    pub agent_timeout_secs: u64,
 }
 
 impl Default for RalphLoopConfig {
@@ -96,6 +99,7 @@ impl Default for RalphLoopConfig {
             retry_config: RetryConfig::default(),
             error_strategy: ErrorStrategy::default(),
             fallback_config: None,
+            agent_timeout_secs: 1800, // 30 minutes default
         }
     }
 }
@@ -730,34 +734,48 @@ impl RalphLoopOrchestrator {
             log::debug!("[RalphLoop] Got child_process: {:?}", child_process.is_some());
 
             // Step 2: Wait on the process WITHOUT holding the manager lock
-            // Use timeout to prevent indefinite blocking (5 minute timeout)
-            const AGENT_TIMEOUT_SECS: u64 = 300;
+            // Use configurable timeout (0 = no timeout, wait indefinitely)
+            let timeout_secs = self.config.agent_timeout_secs;
 
             let exit_code = match child_process {
                 Some(mut child) => {
-                    log::debug!("[RalphLoop] Waiting for agent process (timeout: {}s)...", AGENT_TIMEOUT_SECS);
-
-                    // Use polling-based wait with timeout
-                    match AgentManager::wait_with_timeout(&mut child, AGENT_TIMEOUT_SECS) {
-                        Ok(Some(code)) => code,
-                        Ok(None) => {
-                            // Timeout - kill the process
-                            log::warn!("[RalphLoop] Agent timed out after {}s, killing process", AGENT_TIMEOUT_SECS);
-                            let _ = child.kill();
-                            let _ = child.wait(); // Clean up zombie
-
-                            // Clean up agent PTY
-                            let manager = lock_mutex_recover(&agent_manager_arc);
-                            manager.unregister_pty(&agent_id);
-                            self.current_agent_id = None;
-                            return Err(format!("Agent timed out after {} seconds", AGENT_TIMEOUT_SECS));
+                    if timeout_secs == 0 {
+                        // No timeout - wait indefinitely
+                        log::debug!("[RalphLoop] Waiting for agent process (no timeout)...");
+                        match child.wait() {
+                            Ok(status) => status.code().unwrap_or(-1),
+                            Err(e) => {
+                                let manager = lock_mutex_recover(&agent_manager_arc);
+                                manager.unregister_pty(&agent_id);
+                                self.current_agent_id = None;
+                                return Err(format!("Failed to wait for agent: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            // Clean up agent PTY before returning error
-                            let manager = lock_mutex_recover(&agent_manager_arc);
-                            manager.unregister_pty(&agent_id);
-                            self.current_agent_id = None;
-                            return Err(format!("Failed to wait for agent: {}", e));
+                    } else {
+                        log::debug!("[RalphLoop] Waiting for agent process (timeout: {}s)...", timeout_secs);
+
+                        // Use polling-based wait with timeout
+                        match AgentManager::wait_with_timeout(&mut child, timeout_secs) {
+                            Ok(Some(code)) => code,
+                            Ok(None) => {
+                                // Timeout - kill the process
+                                log::warn!("[RalphLoop] Agent timed out after {}s, killing process", timeout_secs);
+                                let _ = child.kill();
+                                let _ = child.wait(); // Clean up zombie
+
+                                // Clean up agent PTY
+                                let manager = lock_mutex_recover(&agent_manager_arc);
+                                manager.unregister_pty(&agent_id);
+                                self.current_agent_id = None;
+                                return Err(format!("Agent timed out after {} seconds", timeout_secs));
+                            }
+                            Err(e) => {
+                                // Clean up agent PTY before returning error
+                                let manager = lock_mutex_recover(&agent_manager_arc);
+                                manager.unregister_pty(&agent_id);
+                                self.current_agent_id = None;
+                                return Err(format!("Failed to wait for agent: {}", e));
+                            }
                         }
                     }
                 }

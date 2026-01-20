@@ -839,6 +839,8 @@ export interface StartRalphLoopRequest {
   maxCost?: number
   /** Whether to use a worktree for isolation (default: true) */
   useWorktree?: boolean
+  /** Agent timeout in seconds (default: 1800 = 30 minutes, 0 = no timeout) */
+  agentTimeoutSecs?: number
 }
 
 /** Request to convert a database PRD to Ralph format */
