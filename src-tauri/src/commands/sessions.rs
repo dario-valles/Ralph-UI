@@ -32,16 +32,35 @@ pub async fn create_session(
     let db = lock_db(&db)?;
     let conn = db.get_connection();
 
-    database::sessions::create_session(conn, &session)
-        .with_context("Failed to create session")?;
+    // Use a transaction to ensure atomicity of session creation + pause other sessions
+    conn.execute("BEGIN IMMEDIATE", [])
+        .with_context("Failed to begin transaction")?;
 
-    // Enforce single-active-session-per-project: pause any other active sessions
-    if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
-        log::warn!("Failed to pause other sessions: {}", e);
+    let result = (|| -> Result<(), String> {
+        database::sessions::create_session(conn, &session)
+            .with_context("Failed to create session")?;
+
+        // Enforce single-active-session-per-project: pause any other active sessions
+        database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id)
+            .with_context("Failed to pause other sessions")?;
+
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute("COMMIT", [])
+                .with_context("Failed to commit transaction")?;
+        }
+        Err(e) => {
+            // Rollback on error
+            let _ = conn.execute("ROLLBACK", []);
+            return Err(e);
+        }
     }
 
     // Export session to file immediately after creation for git tracking
-    // This provides a safety net for all session creation paths
+    // This is outside the transaction since it's a file operation, not DB
     if let Err(e) = session_files::export_session_to_file(conn, &session.id, None) {
         log::warn!("Failed to export session to file: {}", e);
     }
@@ -323,12 +342,30 @@ pub async fn create_session_from_template(
         total_tokens: 0,
     };
 
-    database::sessions::create_session(conn, &session)
-        .with_context("Failed to create session")?;
+    // Use a transaction to ensure atomicity
+    conn.execute("BEGIN IMMEDIATE", [])
+        .with_context("Failed to begin transaction")?;
 
-    // Enforce single-active-session-per-project: pause any other active sessions
-    if let Err(e) = database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id) {
-        log::warn!("Failed to pause other sessions: {}", e);
+    let result = (|| -> Result<(), String> {
+        database::sessions::create_session(conn, &session)
+            .with_context("Failed to create session")?;
+
+        // Enforce single-active-session-per-project: pause any other active sessions
+        database::sessions::pause_other_sessions_in_project(conn, &project_path, &session.id)
+            .with_context("Failed to pause other sessions")?;
+
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute("COMMIT", [])
+                .with_context("Failed to commit transaction")?;
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", []);
+            return Err(e);
+        }
     }
 
     Ok(session)
