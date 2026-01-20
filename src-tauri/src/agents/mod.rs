@@ -18,4 +18,3 @@ pub use fallback::{AgentFallbackManager, FallbackConfig};
 pub use trace_parser::{SubagentTraceParser, SubagentEvent, SubagentEventType, SubagentTree};
 pub use models::ModelInfo;
 pub use model_cache::ModelCache;
-pub use ansi_stripper::{strip_ansi, LineBuffer, RingBuffer};

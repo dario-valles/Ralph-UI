@@ -3,7 +3,7 @@
 
 #![allow(dead_code)] // Infrastructure for parallel agent orchestration (Phase 4)
 
-use crate::agents::ansi_stripper::{LineBuffer, RingBuffer};
+use crate::agents::ansi_stripper::RingBuffer;
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
 use crate::models::{AgentType, LogEntry, LogLevel};

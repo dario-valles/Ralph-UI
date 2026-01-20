@@ -32,11 +32,13 @@ pub fn strip_ansi(input: &str) -> String {
 /// A buffer for reconstructing complete lines from streaming output
 /// PTY output may arrive in chunks that don't align with line boundaries
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct LineBuffer {
     /// Partial line from previous chunk
     pending: String,
 }
 
+#[allow(dead_code)]
 impl LineBuffer {
     pub fn new() -> Self {
         Self::default()
@@ -144,16 +146,19 @@ impl RingBuffer {
     }
 
     /// Get the number of bytes currently in the buffer
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
     /// Check if the buffer is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
     /// Clear the buffer
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.data.clear();
         self.write_pos = 0;
