@@ -14,9 +14,158 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::sync::mpsc;
+
+/// Parse agent JSON output and extract human-readable text
+/// Supports Claude stream-json format and OpenCode JSON format
+/// Returns formatted text suitable for terminal display
+fn parse_agent_json_output(line: &str) -> String {
+    // Try to parse as JSON
+    let json: serde_json::Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(_) => return line.to_string(), // Not JSON, return as-is
+    };
+
+    // Check for Claude stream-json format (has "type" field)
+    if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
+        return parse_claude_stream_json(&json, msg_type);
+    }
+
+    // Check for OpenCode format (has "role" or "content" at top level)
+    if json.get("role").is_some() || json.get("content").is_some() {
+        return parse_opencode_json(&json);
+    }
+
+    // Check for generic message/text fields
+    if let Some(text) = json.get("text").and_then(|v| v.as_str()) {
+        return text.to_string();
+    }
+    if let Some(message) = json.get("message").and_then(|v| v.as_str()) {
+        return message.to_string();
+    }
+    if let Some(output) = json.get("output").and_then(|v| v.as_str()) {
+        return output.to_string();
+    }
+
+    // Unknown JSON format - return as-is but formatted
+    line.to_string()
+}
+
+/// Parse Claude stream-json format
+fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String {
+    match msg_type {
+        "system" => {
+            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
+            if subtype == "init" {
+                let model = json.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
+                format!("\x1b[36m[System] Initialized with model: {}\x1b[0m", model)
+            } else {
+                format!("\x1b[36m[System] {}\x1b[0m", subtype)
+            }
+        }
+        "assistant" => {
+            if let Some(message) = json.get("message") {
+                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                    let texts: Vec<String> = content
+                        .iter()
+                        .filter_map(|item| {
+                            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                item.get("text").and_then(|t| t.as_str()).map(String::from)
+                            } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                                let tool_name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                                Some(format!("\x1b[33m[Using tool: {}]\x1b[0m", tool_name))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    if !texts.is_empty() {
+                        return texts.join("\n");
+                    }
+                }
+            }
+            String::new()
+        }
+        "user" => {
+            if let Some(message) = json.get("message") {
+                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                    for item in content {
+                        if item.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
+                            let tool_id = item.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                            let content_str = item.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                            let truncated = if content_str.len() > 200 {
+                                format!("{}...", &content_str[..200])
+                            } else {
+                                content_str.to_string()
+                            };
+                            return format!("\x1b[90m[Tool result {}]: {}\x1b[0m", &tool_id[..8.min(tool_id.len())], truncated);
+                        }
+                    }
+                }
+            }
+            String::new()
+        }
+        "result" => {
+            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
+            let duration = json.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+            let cost = json.get("total_cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            format!(
+                "\x1b[32m[Complete] {} - Duration: {}ms, Cost: ${:.4}\x1b[0m",
+                subtype, duration, cost
+            )
+        }
+        _ => String::new(),
+    }
+}
+
+/// Parse OpenCode JSON format
+fn parse_opencode_json(json: &serde_json::Value) -> String {
+    let role = json.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    // Extract content - can be string or array
+    let content = if let Some(content_str) = json.get("content").and_then(|v| v.as_str()) {
+        content_str.to_string()
+    } else if let Some(content_arr) = json.get("content").and_then(|v| v.as_array()) {
+        content_arr
+            .iter()
+            .filter_map(|item| {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    Some(text.to_string())
+                } else if let Some(tool) = item.get("tool_use") {
+                    let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                    Some(format!("\x1b[33m[Using tool: {}]\x1b[0m", name))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        String::new()
+    };
+
+    if content.is_empty() {
+        return String::new();
+    }
+
+    match role {
+        "assistant" => content,
+        "user" => format!("\x1b[90m[User]: {}\x1b[0m", content),
+        "system" => format!("\x1b[36m[System]: {}\x1b[0m", content),
+        "tool" => {
+            let truncated = if content.len() > 200 {
+                format!("{}...", &content[..200])
+            } else {
+                content
+            };
+            format!("\x1b[90m[Tool result]: {}\x1b[0m", truncated)
+        }
+        _ => content,
+    }
+}
 
 /// Agent spawn mode - determines how the agent process is spawned
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -50,6 +199,8 @@ pub struct AgentManager {
     pty_data_tx: Option<mpsc::UnboundedSender<AgentPtyDataEvent>>,
     /// Event sender for PTY exit events
     pty_exit_tx: Option<mpsc::UnboundedSender<AgentPtyExitEvent>>,
+    /// Cancellation tokens for monitor threads (triggered when process is taken/stopped)
+    monitor_cancellation: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 /// Event emitted when a rate limit is detected
@@ -118,6 +269,7 @@ impl AgentManager {
             pty_history: Arc::new(Mutex::new(HashMap::new())),
             pty_data_tx: None,
             pty_exit_tx: None,
+            monitor_cancellation: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -335,6 +487,7 @@ impl AgentManager {
         let program = command.get_program().to_string_lossy().to_string();
         let args: Vec<String> = command.get_args().map(|s| s.to_string_lossy().to_string()).collect();
         log::info!("[AgentManager] Executing command: {} {:?}", program, args);
+        println!("[DEBUG] Executing command: {} {:?}", program, args);
 
         let mut child = match command
             .stdin(Stdio::null())  // Prevent stdin issues causing early exit
@@ -370,6 +523,8 @@ impl AgentManager {
         let is_pty_mode = config.spawn_mode == AgentSpawnMode::Pty;
         if is_pty_mode {
             log::info!("[AgentManager] PTY mode: registering pseudo-PTY for agent {}", agent_id);
+            println!("[DEBUG] PTY mode: registering pseudo-PTY for agent {}", agent_id);
+            println!("[DEBUG] pty_data_tx is_some: {}", self.pty_data_tx.is_some());
             self.register_pty(agent_id, agent_id);
         }
 
@@ -380,28 +535,34 @@ impl AgentManager {
         ));
 
         // Give the process a moment to start (helps detect immediate failures)
+        println!("[DEBUG] Waiting 100ms for process to start...");
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Quick check - see if process already exited (helps diagnose immediate failures)
+        println!("[DEBUG] Checking if process exited immediately...");
         let process_exited_immediately = {
             let mut processes = lock_mutex_recover(&self.processes);
             if let Some(child) = processes.get_mut(agent_id) {
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         let exit_code = status.code().unwrap_or(-1);
+                        println!("[DEBUG] Process {} exited immediately with code {}", pid, exit_code);
                         log::error!("[AgentManager] Process {} exited immediately with code {}", pid, exit_code);
                         Some(exit_code)
                     }
                     Ok(None) => {
+                        println!("[DEBUG] Process {} is running (did not exit immediately)", pid);
                         log::info!("[AgentManager] Process {} is running", pid);
                         None
                     }
                     Err(e) => {
+                        println!("[DEBUG] Failed to check process status: {}", e);
                         log::error!("[AgentManager] Failed to check process status: {}", e);
                         None
                     }
                 }
             } else {
+                println!("[DEBUG] Process not found in processes map!");
                 None
             }
         };
@@ -443,26 +604,36 @@ impl AgentManager {
             let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
             let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
             let agent_id_clone = agent_id.to_string();
+            println!("[DEBUG] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}", agent_id, pty_data_tx.is_some());
             thread::spawn(move || {
+                println!("[DEBUG] Stdout reader thread started for agent {}", agent_id_clone);
                 let reader = BufReader::new(stdout);
                 for line in reader.lines() {
                     match line {
                         Ok(line) => {
                             log::info!("[Agent {}] {}", agent_id_clone, line);
 
+                            // Parse JSON output and extract readable text (supports Claude and OpenCode)
+                            let display_text = parse_agent_json_output(&line);
+
+                            // Skip empty lines (unknown JSON types return empty string)
+                            if display_text.is_empty() {
+                                continue;
+                            }
+
                             // For PTY mode, also write to pty_history with newline
                             if let Some(ref pty_hist) = pty_history {
-                                let line_with_newline = format!("{}\r\n", line);
+                                let text_with_newline = format!("{}\r\n", display_text);
                                 let mut hist = lock_mutex_recover(pty_hist);
                                 hist.entry(agent_id_clone.clone())
                                     .or_insert_with(|| RingBuffer::new(1024 * 1024)) // 1MB buffer
-                                    .write(line_with_newline.as_bytes());
+                                    .write(text_with_newline.as_bytes());
 
                                 // Also send via PTY data channel for real-time updates
                                 if let Some(ref tx) = pty_data_tx {
                                     let _ = tx.send(AgentPtyDataEvent {
                                         agent_id: agent_id_clone.clone(),
-                                        data: line_with_newline.into_bytes(),
+                                        data: text_with_newline.into_bytes(),
                                     });
                                 }
                             }
@@ -470,7 +641,7 @@ impl AgentManager {
                             let log_entry = LogEntry {
                                 timestamp: Utc::now(),
                                 level: LogLevel::Info,
-                                message: line,
+                                message: display_text.clone(),
                             };
 
                             // Store in memory
@@ -496,6 +667,7 @@ impl AgentManager {
                         }
                     }
                 }
+                println!("[DEBUG] Stdout reader finished for agent {}", agent_id_clone);
                 log::debug!("[Agent {}] stdout reader finished", agent_id_clone);
             });
         }
@@ -510,12 +682,15 @@ impl AgentManager {
             // Create a new detector for the thread (uses static patterns internally)
             let rate_limit_detector = RateLimitDetector::new();
             let agent_id_clone = agent_id.to_string();
+            println!("[DEBUG] Spawning stderr reader thread for agent {}", agent_id);
             thread::spawn(move || {
+                println!("[DEBUG] Stderr reader thread started for agent {}", agent_id_clone);
                 let reader = BufReader::new(stderr);
                 for line in reader.lines() {
                     match line {
                         Ok(line) => {
                             // Log stderr as warnings (they're often important)
+                            println!("[DEBUG] Agent {} stderr: {}", agent_id_clone, line);
                             log::warn!("[Agent {}] stderr: {}", agent_id_clone, line);
 
                             // For PTY mode, also write to pty_history (stderr in red)
@@ -577,6 +752,7 @@ impl AgentManager {
                         }
                     }
                 }
+                println!("[DEBUG] Stderr reader finished for agent {}", agent_id_clone);
                 log::debug!("[Agent {}] stderr reader finished", agent_id_clone);
             });
         }
@@ -590,10 +766,36 @@ impl AgentManager {
             let task_id_clone = config.task_id.clone();
             let log_tx = self.log_tx.clone();
 
+            // Create and store cancellation token for this monitor thread
+            let cancelled = Arc::new(AtomicBool::new(false));
+            let monitor_cancellation = self.monitor_cancellation.clone();
+            {
+                let mut tokens = lock_mutex_recover(&self.monitor_cancellation);
+                tokens.insert(agent_id.to_string(), cancelled.clone());
+            }
+
             thread::spawn(move || {
                 // Poll every 500ms to check if process has exited
                 loop {
+                    // Check cancellation token first (allows immediate exit)
+                    if cancelled.load(Ordering::Relaxed) {
+                        log::debug!(
+                            "[AgentManager] Monitor thread for agent {} cancelled",
+                            agent_id_clone
+                        );
+                        break;
+                    }
+
                     thread::sleep(std::time::Duration::from_millis(500));
+
+                    // Check again after sleep
+                    if cancelled.load(Ordering::Relaxed) {
+                        log::debug!(
+                            "[AgentManager] Monitor thread for agent {} cancelled after sleep",
+                            agent_id_clone
+                        );
+                        break;
+                    }
 
                     let should_exit = {
                         let mut processes_guard = lock_mutex_recover(&processes);
@@ -675,6 +877,12 @@ impl AgentManager {
                         break;
                     }
                 }
+
+                // Clean up cancellation token
+                {
+                    let mut tokens = lock_mutex_recover(&monitor_cancellation);
+                    tokens.remove(&agent_id_clone);
+                }
                 log::debug!("[AgentManager] Process monitor for agent {} finished", agent_id_clone);
             });
         }
@@ -703,18 +911,28 @@ impl AgentManager {
                     log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
                 }
 
-                // Add the prompt as positional argument - requires non-empty prompt
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg("-p").arg(prompt);
-                    }
+                // Validate prompt is non-empty
+                let prompt = match &config.prompt {
+                    Some(prompt) if !prompt.trim().is_empty() => prompt.clone(),
                     _ => {
                         return Err(anyhow!(
                             "Claude requires a non-empty prompt. Task description is empty for task {}",
                             config.task_id
                         ));
                     }
-                }
+                };
+
+                // Add --print first to output to stdout instead of interactive TUI
+                // Note: -p is the short form of --print, NOT a prompt flag!
+                cmd.arg("--print");
+
+                // Use stream-json for real-time streaming (text format buffers until complete)
+                // Requires --verbose when using stream-json
+                cmd.arg("--output-format").arg("stream-json");
+                cmd.arg("--verbose");
+
+                // Add --dangerously-skip-permissions to skip permission prompts
+                cmd.arg("--dangerously-skip-permissions");
 
                 // Add max turns (iterations) - only if greater than 0
                 // max_iterations of 0 or negative means no limit (don't pass flag)
@@ -723,14 +941,14 @@ impl AgentManager {
                         .arg(config.max_iterations.to_string());
                 }
 
-                // Add --dangerously-skip-permissions to skip permission prompts
-                // Note: Claude Code doesn't have --yes flag, this is the equivalent
-                cmd.arg("--dangerously-skip-permissions");
-
                 // Add model if specified
                 if let Some(model) = &config.model {
                     cmd.arg("--model").arg(model);
                 }
+
+                // Add the prompt as the LAST positional argument
+                // Claude CLI syntax: claude [options] [prompt]
+                cmd.arg(&prompt);
 
                 Ok(cmd)
             }
@@ -745,6 +963,25 @@ impl AgentManager {
 
                 // Set working directory - check if it exists first
                 let worktree = Path::new(&config.worktree_path);
+
+                // Create opencode.json config in the working directory to skip permission prompts
+                // OpenCode uses config-based permissions, not environment variables
+                if worktree.exists() {
+                    let config_path = worktree.join("opencode.json");
+                    // Only create if it doesn't exist (don't overwrite user config)
+                    if !config_path.exists() {
+                        let config_content = r#"{"$schema": "https://opencode.ai/config.json", "permission": "allow"}"#;
+                        if let Err(e) = std::fs::write(&config_path, config_content) {
+                            log::warn!("[AgentManager] Failed to create opencode.json for permissions: {}", e);
+                        } else {
+                            log::info!("[AgentManager] Created opencode.json with permission: allow");
+                        }
+                    } else {
+                        log::info!("[AgentManager] opencode.json already exists, using existing config");
+                    }
+                }
+
+                // Set working directory
                 if worktree.exists() {
                     log::info!("[AgentManager] Using worktree path: {}", config.worktree_path);
                     cmd.current_dir(&config.worktree_path);
@@ -944,6 +1181,14 @@ impl AgentManager {
 
     /// Stop an agent by killing its process
     pub fn stop_agent(&mut self, agent_id: &str) -> Result<()> {
+        // Cancel the monitor thread for this agent
+        {
+            let tokens = lock_mutex_recover(&self.monitor_cancellation);
+            if let Some(cancelled) = tokens.get(agent_id) {
+                cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+
         let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
@@ -971,6 +1216,14 @@ impl AgentManager {
 
     /// Stop all running agents
     pub fn stop_all(&mut self) -> Result<()> {
+        // Cancel all monitor threads
+        {
+            let tokens = lock_mutex_recover(&self.monitor_cancellation);
+            for (_, cancelled) in tokens.iter() {
+                cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+
         let mut processes = lock_mutex_recover(&self.processes);
         let agent_ids: Vec<String> = processes.keys().cloned().collect();
 
@@ -986,6 +1239,14 @@ impl AgentManager {
 
     /// Wait for an agent process to complete
     pub fn wait_for_agent(&mut self, agent_id: &str) -> Result<i32> {
+        // Cancel the monitor thread since we're waiting directly
+        {
+            let tokens = lock_mutex_recover(&self.monitor_cancellation);
+            if let Some(cancelled) = tokens.get(agent_id) {
+                cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+
         let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
@@ -1006,13 +1267,58 @@ impl AgentManager {
         }
     }
 
+    /// Wait for a child process with timeout (polling-based)
+    /// Returns Ok(Some(exit_code)) if process exited, Ok(None) if timeout, Err on wait error
+    pub fn wait_with_timeout(child: &mut Child, timeout_secs: u64) -> Result<Option<i32>> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        let poll_interval = std::time::Duration::from_millis(100);
+
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    // Process exited
+                    return Ok(Some(status.code().unwrap_or(-1)));
+                }
+                Ok(None) => {
+                    // Still running - check timeout
+                    if start.elapsed() >= timeout {
+                        log::warn!("Process wait timed out after {} seconds", timeout_secs);
+                        return Ok(None);
+                    }
+                    thread::sleep(poll_interval);
+                }
+                Err(e) => {
+                    return Err(anyhow!("Error waiting for process: {}", e));
+                }
+            }
+        }
+    }
+
     /// Take a child process out of the manager for external waiting
     ///
     /// This allows the caller to wait on the process without holding
     /// the manager lock, preventing UI freezes.
+    /// Also cancels the background monitor thread for this agent.
     pub fn take_child_process(&mut self, agent_id: &str) -> Option<std::process::Child> {
+        // Cancel the monitor thread for this agent
+        {
+            let tokens = lock_mutex_recover(&self.monitor_cancellation);
+            if let Some(cancelled) = tokens.get(agent_id) {
+                cancelled.store(true, Ordering::Relaxed);
+                log::debug!("[AgentManager] Cancelled monitor thread for agent {}", agent_id);
+            }
+        }
+
+        // Remove the process from tracking
         let mut processes = lock_mutex_recover(&self.processes);
         processes.remove(agent_id)
+    }
+
+    /// Clean up cancellation token for an agent (call after monitor thread exits)
+    fn cleanup_monitor_token(&self, agent_id: &str) {
+        let mut tokens = lock_mutex_recover(&self.monitor_cancellation);
+        tokens.remove(agent_id);
     }
 
     /// Emit a log event for agent exit (for use after take_child_process + wait)
