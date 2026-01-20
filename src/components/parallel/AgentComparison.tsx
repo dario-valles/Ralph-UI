@@ -2,6 +2,7 @@
 
 import { Card } from '../ui/card'
 import { Badge } from '../ui/badge'
+import { getStatusColor } from '@/lib/agent-api'
 import type { Agent } from '../../types'
 
 interface AgentComparisonProps {
@@ -17,25 +18,6 @@ export function AgentComparison({ agents }: AgentComparisonProps) {
         </p>
       </Card>
     )
-  }
-
-  const getStatusColor = (status: Agent['status']) => {
-    switch (status) {
-      case 'idle':
-        return 'bg-gray-500'
-      case 'thinking':
-        return 'bg-blue-500'
-      case 'reading':
-        return 'bg-purple-500'
-      case 'implementing':
-        return 'bg-green-500'
-      case 'testing':
-        return 'bg-yellow-500'
-      case 'committing':
-        return 'bg-orange-500'
-      default:
-        return 'bg-gray-500'
-    }
   }
 
   const totalTokens = agents.reduce((sum, agent) => sum + agent.tokens, 0)

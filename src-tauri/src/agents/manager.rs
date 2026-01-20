@@ -4,6 +4,7 @@
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
 use crate::models::{AgentType, LogEntry, LogLevel};
+use crate::utils::lock_mutex_recover;
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use std::collections::HashMap;
@@ -68,13 +69,13 @@ impl AgentManager {
 
     /// Get logs for an agent from in-memory storage
     pub fn get_agent_logs(&self, agent_id: &str) -> Vec<LogEntry> {
-        let logs = self.agent_logs.lock().unwrap();
+        let logs = lock_mutex_recover(&self.agent_logs);
         logs.get(agent_id).cloned().unwrap_or_default()
     }
 
     /// Clear logs for an agent
     pub fn clear_agent_logs(&self, agent_id: &str) {
-        let mut logs = self.agent_logs.lock().unwrap();
+        let mut logs = lock_mutex_recover(&self.agent_logs);
         logs.remove(agent_id);
     }
 
@@ -128,7 +129,7 @@ impl AgentManager {
 
         // Store the process
         {
-            let mut processes = self.processes.lock().unwrap();
+            let mut processes = lock_mutex_recover(&self.processes);
             processes.insert(agent_id.to_string(), child);
             log::info!("[AgentManager] Process stored. Total running: {}", processes.len());
         }
@@ -144,7 +145,7 @@ impl AgentManager {
 
         // Quick check - see if process already exited (helps diagnose immediate failures)
         let process_exited_immediately = {
-            let mut processes = self.processes.lock().unwrap();
+            let mut processes = lock_mutex_recover(&self.processes);
             if let Some(child) = processes.get_mut(agent_id) {
                 match child.try_wait() {
                     Ok(Some(status)) => {
@@ -216,7 +217,7 @@ impl AgentManager {
 
                             // Store in memory
                             {
-                                let mut logs = agent_logs.lock().unwrap();
+                                let mut logs = lock_mutex_recover(&agent_logs);
                                 logs.entry(agent_id_clone.clone())
                                     .or_insert_with(Vec::new)
                                     .push(log_entry.clone());
@@ -277,7 +278,7 @@ impl AgentManager {
 
                             // Store in memory
                             {
-                                let mut logs = agent_logs.lock().unwrap();
+                                let mut logs = lock_mutex_recover(&agent_logs);
                                 logs.entry(agent_id_clone.clone())
                                     .or_insert_with(Vec::new)
                                     .push(log_entry.clone());
@@ -374,8 +375,8 @@ impl AgentManager {
                     log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
                 }
 
-                // Use the 'full-auto' subcommand for fully autonomous execution
-                cmd.arg("full-auto");
+                // Use the 'run' subcommand for non-interactive execution
+                cmd.arg("run");
 
                 // Add the prompt as the message - opencode requires a non-empty message
                 match &config.prompt {
@@ -507,8 +508,8 @@ impl AgentManager {
                     }
                 }
 
-                // Permission: --approval-mode yolo for fully autonomous execution
-                cmd.arg("--approval-mode").arg("yolo");
+                // Permission: --yolo for fully autonomous execution (auto-approves all operations)
+                cmd.arg("--yolo");
 
                 // Add model if specified
                 if let Some(model) = &config.model {
@@ -563,7 +564,7 @@ impl AgentManager {
 
     /// Stop an agent by killing its process
     pub fn stop_agent(&mut self, agent_id: &str) -> Result<()> {
-        let mut processes = self.processes.lock().unwrap();
+        let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
             child.kill()
@@ -578,19 +579,19 @@ impl AgentManager {
 
     /// Check if an agent process is still running
     pub fn is_agent_running(&self, agent_id: &str) -> bool {
-        let processes = self.processes.lock().unwrap();
+        let processes = lock_mutex_recover(&self.processes);
         processes.contains_key(agent_id)
     }
 
     /// Get the number of running agents
     pub fn running_count(&self) -> usize {
-        let processes = self.processes.lock().unwrap();
+        let processes = lock_mutex_recover(&self.processes);
         processes.len()
     }
 
     /// Stop all running agents
     pub fn stop_all(&mut self) -> Result<()> {
-        let mut processes = self.processes.lock().unwrap();
+        let mut processes = lock_mutex_recover(&self.processes);
         let agent_ids: Vec<String> = processes.keys().cloned().collect();
 
         for agent_id in agent_ids {
@@ -605,7 +606,7 @@ impl AgentManager {
 
     /// Wait for an agent process to complete
     pub fn wait_for_agent(&mut self, agent_id: &str) -> Result<i32> {
-        let mut processes = self.processes.lock().unwrap();
+        let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
             let status = child.wait()
@@ -635,7 +636,7 @@ impl AgentManager {
 
         // Store in memory for later retrieval
         {
-            let mut logs = self.agent_logs.lock().unwrap();
+            let mut logs = lock_mutex_recover(&self.agent_logs);
             logs.entry(agent_id.to_string())
                 .or_insert_with(Vec::new)
                 .push(log_entry.clone());
@@ -689,7 +690,7 @@ impl AgentManager {
         &mut self,
         agent_id: &str,
     ) -> Result<(i32, Option<RateLimitInfo>)> {
-        let mut processes = self.processes.lock().unwrap();
+        let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
             // Capture stderr and check for rate limits

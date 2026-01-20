@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::agents::{AgentManager, AgentSpawnConfig, RateLimitEvent};
+use crate::utils::lock_mutex_recover;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -91,13 +92,13 @@ impl AgentPool {
     /// Set the rate limit event sender for rate limit notifications
     /// Events will be forwarded to the frontend via Tauri events
     pub fn set_rate_limit_sender(&self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
-        let mut manager = self.manager.lock().expect("mutex poisoned");
+        let mut manager = lock_mutex_recover(&self.manager);
         manager.set_rate_limit_sender(tx);
     }
 
     /// Check if the pool can accept a new agent
     pub fn can_spawn(&self) -> Result<bool> {
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
 
         // Check max agents limit
         if running.len() >= self.limits.max_agents {
@@ -105,7 +106,7 @@ impl AgentPool {
         }
 
         // Check system resources
-        let mut system = self.system.lock().expect("mutex poisoned");
+        let mut system = lock_mutex_recover(&self.system);
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         // Calculate total usage inline to avoid deadlock (running is already locked)
@@ -156,7 +157,7 @@ impl AgentPool {
 
         // Spawn the agent
         log::info!("[AgentPool] Calling manager.spawn_agent...");
-        let mut manager = self.manager.lock().expect("mutex poisoned");
+        let mut manager = lock_mutex_recover(&self.manager);
         let process_id = match manager.spawn_agent(agent_id, config.clone()) {
             Ok(pid) => {
                 log::info!("[AgentPool] Agent spawned with PID: {}", pid);
@@ -177,7 +178,7 @@ impl AgentPool {
         };
 
         {
-            let mut running = self.running.lock().expect("mutex poisoned");
+            let mut running = lock_mutex_recover(&self.running);
             running.insert(agent_id.to_string(), pooled);
         }
 
@@ -186,10 +187,10 @@ impl AgentPool {
 
     /// Stop an agent
     pub fn stop(&self, agent_id: &str) -> Result<()> {
-        let mut manager = self.manager.lock().expect("mutex poisoned");
+        let mut manager = lock_mutex_recover(&self.manager);
         manager.stop_agent(agent_id)?;
 
-        let mut running = self.running.lock().expect("mutex poisoned");
+        let mut running = lock_mutex_recover(&self.running);
         running.remove(agent_id);
 
         Ok(())
@@ -197,10 +198,10 @@ impl AgentPool {
 
     /// Stop all running agents
     pub fn stop_all(&self) -> Result<()> {
-        let mut manager = self.manager.lock().expect("mutex poisoned");
+        let mut manager = lock_mutex_recover(&self.manager);
         manager.stop_all()?;
 
-        let mut running = self.running.lock().expect("mutex poisoned");
+        let mut running = lock_mutex_recover(&self.running);
         running.clear();
 
         Ok(())
@@ -208,28 +209,28 @@ impl AgentPool {
 
     /// Get number of running agents
     pub fn running_count(&self) -> usize {
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
         running.len()
     }
 
     /// Check if an agent is running
     pub fn is_running(&self, agent_id: &str) -> bool {
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
         running.contains_key(agent_id)
     }
 
     /// Get runtime for an agent in seconds
     pub fn get_runtime(&self, agent_id: &str) -> Option<u64> {
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
         running.get(agent_id).map(|a| a.started_at.elapsed().as_secs())
     }
 
     /// Check for agents exceeding resource limits and runtime
     pub fn check_violations(&self) -> Result<Vec<String>> {
         let mut violations = Vec::new();
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
 
-        let mut system = self.system.lock().expect("mutex poisoned");
+        let mut system = lock_mutex_recover(&self.system);
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         for (agent_id, pooled) in running.iter() {
@@ -260,7 +261,7 @@ impl AgentPool {
 
     /// Get total CPU and memory usage from all agents
     fn get_total_usage(&self, system: &System) -> Result<(f32, u64)> {
-        let running = self.running.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
         let mut total_cpu = 0.0;
         let mut total_memory_mb = 0;
 
@@ -276,8 +277,8 @@ impl AgentPool {
 
     /// Get current resource usage statistics
     pub fn get_stats(&self) -> Result<PoolStats> {
-        let running = self.running.lock().expect("mutex poisoned");
-        let mut system = self.system.lock().expect("mutex poisoned");
+        let running = lock_mutex_recover(&self.running);
+        let mut system = lock_mutex_recover(&self.system);
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
         // Calculate total usage inline to avoid deadlock (running is already locked)
@@ -308,8 +309,8 @@ impl AgentPool {
 
         // First, identify processes that are no longer running
         {
-            let running = self.running.lock().expect("mutex poisoned");
-            let mut system = self.system.lock().expect("mutex poisoned");
+            let running = lock_mutex_recover(&self.running);
+            let mut system = lock_mutex_recover(&self.system);
             system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
             for (agent_id, pooled) in running.iter() {
@@ -333,8 +334,8 @@ impl AgentPool {
 
         // Now remove them and try to get exit status
         {
-            let mut running = self.running.lock().expect("mutex poisoned");
-            let mut manager = self.manager.lock().expect("mutex poisoned");
+            let mut running = lock_mutex_recover(&self.running);
+            let mut manager = lock_mutex_recover(&self.manager);
 
             for (agent_id, task_id, process_id) in to_remove {
                 running.remove(&agent_id);
@@ -385,13 +386,13 @@ pub struct CompletedAgent {
 impl AgentPool {
     /// Get in-memory logs for an agent
     pub fn get_agent_logs(&self, agent_id: &str) -> Vec<crate::models::LogEntry> {
-        let manager = self.manager.lock().expect("mutex poisoned");
+        let manager = lock_mutex_recover(&self.manager);
         manager.get_agent_logs(agent_id)
     }
 
     /// Clear in-memory logs for an agent
     pub fn clear_agent_logs(&self, agent_id: &str) {
-        let manager = self.manager.lock().expect("mutex poisoned");
+        let manager = lock_mutex_recover(&self.manager);
         manager.clear_agent_logs(agent_id);
     }
 }

@@ -20,7 +20,7 @@ describe('sessionStore', () => {
     id: 'session-1',
     name: 'Test Session',
     projectPath: '/test/path',
-    createdAt: new Date('2026-01-17T10:00:00Z'),
+    createdAt: '2026-01-17T10:00:00Z',
     lastResumedAt: undefined,
     status: 'active' as SessionStatus,
     config: {
