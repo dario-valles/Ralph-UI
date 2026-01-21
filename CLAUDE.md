@@ -18,7 +18,7 @@ bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test",
 bun run test:run               # Run tests once
 bun run test:coverage          # With coverage report
 bun run e2e                    # E2E tests (Playwright)
-cd src-tauri && cargo test     # Rust backend tests (515+ tests)
+cd src-tauri && cargo test     # Rust backend tests (575+ tests)
 
 # Code Quality
 bun run lint                   # ESLint (strict, 0 warnings allowed)
@@ -41,7 +41,8 @@ bun run tauri build            # Production bundle
 ### Backend (src-tauri/)
 - **Tauri 2.0 + Rust** with tokio async runtime
 - **Command handlers** (`src/commands/`): 14 modules for IPC boundaries
-- **Database** (`src/database/`): SQLite with rusqlite, schema v7 with migrations
+- **File storage** (`src/file_storage/`): JSON files in `.ralph-ui/` for sessions, PRDs, chat
+- **Database** (`src/database/`): SQLite (legacy, being phased out)
 - **Git operations** (`src/git/`): git2-rs integration for branches, worktrees, commits
 - **Agent management** (`src/agents/`): Process spawning, rate limiting, log parsing
 - **Parallel orchestration** (`src/parallel/`): Pool, scheduler, worktree coordination
@@ -49,7 +50,7 @@ bun run tauri build            # Production bundle
 ### Data Flow
 1. React component → Zustand store + Tauri API wrapper
 2. `invoke()` IPC call → Rust command handler
-3. Handler accesses database/git/agents → returns typed response
+3. Handler accesses file storage/git/agents → returns typed response
 4. Store updates → React re-renders
 
 ## Key Patterns
@@ -106,13 +107,27 @@ Pages and their context requirements:
 
 Fully integrated: Claude Code, OpenCode, Cursor Agent, Codex CLI
 
-## Database
+## Data Storage
 
-SQLite with 7 tables: sessions, tasks, agents, agent_logs, prd_documents, prd_chat_sessions, projects. Schema migrations in `src-tauri/src/database/mod.rs`.
+### File-Based Storage (Primary)
+Data is stored in `.ralph-ui/` directories within each project for git-trackable collaboration:
+
+```
+{project}/.ralph-ui/
+├── sessions/{id}.json     # Session state with embedded tasks
+├── prds/{name}.json       # PRD documents with stories/progress
+├── chat/{id}.json         # Chat sessions with embedded messages
+└── .gitignore             # Excludes runtime files (agents/, *.lock)
+```
+
+All file operations use atomic writes (temp file + rename) for safety.
+
+### SQLite (Legacy)
+SQLite database in `src-tauri/src/database/` is being phased out. New features should use file storage.
 
 ## Testing
 
-- **Unit tests**: Vitest with jsdom, 80% coverage targets
+- **Unit tests**: Vitest with jsdom, 575+ tests, 80% coverage targets
 - **E2E tests**: Playwright (Chromium), 240+ tests
-- **Backend tests**: cargo test, 418+ tests
+- **Backend tests**: cargo test, 575+ tests
 - **Accessibility**: jest-axe integration
