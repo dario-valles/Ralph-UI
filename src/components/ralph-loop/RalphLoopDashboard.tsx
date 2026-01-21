@@ -168,10 +168,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   }, [activeExecutionId, loadLoopState, loadLoopMetrics, loadIterationHistory, loadPrdStatus, loadPrdStatusSilent, projectPath])
 
   const handleStartLoop = async () => {
-    console.log('[RalphLoop] handleStartLoop called', { prd, projectPath, effectiveAgent })
-
     if (!prd) {
-      console.error('[RalphLoop] Cannot start loop: PRD is null')
       return
     }
 
@@ -190,15 +187,10 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
       model: effectiveModel || undefined,
     }
 
-    console.log('[RalphLoop] Starting loop with request:', request)
-
     try {
-      console.log('[RalphLoop] Calling startLoop...')
-      const executionId = await startLoop(request)
-      console.log('[RalphLoop] Loop started successfully, executionId:', executionId)
-      console.log('[RalphLoop] activeExecutionId in store after start:', activeExecutionId)
-    } catch (err) {
-      console.error('[RalphLoop] Failed to start loop:', err)
+      await startLoop(request)
+    } catch {
+      // Error handled by store
     }
   }
 

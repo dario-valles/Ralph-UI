@@ -328,15 +328,11 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Start a Ralph loop execution
   startLoop: async (request: StartRalphLoopRequest) => {
-    console.log('[RalphLoopStore] startLoop called with request:', request)
     return asyncAction(
       set,
       async () => {
-        console.log('[RalphLoopStore] Calling ralphLoopApi.startLoop...')
         const executionId = await ralphLoopApi.startLoop(request)
-        console.log('[RalphLoopStore] Got executionId:', executionId)
         const executionState = await ralphLoopApi.getLoopState(executionId)
-        console.log('[RalphLoopStore] Got executionState:', executionState)
         return {
           activeExecutionId: executionId,
           executionState,

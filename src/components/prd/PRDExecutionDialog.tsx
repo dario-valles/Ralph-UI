@@ -71,8 +71,6 @@ export function PRDExecutionDialog({
 
     setExecuting(true)
     try {
-      console.log('[Ralph Loop] Converting PRD to Ralph format...', { prdId, config })
-
       // Get branch name from config or use default
       const branch = `ralph-${prd.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}`
 
@@ -89,17 +87,10 @@ export function PRDExecutionDialog({
         runLint: config.runLint,
         useWorktree,
       })
-      console.log('[Ralph Loop] PRD converted successfully with config:', {
-        agentType: config.agentType,
-        model: config.model,
-        maxIterations: config.maxIterations,
-        useWorktree,
-      })
 
       onOpenChange(false)
 
       // Navigate to Ralph Loop page with the project path
-      console.log('[Ralph Loop] Navigating to Ralph Loop page...')
       navigate(`/ralph-loop?project=${encodeURIComponent(prd.projectPath)}`)
     } catch (err) {
       console.error('[PRD Execution] Failed:', err)

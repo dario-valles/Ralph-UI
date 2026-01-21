@@ -53,7 +53,6 @@ export function AgentsPage() {
     try {
       const cleaned = await cleanupStaleAgents()
       if (cleaned.length > 0) {
-        console.log('[AgentsPage] Cleaned up stale agents:', cleaned)
         needsRefresh = true
       }
     } catch {

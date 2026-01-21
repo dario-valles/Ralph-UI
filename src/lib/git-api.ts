@@ -48,6 +48,14 @@ export interface FileDiff {
   deletions: number;
 }
 
+export interface MergeResult {
+  success: boolean;
+  message: string;
+  conflict_files: string[];
+  commit_id: string | null;
+  fast_forward: boolean;
+}
+
 // ========================================
 // GitHub Types
 // ========================================
@@ -233,6 +241,39 @@ export const gitApi = {
    */
   getWorkingDiff: async (repoPath: string): Promise<DiffInfo> => {
     return invoke("git_get_working_diff", { repoPath });
+  },
+
+  /**
+   * Merge a source branch into a target branch
+   */
+  mergeBranch: async (
+    repoPath: string,
+    sourceBranch: string,
+    targetBranch: string
+  ): Promise<MergeResult> => {
+    return invoke("git_merge_branch", { repoPath, sourceBranch, targetBranch });
+  },
+
+  /**
+   * Abort an ongoing merge
+   */
+  mergeAbort: async (repoPath: string): Promise<void> => {
+    return invoke("git_merge_abort", { repoPath });
+  },
+
+  /**
+   * Check for merge conflicts between two branches without merging
+   */
+  checkMergeConflicts: async (
+    repoPath: string,
+    sourceBranch: string,
+    targetBranch: string
+  ): Promise<string[]> => {
+    return invoke("git_check_merge_conflicts", {
+      repoPath,
+      sourceBranch,
+      targetBranch,
+    });
   },
 };
 

@@ -276,7 +276,8 @@ export function PRDPlanSidebar({
                   className="h-5 w-5 p-0 shrink-0"
                   title="Open file location"
                   onClick={() => {
-                    console.log('Open file:', path)
+                    // TODO: Implement file opening functionality
+                    void path
                   }}
                 >
                   <ExternalLink className="h-3 w-3" />

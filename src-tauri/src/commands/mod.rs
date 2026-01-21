@@ -32,8 +32,3 @@ pub use projects::*;
 pub use mission_control::*;
 pub use models::*;
 pub use ralph_loop::*;
-
-#[tauri::command]
-pub fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}

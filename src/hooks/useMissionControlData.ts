@@ -430,22 +430,6 @@ const TAURI_EVENTS = {
   AGENT_FAILED: 'agent:failed',
 } as const
 
-// Type for agent completion/failure events
-interface AgentCompletionEvent {
-  agentId: string
-  taskId: string
-  sessionId: string
-  exitCode: number | null
-}
-
-interface AgentFailedEvent {
-  agentId: string
-  taskId: string
-  sessionId: string
-  exitCode: number | null
-  error: string
-}
-
 /**
  * Hook to listen for Tauri events and trigger refreshes
  * This provides real-time updates when agent/task/session states change
@@ -504,17 +488,13 @@ export function useTauriEventListeners(onRefresh: () => void) {
     })
 
     // Register agent completed listener
-    registerListener(TAURI_EVENTS.AGENT_COMPLETED, (payload) => {
-      const event = payload as AgentCompletionEvent
-      console.log('[MissionControl] Agent completed:', event)
+    registerListener(TAURI_EVENTS.AGENT_COMPLETED, () => {
       // Trigger refresh to update UI
       onRefresh()
     })
 
     // Register agent failed listener
-    registerListener(TAURI_EVENTS.AGENT_FAILED, (payload) => {
-      const event = payload as AgentFailedEvent
-      console.log('[MissionControl] Agent failed:', event)
+    registerListener(TAURI_EVENTS.AGENT_FAILED, () => {
       // Trigger refresh to update UI
       onRefresh()
     })
@@ -545,15 +525,11 @@ export function useMissionControlRefresh(refreshAgents: () => Promise<void>) {
   const fetchSessions = useSessionStore(s => s.fetchSessions)
 
   const refreshAll = useCallback(async () => {
-    // Clean up stale agents
+    // Clean up stale agents (best-effort, don't fail on errors)
     try {
-      const cleaned = await cleanupStaleAgents()
-      if (cleaned.length > 0) {
-        console.log('[MissionControl] Cleaned up stale agents:', cleaned)
-      }
-    } catch (err) {
-      // Log but don't fail - cleanup is best-effort
-      console.debug('[MissionControl] Cleanup check:', err)
+      await cleanupStaleAgents()
+    } catch {
+      // Ignore errors - cleanup is best-effort
     }
 
     // Then refresh all data from stores

@@ -2,12 +2,14 @@
 //!
 //! These commands control the external Ralph loop that spawns fresh agent instances.
 
+use crate::commands::ConfigState;
 use crate::database::Database;
+use crate::models::AgentType;
 use crate::ralph_loop::{
-    ConfigManager, ErrorStrategy, ExecutionSnapshot, PrdExecutor, PrdStatus, ProgressSummary,
-    ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig, RalphLoopMetrics,
-    RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory,
-    RetryConfig, SnapshotStore,
+    ConfigManager, ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
+    ProgressSummary, ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig,
+    RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
+    RalphStory, RetryConfig, SnapshotStore,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -303,9 +305,8 @@ pub async fn start_ralph_loop(
     ralph_state: State<'_, RalphLoopManagerState>,
     agent_manager_state: State<'_, crate::AgentManagerState>,
     db: State<'_, Mutex<Database>>,
+    config_state: State<'_, ConfigState>,
 ) -> Result<String, String> {
-    use crate::models::AgentType;
-
     // Parse agent type
     let agent_type = match request.agent_type.to_lowercase().as_str() {
         "claude" => AgentType::Claude,
@@ -314,6 +315,38 @@ pub async fn start_ralph_loop(
         "codex" => AgentType::Codex,
         _ => return Err(format!("Unknown agent type: {}", request.agent_type)),
     };
+
+    // Get fallback config from user settings
+    let fallback_config = config_state.get_config().ok().and_then(|config| {
+        if config.fallback.enabled {
+            // Build fallback chain: primary agent + optional fallback agent
+            let mut fallback_chain = vec![agent_type.clone()];
+            if let Some(ref fallback_str) = config.fallback.fallback_agent {
+                let fallback_agent = match fallback_str.to_lowercase().as_str() {
+                    "claude" => Some(AgentType::Claude),
+                    "opencode" => Some(AgentType::Opencode),
+                    "cursor" => Some(AgentType::Cursor),
+                    "codex" => Some(AgentType::Codex),
+                    _ => None,
+                };
+                if let Some(agent) = fallback_agent {
+                    if agent != agent_type {
+                        fallback_chain.push(agent);
+                    }
+                }
+            }
+            Some(FallbackChainConfig {
+                fallback_chain,
+                test_primary_recovery: true,
+                recovery_test_interval: 5,
+                base_backoff_ms: config.fallback.base_backoff_ms,
+                max_backoff_ms: config.fallback.max_backoff_ms,
+                enabled: true,
+            })
+        } else {
+            None
+        }
+    });
 
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
@@ -328,7 +361,7 @@ pub async fn start_ralph_loop(
         use_worktree: request.use_worktree.unwrap_or(true), // Use worktree for isolation by default
         retry_config: RetryConfig::default(),
         error_strategy: ErrorStrategy::default(),
-        fallback_config: None, // TODO: Add frontend UI to configure this
+        fallback_config,
         agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
     };
 
@@ -582,10 +615,10 @@ pub async fn get_ralph_loop_current_agent(
 ) -> Result<Option<String>, String> {
     // Read from snapshot (doesn't require locking orchestrator)
     if let Some(snapshot) = ralph_state.get_snapshot(&execution_id) {
-        println!("[DEBUG] get_ralph_loop_current_agent: returning {:?}", snapshot.current_agent_id);
+        log::debug!("get_ralph_loop_current_agent: returning {:?}", snapshot.current_agent_id);
         return Ok(snapshot.current_agent_id);
     }
-    println!("[DEBUG] get_ralph_loop_current_agent: NO SNAPSHOT for {}", execution_id);
+    log::debug!("get_ralph_loop_current_agent: NO SNAPSHOT for {}", execution_id);
 
     // Fallback: check if execution exists
     let exists = {

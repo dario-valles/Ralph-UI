@@ -62,7 +62,7 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
 
     // Handle empty descriptions by using title as fallback
     let description = if raw_description.trim().is_empty() {
-        eprintln!("[Parser Warning] Task '{}' has no description, using title as prompt", title);
+        log::warn!("[Parser] Task '{}' has no description, using title as prompt", title);
         format!("Implement: {}", title)
     } else {
         raw_description.to_string()

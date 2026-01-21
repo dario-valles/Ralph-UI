@@ -101,15 +101,6 @@ export function hasPty(terminalId: string): boolean {
 }
 
 /**
- * Clean up all PTY instances
- */
-export function cleanupAllTerminals(): void {
-  for (const id of ptyInstances.keys()) {
-    killTerminal(id)
-  }
-}
-
-/**
  * Decode Uint8Array to string
  */
 export function decodeTerminalData(data: Uint8Array): string {

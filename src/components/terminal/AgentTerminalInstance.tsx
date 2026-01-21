@@ -56,9 +56,7 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
     let unlistenExit: (() => void) | null = null
 
     // Get the PTY ID for this agent
-    console.log('[AgentTerminal] Getting PTY ID for agent:', targetAgentId)
     const ptyId = await getAgentPtyId(targetAgentId)
-    console.log('[AgentTerminal] Got PTY ID:', ptyId)
 
     if (!ptyId) {
       if (isTransition) {
@@ -124,17 +122,10 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
       if (!isTransition) {
         terminal.write('\x1b[90mConnecting to agent terminal...\x1b[0m\r\n')
       }
-      console.log('[AgentTerminal] PTY not found locally, listening for agent-pty-data events for agent:', targetAgentId)
 
       // Listen for PTY data events
       unlisten = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
-        if (!isTransition) {
-          console.log('[AgentTerminal] Received agent-pty-data event:', event.payload.agentId, 'bytes:', event.payload.data.length)
-        }
         if (event.payload.agentId === targetAgentId) {
-          if (!isTransition) {
-            console.log('[AgentTerminal] Event matches our agentId, writing to terminal')
-          }
           const data = new Uint8Array(event.payload.data)
           terminal.write(decodeTerminalData(data))
         }

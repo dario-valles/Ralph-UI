@@ -7,26 +7,7 @@ import { invoke } from './invoke'
 export type { Agent, AgentStatus, LogEntry }
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 
-export interface CreateAgentParams {
-  id: string
-  sessionId: string
-  taskId: string
-  status: AgentStatus
-  processId: number | null
-  worktreePath: string
-  branch: string
-  iterationCount: number
-  tokens: number
-  cost: number
-  logs: LogEntry[]
-  subagents: Agent[]
-}
-
 // Agent CRUD operations
-
-export async function createAgent(agent: CreateAgentParams): Promise<void> {
-  return invoke('create_agent', { agent })
-}
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
   return invoke('get_agent', { agentId })
@@ -55,17 +36,6 @@ export async function updateAgentMetrics(
   iterationCount: number,
 ): Promise<void> {
   return invoke('update_agent_metrics', { agentId, tokens, cost, iterationCount })
-}
-
-export async function updateAgentProcessId(
-  agentId: string,
-  processId: number | null,
-): Promise<void> {
-  return invoke('update_agent_process_id', { agentId, processId })
-}
-
-export async function deleteAgent(agentId: string): Promise<void> {
-  return invoke('delete_agent', { agentId })
 }
 
 export async function addAgentLog(agentId: string, log: LogEntry): Promise<void> {
@@ -122,22 +92,6 @@ export async function getAgentPtyHistory(agentId: string): Promise<Uint8Array> {
 }
 
 /**
- * Register a PTY association for an agent
- * Called after spawning a PTY for an agent on the frontend
- */
-export async function registerAgentPty(agentId: string, ptyId: string): Promise<void> {
-  return invoke('register_agent_pty', { agentId, ptyId })
-}
-
-/**
- * Unregister a PTY association for an agent
- * Called when the PTY exits or the agent stops
- */
-export async function unregisterAgentPty(agentId: string): Promise<void> {
-  return invoke('unregister_agent_pty', { agentId })
-}
-
-/**
  * Process PTY data from an agent
  * Called to forward PTY output to the backend for log parsing and history storage
  */
@@ -150,38 +104,6 @@ export async function processAgentPtyData(agentId: string, data: Uint8Array): Pr
  */
 export async function notifyAgentPtyExit(agentId: string, exitCode: number): Promise<void> {
   return invoke('notify_agent_pty_exit', { agentId, exitCode })
-}
-
-/**
- * Command line info for spawning an agent in PTY mode
- */
-export interface AgentCommandLine {
-  program: string
-  args: string[]
-  cwd: string
-}
-
-/**
- * Get the command line for spawning an agent in PTY mode
- */
-export async function getAgentCommandLine(
-  agentType: string,
-  taskId: string,
-  worktreePath: string,
-  branch: string,
-  maxIterations: number,
-  prompt?: string,
-  model?: string
-): Promise<AgentCommandLine> {
-  return invoke('get_agent_command_line', {
-    agentType,
-    taskId,
-    worktreePath,
-    branch,
-    maxIterations,
-    prompt,
-    model,
-  })
 }
 
 // Helper functions

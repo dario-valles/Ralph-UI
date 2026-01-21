@@ -219,7 +219,7 @@ impl ParserState {
         if let Some(title) = self.current_task_title.take() {
             // Handle empty descriptions by using title as fallback
             let description = if self.current_task_description.trim().is_empty() {
-                eprintln!("[Parser Warning] Task '{}' has no description, using title as prompt", title);
+                log::warn!("[Parser] Task '{}' has no description, using title as prompt", title);
                 format!("Implement: {}", title)
             } else {
                 self.current_task_description.trim().to_string()

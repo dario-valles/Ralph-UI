@@ -487,7 +487,6 @@ impl AgentManager {
         let program = command.get_program().to_string_lossy().to_string();
         let args: Vec<String> = command.get_args().map(|s| s.to_string_lossy().to_string()).collect();
         log::info!("[AgentManager] Executing command: {} {:?}", program, args);
-        println!("[DEBUG] Executing command: {} {:?}", program, args);
 
         let mut child = match command
             .stdin(Stdio::null())  // Prevent stdin issues causing early exit
@@ -523,8 +522,7 @@ impl AgentManager {
         let is_pty_mode = config.spawn_mode == AgentSpawnMode::Pty;
         if is_pty_mode {
             log::info!("[AgentManager] PTY mode: registering pseudo-PTY for agent {}", agent_id);
-            println!("[DEBUG] PTY mode: registering pseudo-PTY for agent {}", agent_id);
-            println!("[DEBUG] pty_data_tx is_some: {}", self.pty_data_tx.is_some());
+            log::debug!("[AgentManager] pty_data_tx is_some: {}", self.pty_data_tx.is_some());
             self.register_pty(agent_id, agent_id);
         }
 
@@ -535,34 +533,31 @@ impl AgentManager {
         ));
 
         // Give the process a moment to start (helps detect immediate failures)
-        println!("[DEBUG] Waiting 100ms for process to start...");
+        log::debug!("[AgentManager] Waiting 100ms for process to start...");
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Quick check - see if process already exited (helps diagnose immediate failures)
-        println!("[DEBUG] Checking if process exited immediately...");
+        log::debug!("[AgentManager] Checking if process exited immediately...");
         let process_exited_immediately = {
             let mut processes = lock_mutex_recover(&self.processes);
             if let Some(child) = processes.get_mut(agent_id) {
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         let exit_code = status.code().unwrap_or(-1);
-                        println!("[DEBUG] Process {} exited immediately with code {}", pid, exit_code);
                         log::error!("[AgentManager] Process {} exited immediately with code {}", pid, exit_code);
                         Some(exit_code)
                     }
                     Ok(None) => {
-                        println!("[DEBUG] Process {} is running (did not exit immediately)", pid);
                         log::info!("[AgentManager] Process {} is running", pid);
                         None
                     }
                     Err(e) => {
-                        println!("[DEBUG] Failed to check process status: {}", e);
                         log::error!("[AgentManager] Failed to check process status: {}", e);
                         None
                     }
                 }
             } else {
-                println!("[DEBUG] Process not found in processes map!");
+                log::error!("[AgentManager] Process not found in processes map!");
                 None
             }
         };
@@ -604,9 +599,9 @@ impl AgentManager {
             let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
             let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
             let agent_id_clone = agent_id.to_string();
-            println!("[DEBUG] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}", agent_id, pty_data_tx.is_some());
+            log::debug!("[AgentManager] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}", agent_id, pty_data_tx.is_some());
             thread::spawn(move || {
-                println!("[DEBUG] Stdout reader thread started for agent {}", agent_id_clone);
+                log::debug!("[AgentManager] Stdout reader thread started for agent {}", agent_id_clone);
                 let reader = BufReader::new(stdout);
                 for line in reader.lines() {
                     match line {
@@ -667,7 +662,6 @@ impl AgentManager {
                         }
                     }
                 }
-                println!("[DEBUG] Stdout reader finished for agent {}", agent_id_clone);
                 log::debug!("[Agent {}] stdout reader finished", agent_id_clone);
             });
         }
@@ -682,15 +676,14 @@ impl AgentManager {
             // Create a new detector for the thread (uses static patterns internally)
             let rate_limit_detector = RateLimitDetector::new();
             let agent_id_clone = agent_id.to_string();
-            println!("[DEBUG] Spawning stderr reader thread for agent {}", agent_id);
+            log::debug!("[AgentManager] Spawning stderr reader thread for agent {}", agent_id);
             thread::spawn(move || {
-                println!("[DEBUG] Stderr reader thread started for agent {}", agent_id_clone);
+                log::debug!("[AgentManager] Stderr reader thread started for agent {}", agent_id_clone);
                 let reader = BufReader::new(stderr);
                 for line in reader.lines() {
                     match line {
                         Ok(line) => {
                             // Log stderr as warnings (they're often important)
-                            println!("[DEBUG] Agent {} stderr: {}", agent_id_clone, line);
                             log::warn!("[Agent {}] stderr: {}", agent_id_clone, line);
 
                             // For PTY mode, also write to pty_history (stderr in red)
@@ -752,7 +745,6 @@ impl AgentManager {
                         }
                     }
                 }
-                println!("[DEBUG] Stderr reader finished for agent {}", agent_id_clone);
                 log::debug!("[Agent {}] stderr reader finished", agent_id_clone);
             });
         }
