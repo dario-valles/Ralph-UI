@@ -10,6 +10,7 @@ import { SettingsPage } from './components/settings/SettingsPage'
 import { PRDList } from './components/prd/PRDList'
 import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
+import { PRDFileEditor } from './components/prd/PRDFileEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { RalphLoopPage } from './components/ralph-loop'
 import { ToastContainer } from './components/ui/toast'
@@ -35,6 +36,7 @@ function App() {
             <Route path="prds" element={<PRDList />} />
             <Route path="prds/new" element={<PRDTemplateSelector />} />
             <Route path="prds/chat" element={<PRDChatPanel />} />
+            <Route path="prds/file" element={<PRDFileEditor />} />
             <Route path="prds/:id" element={<PRDEditor />} />
             <Route path="ralph-loop" element={<RalphLoopPage />} />
             <Route path="settings" element={<SettingsPage />} />

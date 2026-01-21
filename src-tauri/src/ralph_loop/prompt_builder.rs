@@ -11,32 +11,101 @@
 //! - Project context section
 //! - Explicit rules and boundaries
 //! - Protected files list
+//!
+//! File locations:
+//! - New format: `.ralph-ui/prds/{prd_name}-prompt.md`
+//! - Legacy format: `.ralph/prompt.md` (for backwards compatibility)
 
 use super::RalphLoopConfig;
 use std::path::{Path, PathBuf};
 
 /// Prompt builder for Ralph loop iterations
+///
+/// Supports two path patterns:
+/// - With prd_name: `.ralph-ui/prds/{prd_name}-prompt.md` (new multi-PRD format)
+/// - Without prd_name: `.ralph/prompt.md` (legacy single-PRD format)
 pub struct PromptBuilder {
-    /// Path to the .ralph directory
-    ralph_dir: PathBuf,
+    /// Base project path
+    project_path: PathBuf,
+    /// Optional PRD name for multi-PRD support
+    prd_name: Option<String>,
 }
 
 impl PromptBuilder {
-    /// Create a new prompt builder
-    pub fn new(ralph_dir: &Path) -> Self {
+    /// Create a new prompt builder with the new path format
+    ///
+    /// # Arguments
+    /// * `project_path` - Path to the project root
+    /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
         Self {
-            ralph_dir: ralph_dir.to_path_buf(),
+            project_path: project_path.to_path_buf(),
+            prd_name: Some(prd_name.to_string()),
+        }
+    }
+
+    /// Create a prompt builder for legacy .ralph/prompt.md format
+    ///
+    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
+    /// The `ralph_dir` parameter should be the `.ralph` directory path.
+    pub fn new(ralph_dir: &Path) -> Self {
+        // Extract project path by going up from .ralph directory
+        let project_path = ralph_dir
+            .parent()
+            .unwrap_or(ralph_dir)
+            .to_path_buf();
+        Self {
+            project_path,
+            prd_name: None,
         }
     }
 
     /// Get the path to prompt.md
     pub fn prompt_path(&self) -> PathBuf {
-        self.ralph_dir.join("prompt.md")
+        match &self.prd_name {
+            Some(name) => self.project_path
+                .join(".ralph-ui")
+                .join("prds")
+                .join(format!("{}-prompt.md", name)),
+            None => self.project_path.join(".ralph").join("prompt.md"),
+        }
+    }
+
+    /// Get the directory containing the prompt file
+    fn prompt_dir(&self) -> PathBuf {
+        match &self.prd_name {
+            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
+            None => self.project_path.join(".ralph"),
+        }
+    }
+
+    /// Get the relative path to the PRD file (for prompt generation)
+    fn prd_file_path(&self) -> String {
+        match &self.prd_name {
+            Some(name) => format!(".ralph-ui/prds/{}.json", name),
+            None => ".ralph/prd.json".to_string(),
+        }
+    }
+
+    /// Get the relative path to the progress file (for prompt generation)
+    fn progress_file_path(&self) -> String {
+        match &self.prd_name {
+            Some(name) => format!(".ralph-ui/prds/{}-progress.txt", name),
+            None => ".ralph/progress.txt".to_string(),
+        }
+    }
+
+    /// Get the relative path to the prompt file (for prompt generation)
+    fn prompt_file_path(&self) -> String {
+        match &self.prd_name {
+            Some(name) => format!(".ralph-ui/prds/{}-prompt.md", name),
+            None => ".ralph/prompt.md".to_string(),
+        }
     }
 
     /// Generate the static prompt.md file
     ///
-    /// This prompt is written to .ralph/prompt.md and can be customized by users.
+    /// This prompt is written to the appropriate location and can be customized by users.
     /// The agent reads this file to understand its task.
     ///
     /// Enhanced with Ralphy CLI patterns:
@@ -45,9 +114,10 @@ impl PromptBuilder {
     /// - Protected files list (boundaries)
     /// - Focus directive for single story
     pub fn generate_prompt(&self, config: &RalphLoopConfig) -> Result<(), String> {
-        // Ensure .ralph directory exists
-        std::fs::create_dir_all(&self.ralph_dir)
-            .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
+        // Ensure prompt directory exists
+        let prompt_dir = self.prompt_dir();
+        std::fs::create_dir_all(&prompt_dir)
+            .map_err(|e| format!("Failed to create prompt directory {:?}: {}", prompt_dir, e))?;
 
         let completion_promise = config
             .completion_promise
@@ -61,6 +131,11 @@ impl PromptBuilder {
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown Project");
+
+        // Get the file paths (either new or legacy format)
+        let prd_path = self.prd_file_path();
+        let progress_path = self.progress_file_path();
+        let prompt_path = self.prompt_file_path();
 
         let prompt = format!(
             r#"# Ralph Wiggum Loop - Task Instructions
@@ -87,7 +162,7 @@ Your context is fresh - you have no memory of previous iterations. All context i
 
 These files are managed by the Ralph loop - do not edit them except as instructed:
 
-- `.ralph/prd.json` - Only update the `passes` field when a story is complete. Do NOT add new stories.
+- `{prd_path}` - Only update the `passes` field when a story is complete. Do NOT add new stories.
 - `.ralph-ui/prds/*.md` - Original PRD documents (read-only reference)
 - `package-lock.json` / `yarn.lock` / `bun.lock` - Only via package manager commands
 - `.git/` directory - Never modify git internals
@@ -96,17 +171,17 @@ These files are managed by the Ralph loop - do not edit them except as instructe
 ## Discovered Work
 
 If you discover additional work that needs to be done beyond the current stories:
-- Document it in `.ralph/progress.txt` as a learning/note
-- Do NOT add new stories to prd.json - this will be handled by the human operator
+- Document it in `{progress_path}` as a learning/note
+- Do NOT add new stories to the PRD JSON - this will be handled by the human operator
 - Focus on completing the existing story first
 
 ## Your Task
 
-1. **Read the PRD file** at `.ralph/prd.json`
+1. **Read the PRD file** at `{prd_path}`
    - This contains the list of stories/tasks with their pass/fail status
    - Each story has: id, title, acceptance criteria, and a `passes` boolean
 
-2. **Read the progress file** at `.ralph/progress.txt`
+2. **Read the progress file** at `{progress_path}`
    - This contains learnings from previous iterations
    - Use these learnings to avoid repeating mistakes
    - Add your own learnings for future iterations
@@ -129,7 +204,7 @@ If you discover additional work that needs to be done beyond the current stories
 6. **Verify your implementation**
 {verification_steps}
 
-7. **Update progress.txt with learnings**
+7. **Update {progress_path} with learnings**
    - What patterns did you discover?
    - What gotchas should future iterations know about?
    - Keep it concise but useful
@@ -138,7 +213,7 @@ If you discover additional work that needs to be done beyond the current stories
    - Use a clear commit message referencing the story
    - Example: "feat(story-1): Add user authentication"
 
-9. **Update prd.json**
+9. **Update the PRD JSON**
    - Set `passes: true` for the completed story
    - Be honest - only mark as passing if it truly meets acceptance criteria
 
@@ -148,9 +223,9 @@ If you discover additional work that needs to be done beyond the current stories
 
 ## File Locations
 
-- PRD: `.ralph/prd.json`
-- Progress: `.ralph/progress.txt`
-- This prompt: `.ralph/prompt.md`
+- PRD: `{prd_path}`
+- Progress: `{progress_path}`
+- This prompt: `{prompt_path}`
 
 ---
 
@@ -161,7 +236,10 @@ Focus ONLY on one story. Make minimal changes. Be honest about completion.
             working_dir = config.project_path.display(),
             agent_type = format!("{:?}", config.agent_type),
             verification_steps = Self::build_verification_steps(config),
-            completion_promise = completion_promise
+            completion_promise = completion_promise,
+            prd_path = prd_path,
+            progress_path = progress_path,
+            prompt_path = prompt_path
         );
 
         std::fs::write(self.prompt_path(), prompt)
@@ -199,10 +277,11 @@ Focus ONLY on one story. Make minimal changes. Be honest about completion.
         };
 
         // Add iteration context
+        let progress_path = self.progress_file_path();
         let prompt = format!(
             "{}\n\n---\n\n## Current Iteration: {}\n\nThis is iteration {} of the Ralph loop. \
-             Remember: your context is fresh. Read `.ralph/progress.txt` for learnings from previous iterations.\n",
-            base_prompt, iteration, iteration
+             Remember: your context is fresh. Read `{}` for learnings from previous iterations.\n",
+            base_prompt, iteration, iteration, progress_path
         );
 
         Ok(prompt)
@@ -210,25 +289,27 @@ Focus ONLY on one story. Make minimal changes. Be honest about completion.
 
     /// Get the default prompt (used if prompt.md doesn't exist)
     fn get_default_prompt(&self) -> String {
-        r#"# Ralph Wiggum Loop - Task Instructions
+        let prd_path = self.prd_file_path();
+        let progress_path = self.progress_file_path();
+
+        format!(r#"# Ralph Wiggum Loop - Task Instructions
 
 You are working on a PRD using the Ralph Wiggum Loop pattern.
 
 ## Your Task
 
-1. Read `.ralph/prd.json` for the task list
-2. Read `.ralph/progress.txt` for learnings from previous iterations
+1. Read `{prd}` for the task list
+2. Read `{progress}` for learnings from previous iterations
 3. Pick the highest priority story where `passes: false`
 4. Implement ONE story only
 5. Run tests to verify
-6. Update progress.txt with learnings
+6. Update progress file with learnings
 7. Commit changes
-8. Update prd.json (set passes: true for completed story)
+8. Update PRD JSON (set passes: true for completed story)
 9. If ALL stories pass, output: <promise>COMPLETE</promise>
 
 Now begin!
-"#
-        .to_string()
+"#, prd = prd_path, progress = progress_path)
     }
 
     /// Check if a custom prompt exists
@@ -248,9 +329,10 @@ Now begin!
 
     /// Write a custom prompt
     pub fn write_prompt(&self, content: &str) -> Result<(), String> {
-        // Ensure .ralph directory exists
-        std::fs::create_dir_all(&self.ralph_dir)
-            .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
+        // Ensure prompt directory exists
+        let prompt_dir = self.prompt_dir();
+        std::fs::create_dir_all(&prompt_dir)
+            .map_err(|e| format!("Failed to create prompt directory {:?}: {}", prompt_dir, e))?;
 
         std::fs::write(self.prompt_path(), content)
             .map_err(|e| format!("Failed to write prompt.md: {}", e))

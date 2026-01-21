@@ -46,7 +46,9 @@ use tokio::sync::mpsc;
 /// The agent works directly in `project_path`:
 /// - If `branch` is specified, commits happen on that branch
 /// - If `use_worktree` is true, a dedicated worktree is created for isolation
-/// - Progress is tracked in files (.ralph/prd.json, .ralph/progress.txt)
+/// - Progress is tracked in files:
+///   - With prd_name: `.ralph-ui/prds/{prd_name}.json`, `.ralph-ui/prds/{prd_name}-progress.txt`
+///   - Without prd_name (legacy): `.ralph/prd.json`, `.ralph/progress.txt`
 /// - Git history provides persistent memory across iterations
 #[derive(Debug, Clone)]
 pub struct RalphLoopConfig {
@@ -81,6 +83,11 @@ pub struct RalphLoopConfig {
     /// Timeout in seconds for each agent iteration (default: 1800 = 30 minutes)
     /// Set to 0 for no timeout (wait indefinitely)
     pub agent_timeout_secs: u64,
+    /// PRD name for multi-PRD support (e.g., "my-feature-a1b2c3d4")
+    ///
+    /// When set, PRD files are stored in `.ralph-ui/prds/{prd_name}.json`.
+    /// When None, the legacy `.ralph/prd.json` path is used.
+    pub prd_name: Option<String>,
 }
 
 impl Default for RalphLoopConfig {
@@ -100,6 +107,7 @@ impl Default for RalphLoopConfig {
             error_strategy: ErrorStrategy::default(),
             fallback_config: None,
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
+            prd_name: None,
         }
     }
 }
@@ -258,7 +266,6 @@ impl RalphLoopOrchestrator {
     /// Create a new Ralph Loop orchestrator
     pub fn new(config: RalphLoopConfig) -> Self {
         let execution_id = uuid::Uuid::new_v4().to_string();
-        let ralph_dir = config.project_path.join(".ralph");
         let working_path = config.project_path.clone();
 
         let completion_promise = config
@@ -270,10 +277,31 @@ impl RalphLoopOrchestrator {
         let fallback_orchestrator = config.fallback_config.clone().map(FallbackOrchestrator::new);
         let active_agent_type = config.agent_type.clone();
 
+        // Create executors with either new (.ralph-ui/prds/) or legacy (.ralph/) paths
+        let (prd_executor, progress_tracker, prompt_builder) = match &config.prd_name {
+            Some(name) => {
+                // New multi-PRD format: .ralph-ui/prds/{prd_name}.*
+                (
+                    PrdExecutor::new_with_name(&config.project_path, name),
+                    ProgressTracker::new_with_name(&config.project_path, name),
+                    PromptBuilder::new_with_name(&config.project_path, name),
+                )
+            }
+            None => {
+                // Legacy single-PRD format: .ralph/*
+                let ralph_dir = config.project_path.join(".ralph");
+                (
+                    PrdExecutor::new(&ralph_dir),
+                    ProgressTracker::new(&ralph_dir),
+                    PromptBuilder::new(&ralph_dir),
+                )
+            }
+        };
+
         Self {
-            prd_executor: PrdExecutor::new(&ralph_dir),
-            progress_tracker: ProgressTracker::new(&ralph_dir),
-            prompt_builder: PromptBuilder::new(&ralph_dir),
+            prd_executor,
+            progress_tracker,
+            prompt_builder,
             completion_detector: CompletionDetector::new(&completion_promise),
             config,
             execution_id,
@@ -378,20 +406,19 @@ impl RalphLoopOrchestrator {
         self.current_agent_id.as_deref()
     }
 
-    /// Initialize the Ralph loop (create .ralph directory and files if needed)
+    /// Initialize the Ralph loop (create directories and files if needed)
+    ///
+    /// Directory and file locations depend on whether `prd_name` is set in config:
+    /// - With prd_name: `.ralph-ui/prds/{prd_name}.json`, etc.
+    /// - Without prd_name (legacy): `.ralph/prd.json`, etc.
     pub fn initialize(&mut self, prd: &RalphPrd) -> Result<(), String> {
-        // Ensure .ralph directory exists
-        let ralph_dir = self.config.project_path.join(".ralph");
-        std::fs::create_dir_all(&ralph_dir)
-            .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
-
-        // Write initial prd.json
+        // Write initial PRD JSON (directory creation is handled by write_prd)
         self.prd_executor.write_prd(prd)?;
 
-        // Initialize progress.txt
+        // Initialize progress file
         self.progress_tracker.initialize()?;
 
-        // Generate initial prompt.md
+        // Generate initial prompt file
         self.prompt_builder.generate_prompt(&self.config)?;
 
         self.state = RalphLoopState::Idle;
@@ -1118,30 +1145,78 @@ impl RalphLoopOrchestrator {
             );
         }
 
-        // Always sync .ralph/ directory to worktree (may have updates)
-        let src_ralph_dir = self.config.project_path.join(".ralph");
-        let dst_ralph_dir = worktree_path.join(".ralph");
+        // Sync PRD files to worktree based on prd_name setting
+        if let Some(ref prd_name) = self.config.prd_name {
+            // New format: sync .ralph-ui/prds/ directory
+            let src_prds_dir = self.config.project_path.join(".ralph-ui").join("prds");
+            let dst_prds_dir = worktree_path.join(".ralph-ui").join("prds");
 
-        if src_ralph_dir.exists() {
-            // Remove old .ralph dir in worktree and copy fresh version
-            if dst_ralph_dir.exists() {
-                std::fs::remove_dir_all(&dst_ralph_dir)
-                    .map_err(|e| format!("Failed to remove old .ralph directory: {}", e))?;
+            if src_prds_dir.exists() {
+                // Ensure .ralph-ui/prds exists in worktree
+                std::fs::create_dir_all(&dst_prds_dir)
+                    .map_err(|e| format!("Failed to create .ralph-ui/prds directory: {}", e))?;
+
+                // Copy PRD-specific files (only for this PRD, not all)
+                for ext in &["json", "txt", "md"] {
+                    let filename = if *ext == "json" {
+                        format!("{}.{}", prd_name, ext)
+                    } else if *ext == "txt" {
+                        format!("{}-progress.{}", prd_name, ext)
+                    } else {
+                        format!("{}-prompt.{}", prd_name, ext)
+                    };
+                    let src_file = src_prds_dir.join(&filename);
+                    let dst_file = dst_prds_dir.join(&filename);
+
+                    if src_file.exists() {
+                        std::fs::copy(&src_file, &dst_file)
+                            .map_err(|e| format!("Failed to copy {}: {}", filename, e))?;
+                    }
+                }
+                log::info!("[RalphLoop] Synced .ralph-ui/prds/ files to worktree");
             }
-            Self::copy_dir_recursive(&src_ralph_dir, &dst_ralph_dir)
-                .map_err(|e| format!("Failed to copy .ralph directory: {}", e))?;
-            log::info!("[RalphLoop] Synced .ralph directory to worktree");
+        } else {
+            // Legacy format: sync .ralph/ directory
+            let src_ralph_dir = self.config.project_path.join(".ralph");
+            let dst_ralph_dir = worktree_path.join(".ralph");
+
+            if src_ralph_dir.exists() {
+                // Remove old .ralph dir in worktree and copy fresh version
+                if dst_ralph_dir.exists() {
+                    std::fs::remove_dir_all(&dst_ralph_dir)
+                        .map_err(|e| format!("Failed to remove old .ralph directory: {}", e))?;
+                }
+                Self::copy_dir_recursive(&src_ralph_dir, &dst_ralph_dir)
+                    .map_err(|e| format!("Failed to copy .ralph directory: {}", e))?;
+                log::info!("[RalphLoop] Synced .ralph directory to worktree");
+            }
         }
 
         // Update working path and reinitialize components
         self.worktree_path = Some(worktree_path.clone());
         self.working_path = worktree_path.clone();
 
-        // Reinitialize prd_executor, progress_tracker, prompt_builder with new path
-        let ralph_dir = worktree_path.join(".ralph");
-        self.prd_executor = PrdExecutor::new(&ralph_dir);
-        self.progress_tracker = ProgressTracker::new(&ralph_dir);
-        self.prompt_builder = PromptBuilder::new(&ralph_dir);
+        // Reinitialize executors with new worktree path
+        let (prd_executor, progress_tracker, prompt_builder) = match &self.config.prd_name {
+            Some(name) => {
+                (
+                    PrdExecutor::new_with_name(&worktree_path, name),
+                    ProgressTracker::new_with_name(&worktree_path, name),
+                    PromptBuilder::new_with_name(&worktree_path, name),
+                )
+            }
+            None => {
+                let ralph_dir = worktree_path.join(".ralph");
+                (
+                    PrdExecutor::new(&ralph_dir),
+                    ProgressTracker::new(&ralph_dir),
+                    PromptBuilder::new(&ralph_dir),
+                )
+            }
+        };
+        self.prd_executor = prd_executor;
+        self.progress_tracker = progress_tracker;
+        self.prompt_builder = prompt_builder;
 
         // Store the execution branch (different from the base PRD branch)
         self.config.branch = Some(execution_branch);

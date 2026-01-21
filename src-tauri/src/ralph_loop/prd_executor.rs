@@ -2,27 +2,72 @@
 //!
 //! This module handles reading and writing prd.json files.
 //! The PRD file is the source of truth for what tasks need to be done.
+//!
+//! File locations:
+//! - New format: `.ralph-ui/prds/{prd_name}.json`
+//! - Legacy format: `.ralph/prd.json` (for backwards compatibility)
 
 use super::types::{PrdStatus, RalphPrd, RalphStory};
 use std::path::{Path, PathBuf};
 
-/// PRD file executor for reading/writing .ralph/prd.json
+/// PRD file executor for reading/writing PRD JSON files
+///
+/// Supports two path patterns:
+/// - With prd_name: `.ralph-ui/prds/{prd_name}.json` (new multi-PRD format)
+/// - Without prd_name: `.ralph/prd.json` (legacy single-PRD format)
 pub struct PrdExecutor {
-    /// Path to the .ralph directory
-    ralph_dir: PathBuf,
+    /// Base project path
+    project_path: PathBuf,
+    /// Optional PRD name for multi-PRD support
+    prd_name: Option<String>,
 }
 
 impl PrdExecutor {
-    /// Create a new PRD executor
-    pub fn new(ralph_dir: &Path) -> Self {
+    /// Create a new PRD executor with the new path format
+    ///
+    /// # Arguments
+    /// * `project_path` - Path to the project root
+    /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
         Self {
-            ralph_dir: ralph_dir.to_path_buf(),
+            project_path: project_path.to_path_buf(),
+            prd_name: Some(prd_name.to_string()),
+        }
+    }
+
+    /// Create a PRD executor for legacy .ralph/prd.json format
+    ///
+    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
+    /// The `ralph_dir` parameter should be the `.ralph` directory path.
+    pub fn new(ralph_dir: &Path) -> Self {
+        // Extract project path by going up from .ralph directory
+        let project_path = ralph_dir
+            .parent()
+            .unwrap_or(ralph_dir)
+            .to_path_buf();
+        Self {
+            project_path,
+            prd_name: None,
         }
     }
 
     /// Get the path to prd.json
     pub fn prd_path(&self) -> PathBuf {
-        self.ralph_dir.join("prd.json")
+        match &self.prd_name {
+            Some(name) => self.project_path
+                .join(".ralph-ui")
+                .join("prds")
+                .join(format!("{}.json", name)),
+            None => self.project_path.join(".ralph").join("prd.json"),
+        }
+    }
+
+    /// Get the directory containing the PRD file
+    fn prd_dir(&self) -> PathBuf {
+        match &self.prd_name {
+            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
+            None => self.project_path.join(".ralph"),
+        }
     }
 
     /// Check if a PRD file exists
@@ -47,9 +92,10 @@ impl PrdExecutor {
 
     /// Write the PRD to disk
     pub fn write_prd(&self, prd: &RalphPrd) -> Result<(), String> {
-        // Ensure .ralph directory exists
-        std::fs::create_dir_all(&self.ralph_dir)
-            .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
+        // Ensure PRD directory exists
+        let prd_dir = self.prd_dir();
+        std::fs::create_dir_all(&prd_dir)
+            .map_err(|e| format!("Failed to create PRD directory {:?}: {}", prd_dir, e))?;
 
         let path = self.prd_path();
         let content = serde_json::to_string_pretty(prd)

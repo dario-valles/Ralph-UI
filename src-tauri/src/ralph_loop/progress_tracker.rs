@@ -3,28 +3,73 @@
 //! The progress.txt file accumulates learnings across agent iterations.
 //! Each fresh agent instance reads this file to catch up on context
 //! from previous iterations.
+//!
+//! File locations:
+//! - New format: `.ralph-ui/prds/{prd_name}-progress.txt`
+//! - Legacy format: `.ralph/progress.txt` (for backwards compatibility)
 
 use super::types::{ProgressEntry, ProgressEntryType};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-/// Progress tracker for managing .ralph/progress.txt
+/// Progress tracker for managing progress.txt files
+///
+/// Supports two path patterns:
+/// - With prd_name: `.ralph-ui/prds/{prd_name}-progress.txt` (new multi-PRD format)
+/// - Without prd_name: `.ralph/progress.txt` (legacy single-PRD format)
 pub struct ProgressTracker {
-    /// Path to the .ralph directory
-    ralph_dir: PathBuf,
+    /// Base project path
+    project_path: PathBuf,
+    /// Optional PRD name for multi-PRD support
+    prd_name: Option<String>,
 }
 
 impl ProgressTracker {
-    /// Create a new progress tracker
-    pub fn new(ralph_dir: &Path) -> Self {
+    /// Create a new progress tracker with the new path format
+    ///
+    /// # Arguments
+    /// * `project_path` - Path to the project root
+    /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
         Self {
-            ralph_dir: ralph_dir.to_path_buf(),
+            project_path: project_path.to_path_buf(),
+            prd_name: Some(prd_name.to_string()),
+        }
+    }
+
+    /// Create a progress tracker for legacy .ralph/progress.txt format
+    ///
+    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
+    /// The `ralph_dir` parameter should be the `.ralph` directory path.
+    pub fn new(ralph_dir: &Path) -> Self {
+        // Extract project path by going up from .ralph directory
+        let project_path = ralph_dir
+            .parent()
+            .unwrap_or(ralph_dir)
+            .to_path_buf();
+        Self {
+            project_path,
+            prd_name: None,
         }
     }
 
     /// Get the path to progress.txt
     pub fn progress_path(&self) -> PathBuf {
-        self.ralph_dir.join("progress.txt")
+        match &self.prd_name {
+            Some(name) => self.project_path
+                .join(".ralph-ui")
+                .join("prds")
+                .join(format!("{}-progress.txt", name)),
+            None => self.project_path.join(".ralph").join("progress.txt"),
+        }
+    }
+
+    /// Get the directory containing the progress file
+    fn progress_dir(&self) -> PathBuf {
+        match &self.prd_name {
+            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
+            None => self.project_path.join(".ralph"),
+        }
     }
 
     /// Check if progress.txt exists
@@ -34,9 +79,10 @@ impl ProgressTracker {
 
     /// Initialize progress.txt with header
     pub fn initialize(&self) -> Result<(), String> {
-        // Ensure .ralph directory exists
-        std::fs::create_dir_all(&self.ralph_dir)
-            .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
+        // Ensure progress directory exists
+        let progress_dir = self.progress_dir();
+        std::fs::create_dir_all(&progress_dir)
+            .map_err(|e| format!("Failed to create progress directory {:?}: {}", progress_dir, e))?;
 
         let path = self.progress_path();
 

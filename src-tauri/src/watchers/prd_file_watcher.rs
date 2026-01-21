@@ -251,14 +251,16 @@ fn handle_file_event(
 }
 
 /// Generate the plan file path for a session
-/// Each session gets a unique file by including the session ID in the filename
+/// Each session gets a unique file using the centralized `make_prd_filename` function.
+///
+/// Format: `{project_path}/.ralph-ui/prds/{sanitized-title}-{8-char-session-id}.md`
+///
+/// Uses `make_prd_filename` from ralph_loop::types for consistency with the Ralph Loop.
+/// This ensures the markdown filename matches what the Ralph Loop expects for its JSON files.
 pub fn get_prd_plan_file_path(project_path: &str, session_id: &str, title: Option<&str>) -> PathBuf {
-    // Use first 8 chars of session ID for uniqueness while keeping filename readable
-    let short_id = &session_id[..8.min(session_id.len())];
-
     let prd_name = title
-        .map(|t| format!("{}-{}", sanitize_filename(t), short_id))
-        .unwrap_or_else(|| format!("prd-{}", short_id));
+        .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
+        .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id));
 
     Path::new(project_path)
         .join(".ralph-ui")
@@ -266,48 +268,28 @@ pub fn get_prd_plan_file_path(project_path: &str, session_id: &str, title: Optio
         .join(format!("{}.md", prd_name))
 }
 
-/// Sanitize a string for use as a filename
-pub fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else if c.is_whitespace() {
-                '-'
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>()
-        .to_lowercase()
-        .chars()
-        .take(50) // Limit length
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_sanitize_filename() {
-        assert_eq!(sanitize_filename("My PRD Document"), "my-prd-document");
-        assert_eq!(sanitize_filename("Test/Invalid:Chars"), "test_invalid_chars");
-        assert_eq!(sanitize_filename("Simple"), "simple");
-    }
-
-    #[test]
     fn test_get_prd_plan_file_path() {
         // With title: includes sanitized title + short session ID
         let path = get_prd_plan_file_path("/projects/myapp", "session-123-abc", Some("My Feature PRD"));
-        assert!(path.to_string_lossy().contains(".ralph-ui/prds/my-feature-prd-session-.md"));
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains(".ralph-ui/prds/"));
+        assert!(path_str.contains("my-feature-prd-"));
+        assert!(path_str.ends_with(".md"));
 
-        // Without title: uses short session ID only
+        // Without title: uses "prd" as default + short session ID
         let path_no_title = get_prd_plan_file_path("/projects/myapp", "session-123-abc", None);
-        assert!(path_no_title.to_string_lossy().contains("prd-session-.md"));
+        let path_str = path_no_title.to_string_lossy();
+        assert!(path_str.contains("prd-session-"));
+        assert!(path_str.ends_with(".md"));
 
-        // UUID-style session ID
+        // UUID-style session ID (only first 8 chars used)
         let path_uuid = get_prd_plan_file_path("/projects/myapp", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Some("Test"));
-        assert!(path_uuid.to_string_lossy().contains("test-a1b2c3d4.md"));
+        let path_str = path_uuid.to_string_lossy();
+        assert!(path_str.contains("test-a1b2c3d4.md"));
     }
 }

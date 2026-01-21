@@ -85,6 +85,11 @@ pub struct StartRalphLoopRequest {
     pub use_worktree: Option<bool>,
     /// Agent timeout in seconds (default: 1800 = 30 minutes, 0 = no timeout)
     pub agent_timeout_secs: Option<u64>,
+    /// PRD name for multi-PRD support (e.g., "my-feature-a1b2c3d4")
+    ///
+    /// When set, PRD files are stored in `.ralph-ui/prds/{prd_name}.json`.
+    /// When None, the legacy `.ralph/prd.json` path is used.
+    pub prd_name: Option<String>,
 }
 
 /// Response from starting a Ralph loop
@@ -134,6 +139,32 @@ pub struct RalphStoryInput {
 pub struct ConvertPrdToRalphRequest {
     /// Database PRD ID
     pub prd_id: String,
+    /// Branch name to use
+    pub branch: String,
+    /// Agent type to use (claude, opencode, cursor, codex)
+    pub agent_type: Option<String>,
+    /// Model to use (e.g., "claude-sonnet-4-5")
+    pub model: Option<String>,
+    /// Maximum iterations (default: 50)
+    pub max_iterations: Option<u32>,
+    /// Maximum cost limit in dollars
+    pub max_cost: Option<f64>,
+    /// Whether to run tests (default: true)
+    pub run_tests: Option<bool>,
+    /// Whether to run lint (default: true)
+    pub run_lint: Option<bool>,
+    /// Whether to use a worktree for isolation
+    pub use_worktree: Option<bool>,
+}
+
+/// Request to convert a file-based PRD to Ralph format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvertPrdFileToRalphRequest {
+    /// Project path
+    pub project_path: String,
+    /// PRD filename (without extension, e.g., "new-feature-prd-abc123")
+    pub prd_name: String,
     /// Branch name to use
     pub branch: String,
     /// Agent type to use (claude, opencode, cursor, codex)
@@ -363,6 +394,7 @@ pub async fn start_ralph_loop(
         error_strategy: ErrorStrategy::default(),
         fallback_config,
         agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
+        prd_name: request.prd_name.clone(),
     };
 
     // Create orchestrator
@@ -386,8 +418,15 @@ pub async fn start_ralph_loop(
     }
 
     // Read existing PRD and initialize
-    let ralph_dir = config.project_path.join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+    // Use appropriate executor based on prd_name setting
+    let project_path = PathBuf::from(&request.project_path);
+    let executor = match &request.prd_name {
+        Some(name) => PrdExecutor::new_with_name(&project_path, name),
+        None => {
+            let ralph_dir = project_path.join(".ralph");
+            PrdExecutor::new(&ralph_dir)
+        }
+    };
     let prd = executor.read_prd()?;
     orchestrator.initialize(&prd)?;
 
@@ -816,6 +855,144 @@ pub fn convert_prd_to_ralph(
         max_iterations: request.max_iterations.unwrap_or(50),
         max_cost: request.max_cost,
         model: request.model,
+        ..Default::default()
+    };
+    prompt_builder.generate_prompt(&loop_config)?;
+
+    Ok(ralph_prd)
+}
+
+/// Convert a file-based PRD (from .ralph-ui/prds/) to Ralph loop format
+///
+/// This reads a markdown PRD file and its associated structure JSON (if any),
+/// then creates the Ralph loop files (prd.json, progress.txt, config.yaml, prompt.md).
+#[tauri::command]
+pub fn convert_prd_file_to_ralph(
+    request: ConvertPrdFileToRalphRequest,
+) -> Result<RalphPrd, String> {
+    use crate::ralph_loop::{LoopConfig, ProjectConfig};
+    use std::fs;
+
+    let project_path = PathBuf::from(&request.project_path);
+    let prds_dir = project_path.join(".ralph-ui").join("prds");
+
+    // Read the markdown file
+    let md_path = prds_dir.join(format!("{}.md", request.prd_name));
+    let content = fs::read_to_string(&md_path)
+        .map_err(|e| format!("Failed to read PRD file {:?}: {}", md_path, e))?;
+
+    // Extract title from first # heading or use prd_name
+    let title = content
+        .lines()
+        .find(|line| line.starts_with("# "))
+        .map(|line| line.trim_start_matches("# ").trim().to_string())
+        .unwrap_or_else(|| request.prd_name.clone());
+
+    // Try to read associated structure JSON
+    let structure_path = prds_dir.join(format!("{}-structure.json", request.prd_name));
+    let structure: Option<crate::models::ExtractedPRDStructure> = if structure_path.exists() {
+        fs::read_to_string(&structure_path)
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+    } else {
+        None
+    };
+
+    // Create Ralph PRD
+    let mut ralph_prd = RalphPrd::new(&title, &request.branch);
+
+    // If we have extracted structure, use it
+    if let Some(structure) = structure {
+        for (index, task) in structure.tasks.iter().enumerate() {
+            let mut story = RalphStory::new(
+                &task.id,
+                &task.title,
+                task.acceptance_criteria
+                    .as_ref()
+                    .map(|v| v.join("\n"))
+                    .unwrap_or_else(|| task.description.clone()),
+            );
+            story.description = Some(task.description.clone());
+            story.priority = task.priority.map(|p| p as u32).unwrap_or(index as u32);
+            story.dependencies = task.dependencies.clone().unwrap_or_default();
+            story.tags = task.tags.clone().unwrap_or_default();
+            ralph_prd.add_story(story);
+        }
+    } else {
+        // Parse markdown to extract tasks (simple parsing)
+        // Look for ## or ### headers as tasks
+        let mut task_index = 0;
+        for line in content.lines() {
+            if line.starts_with("## ") || line.starts_with("### ") {
+                let task_title = line.trim_start_matches('#').trim();
+                // Skip common section headers
+                if !["overview", "requirements", "tasks", "summary", "description", "background"]
+                    .iter()
+                    .any(|s| task_title.to_lowercase().starts_with(s))
+                {
+                    let story = RalphStory::new(
+                        &format!("task-{}", task_index + 1),
+                        task_title,
+                        task_title, // Use title as acceptance criteria
+                    );
+                    ralph_prd.add_story(story);
+                    task_index += 1;
+                }
+            }
+        }
+
+        // If no tasks found, create a single task from the PRD
+        if ralph_prd.stories.is_empty() {
+            let story = RalphStory::new(
+                "task-1",
+                &title,
+                "Complete the requirements specified in the PRD",
+            );
+            ralph_prd.add_story(story);
+        }
+    }
+
+    // Use new multi-PRD path format
+    let executor = PrdExecutor::new_with_name(&project_path, &request.prd_name);
+    executor.write_prd(&ralph_prd)?;
+
+    // Initialize progress
+    let tracker = ProgressTracker::new_with_name(&project_path, &request.prd_name);
+    tracker.initialize()?;
+
+    // Create and write config.yaml
+    // Note: config.yaml stays in .ralph-ui/prds/ for now as it's per-PRD
+    let config_path = prds_dir.join(format!("{}-config.yaml", request.prd_name));
+    let ralph_config = RalphConfig {
+        project: ProjectConfig {
+            name: Some(title.clone()),
+            test_command: None,
+            lint_command: None,
+            build_command: None,
+        },
+        ralph: LoopConfig {
+            max_iterations: request.max_iterations.unwrap_or(50),
+            max_cost: request.max_cost,
+            agent: request.agent_type.clone().unwrap_or_else(|| "claude".to_string()),
+            model: request.model.clone(),
+            completion_promise: "<promise>COMPLETE</promise>".to_string(),
+        },
+    };
+    let config_yaml = serde_yaml::to_string(&ralph_config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    fs::write(&config_path, config_yaml)
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+
+    // Generate prompt.md
+    let prompt_builder = PromptBuilder::new_with_name(&project_path, &request.prd_name);
+    let loop_config = RalphLoopConfig {
+        project_path: project_path.clone(),
+        run_tests: request.run_tests.unwrap_or(true),
+        run_lint: request.run_lint.unwrap_or(true),
+        max_iterations: request.max_iterations.unwrap_or(50),
+        max_cost: request.max_cost,
+        model: request.model,
+        prd_name: Some(request.prd_name),
         ..Default::default()
     };
     prompt_builder.generate_prompt(&loop_config)?;

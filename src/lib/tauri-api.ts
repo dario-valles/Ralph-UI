@@ -10,6 +10,7 @@ import type {
   SessionComparison,
   SessionAnalytics,
   PRDDocument,
+  PRDFile,
   PRDTemplate,
   CreatePRDRequest,
   UpdatePRDRequest,
@@ -20,8 +21,6 @@ import type {
   QualityAssessment,
   GuidedQuestion,
   ExtractedPRDContent,
-  ExtractedPRDStructure,
-  ExportResult,
   PRDTypeValue,
   Project,
   IterationRecord,
@@ -173,6 +172,21 @@ export const prdApi = {
   execute: async (prdId: string, config: ExecutionConfig): Promise<string> => {
     return await invoke('execute_prd', { prdId, config })
   },
+
+  /** Scan .ralph-ui/prds/ directory for PRD markdown files */
+  scanFiles: async (projectPath: string): Promise<PRDFile[]> => {
+    return await invoke('scan_prd_files', { projectPath })
+  },
+
+  /** Get a PRD file by name */
+  getFile: async (projectPath: string, prdName: string): Promise<PRDFile> => {
+    return await invoke('get_prd_file', { projectPath, prdName })
+  },
+
+  /** Update a PRD file's content */
+  updateFile: async (projectPath: string, prdName: string, content: string): Promise<PRDFile> => {
+    return await invoke('update_prd_file', { projectPath, prdName, content })
+  },
 }
 
 // PRD Chat API
@@ -212,12 +226,6 @@ export const prdChatApi = {
     return await invoke('delete_prd_chat_session', { sessionId })
   },
 
-  exportToPRD: async (sessionId: string, title: string): Promise<ExportResult> => {
-    return await invoke('export_chat_to_prd', {
-      request: { sessionId, title }
-    })
-  },
-
   /** Assess the quality of a PRD chat session before export */
   assessQuality: async (sessionId: string): Promise<QualityAssessment> => {
     return await invoke('assess_prd_quality', { sessionId })
@@ -236,11 +244,6 @@ export const prdChatApi = {
   /** Check if an agent CLI is available in the system PATH */
   checkAgentAvailability: async (agentType: string): Promise<AgentAvailabilityResult> => {
     return await invoke('check_agent_availability', { agentType })
-  },
-
-  /** Get extracted PRD structure for a session */
-  getExtractedStructure: async (sessionId: string): Promise<ExtractedPRDStructure> => {
-    return await invoke('get_extracted_structure', { sessionId })
   },
 
   /** Set structured output mode for a session */
@@ -518,6 +521,22 @@ export const ralphLoopApi = {
     useWorktree?: boolean
   }): Promise<RalphPrd> => {
     return await invoke('convert_prd_to_ralph', { request })
+  },
+
+  /** Convert a file-based PRD to Ralph loop format */
+  convertPrdFileToRalph: async (request: {
+    projectPath: string
+    prdName: string
+    branch: string
+    agentType?: string
+    model?: string
+    maxIterations?: number
+    maxCost?: number
+    runTests?: boolean
+    runLint?: boolean
+    useWorktree?: boolean
+  }): Promise<RalphPrd> => {
+    return await invoke('convert_prd_file_to_ralph', { request })
   },
 
   /** Check if a project has Ralph loop files */

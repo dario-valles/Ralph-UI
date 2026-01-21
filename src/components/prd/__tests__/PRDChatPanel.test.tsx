@@ -35,23 +35,16 @@ vi.mock('@/stores/sessionStore', () => ({
 
 // Mock the tauri-api
 const mockCheckAgentAvailability = vi.fn()
-const mockGetExtractedStructure = vi.fn()
 
 vi.mock('@/lib/tauri-api', () => ({
   prdChatApi: {
     checkAgentAvailability: () => mockCheckAgentAvailability(),
-    getExtractedStructure: () => mockGetExtractedStructure(),
   },
 }))
 
 // Mock Tauri event listener
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
-}))
-
-// Mock TaskPreviewDialog to avoid render issues
-vi.mock('../TaskPreviewDialog', () => ({
-  TaskPreviewDialog: () => <div data-testid="task-preview-dialog">Task Preview Dialog</div>,
 }))
 
 // Mock the useAvailableModels hook

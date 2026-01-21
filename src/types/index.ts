@@ -184,6 +184,26 @@ export interface PRDDocument {
   extractedStructure?: string
 }
 
+/** A PRD file found in the .ralph-ui/prds/ directory */
+export interface PRDFile {
+  /** Unique identifier derived from filename (e.g., "file:new-feature-prd-abc123") */
+  id: string
+  /** Title extracted from first # heading or derived from filename */
+  title: string
+  /** Full markdown content */
+  content: string
+  /** Path to the project */
+  projectPath: string
+  /** File path relative to project */
+  filePath: string
+  /** File modification time as ISO string */
+  modifiedAt: string
+  /** Whether this PRD has an associated .json file (Ralph Loop initialized) */
+  hasRalphJson: boolean
+  /** Whether this PRD has a progress file */
+  hasProgress: boolean
+}
+
 /** Result of exporting a PRD chat session */
 export interface ExportResult {
   prd: PRDDocument
@@ -602,33 +622,6 @@ export interface RateLimitEvent {
 }
 
 // ============================================================================
-// Structured PRD Output Types
-// ============================================================================
-
-export type PRDItemType = 'epic' | 'user_story' | 'task' | 'acceptance_criteria'
-export type EffortSize = 'small' | 'medium' | 'large'
-
-export interface StructuredPRDItem {
-  type: PRDItemType
-  id: string // e.g., "EP-1", "US-1.1", "AC-1.1.1"
-  parentId?: string // Link to parent epic/story
-  title: string
-  description: string
-  acceptanceCriteria?: string[] // For user stories
-  priority?: number // 1-5
-  dependencies?: string[] // Item IDs
-  estimatedEffort?: EffortSize
-  tags?: string[]
-}
-
-export interface ExtractedPRDStructure {
-  epics: StructuredPRDItem[]
-  userStories: StructuredPRDItem[]
-  tasks: StructuredPRDItem[]
-  acceptanceCriteria: StructuredPRDItem[]
-}
-
-// ============================================================================
 // Terminal Types (re-exported from terminal.ts)
 // ============================================================================
 
@@ -841,6 +834,13 @@ export interface StartRalphLoopRequest {
   useWorktree?: boolean
   /** Agent timeout in seconds (default: 1800 = 30 minutes, 0 = no timeout) */
   agentTimeoutSecs?: number
+  /**
+   * PRD name for multi-PRD support (e.g., "my-feature-a1b2c3d4")
+   *
+   * When set, PRD files are stored in `.ralph-ui/prds/{prdName}.json`.
+   * When undefined, the legacy `.ralph/prd.json` path is used.
+   */
+  prdName?: string
 }
 
 /** Request to convert a database PRD to Ralph format */

@@ -584,3 +584,212 @@ fn calculate_actionability(content: &str) -> i32 {
 
     score.min(100)
 }
+
+/// A PRD file found in the .ralph-ui/prds/ directory
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PRDFile {
+    /// Unique identifier derived from filename (e.g., "file:new-feature-prd-abc123")
+    pub id: String,
+    /// Title extracted from first # heading or derived from filename
+    pub title: String,
+    /// Full markdown content
+    pub content: String,
+    /// Path to the project
+    pub project_path: String,
+    /// File path relative to project
+    pub file_path: String,
+    /// File modification time as ISO string
+    pub modified_at: String,
+    /// Whether this PRD has an associated .json file (Ralph Loop initialized)
+    pub has_ralph_json: bool,
+    /// Whether this PRD has a progress file
+    pub has_progress: bool,
+}
+
+/// Scan .ralph-ui/prds/ directory for PRD markdown files
+#[tauri::command]
+pub async fn scan_prd_files(
+    project_path: String,
+) -> Result<Vec<PRDFile>, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+
+    if !prds_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut prd_files = Vec::new();
+
+    let entries = fs::read_dir(&prds_dir)
+        .map_err(|e| format!("Failed to read prds directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        // Only process .md files, skip -prompt.md (Ralph Loop prompts)
+        if let Some(ext) = path.extension() {
+            if ext != "md" {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        let filename = path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        // Skip prompt files (e.g., my-prd-prompt.md)
+        if filename.ends_with("-prompt") {
+            continue;
+        }
+
+        // Read file content
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
+
+        // Extract title from first # heading or use filename
+        let title = content.lines()
+            .find(|line| line.starts_with("# "))
+            .map(|line| line.trim_start_matches("# ").trim().to_string())
+            .unwrap_or_else(|| {
+                // Convert filename to title (e.g., "new-feature-prd-abc123" -> "New Feature PRD")
+                let name_part = filename.rsplitn(2, '-').last().unwrap_or(filename);
+                name_part.split('-')
+                    .map(|word| {
+                        let mut chars = word.chars();
+                        match chars.next() {
+                            None => String::new(),
+                            Some(first) => first.to_uppercase().chain(chars).collect()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            });
+
+        // Get file modification time
+        let metadata = fs::metadata(&path)
+            .map_err(|e| format!("Failed to get file metadata: {}", e))?;
+        let modified_at = metadata.modified()
+            .map(|t| {
+                let datetime: chrono::DateTime<chrono::Utc> = t.into();
+                datetime.to_rfc3339()
+            })
+            .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+
+        // Check for associated files
+        let json_path = prds_dir.join(format!("{}.json", filename));
+        let progress_path = prds_dir.join(format!("{}-progress.txt", filename));
+
+        let file_path = format!(".ralph-ui/prds/{}.md", filename);
+
+        prd_files.push(PRDFile {
+            id: format!("file:{}", filename),
+            title,
+            content,
+            project_path: project_path.clone(),
+            file_path,
+            modified_at,
+            has_ralph_json: json_path.exists(),
+            has_progress: progress_path.exists(),
+        });
+    }
+
+    // Sort by modification time (newest first)
+    prd_files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+
+    Ok(prd_files)
+}
+
+/// Get a PRD file by name from .ralph-ui/prds/
+#[tauri::command]
+pub async fn get_prd_file(
+    project_path: String,
+    prd_name: String,
+) -> Result<PRDFile, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let file_path = prds_dir.join(format!("{}.md", prd_name));
+
+    if !file_path.exists() {
+        return Err(format!("PRD file not found: {}.md", prd_name));
+    }
+
+    // Read file content
+    let content = fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Extract title from first # heading or use filename
+    let title = content.lines()
+        .find(|line| line.starts_with("# "))
+        .map(|line| line.trim_start_matches("# ").trim().to_string())
+        .unwrap_or_else(|| {
+            // Convert filename to title
+            prd_name.split('-')
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(first) => first.to_uppercase().chain(chars).collect()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        });
+
+    // Get file modification time
+    let metadata = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
+    let modified_at = metadata.modified()
+        .map(|t| {
+            let datetime: chrono::DateTime<chrono::Utc> = t.into();
+            datetime.to_rfc3339()
+        })
+        .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+
+    // Check for associated files
+    let json_path = prds_dir.join(format!("{}.json", prd_name));
+    let progress_path = prds_dir.join(format!("{}-progress.txt", prd_name));
+
+    Ok(PRDFile {
+        id: format!("file:{}", prd_name),
+        title,
+        content,
+        project_path,
+        file_path: format!(".ralph-ui/prds/{}.md", prd_name),
+        modified_at,
+        has_ralph_json: json_path.exists(),
+        has_progress: progress_path.exists(),
+    })
+}
+
+/// Update a PRD file's content
+#[tauri::command]
+pub async fn update_prd_file(
+    project_path: String,
+    prd_name: String,
+    content: String,
+) -> Result<PRDFile, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let file_path = prds_dir.join(format!("{}.md", prd_name));
+
+    if !file_path.exists() {
+        return Err(format!("PRD file not found: {}.md", prd_name));
+    }
+
+    // Write updated content
+    fs::write(&file_path, &content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    // Return updated PRDFile
+    get_prd_file(project_path, prd_name).await
+}

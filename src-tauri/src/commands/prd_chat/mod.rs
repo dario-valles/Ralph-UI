@@ -450,9 +450,7 @@ pub async fn export_chat_to_prd(
         } else {
             // Save PRD markdown content
             // Include short ID (first 8 chars of UUID) to make filename unique
-            let title_part = crate::watchers::sanitize_filename(&prd.title);
-            let short_id = &prd.id[..8.min(prd.id.len())];
-            let prd_filename = format!("{}-{}", title_part, short_id);
+            let prd_filename = crate::ralph_loop::make_prd_filename(&prd.title, &prd.id);
             let prd_path = prds_dir.join(format!("{}.md", prd_filename));
             if let Err(e) = std::fs::write(&prd_path, &prd.content) {
                 log::warn!("Failed to write PRD file: {}", e);
@@ -2654,10 +2652,13 @@ fn build_prd_chat_prompt(
 
 /// Generate the plan file instruction to be injected into prompts
 /// This instructs the AI to maintain a living plan document
+///
+/// The PRD filename uses `make_prd_filename` from ralph_loop::types for consistency:
+/// Format: `{sanitized-title}-{8-char-session-id}`
 fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<&str>) -> String {
     let prd_name = title
-        .map(|t| sanitize_filename_for_prd(t))
-        .unwrap_or_else(|| format!("prd-{}", session_id));
+        .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
+        .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id));
 
     format!(
         "\n=== PLAN FILE INSTRUCTION ===\n\n\
@@ -2671,25 +2672,6 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
         Write the file content using your file writing capabilities.\n\n\
         === END PLAN FILE INSTRUCTION ===\n\n"
     )
-}
-
-/// Sanitize a string for use as a filename (for PRD plan files)
-fn sanitize_filename_for_prd(name: &str) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else if c.is_whitespace() {
-                '-'
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>()
-        .to_lowercase()
-        .chars()
-        .take(50) // Limit length
-        .collect()
 }
 
 /// Default timeout for agent execution (25 minutes - 5x multiplier for longer agent operations)

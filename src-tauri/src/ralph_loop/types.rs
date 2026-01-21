@@ -1,11 +1,47 @@
 //! Type definitions for Ralph Wiggum Loop
 //!
 //! These types define the file-based state that persists across agent iterations:
-//! - prd.json: Task list with pass/fail status
-//! - progress.txt: Learnings accumulated across iterations
+//! - .ralph-ui/prds/{prd_name}.json: Task list with pass/fail status
+//! - .ralph-ui/prds/{prd_name}-progress.txt: Learnings accumulated across iterations
+//! - .ralph-ui/prds/{prd_name}-prompt.md: Prompt template for agent iterations
 
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
+
+/// Generate a consistent PRD filename from title and ID
+///
+/// Format: `{sanitized-title}-{8-char-id}`
+///
+/// # Arguments
+/// * `title` - The PRD title (will be sanitized)
+/// * `prd_id` - A UUID or unique identifier (first 8 chars used)
+///
+/// # Example
+/// ```ignore
+/// let name = make_prd_filename("New Feature PRD", "a1b2c3d4-5678-9abc-def0");
+/// assert_eq!(name, "new-feature-prd-a1b2c3d4");
+/// ```
+pub fn make_prd_filename(title: &str, prd_id: &str) -> String {
+    let sanitized = title
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else if c.is_whitespace() {
+                '-'
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .to_lowercase()
+        .chars()
+        .take(50)
+        .collect::<String>();
+
+    let short_id = &prd_id[..8.min(prd_id.len())];
+    format!("{}-{}", sanitized, short_id)
+}
 
 /// A story/task in the PRD
 ///
@@ -738,5 +774,36 @@ mod tests {
         assert!(json.contains("failed"));
         assert!(json.contains("Rate limit exceeded"));
         assert!(json.contains("rateLimitEncountered\":true"));
+    }
+
+    // =========================================================================
+    // make_prd_filename Tests
+    // =========================================================================
+
+    #[test]
+    fn test_make_prd_filename_basic() {
+        let name = super::make_prd_filename("New Feature PRD", "a1b2c3d4-5678-9abc-def0");
+        assert_eq!(name, "new-feature-prd-a1b2c3d4");
+    }
+
+    #[test]
+    fn test_make_prd_filename_special_chars() {
+        let name = super::make_prd_filename("My PRD: Test/Feature!", "12345678-abcd");
+        assert_eq!(name, "my-prd_-test_feature_-12345678");
+    }
+
+    #[test]
+    fn test_make_prd_filename_long_title() {
+        let long_title = "This is a very long PRD title that exceeds fifty characters limit";
+        let name = super::make_prd_filename(long_title, "abcd1234");
+        // Sanitized title is truncated to 50 chars, then -id is appended
+        assert!(name.starts_with("this-is-a-very-long-prd-title-that-exceeds-fifty-c"));
+        assert!(name.ends_with("-abcd1234"));
+    }
+
+    #[test]
+    fn test_make_prd_filename_short_id() {
+        let name = super::make_prd_filename("Test", "abc");
+        assert_eq!(name, "test-abc");
     }
 }

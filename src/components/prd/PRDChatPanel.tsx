@@ -16,13 +16,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip } from '@/components/ui/tooltip'
 import {
   Plus,
-  FileText,
   Loader2,
   MessageSquare,
   Bot,
@@ -30,24 +28,20 @@ import {
   AlertTriangle,
   ScrollText,
   ChevronDown,
-  CheckCircle2,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
-import { QualityScoreCard } from './QualityScoreCard'
 import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
-import { TaskPreviewDialog } from './TaskPreviewDialog'
 import { prdChatApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
-import { useExportWorkflow } from '@/hooks/useExportWorkflow'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 
 // ============================================================================
@@ -106,20 +100,6 @@ export function PRDChatPanel() {
   // Load available models for the current agent type
   const agentType = (currentSession?.agentType || 'claude') as AgentType
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
-
-  // Export workflow hook - handles export progress, task preview, and quality assessment
-  const {
-    exportProgress,
-    showTaskPreview,
-    previewStructure,
-    previewLoading,
-    showQualityPanel,
-    setShowQualityPanel,
-    setShowTaskPreview,
-    handleExportToPRD,
-    handleConfirmTaskPreview,
-    handleForceExport,
-  } = useExportWorkflow(currentSession)
 
   // Memoize the plan update callback for the events hook
   const handlePlanUpdated = useCallback(
@@ -342,12 +322,6 @@ export function PRDChatPanel() {
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
-  // Ready to export: quality >= 70% and has messages
-  const isReadyToExport = hasMessages &&
-    qualityAssessment &&
-    qualityAssessment.readyForExport &&
-    qualityAssessment.overall >= 70
-
   // Show type selector when creating a new session
   if (showTypeSelector) {
     return (
@@ -465,34 +439,15 @@ export function PRDChatPanel() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   {hasMessages && (
-                    <>
-                      <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Check Quality
-                        {qualityAssessment && (
-                          <Badge variant="secondary" className="ml-auto text-xs">
-                            {qualityAssessment.overall}%
-                          </Badge>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={handleExportToPRD}
-                        className={isReadyToExport ? 'bg-green-50 text-green-700' : ''}
-                      >
-                        {isReadyToExport ? (
-                          <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                        ) : (
-                          <FileText className="h-4 w-4 mr-2" />
-                        )}
-                        Export to PRD
-                        {isReadyToExport && (
-                          <Badge variant="secondary" className="ml-auto bg-green-100 text-green-700 text-xs">
-                            Ready
-                          </Badge>
-                        )}
-                      </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Check Quality
+                      {qualityAssessment && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                          {qualityAssessment.overall}%
+                        </Badge>
+                      )}
+                    </DropdownMenuItem>
                   )}
                   {!hasMessages && (
                     <DropdownMenuItem disabled>
@@ -507,44 +462,12 @@ export function PRDChatPanel() {
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
           {/* Loading Spinner */}
-          {loading && !exportProgress && (
+          {loading && (
             <div
               data-testid="loading-spinner"
               className="absolute inset-0 flex items-center justify-center bg-background/50 z-10"
             >
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          )}
-
-          {/* Export Progress Overlay */}
-          {exportProgress?.active && (
-            <div
-              data-testid="export-progress"
-              className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-20"
-            >
-              <div className="flex flex-col items-center gap-4 p-6 bg-card rounded-lg shadow-lg border max-w-sm mx-4">
-                <div className="relative">
-                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xs font-medium text-primary">{exportProgress.step}</span>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <p className="font-medium text-foreground">Exporting PRD</p>
-                  <p className="text-sm text-muted-foreground mt-1">{exportProgress.message}</p>
-                </div>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map((step) => (
-                    <div
-                      key={step}
-                      className={cn(
-                        'w-2 h-2 rounded-full transition-colors',
-                        step <= exportProgress.step ? 'bg-primary' : 'bg-muted'
-                      )}
-                    />
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
@@ -667,33 +590,6 @@ export function PRDChatPanel() {
         />
       )}
 
-      {/* Quality Warning Dialog */}
-      <Dialog open={showQualityPanel} onOpenChange={setShowQualityPanel}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>PRD Quality Assessment</DialogTitle>
-            <DialogDescription>
-              Your PRD may be incomplete. Review the quality assessment below.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <QualityScoreCard
-              assessment={qualityAssessment}
-              loading={loading}
-              onRefresh={handleRefreshQuality}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowQualityPanel(false)}>
-              Continue Editing
-            </Button>
-            <Button onClick={handleForceExport}>
-              Export Anyway
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
@@ -714,15 +610,6 @@ export function PRDChatPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Task Preview Dialog */}
-      <TaskPreviewDialog
-        open={showTaskPreview}
-        onOpenChange={setShowTaskPreview}
-        extractedStructure={previewStructure}
-        onConfirm={handleConfirmTaskPreview}
-        loading={previewLoading}
-      />
     </div>
   )
 }
