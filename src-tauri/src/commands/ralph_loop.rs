@@ -329,7 +329,7 @@ pub async fn start_ralph_loop(
         retry_config: RetryConfig::default(),
         error_strategy: ErrorStrategy::default(),
         fallback_config: None, // TODO: Add frontend UI to configure this
-        agent_timeout_secs: request.agent_timeout_secs.unwrap_or(1800), // 30 minutes default
+        agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
     };
 
     // Create orchestrator

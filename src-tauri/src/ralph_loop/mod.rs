@@ -99,7 +99,7 @@ impl Default for RalphLoopConfig {
             retry_config: RetryConfig::default(),
             error_strategy: ErrorStrategy::default(),
             fallback_config: None,
-            agent_timeout_secs: 1800, // 30 minutes default
+            agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
         }
     }
 }
