@@ -1038,22 +1038,31 @@ impl RalphLoopOrchestrator {
     /// multiple concurrent Ralph loops on different PRDs.
     fn setup_worktree(&mut self) -> Result<(), String> {
         use crate::git::GitManager;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
         log::info!("[RalphLoop] Setting up worktree for execution {}", self.execution_id);
 
         // Get the base branch (the branch to start from)
         let base_branch = self.config.branch.clone().unwrap_or_else(|| "main".to_string());
 
-        // Create a unique branch name per execution to allow concurrent loops
-        // Format: ralph/{base_branch_sanitized}/{short_execution_id}
+        // Generate a STABLE worktree ID based on project path + branch
+        // This allows reusing the same worktree when restarting the same PRD
+        let mut hasher = DefaultHasher::new();
+        self.config.project_path.hash(&mut hasher);
+        base_branch.hash(&mut hasher);
+        let stable_id = format!("{:x}", hasher.finish())[..8].to_string();
+
+        // Create a stable branch name for this PRD (not per-execution)
+        // Format: ralph/{base_branch_sanitized}-{stable_id}
         let sanitized_base = base_branch.replace('/', "-");
-        let short_id = &self.execution_id[..8];
-        let execution_branch = format!("ralph/{}-{}", sanitized_base, short_id);
+        let execution_branch = format!("ralph/{}-{}", sanitized_base, stable_id);
 
         log::info!(
-            "[RalphLoop] Creating execution branch '{}' based on '{}'",
-            execution_branch,
-            base_branch
+            "[RalphLoop] Using stable worktree ID '{}' for branch '{}' (execution: {})",
+            stable_id,
+            base_branch,
+            self.execution_id
         );
 
         // Create worktree path
@@ -1061,56 +1070,67 @@ impl RalphLoopOrchestrator {
         std::fs::create_dir_all(&worktree_dir)
             .map_err(|e| format!("Failed to create .worktrees directory: {}", e))?;
 
-        let worktree_path = worktree_dir.join(format!("ralph-{}", short_id));
+        let worktree_path = worktree_dir.join(format!("ralph-{}", stable_id));
 
         // Create git manager early for cleanup operations
         let git_manager = GitManager::new(&self.config.project_path)
             .map_err(|e| format!("Failed to open git repository: {}", e))?;
 
-        // Clean up stale worktree if it exists (from a previous failed run)
-        if worktree_path.exists() {
-            log::warn!(
-                "[RalphLoop] Removing stale worktree at {:?}",
+        // Check if worktree already exists and is valid
+        let worktree_exists = worktree_path.exists() && worktree_path.join(".git").exists();
+
+        if worktree_exists {
+            log::info!(
+                "[RalphLoop] Reusing existing worktree at {:?}",
                 worktree_path
             );
-
-            // First, try to prune it from git's worktree list
-            let worktree_path_str = worktree_path.to_string_lossy().to_string();
-            if let Err(e) = git_manager.remove_worktree(&worktree_path_str) {
-                log::warn!("[RalphLoop] Failed to prune worktree from git: {}", e);
+            // Worktree exists - just sync the .ralph directory
+        } else {
+            // Need to create worktree - clean up any stale remnants first
+            if worktree_path.exists() {
+                log::warn!(
+                    "[RalphLoop] Removing invalid worktree at {:?}",
+                    worktree_path
+                );
+                let worktree_path_str = worktree_path.to_string_lossy().to_string();
+                if let Err(e) = git_manager.remove_worktree(&worktree_path_str) {
+                    log::warn!("[RalphLoop] Failed to prune worktree from git: {}", e);
+                }
+                if let Err(e) = std::fs::remove_dir_all(&worktree_path) {
+                    log::warn!("[RalphLoop] Failed to remove stale worktree directory: {}", e);
+                }
             }
 
-            // Then remove the directory
-            if let Err(e) = std::fs::remove_dir_all(&worktree_path) {
-                log::warn!("[RalphLoop] Failed to remove stale worktree directory: {}", e);
+            // Try to delete any stale branch with the same name
+            if let Err(e) = git_manager.delete_branch(&execution_branch) {
+                log::debug!("[RalphLoop] Branch {} didn't exist or couldn't be deleted: {}", execution_branch, e);
             }
+
+            // Create git worktree with stable branch
+            git_manager
+                .create_worktree(&execution_branch, worktree_path.to_str().unwrap())
+                .map_err(|e| format!("Failed to create worktree: {}", e))?;
+
+            log::info!(
+                "[RalphLoop] Created worktree at {:?} on branch {}",
+                worktree_path,
+                execution_branch
+            );
         }
 
-        // Also try to delete any stale branch with the same name
-        if let Err(e) = git_manager.delete_branch(&execution_branch) {
-            // Ignore error - branch might not exist
-            log::debug!("[RalphLoop] Branch {} didn't exist or couldn't be deleted: {}", execution_branch, e);
-        }
-
-        // Create git worktree with unique branch
-        git_manager
-            .create_worktree(&execution_branch, worktree_path.to_str().unwrap())
-            .map_err(|e| format!("Failed to create worktree: {}", e))?;
-
-        log::info!(
-            "[RalphLoop] Created worktree at {:?} on branch {}",
-            worktree_path,
-            execution_branch
-        );
-
-        // Copy .ralph/ directory to worktree
+        // Always sync .ralph/ directory to worktree (may have updates)
         let src_ralph_dir = self.config.project_path.join(".ralph");
         let dst_ralph_dir = worktree_path.join(".ralph");
 
         if src_ralph_dir.exists() {
+            // Remove old .ralph dir in worktree and copy fresh version
+            if dst_ralph_dir.exists() {
+                std::fs::remove_dir_all(&dst_ralph_dir)
+                    .map_err(|e| format!("Failed to remove old .ralph directory: {}", e))?;
+            }
             Self::copy_dir_recursive(&src_ralph_dir, &dst_ralph_dir)
                 .map_err(|e| format!("Failed to copy .ralph directory: {}", e))?;
-            log::info!("[RalphLoop] Copied .ralph directory to worktree");
+            log::info!("[RalphLoop] Synced .ralph directory to worktree");
         }
 
         // Update working path and reinitialize components
