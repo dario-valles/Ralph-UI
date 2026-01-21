@@ -33,6 +33,20 @@ vi.mock('@/stores/sessionStore', () => ({
   },
 }))
 
+// Mock the project store
+const mockActiveProject = {
+  id: 'project-1',
+  name: 'Test Project',
+  path: '/test/project/path',
+}
+
+vi.mock('@/stores/projectStore', () => ({
+  useProjectStore: () => ({
+    getActiveProject: () => mockActiveProject,
+    registerProject: vi.fn(),
+  }),
+}))
+
 // Mock the tauri-api
 const mockCheckAgentAvailability = vi.fn()
 
@@ -84,6 +98,7 @@ const mockSessions: ChatSession[] = [
     id: 'session-1',
     agentType: 'claude',
     title: 'Todo App PRD',
+    projectPath: '/test/project/path',
     createdAt: '2024-01-01T09:00:00.000Z',
     updatedAt: '2024-01-01T10:00:05.000Z',
     messageCount: 2,
@@ -92,6 +107,7 @@ const mockSessions: ChatSession[] = [
     id: 'session-2',
     agentType: 'opencode',
     title: 'E-commerce PRD',
+    projectPath: '/test/project/path',
     createdAt: '2024-01-02T09:00:00.000Z',
     updatedAt: '2024-01-02T09:00:00.000Z',
     messageCount: 0,
@@ -105,13 +121,11 @@ describe('PRDChatPanel', () => {
   const mockSetCurrentSession = vi.fn()
   const mockLoadHistory = vi.fn()
   const mockLoadSessions = vi.fn()
-  const mockExportToPRD = vi.fn()
   const mockClearError = vi.fn()
   const mockAssessQuality = vi.fn()
   const mockLoadGuidedQuestions = vi.fn()
   const mockPreviewExtraction = vi.fn()
   const mockSetStructuredMode = vi.fn()
-  const mockLoadExtractedStructure = vi.fn()
   const mockClearExtractedStructure = vi.fn()
   const mockStartWatchingPlanFile = vi.fn()
   const mockStopWatchingPlanFile = vi.fn()
@@ -128,7 +142,6 @@ describe('PRDChatPanel', () => {
     guidedQuestions: [],
     extractedContent: null,
     processingSessionId: null,
-    extractedStructure: null,
     watchedPlanContent: null,
     watchedPlanPath: null,
     isWatchingPlan: false,
@@ -138,13 +151,11 @@ describe('PRDChatPanel', () => {
     setCurrentSession: mockSetCurrentSession,
     loadHistory: mockLoadHistory,
     loadSessions: mockLoadSessions,
-    exportToPRD: mockExportToPRD,
     clearError: mockClearError,
     assessQuality: mockAssessQuality,
     loadGuidedQuestions: mockLoadGuidedQuestions,
     previewExtraction: mockPreviewExtraction,
     setStructuredMode: mockSetStructuredMode,
-    loadExtractedStructure: mockLoadExtractedStructure,
     clearExtractedStructure: mockClearExtractedStructure,
     startWatchingPlanFile: mockStartWatchingPlanFile,
     stopWatchingPlanFile: mockStopWatchingPlanFile,
@@ -503,11 +514,11 @@ describe('PRDChatPanel', () => {
   })
 
   // ============================================================================
-  // Export to PRD Tests
+  // Actions Menu Tests
   // ============================================================================
 
-  describe('Export to PRD', () => {
-    it('shows export option in Actions menu when messages exist', async () => {
+  describe('Actions Menu', () => {
+    it('shows check quality option in Actions menu when messages exist', async () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
@@ -515,12 +526,12 @@ describe('PRDChatPanel', () => {
       const actionsButton = screen.getByRole('button', { name: /actions/i })
       await user.click(actionsButton)
 
-      // Export option should be visible in the dropdown
-      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
-      expect(exportOption).toBeInTheDocument()
+      // Check quality option should be visible in the dropdown
+      const qualityOption = await screen.findByRole('menuitem', { name: /check quality/i })
+      expect(qualityOption).toBeInTheDocument()
     })
 
-    it('hides export option when no messages', async () => {
+    it('shows disabled message when no messages', async () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         messages: [],
@@ -533,31 +544,11 @@ describe('PRDChatPanel', () => {
       const actionsButton = screen.getByRole('button', { name: /actions/i })
       await user.click(actionsButton)
 
-      // Export option should not be in the dropdown when no messages
-      expect(screen.queryByRole('menuitem', { name: /export to prd/i })).not.toBeInTheDocument()
+      // Should show disabled message
+      expect(screen.getByText(/Send a message first/i)).toBeInTheDocument()
     })
 
-    it('shows task preview when export option is clicked and quality is ready', async () => {
-      // Mock assessQuality to return a ready-for-export assessment
-      mockAssessQuality.mockResolvedValue({
-        overall: 80,
-        completeness: 85,
-        clarity: 75,
-        actionability: 80,
-        missingSections: [],
-        suggestions: [],
-        readyForExport: true,
-      })
-
-      // Mock getExtractedStructure to return a valid structure
-      mockGetExtractedStructure.mockResolvedValue({
-        title: 'Test PRD',
-        description: 'Test description',
-        tasks: [
-          { id: 'task-1', title: 'Task 1', description: 'Description 1', priority: 1 },
-        ],
-      })
-
+    it('calls assessQuality when check quality is clicked', async () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
@@ -565,43 +556,13 @@ describe('PRDChatPanel', () => {
       const actionsButton = screen.getByRole('button', { name: /actions/i })
       await user.click(actionsButton)
 
-      // Click on Export to PRD option
-      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
-      await user.click(exportOption)
+      // Click on Check Quality option
+      const qualityOption = await screen.findByRole('menuitem', { name: /check quality/i })
+      await user.click(qualityOption)
 
       await waitFor(() => {
         expect(mockAssessQuality).toHaveBeenCalled()
       })
-    })
-
-    it('shows quality panel when PRD is not ready for export', async () => {
-      // Mock assessQuality to return a not-ready assessment
-      mockAssessQuality.mockResolvedValue({
-        overall: 40,
-        completeness: 35,
-        clarity: 45,
-        actionability: 40,
-        missingSections: ['User Stories', 'Acceptance Criteria'],
-        suggestions: ['Add more detail'],
-        readyForExport: false,
-      })
-
-      const user = userEvent.setup()
-      renderWithRouter(<PRDChatPanel />)
-
-      // Click on Actions dropdown
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      await user.click(actionsButton)
-
-      // Click on Export to PRD option
-      const exportOption = await screen.findByRole('menuitem', { name: /export to prd/i })
-      await user.click(exportOption)
-
-      await waitFor(() => {
-        expect(mockAssessQuality).toHaveBeenCalled()
-      })
-      // Export should not be called if not ready
-      expect(mockExportToPRD).not.toHaveBeenCalled()
     })
 
     it('disables Actions button when streaming', () => {
@@ -821,10 +782,10 @@ describe('PRDChatPanel', () => {
   // ============================================================================
 
   describe('Session Loading', () => {
-    it('calls loadSessions on mount', () => {
+    it('calls loadSessions on mount with project path', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      expect(mockLoadSessions).toHaveBeenCalled()
+      expect(mockLoadSessions).toHaveBeenCalledWith('/test/project/path')
     })
 
     it('calls loadHistory when currentSession exists', () => {

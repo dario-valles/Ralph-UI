@@ -115,11 +115,14 @@ impl RalphStory {
     }
 }
 
-/// The PRD document stored in .ralph/prd.json
+/// The PRD document stored in .ralph-ui/prds/{prd_name}.json
 ///
 /// This is the source of truth for what tasks need to be done and their status.
 /// The agent reads this file at the start of each iteration to pick a task,
 /// and updates it when a task is completed.
+///
+/// Executions and iteration history are embedded directly in this file,
+/// enabling git-trackable state for team sharing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RalphPrd {
     /// Title of the PRD
@@ -138,6 +141,11 @@ pub struct RalphPrd {
     /// PRD metadata
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<PrdMetadata>,
+
+    /// Execution history (embedded, replaces database tables)
+    /// Only the most recent executions are kept to avoid file bloat.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub executions: Vec<PrdExecution>,
 }
 
 /// Metadata about the PRD
@@ -164,6 +172,193 @@ pub struct PrdMetadata {
     pub last_execution_id: Option<String>,
 }
 
+// ============================================================================
+// PRD Execution Types (Embedded in PRD files)
+// ============================================================================
+
+/// Execution status
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionStatus {
+    /// Execution is currently running
+    Running,
+    /// Execution completed successfully (all stories passed)
+    Completed,
+    /// Execution was stopped manually
+    Stopped,
+    /// Execution failed due to errors
+    Failed,
+    /// Execution was interrupted (crash recovery)
+    Interrupted,
+}
+
+impl Default for ExecutionStatus {
+    fn default() -> Self {
+        Self::Running
+    }
+}
+
+impl std::fmt::Display for ExecutionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExecutionStatus::Running => write!(f, "running"),
+            ExecutionStatus::Completed => write!(f, "completed"),
+            ExecutionStatus::Stopped => write!(f, "stopped"),
+            ExecutionStatus::Failed => write!(f, "failed"),
+            ExecutionStatus::Interrupted => write!(f, "interrupted"),
+        }
+    }
+}
+
+/// A single PRD execution with embedded iteration history
+///
+/// This replaces the database tables:
+/// - `prd_executions` table
+/// - `ralph_iteration_history` table (embedded as `iterations`)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrdExecution {
+    /// Unique execution ID
+    pub id: String,
+
+    /// Status of this execution
+    #[serde(default)]
+    pub status: ExecutionStatus,
+
+    /// Agent type used for this execution
+    pub agent_type: AgentType,
+
+    /// Model used (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Worktree path for this execution
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_path: Option<String>,
+
+    /// When the execution started
+    pub started_at: String,
+
+    /// When the execution ended (None if still running)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+
+    /// Total iterations completed
+    pub total_iterations: u32,
+
+    /// Total duration in seconds
+    pub total_duration_secs: f64,
+
+    /// Total cost incurred
+    #[serde(default)]
+    pub total_cost: f64,
+
+    /// Stories completed during this execution
+    #[serde(default)]
+    pub stories_completed: u32,
+
+    /// Stories remaining at end of execution
+    #[serde(default)]
+    pub stories_remaining: u32,
+
+    /// Error message if failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+
+    /// Iteration history embedded in the execution
+    #[serde(default)]
+    pub iterations: Vec<IterationRecord>,
+}
+
+impl PrdExecution {
+    /// Create a new execution with an ID and agent type
+    pub fn new(id: impl Into<String>, agent_type: AgentType) -> Self {
+        Self {
+            id: id.into(),
+            status: ExecutionStatus::Running,
+            agent_type,
+            model: None,
+            worktree_path: None,
+            started_at: chrono::Utc::now().to_rfc3339(),
+            ended_at: None,
+            total_iterations: 0,
+            total_duration_secs: 0.0,
+            total_cost: 0.0,
+            stories_completed: 0,
+            stories_remaining: 0,
+            error_message: None,
+            iterations: Vec::new(),
+        }
+    }
+
+    /// Add an iteration to this execution
+    pub fn add_iteration(&mut self, iteration: IterationRecord) {
+        self.total_iterations += 1;
+        self.total_duration_secs += iteration.duration_secs;
+        self.iterations.push(iteration);
+    }
+
+    /// Mark this execution as completed
+    pub fn mark_completed(&mut self, stories_completed: u32, stories_remaining: u32) {
+        self.status = ExecutionStatus::Completed;
+        self.ended_at = Some(chrono::Utc::now().to_rfc3339());
+        self.stories_completed = stories_completed;
+        self.stories_remaining = stories_remaining;
+    }
+
+    /// Mark this execution as stopped
+    pub fn mark_stopped(&mut self, stories_completed: u32, stories_remaining: u32) {
+        self.status = ExecutionStatus::Stopped;
+        self.ended_at = Some(chrono::Utc::now().to_rfc3339());
+        self.stories_completed = stories_completed;
+        self.stories_remaining = stories_remaining;
+    }
+
+    /// Mark this execution as failed
+    pub fn mark_failed(&mut self, error: impl Into<String>) {
+        self.status = ExecutionStatus::Failed;
+        self.ended_at = Some(chrono::Utc::now().to_rfc3339());
+        self.error_message = Some(error.into());
+    }
+
+    /// Get iteration stats
+    pub fn get_stats(&self) -> IterationStats {
+        let mut stats = IterationStats::default();
+        stats.total = self.total_iterations;
+        stats.total_duration_secs = self.total_duration_secs;
+
+        for iter in &self.iterations {
+            match iter.outcome {
+                IterationOutcome::Success => stats.successful += 1,
+                IterationOutcome::Failed => stats.failed += 1,
+                IterationOutcome::Skipped => stats.skipped += 1,
+                IterationOutcome::Interrupted => stats.interrupted += 1,
+            }
+            if iter.rate_limit_encountered {
+                stats.rate_limited += 1;
+            }
+        }
+
+        stats
+    }
+}
+
+/// Statistics for an execution's iterations
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IterationStats {
+    pub total: u32,
+    pub successful: u32,
+    pub failed: u32,
+    pub skipped: u32,
+    pub interrupted: u32,
+    pub rate_limited: u32,
+    pub total_duration_secs: f64,
+}
+
+/// Maximum number of executions to keep embedded in PRD file
+const MAX_EMBEDDED_EXECUTIONS: usize = 10;
+
 impl RalphPrd {
     /// Create a new PRD with required fields
     pub fn new(title: impl Into<String>, branch: impl Into<String>) -> Self {
@@ -179,6 +374,7 @@ impl RalphPrd {
                 total_iterations: 0,
                 last_execution_id: None,
             }),
+            executions: Vec::new(),
         }
     }
 
@@ -219,6 +415,80 @@ impl RalphPrd {
     pub fn progress(&self) -> (usize, usize) {
         let passed = self.stories.iter().filter(|s| s.passes).count();
         (passed, self.stories.len())
+    }
+
+    // =========================================================================
+    // Execution Management (Embedded)
+    // =========================================================================
+
+    /// Start a new execution
+    pub fn start_execution(&mut self, execution_id: impl Into<String>, agent_type: AgentType) -> &mut PrdExecution {
+        let exec = PrdExecution::new(execution_id, agent_type);
+        self.executions.push(exec);
+
+        // Update metadata
+        if let Some(ref mut meta) = self.metadata {
+            meta.last_execution_id = Some(self.executions.last().unwrap().id.clone());
+            meta.updated_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+
+        // Trim old executions to avoid file bloat
+        while self.executions.len() > MAX_EMBEDDED_EXECUTIONS {
+            self.executions.remove(0);
+        }
+
+        self.executions.last_mut().unwrap()
+    }
+
+    /// Get the current (most recent) execution
+    pub fn current_execution(&self) -> Option<&PrdExecution> {
+        self.executions.last()
+    }
+
+    /// Get mutable reference to the current execution
+    pub fn current_execution_mut(&mut self) -> Option<&mut PrdExecution> {
+        self.executions.last_mut()
+    }
+
+    /// Get an execution by ID
+    pub fn get_execution(&self, execution_id: &str) -> Option<&PrdExecution> {
+        self.executions.iter().find(|e| e.id == execution_id)
+    }
+
+    /// Get mutable reference to an execution by ID
+    pub fn get_execution_mut(&mut self, execution_id: &str) -> Option<&mut PrdExecution> {
+        self.executions.iter_mut().find(|e| e.id == execution_id)
+    }
+
+    /// Add an iteration to the current execution
+    pub fn add_iteration(&mut self, iteration: IterationRecord) -> bool {
+        if let Some(exec) = self.current_execution_mut() {
+            exec.add_iteration(iteration);
+
+            // Update total iterations in metadata
+            if let Some(ref mut meta) = self.metadata {
+                meta.total_iterations += 1;
+                meta.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get all iterations across all executions
+    pub fn all_iterations(&self) -> Vec<&IterationRecord> {
+        self.executions
+            .iter()
+            .flat_map(|e| e.iterations.iter())
+            .collect()
+    }
+
+    /// Get iterations for a specific execution
+    pub fn iterations_for_execution(&self, execution_id: &str) -> Vec<&IterationRecord> {
+        self.get_execution(execution_id)
+            .map(|e| e.iterations.iter().collect())
+            .unwrap_or_default()
     }
 }
 
@@ -805,5 +1075,250 @@ mod tests {
     fn test_make_prd_filename_short_id() {
         let name = super::make_prd_filename("Test", "abc");
         assert_eq!(name, "test-abc");
+    }
+
+    // =========================================================================
+    // PRD Execution Tests
+    // =========================================================================
+
+    #[test]
+    fn test_prd_execution_new() {
+        let exec = PrdExecution::new("exec-123", AgentType::Claude);
+        assert_eq!(exec.id, "exec-123");
+        assert_eq!(exec.status, ExecutionStatus::Running);
+        assert_eq!(exec.agent_type, AgentType::Claude);
+        assert_eq!(exec.total_iterations, 0);
+        assert!(exec.iterations.is_empty());
+    }
+
+    #[test]
+    fn test_prd_execution_add_iteration() {
+        let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
+
+        let iter = IterationRecord {
+            id: "iter-1".to_string(),
+            execution_id: "exec-123".to_string(),
+            iteration: 1,
+            outcome: IterationOutcome::Success,
+            duration_secs: 60.0,
+            agent_type: AgentType::Claude,
+            rate_limit_encountered: false,
+            error_message: None,
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:01:00Z".to_string()),
+        };
+
+        exec.add_iteration(iter);
+
+        assert_eq!(exec.total_iterations, 1);
+        assert_eq!(exec.total_duration_secs, 60.0);
+        assert_eq!(exec.iterations.len(), 1);
+    }
+
+    #[test]
+    fn test_prd_execution_mark_completed() {
+        let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
+        exec.mark_completed(5, 0);
+
+        assert_eq!(exec.status, ExecutionStatus::Completed);
+        assert_eq!(exec.stories_completed, 5);
+        assert_eq!(exec.stories_remaining, 0);
+        assert!(exec.ended_at.is_some());
+    }
+
+    #[test]
+    fn test_prd_execution_mark_failed() {
+        let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
+        exec.mark_failed("Connection timeout");
+
+        assert_eq!(exec.status, ExecutionStatus::Failed);
+        assert_eq!(exec.error_message, Some("Connection timeout".to_string()));
+        assert!(exec.ended_at.is_some());
+    }
+
+    #[test]
+    fn test_prd_execution_get_stats() {
+        let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
+
+        for i in 1..=5 {
+            let outcome = if i <= 3 {
+                IterationOutcome::Success
+            } else {
+                IterationOutcome::Failed
+            };
+
+            exec.add_iteration(IterationRecord {
+                id: format!("iter-{}", i),
+                execution_id: "exec-123".to_string(),
+                iteration: i,
+                outcome,
+                duration_secs: 30.0,
+                agent_type: AgentType::Claude,
+                rate_limit_encountered: i == 4,
+                error_message: None,
+                started_at: "2024-01-01T00:00:00Z".to_string(),
+                completed_at: Some("2024-01-01T00:00:30Z".to_string()),
+            });
+        }
+
+        let stats = exec.get_stats();
+        assert_eq!(stats.total, 5);
+        assert_eq!(stats.successful, 3);
+        assert_eq!(stats.failed, 2);
+        assert_eq!(stats.rate_limited, 1);
+        assert_eq!(stats.total_duration_secs, 150.0);
+    }
+
+    #[test]
+    fn test_prd_execution_serialization() {
+        let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
+        exec.model = Some("claude-3-5-sonnet".to_string());
+        exec.mark_completed(3, 2);
+
+        let json = serde_json::to_string_pretty(&exec).unwrap();
+        assert!(json.contains("exec-123"));
+        assert!(json.contains("completed"));
+
+        let parsed: PrdExecution = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, "exec-123");
+        assert_eq!(parsed.status, ExecutionStatus::Completed);
+    }
+
+    // =========================================================================
+    // PRD with Embedded Executions Tests
+    // =========================================================================
+
+    #[test]
+    fn test_prd_start_execution() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let exec = prd.start_execution("exec-1", AgentType::Claude);
+        assert_eq!(exec.id, "exec-1");
+
+        assert_eq!(prd.executions.len(), 1);
+        assert_eq!(prd.metadata.as_ref().unwrap().last_execution_id, Some("exec-1".to_string()));
+    }
+
+    #[test]
+    fn test_prd_current_execution() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        assert!(prd.current_execution().is_none());
+
+        prd.start_execution("exec-1", AgentType::Claude);
+        assert!(prd.current_execution().is_some());
+        assert_eq!(prd.current_execution().unwrap().id, "exec-1");
+    }
+
+    #[test]
+    fn test_prd_add_iteration() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        prd.start_execution("exec-1", AgentType::Claude);
+
+        let iter = IterationRecord {
+            id: "iter-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            iteration: 1,
+            outcome: IterationOutcome::Success,
+            duration_secs: 60.0,
+            agent_type: AgentType::Claude,
+            rate_limit_encountered: false,
+            error_message: None,
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:01:00Z".to_string()),
+        };
+
+        assert!(prd.add_iteration(iter));
+        assert_eq!(prd.current_execution().unwrap().total_iterations, 1);
+        assert_eq!(prd.metadata.as_ref().unwrap().total_iterations, 1);
+    }
+
+    #[test]
+    fn test_prd_executions_trimming() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        // Start more than MAX_EMBEDDED_EXECUTIONS
+        for i in 1..=15 {
+            prd.start_execution(format!("exec-{}", i), AgentType::Claude);
+        }
+
+        // Should be trimmed to MAX_EMBEDDED_EXECUTIONS
+        assert_eq!(prd.executions.len(), super::MAX_EMBEDDED_EXECUTIONS);
+        // The most recent execution should still be there
+        assert_eq!(prd.current_execution().unwrap().id, "exec-15");
+    }
+
+    #[test]
+    fn test_prd_all_iterations() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        prd.start_execution("exec-1", AgentType::Claude);
+        prd.add_iteration(IterationRecord {
+            id: "iter-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            iteration: 1,
+            outcome: IterationOutcome::Success,
+            duration_secs: 30.0,
+            agent_type: AgentType::Claude,
+            rate_limit_encountered: false,
+            error_message: None,
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:00:30Z".to_string()),
+        });
+
+        prd.start_execution("exec-2", AgentType::Opencode);
+        prd.add_iteration(IterationRecord {
+            id: "iter-2".to_string(),
+            execution_id: "exec-2".to_string(),
+            iteration: 1,
+            outcome: IterationOutcome::Failed,
+            duration_secs: 45.0,
+            agent_type: AgentType::Opencode,
+            rate_limit_encountered: true,
+            error_message: Some("Rate limit".to_string()),
+            started_at: "2024-01-01T00:01:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:01:45Z".to_string()),
+        });
+
+        let all_iters = prd.all_iterations();
+        assert_eq!(all_iters.len(), 2);
+    }
+
+    #[test]
+    fn test_prd_with_executions_serialization() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        prd.add_story(RalphStory::new("1", "Story 1", "Acceptance"));
+
+        prd.start_execution("exec-1", AgentType::Claude);
+        prd.add_iteration(IterationRecord {
+            id: "iter-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            iteration: 1,
+            outcome: IterationOutcome::Success,
+            duration_secs: 60.0,
+            agent_type: AgentType::Claude,
+            rate_limit_encountered: false,
+            error_message: None,
+            started_at: "2024-01-01T00:00:00Z".to_string(),
+            completed_at: Some("2024-01-01T00:01:00Z".to_string()),
+        });
+
+        let json = serde_json::to_string_pretty(&prd).unwrap();
+        assert!(json.contains("executions"));
+        assert!(json.contains("exec-1"));
+        assert!(json.contains("iter-1"));
+
+        let parsed: RalphPrd = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.executions.len(), 1);
+        assert_eq!(parsed.executions[0].iterations.len(), 1);
+    }
+
+    #[test]
+    fn test_execution_status_display() {
+        assert_eq!(ExecutionStatus::Running.to_string(), "running");
+        assert_eq!(ExecutionStatus::Completed.to_string(), "completed");
+        assert_eq!(ExecutionStatus::Stopped.to_string(), "stopped");
+        assert_eq!(ExecutionStatus::Failed.to_string(), "failed");
+        assert_eq!(ExecutionStatus::Interrupted.to_string(), "interrupted");
     }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { usePRDChatStore } from '../prdChatStore'
 import { prdChatApi } from '@/lib/tauri-api'
 import { resetStore } from '@/test/store-test-utils'
-import type { ChatSession, ChatMessage, PRDDocument, ExtractedPRDStructure } from '@/types'
+import type { ChatSession, ChatMessage } from '@/types'
 
 // Mock the tauri API
 vi.mock('@/lib/tauri-api', () => ({
@@ -12,10 +12,13 @@ vi.mock('@/lib/tauri-api', () => ({
     getHistory: vi.fn(),
     getSessions: vi.fn(),
     deleteSession: vi.fn(),
-    exportToPRD: vi.fn(),
-    getExtractedStructure: vi.fn(),
     setStructuredMode: vi.fn(),
     clearExtractedStructure: vi.fn(),
+    assessQuality: vi.fn(),
+    getGuidedQuestions: vi.fn(),
+    previewExtraction: vi.fn(),
+    startWatchingPlanFile: vi.fn(),
+    stopWatchingPlanFile: vi.fn(),
   },
 }))
 
@@ -46,30 +49,6 @@ describe('prdChatStore', () => {
     structuredMode: true,
   }
 
-  const mockExtractedStructure: ExtractedPRDStructure = {
-    epics: [
-      {
-        type: 'epic',
-        id: 'EP-1',
-        title: 'User Authentication',
-        description: 'Complete auth system',
-        priority: 1,
-      },
-    ],
-    userStories: [
-      {
-        type: 'user_story',
-        id: 'US-1.1',
-        parentId: 'EP-1',
-        title: 'User Login',
-        description: 'As a user, I want to log in',
-        acceptanceCriteria: ['Valid email required', 'Password validation'],
-      },
-    ],
-    tasks: [],
-    acceptanceCriteria: [],
-  }
-
   const mockUserMessage: ChatMessage = {
     id: 'msg-1',
     sessionId: 'session-1',
@@ -86,16 +65,6 @@ describe('prdChatStore', () => {
     createdAt: new Date().toISOString(),
   }
 
-  const mockPRD: PRDDocument = {
-    id: 'prd-1',
-    title: 'Todo App PRD',
-    description: 'A PRD for a simple todo application',
-    content: JSON.stringify({ overview: 'Todo app' }),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    version: 1,
-  }
-
   beforeEach(() => {
     resetStore(usePRDChatStore, {
       sessions: [],
@@ -104,7 +73,7 @@ describe('prdChatStore', () => {
       loading: false,
       streaming: false,
       error: null,
-      extractedStructure: null,
+      extractedContent: null,
     })
     vi.clearAllMocks()
   })
@@ -152,7 +121,7 @@ describe('prdChatStore', () => {
       store.sessions = [mockSession2]
 
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(usePRDChatStore.getState().sessions[0]).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions[1]).toEqual(mockSession2)
@@ -166,7 +135,7 @@ describe('prdChatStore', () => {
       })
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(loadingDuringCall).toBe(true)
     })
@@ -176,7 +145,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue(error)
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
       expect(usePRDChatStore.getState().loading).toBe(false)
@@ -188,7 +157,7 @@ describe('prdChatStore', () => {
       store.error = 'Previous error'
 
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(usePRDChatStore.getState().error).toBeNull()
     })
@@ -206,7 +175,7 @@ describe('prdChatStore', () => {
       store.currentSession = mockSession
       await store.sendMessage('Help me create a PRD for a todo app')
 
-      expect(prdChatApi.sendMessage).toHaveBeenCalledWith('session-1', 'Help me create a PRD for a todo app')
+      expect(prdChatApi.sendMessage).toHaveBeenCalledWith('session-1', 'Help me create a PRD for a todo app', '/test/project')
       expect(usePRDChatStore.getState().messages).toContainEqual(mockUserMessage)
       expect(usePRDChatStore.getState().messages).toContainEqual(mockAssistantMessage)
     })
@@ -254,6 +223,13 @@ describe('prdChatStore', () => {
       store.currentSession = null
 
       await expect(store.sendMessage('Test')).rejects.toThrow('No active session')
+    })
+
+    it('should throw error if session has no project path', async () => {
+      const store = usePRDChatStore.getState()
+      store.currentSession = { ...mockSession, projectPath: undefined }
+
+      await expect(store.sendMessage('Test')).rejects.toThrow('Session has no project path')
     })
 
     it('should handle errors when sending message', async () => {
@@ -317,9 +293,10 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.getHistory).mockResolvedValue(messages)
 
       const store = usePRDChatStore.getState()
+      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
-      expect(prdChatApi.getHistory).toHaveBeenCalledWith('session-1')
+      expect(prdChatApi.getHistory).toHaveBeenCalledWith('session-1', '/test/project')
       expect(usePRDChatStore.getState().messages).toEqual(messages)
       expect(usePRDChatStore.getState().loading).toBe(false)
     })
@@ -332,6 +309,7 @@ describe('prdChatStore', () => {
       })
 
       const store = usePRDChatStore.getState()
+      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
       expect(loadingDuringCall).toBe(true)
@@ -342,6 +320,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.getHistory).mockRejectedValue(error)
 
       const store = usePRDChatStore.getState()
+      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
       expect(usePRDChatStore.getState().error).toBe('Failed to load history')
@@ -353,22 +332,33 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.getHistory).mockResolvedValue(newMessages)
 
       const store = usePRDChatStore.getState()
+      store.currentSession = mockSession
       store.messages = [mockUserMessage]
       await store.loadHistory('session-1')
 
       expect(usePRDChatStore.getState().messages).toEqual(newMessages)
     })
+
+    it('should set error if no project path available', async () => {
+      const store = usePRDChatStore.getState()
+      store.currentSession = null
+
+      await store.loadHistory('session-1')
+
+      expect(usePRDChatStore.getState().error).toBe('No project path available')
+      expect(prdChatApi.getHistory).not.toHaveBeenCalled()
+    })
   })
 
   describe('loadSessions', () => {
-    it('should load all sessions', async () => {
+    it('should load all sessions with project path', async () => {
       const sessions = [mockSession, mockSession2]
       vi.mocked(prdChatApi.getSessions).mockResolvedValue(sessions)
 
       const store = usePRDChatStore.getState()
-      await store.loadSessions()
+      await store.loadSessions('/test/project')
 
-      expect(prdChatApi.getSessions).toHaveBeenCalled()
+      expect(prdChatApi.getSessions).toHaveBeenCalledWith('/test/project')
       expect(usePRDChatStore.getState().sessions).toEqual(sessions)
       expect(usePRDChatStore.getState().loading).toBe(false)
     })
@@ -381,7 +371,7 @@ describe('prdChatStore', () => {
       })
 
       const store = usePRDChatStore.getState()
-      await store.loadSessions()
+      await store.loadSessions('/test/project')
 
       expect(loadingDuringCall).toBe(true)
     })
@@ -391,20 +381,18 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.getSessions).mockRejectedValue(error)
 
       const store = usePRDChatStore.getState()
-      await store.loadSessions()
+      await store.loadSessions('/test/project')
 
       expect(usePRDChatStore.getState().error).toBe('Failed to load sessions')
       expect(usePRDChatStore.getState().loading).toBe(false)
     })
 
-    it('should clear previous error when loading sessions', async () => {
+    it('should set error if project path is not provided', async () => {
       const store = usePRDChatStore.getState()
-      store.error = 'Previous error'
-
-      vi.mocked(prdChatApi.getSessions).mockResolvedValue([])
       await store.loadSessions()
 
-      expect(usePRDChatStore.getState().error).toBeNull()
+      expect(usePRDChatStore.getState().error).toBe('Project path is required to load sessions')
+      expect(prdChatApi.getSessions).not.toHaveBeenCalled()
     })
   })
 
@@ -450,7 +438,7 @@ describe('prdChatStore', () => {
       store.sessions = [mockSession, mockSession2]
       await store.deleteSession(mockSession.id)
 
-      expect(prdChatApi.deleteSession).toHaveBeenCalledWith(mockSession.id)
+      expect(prdChatApi.deleteSession).toHaveBeenCalledWith(mockSession.id, '/test/project')
       expect(usePRDChatStore.getState().sessions).toEqual([mockSession2])
     })
 
@@ -496,58 +484,20 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.deleteSession).mockRejectedValue(error)
 
       const store = usePRDChatStore.getState()
+      store.sessions = [mockSession]
       await expect(store.deleteSession(mockSession.id)).rejects.toThrow('Failed to delete session')
       expect(usePRDChatStore.getState().error).toBe('Failed to delete session')
     })
-  })
 
-  describe('exportToPRD', () => {
-    it('should export chat to PRD', async () => {
-      vi.mocked(prdChatApi.exportToPRD).mockResolvedValue(mockPRD)
+    it('should set error if session has no project path', async () => {
+      const sessionWithoutPath = { ...mockSession, projectPath: undefined }
 
       const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
-      const result = await store.exportToPRD('Todo App PRD')
+      store.sessions = [sessionWithoutPath]
+      await store.deleteSession(sessionWithoutPath.id)
 
-      expect(prdChatApi.exportToPRD).toHaveBeenCalledWith('session-1', 'Todo App PRD')
-      expect(result).toEqual(mockPRD)
-      expect(usePRDChatStore.getState().loading).toBe(false)
-    })
-
-    it('should return null if no current session', async () => {
-      const store = usePRDChatStore.getState()
-      store.currentSession = null
-
-      const result = await store.exportToPRD('Test PRD')
-
-      expect(result).toBeNull()
-      expect(prdChatApi.exportToPRD).not.toHaveBeenCalled()
-    })
-
-    it('should set loading state during export', async () => {
-      let loadingDuringCall = false
-      vi.mocked(prdChatApi.exportToPRD).mockImplementation(async () => {
-        loadingDuringCall = usePRDChatStore.getState().loading
-        return mockPRD
-      })
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
-      await store.exportToPRD('Test PRD')
-
-      expect(loadingDuringCall).toBe(true)
-    })
-
-    it('should handle errors when exporting to PRD', async () => {
-      const error = new Error('Failed to export')
-      vi.mocked(prdChatApi.exportToPRD).mockRejectedValue(error)
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
-
-      await expect(store.exportToPRD('Test PRD')).rejects.toThrow('Failed to export')
-      expect(usePRDChatStore.getState().error).toBe('Failed to export')
-      expect(usePRDChatStore.getState().loading).toBe(false)
+      expect(usePRDChatStore.getState().error).toBe('Cannot delete session without project path')
+      expect(prdChatApi.deleteSession).not.toHaveBeenCalled()
     })
   })
 
@@ -607,7 +557,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue('String error')
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
     })
@@ -616,7 +566,7 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockRejectedValue(new Error())
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude' })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
       expect(usePRDChatStore.getState().error).toBe('Failed to start session')
     })
@@ -632,6 +582,7 @@ describe('prdChatStore', () => {
         .mockResolvedValueOnce(session2Messages)
 
       const store = usePRDChatStore.getState()
+      store.currentSession = mockSession
 
       await store.loadHistory('session-1')
       expect(usePRDChatStore.getState().messages).toEqual(session1Messages)
@@ -655,7 +606,7 @@ describe('prdChatStore', () => {
 
       await store.setStructuredMode(true)
 
-      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-1', true)
+      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-1', '/test/project', true)
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(true)
     })
 
@@ -668,7 +619,7 @@ describe('prdChatStore', () => {
 
       await store.setStructuredMode(false)
 
-      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-structured', false)
+      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-structured', '/test/project', false)
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(false)
     })
 
@@ -706,70 +657,16 @@ describe('prdChatStore', () => {
     })
   })
 
-  describe('loadExtractedStructure', () => {
-    it('should load extracted structure for current session', async () => {
-      vi.mocked(prdChatApi.getExtractedStructure).mockResolvedValue(mockExtractedStructure)
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-
-      await store.loadExtractedStructure()
-
-      expect(prdChatApi.getExtractedStructure).toHaveBeenCalledWith('session-structured')
-      expect(usePRDChatStore.getState().extractedStructure).toEqual(mockExtractedStructure)
-    })
-
-    it('should do nothing if no current session', async () => {
-      const store = usePRDChatStore.getState()
-      store.currentSession = null
-
-      await store.loadExtractedStructure()
-
-      expect(prdChatApi.getExtractedStructure).not.toHaveBeenCalled()
-    })
-
-    it('should handle errors when loading extracted structure', async () => {
-      vi.mocked(prdChatApi.getExtractedStructure).mockRejectedValue(new Error('Failed to load extracted structure'))
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-
-      await store.loadExtractedStructure()
-
-      expect(usePRDChatStore.getState().error).toBe('Failed to load extracted structure')
-    })
-
-    it('should replace existing extracted structure', async () => {
-      const newStructure: ExtractedPRDStructure = {
-        epics: [{ type: 'epic', id: 'EP-2', title: 'New Epic', description: 'New' }],
-        userStories: [],
-        tasks: [],
-        acceptanceCriteria: [],
-      }
-      vi.mocked(prdChatApi.getExtractedStructure).mockResolvedValue(newStructure)
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-      store.extractedStructure = mockExtractedStructure
-
-      await store.loadExtractedStructure()
-
-      expect(usePRDChatStore.getState().extractedStructure).toEqual(newStructure)
-    })
-  })
-
   describe('clearExtractedStructure', () => {
     it('should clear extracted structure for current session', async () => {
       vi.mocked(prdChatApi.clearExtractedStructure).mockResolvedValue(undefined)
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockStructuredSession
-      store.extractedStructure = mockExtractedStructure
 
       await store.clearExtractedStructure()
 
-      expect(prdChatApi.clearExtractedStructure).toHaveBeenCalledWith('session-structured')
-      expect(usePRDChatStore.getState().extractedStructure).toBeNull()
+      expect(prdChatApi.clearExtractedStructure).toHaveBeenCalledWith('session-structured', '/test/project')
     })
 
     it('should do nothing if no current session', async () => {
@@ -786,12 +683,10 @@ describe('prdChatStore', () => {
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockStructuredSession
-      store.extractedStructure = mockExtractedStructure
 
       await store.clearExtractedStructure()
 
       expect(usePRDChatStore.getState().error).toBe('Failed to clear extracted structure')
-      // Structure should remain unchanged on error
     })
   })
 
@@ -800,71 +695,10 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockStructuredSession)
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude', structuredMode: true })
+      await store.startSession({ agentType: 'claude', projectPath: '/test/project', structuredMode: true })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', undefined, undefined, undefined, undefined, undefined, true)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, true)
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(true)
-    })
-
-    it('should clear extractedStructure when starting new session', async () => {
-      vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
-
-      const store = usePRDChatStore.getState()
-      store.extractedStructure = mockExtractedStructure
-
-      await store.startSession({ agentType: 'claude' })
-
-      expect(usePRDChatStore.getState().extractedStructure).toBeNull()
-    })
-  })
-
-  describe('sendMessage with structuredMode', () => {
-    it('should reload extracted structure after sending message in structured mode', async () => {
-      const response = {
-        userMessage: mockUserMessage,
-        assistantMessage: mockAssistantMessage,
-      }
-      vi.mocked(prdChatApi.sendMessage).mockResolvedValue(response)
-      vi.mocked(prdChatApi.getExtractedStructure).mockResolvedValue(mockExtractedStructure)
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-      await store.sendMessage('Create an epic for user authentication')
-
-      expect(prdChatApi.getExtractedStructure).toHaveBeenCalledWith('session-structured')
-      expect(usePRDChatStore.getState().extractedStructure).toEqual(mockExtractedStructure)
-    })
-
-    it('should not reload extracted structure if structured mode is disabled', async () => {
-      const response = {
-        userMessage: mockUserMessage,
-        assistantMessage: mockAssistantMessage,
-      }
-      vi.mocked(prdChatApi.sendMessage).mockResolvedValue(response)
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockSession // structuredMode: false
-      await store.sendMessage('Help me create a PRD')
-
-      expect(prdChatApi.getExtractedStructure).not.toHaveBeenCalled()
-    })
-
-    it('should silently ignore errors when reloading extracted structure', async () => {
-      const response = {
-        userMessage: mockUserMessage,
-        assistantMessage: mockAssistantMessage,
-      }
-      vi.mocked(prdChatApi.sendMessage).mockResolvedValue(response)
-      vi.mocked(prdChatApi.getExtractedStructure).mockRejectedValue(new Error('Network error'))
-
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-
-      // Should not throw despite the error
-      await store.sendMessage('Create an epic')
-
-      // Error should not be set for structure reload failures
-      expect(usePRDChatStore.getState().error).toBeNull()
     })
   })
 })

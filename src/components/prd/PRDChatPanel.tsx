@@ -131,7 +131,9 @@ export function PRDChatPanel() {
 
   // Load sessions on mount and auto-refresh if returning after processing
   useEffect(() => {
-    loadSessions()
+    if (activeProject?.path) {
+      loadSessions(activeProject.path)
+    }
 
     // If we had a processing session stored and we're returning to this view,
     // reload its history to show the new messages
@@ -140,7 +142,7 @@ export function PRDChatPanel() {
       // Processing completed while we were away - reload history
       loadHistory(storedProcessingId)
     }
-  }, [loadSessions, loadHistory, processingSessionId])
+  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path])
 
   // Keep track of processing session ID changes
   useEffect(() => {

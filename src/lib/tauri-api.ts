@@ -193,7 +193,7 @@ export const prdApi = {
 export const prdChatApi = {
   startSession: async (
     agentType: string,
-    projectPath?: string,
+    projectPath: string,
     prdId?: string,
     prdType?: PRDTypeValue,
     guidedMode?: boolean,
@@ -207,28 +207,29 @@ export const prdChatApi = {
 
   sendMessage: async (
     sessionId: string,
-    content: string
+    content: string,
+    projectPath: string
   ): Promise<SendMessageResponse> => {
     return await invoke('send_prd_chat_message', {
-      request: { sessionId, content }
+      request: { sessionId, content, projectPath }
     })
   },
 
-  getHistory: async (sessionId: string): Promise<ChatMessage[]> => {
-    return await invoke('get_prd_chat_history', { sessionId })
+  getHistory: async (sessionId: string, projectPath: string): Promise<ChatMessage[]> => {
+    return await invoke('get_prd_chat_history', { sessionId, projectPath })
   },
 
-  getSessions: async (): Promise<ChatSession[]> => {
-    return await invoke('list_prd_chat_sessions')
+  getSessions: async (projectPath: string): Promise<ChatSession[]> => {
+    return await invoke('list_prd_chat_sessions', { projectPath })
   },
 
-  deleteSession: async (sessionId: string): Promise<void> => {
-    return await invoke('delete_prd_chat_session', { sessionId })
+  deleteSession: async (sessionId: string, projectPath: string): Promise<void> => {
+    return await invoke('delete_prd_chat_session', { sessionId, projectPath })
   },
 
   /** Assess the quality of a PRD chat session before export */
-  assessQuality: async (sessionId: string): Promise<QualityAssessment> => {
-    return await invoke('assess_prd_quality', { sessionId })
+  assessQuality: async (sessionId: string, projectPath: string): Promise<QualityAssessment> => {
+    return await invoke('assess_prd_quality', { sessionId, projectPath })
   },
 
   /** Get guided questions based on PRD type */
@@ -237,8 +238,8 @@ export const prdChatApi = {
   },
 
   /** Preview extracted PRD content before export */
-  previewExtraction: async (sessionId: string): Promise<ExtractedPRDContent> => {
-    return await invoke('preview_prd_extraction', { sessionId })
+  previewExtraction: async (sessionId: string, projectPath: string): Promise<ExtractedPRDContent> => {
+    return await invoke('preview_prd_extraction', { sessionId, projectPath })
   },
 
   /** Check if an agent CLI is available in the system PATH */
@@ -247,18 +248,18 @@ export const prdChatApi = {
   },
 
   /** Set structured output mode for a session */
-  setStructuredMode: async (sessionId: string, enabled: boolean): Promise<void> => {
-    return await invoke('set_structured_mode', { sessionId, enabled })
+  setStructuredMode: async (sessionId: string, projectPath: string, enabled: boolean): Promise<void> => {
+    return await invoke('set_structured_mode', { sessionId, projectPath, enabled })
   },
 
   /** Clear extracted structure for a session */
-  clearExtractedStructure: async (sessionId: string): Promise<void> => {
-    return await invoke('clear_extracted_structure', { sessionId })
+  clearExtractedStructure: async (sessionId: string, projectPath: string): Promise<void> => {
+    return await invoke('clear_extracted_structure', { sessionId, projectPath })
   },
 
   /** Start watching a PRD plan file for changes */
-  startWatchingPlanFile: async (sessionId: string): Promise<WatchFileResponse> => {
-    return await invoke('start_watching_prd_file', { sessionId })
+  startWatchingPlanFile: async (sessionId: string, projectPath: string): Promise<WatchFileResponse> => {
+    return await invoke('start_watching_prd_file', { sessionId, projectPath })
   },
 
   /** Stop watching a PRD plan file */
@@ -267,8 +268,8 @@ export const prdChatApi = {
   },
 
   /** Get the current content of a PRD plan file */
-  getPlanContent: async (sessionId: string): Promise<string | null> => {
-    return await invoke('get_prd_plan_content', { sessionId })
+  getPlanContent: async (sessionId: string, projectPath: string): Promise<string | null> => {
+    return await invoke('get_prd_plan_content', { sessionId, projectPath })
   },
 }
 

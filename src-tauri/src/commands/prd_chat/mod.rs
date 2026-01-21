@@ -3,22 +3,22 @@
 // This module is organized into submodules:
 // - types: Request/response types for the API
 // - (commands remain in mod.rs for now)
+//
+// Storage: Chat sessions are stored in {project}/.ralph-ui/chat/{id}.json
 
 mod types;
 
 pub use types::*;
 
-use crate::database::Database;
+use crate::file_storage::chat_ops;
 use crate::models::{
     AgentType, ChatMessage, ChatSession, ExtractedPRDContent, ExtractedPRDStructure,
     GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
 };
 use crate::parsers::structured_output;
-use crate::session_files;
-use crate::utils::lock_db;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
 
@@ -30,12 +30,13 @@ use uuid::Uuid;
 #[tauri::command]
 pub async fn start_prd_chat_session(
     request: StartChatSessionRequest,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<ChatSession, String> {
-    let db = lock_db(&db)?;
-
     // Validate agent type
     let _agent_type = parse_agent_type(&request.agent_type)?;
+
+    // Require project_path for file-based storage
+    let project_path = request.project_path.as_ref()
+        .ok_or_else(|| "project_path is required for chat sessions".to_string())?;
 
     // Validate and parse PRD type if provided
     let prd_type_enum = if let Some(ref prd_type) = request.prd_type {
@@ -56,7 +57,7 @@ pub async fn start_prd_chat_session(
     let mut session = ChatSession {
         id: session_id.clone(),
         agent_type: request.agent_type,
-        project_path: request.project_path,
+        project_path: request.project_path.clone(),
         prd_id: request.prd_id,
         title: default_title,
         prd_type: request.prd_type,
@@ -70,19 +71,13 @@ pub async fn start_prd_chat_session(
         message_count: Some(0),
     };
 
-    db.create_chat_session(&session)
-        .map_err(|e| format!("Failed to create chat session: {}", e))?;
+    // Initialize .ralph-ui directory and save session to file
+    let project_path_obj = Path::new(project_path);
+    crate::file_storage::init_ralph_ui_dir(project_path_obj)
+        .map_err(|e| format!("Failed to initialize .ralph-ui directory: {}", e))?;
 
-    // Ensure .ralph-ui/prds/ directory exists for plan files
-    if let Some(ref project_path) = session.project_path {
-        let prds_dir = std::path::Path::new(project_path)
-            .join(".ralph-ui")
-            .join("prds");
-        if let Err(e) = std::fs::create_dir_all(&prds_dir) {
-            log::warn!("Failed to create PRD plan directory: {}", e);
-            // Don't fail the session creation, just log the warning
-        }
-    }
+    chat_ops::create_chat_session(project_path_obj, &session)
+        .map_err(|e| format!("Failed to create chat session: {}", e))?;
 
     // If guided mode is enabled, add an initial welcome message with the first question
     if guided_mode {
@@ -96,7 +91,7 @@ pub async fn start_prd_chat_session(
             created_at: now,
         };
 
-        db.create_chat_message(&assistant_message)
+        chat_ops::create_chat_message(project_path_obj, &assistant_message)
             .map_err(|e| format!("Failed to create welcome message: {}", e))?;
 
         // Update message count
@@ -159,45 +154,39 @@ fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
 pub async fn send_prd_chat_message(
     app_handle: tauri::AppHandle,
     request: SendMessageRequest,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<SendMessageResponse, String> {
-    // First phase: read data and store user message (hold mutex briefly)
-    let (session, history, user_message, prompt) = {
-        let db_guard = lock_db(&db)?;
+    // Get project_path from request (required for file storage)
+    let project_path_obj = Path::new(&request.project_path);
 
-        // Get the session
-        let session = db_guard.get_chat_session(&request.session_id)
-            .map_err(|e| format!("Session not found: {}", e))?;
+    // First phase: read data and store user message
+    let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
 
-        let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339();
 
-        // Store user message
-        let user_message = ChatMessage {
-            id: Uuid::new_v4().to_string(),
-            session_id: request.session_id.clone(),
-            role: MessageRole::User,
-            content: request.content.clone(),
-            created_at: now.clone(),
-        };
-
-        db_guard.create_chat_message(&user_message)
-            .map_err(|e| format!("Failed to store user message: {}", e))?;
-
-        // Get chat history for context
-        let history = db_guard.get_messages_by_session(&request.session_id)
-            .map_err(|e| format!("Failed to get chat history: {}", e))?;
-
-        // Build prompt with PRD context
-        let prompt = build_prd_chat_prompt(&session, &history, &request.content);
-
-        (session, history, user_message, prompt)
-        // db_guard dropped here
+    // Store user message
+    let user_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::User,
+        content: request.content.clone(),
+        created_at: now.clone(),
     };
 
-    // Parse agent type (no db access needed)
+    chat_ops::create_chat_message(project_path_obj, &user_message)
+        .map_err(|e| format!("Failed to store user message: {}", e))?;
+
+    // Get chat history for context
+    let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Failed to get chat history: {}", e))?;
+
+    // Build prompt with PRD context
+    let prompt = build_prd_chat_prompt(&session, &history, &request.content);
+
+    // Parse agent type
     let agent_type = parse_agent_type(&session.agent_type)?;
 
-    // Execute CLI agent and get response with streaming (no mutex held)
+    // Execute CLI agent and get response with streaming
     let response_content = execute_chat_agent(
         &app_handle,
         &request.session_id,
@@ -208,59 +197,52 @@ pub async fn send_prd_chat_message(
         .await
         .map_err(|e| format!("Agent execution failed: {}", e))?;
 
-    // Second phase: store response and parse structured output (hold mutex briefly)
-    let assistant_message = {
-        let db_guard = lock_db(&db)?;
+    // Second phase: store response and parse structured output
+    let response_now = chrono::Utc::now().to_rfc3339();
 
-        let response_now = chrono::Utc::now().to_rfc3339();
-
-        // Store assistant message
-        let assistant_message = ChatMessage {
-            id: Uuid::new_v4().to_string(),
-            session_id: request.session_id.clone(),
-            role: MessageRole::Assistant,
-            content: response_content.clone(),
-            created_at: response_now.clone(),
-        };
-
-        db_guard.create_chat_message(&assistant_message)
-            .map_err(|e| format!("Failed to store assistant message: {}", e))?;
-
-        // Update session timestamp
-        update_chat_session_timestamp(db_guard.get_connection(), &request.session_id, &response_now)
-            .map_err(|e| format!("Failed to update session: {}", e))?;
-
-        // Auto-generate title from first message if not set
-        if session.title.is_none() {
-            let title = generate_session_title(&request.content, session.prd_type.as_deref());
-            update_chat_session_title(db_guard.get_connection(), &request.session_id, &title)
-                .ok(); // Ignore title update errors
-        }
-
-        // If structured mode is enabled, parse JSON blocks from response
-        if session.structured_mode {
-            let new_items = structured_output::extract_items(&response_content);
-            if !new_items.is_empty() {
-                // Load existing structure or create new
-                let mut structure: ExtractedPRDStructure = session.extracted_structure
-                    .as_ref()
-                    .and_then(|s| serde_json::from_str(s).ok())
-                    .unwrap_or_default();
-
-                // Merge new items
-                structured_output::merge_items(&mut structure, new_items);
-
-                // Store updated structure
-                let structure_json = serde_json::to_string(&structure)
-                    .map_err(|e| format!("Failed to serialize structure: {}", e))?;
-                db_guard.update_chat_session_extracted_structure(&request.session_id, Some(&structure_json))
-                    .map_err(|e| format!("Failed to update structure: {}", e))?;
-            }
-        }
-
-        assistant_message
-        // db_guard dropped here
+    // Store assistant message
+    let assistant_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::Assistant,
+        content: response_content.clone(),
+        created_at: response_now.clone(),
     };
+
+    chat_ops::create_chat_message(project_path_obj, &assistant_message)
+        .map_err(|e| format!("Failed to store assistant message: {}", e))?;
+
+    // Update session timestamp
+    chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
+        .map_err(|e| format!("Failed to update session: {}", e))?;
+
+    // Auto-generate title from first message if not set
+    if session.title.is_none() {
+        let title = generate_session_title(&request.content, session.prd_type.as_deref());
+        chat_ops::update_chat_session_title(project_path_obj, &request.session_id, &title)
+            .ok(); // Ignore title update errors
+    }
+
+    // If structured mode is enabled, parse JSON blocks from response
+    if session.structured_mode {
+        let new_items = structured_output::extract_items(&response_content);
+        if !new_items.is_empty() {
+            // Load existing structure or create new
+            let mut structure: ExtractedPRDStructure = session.extracted_structure
+                .as_ref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+
+            // Merge new items
+            structured_output::merge_items(&mut structure, new_items);
+
+            // Store updated structure
+            let structure_json = serde_json::to_string(&structure)
+                .map_err(|e| format!("Failed to serialize structure: {}", e))?;
+            chat_ops::update_chat_session_extracted_structure(project_path_obj, &request.session_id, Some(&structure_json))
+                .map_err(|e| format!("Failed to update structure: {}", e))?;
+        }
+    }
 
     // Suppress unused variable warning
     let _ = history;
@@ -275,22 +257,22 @@ pub async fn send_prd_chat_message(
 #[tauri::command]
 pub async fn get_prd_chat_history(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<Vec<ChatMessage>, String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    db.get_messages_by_session(&session_id)
+    chat_ops::get_messages_by_session(project_path_obj, &session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))
 }
 
-/// List all chat sessions
+/// List all chat sessions for a project
 #[tauri::command]
 pub async fn list_prd_chat_sessions(
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<Vec<ChatSession>, String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    db.list_chat_sessions()
+    chat_ops::list_chat_sessions(project_path_obj)
         .map_err(|e| format!("Failed to list chat sessions: {}", e))
 }
 
@@ -298,16 +280,12 @@ pub async fn list_prd_chat_sessions(
 #[tauri::command]
 pub async fn delete_prd_chat_session(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    // Delete messages first (foreign key constraint)
-    db.delete_messages_by_session(&session_id)
-        .map_err(|e| format!("Failed to delete messages: {}", e))?;
-
-    // Delete session
-    db.delete_chat_session(&session_id)
+    // Delete session (messages are embedded in the file)
+    chat_ops::delete_chat_session(project_path_obj, &session_id)
         .map_err(|e| format!("Failed to delete session: {}", e))
 }
 
@@ -316,56 +294,46 @@ pub async fn delete_prd_chat_session(
 pub async fn export_chat_to_prd(
     app_handle: tauri::AppHandle,
     request: ExportToPRDRequest,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<ExportResult, String> {
-    // First, get session data and determine content source
-    // We need to release the lock before async AI call
-    let (session, content, assessment, from_plan_file) = {
-        let db_guard = lock_db(&db)?;
+    // Use project_path from request (required)
+    let project_path_obj = Path::new(&request.project_path);
 
-        // Get session
-        let session = db_guard.get_chat_session(&request.session_id)
-            .map_err(|e| format!("Session not found: {}", e))?;
+    // Get session from file storage
+    let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
 
-        // Try to get content from PRD plan file first (this has the actual PRD)
-        // Fall back to chat messages if the file doesn't exist or can't be read
-        let (content, assessment, from_plan_file) = if let Some(ref project_path) = session.project_path {
-            let plan_path = crate::watchers::get_prd_plan_file_path(
-                project_path,
-                &request.session_id,
-                session.title.as_deref(),
-            );
+    // Try to get content from PRD plan file first (this has the actual PRD)
+    // Fall back to chat messages if the file doesn't exist or can't be read
+    let (content, assessment, from_plan_file) = {
+        let plan_path = crate::watchers::get_prd_plan_file_path(
+            &request.project_path,
+            &request.session_id,
+            session.title.as_deref(),
+        );
 
-            if plan_path.exists() {
-                // Use the actual PRD file content
-                match std::fs::read_to_string(&plan_path) {
-                    Ok(file_content) => {
-                        log::info!("Exporting PRD from plan file: {:?}", plan_path);
-                        let assessment = calculate_quality_from_markdown(
-                            &file_content,
-                            session.prd_type.as_deref(),
-                        );
-                        (file_content, assessment, true)
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
-                        let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
-                        (c, a, false)
-                    }
+        if plan_path.exists() {
+            // Use the actual PRD file content
+            match std::fs::read_to_string(&plan_path) {
+                Ok(file_content) => {
+                    log::info!("Exporting PRD from plan file: {:?}", plan_path);
+                    let assessment = calculate_quality_from_markdown(
+                        &file_content,
+                        session.prd_type.as_deref(),
+                    );
+                    (file_content, assessment, true)
                 }
-            } else {
-                // No plan file yet, use messages
-                let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
-                (c, a, false)
+                Err(e) => {
+                    log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
+                    let (c, a) = export_content_from_messages_file(project_path_obj, &request.session_id, &session)?;
+                    (c, a, false)
+                }
             }
         } else {
-            // No project path, use messages
-            let (c, a) = export_content_from_messages(&db_guard, &request.session_id, &session)?;
+            // No plan file yet, use messages
+            let (c, a) = export_content_from_messages_file(project_path_obj, &request.session_id, &session)?;
             (c, a, false)
-        };
-
-        (session, content, assessment, from_plan_file)
-    }; // Release db lock here before async AI call
+        }
+    };
 
     // Extract structured items via AI if we have substantial content
     // Run extraction for any substantial content (plan file or messages)
@@ -428,7 +396,7 @@ pub async fn export_chat_to_prd(
         created_at: now.clone(),
         updated_at: now,
         version: 1,
-        project_path: session.project_path,
+        project_path: session.project_path.clone(),
         // Track the source chat session
         source_chat_session_id: Some(request.session_id.clone()),
         prd_type: session.prd_type.clone(),
@@ -436,15 +404,10 @@ pub async fn export_chat_to_prd(
         extracted_structure,
     };
 
-    // Re-acquire lock to save to database
-    let db_guard = lock_db(&db)?;
-    db_guard.create_prd(&prd)
-        .map_err(|e| format!("Failed to create PRD: {}", e))?;
-
-    // Save PRD content to file for debugging/inspection
-    if let Some(ref project_path) = prd.project_path {
-        log::info!("Saving PRD files to project path: {}", project_path);
-        let prds_dir = std::path::Path::new(project_path).join(".ralph-ui").join("prds");
+    // Save PRD content to file (primary storage now)
+    if let Some(ref proj_path) = prd.project_path {
+        log::info!("Saving PRD files to project path: {}", proj_path);
+        let prds_dir = std::path::Path::new(proj_path).join(".ralph-ui").join("prds");
         if let Err(e) = std::fs::create_dir_all(&prds_dir) {
             log::warn!("Failed to create prds directory: {}", e);
         } else {
@@ -492,116 +455,14 @@ pub async fn export_chat_to_prd(
     })
 }
 
-/// Create a work session and tasks from an exported PRD with extracted structure
-/// Note: This is currently unused - session/task creation moved to execute_prd command
-#[allow(dead_code)]
-fn create_session_and_tasks_from_prd(
-    db: &Database,
-    prd: &crate::database::prd::PRDDocument,
-    structure: &ExtractedPRDStructure,
-) -> Result<(String, usize), String> {
-    use crate::database;
-    use crate::models::{Session, SessionConfig, SessionStatus, Task, TaskStatus};
-    use chrono::Utc;
-
-    // Create a new session for this PRD
-    let session_id = Uuid::new_v4().to_string();
-    let project_path = prd.project_path.clone()
-        .ok_or_else(|| "PRD has no project path, cannot create session".to_string())?;
-
-    let session = Session {
-        id: session_id.clone(),
-        name: prd.title.clone(),
-        project_path,
-        created_at: Utc::now(),
-        last_resumed_at: None,
-        status: SessionStatus::Active,
-        config: SessionConfig {
-            max_parallel: 3,
-            max_iterations: 10,
-            max_retries: 3,
-            agent_type: AgentType::Claude,
-            auto_create_prs: true,
-            draft_prs: false,
-            run_tests: true,
-            run_lint: true,
-        },
-        tasks: vec![],
-        total_cost: 0.0,
-        total_tokens: 0,
-    };
-
-    // Save the session
-    database::sessions::create_session(db.get_connection(), &session)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
-
-    // Convert extracted tasks to Task records
-    // Prefix task IDs with short session ID to make them unique across sessions
-    // while preserving the meaningful ID structure (e.g., "abc12345-T-1.1")
-    let short_session_id = &session_id[..8.min(session_id.len())];
-
-    // Build a map of original ID -> new ID for dependency remapping
-    let id_map: std::collections::HashMap<String, String> = structure.tasks.iter()
-        .map(|t| (t.id.clone(), format!("{}-{}", short_session_id, t.id)))
-        .collect();
-
-    let mut task_count = 0;
-    for prd_item in structure.tasks.iter() {
-        // Remap dependencies to use new prefixed IDs
-        let remapped_deps = prd_item.dependencies.as_ref()
-            .map(|deps| deps.iter()
-                .map(|dep| id_map.get(dep).cloned().unwrap_or_else(|| dep.clone()))
-                .collect())
-            .unwrap_or_default();
-
-        let task = Task {
-            // Use session-prefixed ID to ensure uniqueness across executions
-            id: format!("{}-{}", short_session_id, prd_item.id),
-            title: prd_item.title.clone(),
-            description: prd_item.description.clone(),
-            status: TaskStatus::Pending,
-            priority: match prd_item.priority {
-                Some(p) if p >= 1 && p <= 5 => p,
-                _ => 3, // Default to medium priority (3) if invalid or missing
-            },
-            dependencies: remapped_deps,
-            assigned_agent: None,
-            estimated_tokens: None,
-            actual_tokens: None,
-            started_at: None,
-            completed_at: None,
-            branch: None,
-            worktree_path: None,
-            error: None,
-        };
-
-        database::tasks::create_task(db.get_connection(), &session_id, &task)
-            .map_err(|e| format!("Failed to create task: {}", e))?;
-        task_count += 1;
-    }
-
-    // Export session to file for git tracking and portability
-    // Pass PRD ID to preserve the PRD-session relationship
-    if let Err(e) = session_files::export_session_to_file(
-        db.get_connection(),
-        &session_id,
-        Some(prd.id.clone()),
-    ) {
-        log::warn!("Failed to export session to file: {}", e);
-        // Don't fail - session is in DB
-    }
-
-    Ok((session_id, task_count))
-}
-
 /// Helper function to extract PRD content and quality from chat messages
 /// Used as a fallback when no PRD plan file exists
-fn export_content_from_messages(
-    db: &Database,
+fn export_content_from_messages_file(
+    project_path: &Path,
     session_id: &str,
     session: &ChatSession,
 ) -> Result<(String, QualityAssessment), String> {
-    let messages = db.get_messages_by_session(session_id)
+    let messages = chat_ops::get_messages_by_session(project_path, session_id)
         .map_err(|e| format!("Failed to get messages: {}", e))?;
 
     let assessment = calculate_quality_assessment(&messages, session.prd_type.as_deref());
@@ -630,56 +491,46 @@ fn export_content_from_messages(
 #[tauri::command]
 pub async fn assess_prd_quality(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<QualityAssessment, String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    // Get session
-    let session = db.get_chat_session(&session_id)
+    // Get session from file storage
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
 
     // Try to use PRD plan file content first if available
-    let assessment = if let Some(ref project_path) = session.project_path {
-        let plan_path = crate::watchers::get_prd_plan_file_path(
-            project_path,
-            &session_id,
-            session.title.as_deref(),
-        );
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        session.title.as_deref(),
+    );
 
-        if plan_path.exists() {
-            // Use PRD plan file for quality assessment
-            match std::fs::read_to_string(&plan_path) {
-                Ok(content) => {
-                    log::info!("Assessing quality from PRD plan file: {:?}", plan_path);
-                    calculate_quality_from_markdown(&content, session.prd_type.as_deref())
-                }
-                Err(e) => {
-                    log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
-                    // Fall back to messages
-                    let messages = db.get_messages_by_session(&session_id)
-                        .map_err(|e| format!("Failed to get messages: {}", e))?;
-                    calculate_quality_assessment(&messages, session.prd_type.as_deref())
-                }
+    let assessment = if plan_path.exists() {
+        // Use PRD plan file for quality assessment
+        match std::fs::read_to_string(&plan_path) {
+            Ok(content) => {
+                log::info!("Assessing quality from PRD plan file: {:?}", plan_path);
+                calculate_quality_from_markdown(&content, session.prd_type.as_deref())
             }
-        } else {
-            // No plan file yet, use messages
-            let messages = db.get_messages_by_session(&session_id)
-                .map_err(|e| format!("Failed to get messages: {}", e))?;
-            calculate_quality_assessment(&messages, session.prd_type.as_deref())
+            Err(e) => {
+                log::warn!("Failed to read PRD plan file, falling back to messages: {}", e);
+                // Fall back to messages
+                let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+                    .map_err(|e| format!("Failed to get messages: {}", e))?;
+                calculate_quality_assessment(&messages, session.prd_type.as_deref())
+            }
         }
     } else {
-        // No project path, use messages
-        let messages = db.get_messages_by_session(&session_id)
+        // No plan file yet, use messages
+        let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
             .map_err(|e| format!("Failed to get messages: {}", e))?;
         calculate_quality_assessment(&messages, session.prd_type.as_deref())
     };
 
-    // Update session with quality score
-    update_chat_session_quality_score(
-        db.get_connection(),
-        &session_id,
-        assessment.overall as i32,
-    ).map_err(|e| format!("Failed to update quality score: {}", e))?;
+    // Update session with quality score in file storage
+    chat_ops::update_chat_session_quality_score(project_path_obj, &session_id, assessment.overall as i32)
+        .map_err(|e| format!("Failed to update quality score: {}", e))?;
 
     Ok(assessment)
 }
@@ -699,12 +550,12 @@ pub async fn get_guided_questions(
 #[tauri::command]
 pub async fn preview_prd_extraction(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<ExtractedPRDContent, String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    // Get all messages
-    let messages = db.get_messages_by_session(&session_id)
+    // Get all messages from file storage
+    let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
         .map_err(|e| format!("Failed to get messages: {}", e))?;
 
     // Extract content using improved algorithm
@@ -765,11 +616,11 @@ pub async fn check_agent_availability(
 #[tauri::command]
 pub async fn get_extracted_structure(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<ExtractedPRDStructure, String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    let session = db.get_chat_session(&session_id)
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
 
     // Parse the stored structure or return empty
@@ -785,12 +636,12 @@ pub async fn get_extracted_structure(
 #[tauri::command]
 pub async fn set_structured_mode(
     session_id: String,
+    project_path: String,
     enabled: bool,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    db.update_chat_session_structured_mode(&session_id, enabled)
+    chat_ops::update_chat_session_structured_mode(project_path_obj, &session_id, enabled)
         .map_err(|e| format!("Failed to update structured mode: {}", e))?;
 
     Ok(())
@@ -800,11 +651,11 @@ pub async fn set_structured_mode(
 #[tauri::command]
 pub async fn clear_extracted_structure(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
+    let project_path_obj = Path::new(&project_path);
 
-    db.update_chat_session_extracted_structure(&session_id, None)
+    chat_ops::update_chat_session_extracted_structure(project_path_obj, &session_id, None)
         .map_err(|e| format!("Failed to clear structure: {}", e))?;
 
     Ok(())
@@ -1247,25 +1098,20 @@ pub struct WatchFileResponse {
 #[tauri::command]
 pub async fn start_watching_prd_file(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
     watcher_state: State<'_, crate::PrdFileWatcherState>,
 ) -> Result<WatchFileResponse, String> {
-    // Get the session to determine the file path
-    let (project_path, title) = {
-        let db_guard = lock_db(&db)?;
-        let session = db_guard.get_chat_session(&session_id)
-            .map_err(|e| format!("Session not found: {}", e))?;
-        (session.project_path, session.title)
-    };
+    let project_path_obj = Path::new(&project_path);
 
-    let project_path = project_path
-        .ok_or("Session has no project path - cannot watch PRD plan file")?;
+    // Get the session to determine the title for file naming
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
 
     // Calculate the plan file path
     let plan_path = crate::watchers::get_prd_plan_file_path(
         &project_path,
         &session_id,
-        title.as_deref(),
+        session.title.as_deref(),
     );
 
     // Get the watcher manager and start watching
@@ -1305,26 +1151,19 @@ pub async fn stop_watching_prd_file(
 #[tauri::command]
 pub async fn get_prd_plan_content(
     session_id: String,
-    db: State<'_, Mutex<Database>>,
+    project_path: String,
 ) -> Result<Option<String>, String> {
-    // Get the session to determine the file path
-    let (project_path, title) = {
-        let db_guard = lock_db(&db)?;
-        let session = db_guard.get_chat_session(&session_id)
-            .map_err(|e| format!("Session not found: {}", e))?;
-        (session.project_path, session.title)
-    };
+    let project_path_obj = Path::new(&project_path);
 
-    let project_path = match project_path {
-        Some(p) => p,
-        None => return Ok(None),
-    };
+    // Get the session to determine the title for file naming
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
 
     // Calculate the plan file path
     let plan_path = crate::watchers::get_prd_plan_file_path(
         &project_path,
         &session_id,
-        title.as_deref(),
+        session.title.as_deref(),
     );
 
     // Read the file content if it exists
@@ -3164,36 +3003,8 @@ fn extract_tasks_from_messages(messages: &[ChatMessage]) -> String {
 }
 
 // ============================================================================
-// Database Helper Functions (for specific update operations)
+// Helper Functions
 // ============================================================================
-
-use rusqlite::{params, Connection, Result};
-
-fn update_chat_session_timestamp(conn: &Connection, id: &str, timestamp: &str) -> Result<()> {
-    conn.execute(
-        "UPDATE chat_sessions SET updated_at = ?1 WHERE id = ?2",
-        params![timestamp, id],
-    )?;
-    Ok(())
-}
-
-fn update_chat_session_quality_score(conn: &Connection, id: &str, score: i32) -> Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
-    conn.execute(
-        "UPDATE chat_sessions SET quality_score = ?1, updated_at = ?2 WHERE id = ?3",
-        params![score, now, id],
-    )?;
-    Ok(())
-}
-
-fn update_chat_session_title(conn: &Connection, id: &str, title: &str) -> Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
-    conn.execute(
-        "UPDATE chat_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
-        params![title, now, id],
-    )?;
-    Ok(())
-}
 
 /// Generate a session title from the first user message and PRD type
 fn generate_session_title(first_message: &str, prd_type: Option<&str>) -> String {
@@ -3232,14 +3043,6 @@ fn generate_session_title(first_message: &str, prd_type: Option<&str>) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-
-    fn create_test_db() -> Database {
-        let db = Database::new(":memory:").unwrap();
-        db.init().unwrap();
-        // Chat tables are created in migration v4 by db.init()
-        db
-    }
 
     // Helper to create a test session with default new fields
     fn make_test_session(id: &str) -> ChatSession {
@@ -3259,193 +3062,6 @@ mod tests {
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Database Tests
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn test_create_chat_session() {
-        let db = create_test_db();
-
-        let mut session = make_test_session("test-session-1");
-        session.project_path = Some("/test/project".to_string());
-        session.title = Some("Test Session".to_string());
-
-        let result = db.create_chat_session(&session);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_get_chat_session_by_id() {
-        let db = create_test_db();
-
-        let mut session = make_test_session("test-session-2");
-        session.agent_type = "opencode".to_string();
-        session.project_path = Some("/test/path".to_string());
-        session.prd_type = Some("new_feature".to_string());
-        session.quality_score = Some(75);
-
-        db.create_chat_session(&session).unwrap();
-        let retrieved = db.get_chat_session("test-session-2").unwrap();
-
-        assert_eq!(retrieved.id, "test-session-2");
-        assert_eq!(retrieved.agent_type, "opencode");
-        assert_eq!(retrieved.project_path, Some("/test/path".to_string()));
-        assert_eq!(retrieved.prd_id, None);
-        assert_eq!(retrieved.prd_type, Some("new_feature".to_string()));
-        assert!(retrieved.guided_mode);
-        assert_eq!(retrieved.quality_score, Some(75));
-    }
-
-    #[test]
-    fn test_list_chat_sessions() {
-        let db = create_test_db();
-
-        let mut session1 = make_test_session("session-1");
-        session1.updated_at = "2026-01-17T01:00:00Z".to_string();
-
-        let mut session2 = make_test_session("session-2");
-        session2.agent_type = "cursor".to_string();
-        session2.updated_at = "2026-01-17T02:00:00Z".to_string();
-
-        db.create_chat_session(&session1).unwrap();
-        db.create_chat_session(&session2).unwrap();
-
-        let sessions = db.list_chat_sessions().unwrap();
-
-        assert_eq!(sessions.len(), 2);
-        // Should be ordered by updated_at DESC
-        assert_eq!(sessions[0].id, "session-2");
-        assert_eq!(sessions[1].id, "session-1");
-    }
-
-    #[test]
-    fn test_delete_chat_session() {
-        let db = create_test_db();
-
-        let session = make_test_session("delete-test");
-
-        db.create_chat_session(&session).unwrap();
-        db.delete_chat_session("delete-test").unwrap();
-
-        let result = db.get_chat_session("delete-test");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_update_chat_session_timestamp() {
-        let db = create_test_db();
-
-        let session = make_test_session("timestamp-test");
-
-        db.create_chat_session(&session).unwrap();
-        update_chat_session_timestamp(db.get_connection(), "timestamp-test", "2026-01-17T12:00:00Z").unwrap();
-
-        let retrieved = db.get_chat_session("timestamp-test").unwrap();
-        assert_eq!(retrieved.updated_at, "2026-01-17T12:00:00Z");
-    }
-
-    #[test]
-    fn test_update_chat_session_quality_score() {
-        let db = create_test_db();
-
-        let session = make_test_session("quality-test");
-
-        db.create_chat_session(&session).unwrap();
-        update_chat_session_quality_score(db.get_connection(), "quality-test", 85).unwrap();
-
-        let retrieved = db.get_chat_session("quality-test").unwrap();
-        assert_eq!(retrieved.quality_score, Some(85));
-    }
-
-    #[test]
-    fn test_create_chat_message() {
-        let db = create_test_db();
-
-        // Create session first
-        let session = make_test_session("msg-session");
-        db.create_chat_session(&session).unwrap();
-
-        let message = ChatMessage {
-            id: "msg-1".to_string(),
-            session_id: "msg-session".to_string(),
-            role: MessageRole::User,
-            content: "Help me create a PRD".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-
-        let result = db.create_chat_message(&message);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_get_messages_for_session() {
-        let db = create_test_db();
-
-        let session = make_test_session("history-session");
-        db.create_chat_session(&session).unwrap();
-
-        let msg1 = ChatMessage {
-            id: "msg-1".to_string(),
-            session_id: "history-session".to_string(),
-            role: MessageRole::User,
-            content: "Hello".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-
-        let msg2 = ChatMessage {
-            id: "msg-2".to_string(),
-            session_id: "history-session".to_string(),
-            role: MessageRole::Assistant,
-            content: "Hi! How can I help?".to_string(),
-            created_at: "2026-01-17T00:02:00Z".to_string(),
-        };
-
-        let msg3 = ChatMessage {
-            id: "msg-3".to_string(),
-            session_id: "history-session".to_string(),
-            role: MessageRole::User,
-            content: "I need a PRD".to_string(),
-            created_at: "2026-01-17T00:03:00Z".to_string(),
-        };
-
-        db.create_chat_message(&msg1).unwrap();
-        db.create_chat_message(&msg2).unwrap();
-        db.create_chat_message(&msg3).unwrap();
-
-        let messages = db.get_messages_by_session("history-session").unwrap();
-
-        assert_eq!(messages.len(), 3);
-        // Should be ordered by created_at ASC
-        assert_eq!(messages[0].id, "msg-1");
-        assert_eq!(messages[0].role, MessageRole::User);
-        assert_eq!(messages[1].id, "msg-2");
-        assert_eq!(messages[1].role, MessageRole::Assistant);
-        assert_eq!(messages[2].id, "msg-3");
-    }
-
-    #[test]
-    fn test_delete_messages_for_session() {
-        let db = create_test_db();
-
-        let session = make_test_session("delete-msgs-session");
-        db.create_chat_session(&session).unwrap();
-
-        let msg = ChatMessage {
-            id: "to-delete".to_string(),
-            session_id: "delete-msgs-session".to_string(),
-            role: MessageRole::User,
-            content: "Delete me".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-        db.create_chat_message(&msg).unwrap();
-
-        db.delete_messages_by_session("delete-msgs-session").unwrap();
-
-        let messages = db.get_messages_by_session("delete-msgs-session").unwrap();
-        assert_eq!(messages.len(), 0);
     }
 
     // -------------------------------------------------------------------------
@@ -3666,148 +3282,8 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Integration Tests (without actual CLI execution)
+    // PRD Export Tests
     // -------------------------------------------------------------------------
-
-    #[test]
-    fn test_full_session_workflow() {
-        let db = create_test_db();
-        let conn = db.get_connection();
-
-        // 1. Create session
-        let session = ChatSession {
-            id: "workflow-session".to_string(),
-            agent_type: "claude".to_string(),
-            project_path: Some("/project".to_string()),
-            prd_id: None,
-            title: None,
-            prd_type: None,
-            guided_mode: true,
-            quality_score: None,
-            template_id: None,
-            structured_mode: false,
-            extracted_structure: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            message_count: None,
-        };
-        db.create_chat_session(&session).unwrap();
-
-        // 2. Add messages
-        let user_msg = ChatMessage {
-            id: "u1".to_string(),
-            session_id: "workflow-session".to_string(),
-            role: MessageRole::User,
-            content: "Create a PRD for a task manager".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-        db.create_chat_message(&user_msg).unwrap();
-
-        let assistant_msg = ChatMessage {
-            id: "a1".to_string(),
-            session_id: "workflow-session".to_string(),
-            role: MessageRole::Assistant,
-            content: "I'll help you create a comprehensive PRD for a task manager.".to_string(),
-            created_at: "2026-01-17T00:02:00Z".to_string(),
-        };
-        db.create_chat_message(&assistant_msg).unwrap();
-
-        // 3. Verify history
-        let history = db.get_messages_by_session("workflow-session").unwrap();
-        assert_eq!(history.len(), 2);
-        assert_eq!(history[0].role, MessageRole::User);
-        assert_eq!(history[1].role, MessageRole::Assistant);
-
-        // 4. Update timestamp
-        update_chat_session_timestamp(conn, "workflow-session", "2026-01-17T00:02:00Z").unwrap();
-
-        // 5. Verify session list
-        let sessions = db.list_chat_sessions().unwrap();
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].updated_at, "2026-01-17T00:02:00Z");
-
-        // 6. Delete and verify
-        db.delete_messages_by_session("workflow-session").unwrap();
-        db.delete_chat_session("workflow-session").unwrap();
-
-        let sessions = db.list_chat_sessions().unwrap();
-        assert_eq!(sessions.len(), 0);
-    }
-
-    #[test]
-    fn test_session_with_prd_reference() {
-        let db = create_test_db();
-
-        // Create a PRD first
-        let prd = crate::database::prd::PRDDocument {
-            id: "prd-ref".to_string(),
-            title: "Linked PRD".to_string(),
-            description: None,
-            template_id: None,
-            content: "{}".to_string(),
-            quality_score_completeness: None,
-            quality_score_clarity: None,
-            quality_score_actionability: None,
-            quality_score_overall: None,
-            created_at: "2026-01-17T00:00:00Z".to_string(),
-            updated_at: "2026-01-17T00:00:00Z".to_string(),
-            version: 1,
-            project_path: None,
-            source_chat_session_id: None,
-            prd_type: None,
-            extracted_structure: None,
-        };
-        db.create_prd(&prd).unwrap();
-
-        // Create session linked to PRD
-        let mut session = make_test_session("linked-session");
-        session.prd_id = Some("prd-ref".to_string());
-        db.create_chat_session(&session).unwrap();
-
-        let retrieved = db.get_chat_session("linked-session").unwrap();
-        assert_eq!(retrieved.prd_id, Some("prd-ref".to_string()));
-    }
-
-    #[test]
-    fn test_multiple_sessions_isolation() {
-        let db = create_test_db();
-
-        // Create two sessions
-        let session1 = make_test_session("session-a");
-        let mut session2 = make_test_session("session-b");
-        session2.agent_type = "opencode".to_string();
-
-        db.create_chat_session(&session1).unwrap();
-        db.create_chat_session(&session2).unwrap();
-
-        // Add messages to each session
-        let msg_a = ChatMessage {
-            id: "msg-a".to_string(),
-            session_id: "session-a".to_string(),
-            role: MessageRole::User,
-            content: "Message for session A".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-        let msg_b = ChatMessage {
-            id: "msg-b".to_string(),
-            session_id: "session-b".to_string(),
-            role: MessageRole::User,
-            content: "Message for session B".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-
-        db.create_chat_message(&msg_a).unwrap();
-        db.create_chat_message(&msg_b).unwrap();
-
-        // Verify isolation
-        let messages_a = db.get_messages_by_session("session-a").unwrap();
-        let messages_b = db.get_messages_by_session("session-b").unwrap();
-
-        assert_eq!(messages_a.len(), 1);
-        assert_eq!(messages_b.len(), 1);
-        assert_eq!(messages_a[0].content, "Message for session A");
-        assert_eq!(messages_b[0].content, "Message for session B");
-    }
 
     #[test]
     fn test_export_generates_valid_prd_structure() {
@@ -4166,74 +3642,6 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
-    fn test_create_session_with_structured_mode() {
-        let db = create_test_db();
-
-        let mut session = make_test_session("structured-session");
-        session.structured_mode = true;
-        db.create_chat_session(&session).unwrap();
-
-        let retrieved = db.get_chat_session("structured-session").unwrap();
-        assert!(retrieved.structured_mode);
-        assert!(retrieved.extracted_structure.is_none());
-    }
-
-    #[test]
-    fn test_update_structured_mode() {
-        let db = create_test_db();
-
-        let session = make_test_session("mode-test");
-        db.create_chat_session(&session).unwrap();
-
-        // Initially false
-        let retrieved = db.get_chat_session("mode-test").unwrap();
-        assert!(!retrieved.structured_mode);
-
-        // Update to true
-        db.update_chat_session_structured_mode("mode-test", true).unwrap();
-        let retrieved = db.get_chat_session("mode-test").unwrap();
-        assert!(retrieved.structured_mode);
-
-        // Update back to false
-        db.update_chat_session_structured_mode("mode-test", false).unwrap();
-        let retrieved = db.get_chat_session("mode-test").unwrap();
-        assert!(!retrieved.structured_mode);
-    }
-
-    #[test]
-    fn test_update_extracted_structure() {
-        let db = create_test_db();
-
-        let mut session = make_test_session("structure-test");
-        session.structured_mode = true;
-        db.create_chat_session(&session).unwrap();
-
-        // Set extracted structure
-        let structure_json = r#"{"epics":[{"type":"epic","id":"EP-1","title":"Auth","description":"Auth system"}],"userStories":[],"tasks":[],"acceptanceCriteria":[]}"#;
-        db.update_chat_session_extracted_structure("structure-test", Some(structure_json)).unwrap();
-
-        let retrieved = db.get_chat_session("structure-test").unwrap();
-        assert!(retrieved.extracted_structure.is_some());
-        assert!(retrieved.extracted_structure.as_ref().unwrap().contains("EP-1"));
-    }
-
-    #[test]
-    fn test_clear_extracted_structure() {
-        let db = create_test_db();
-
-        let mut session = make_test_session("clear-structure");
-        session.structured_mode = true;
-        session.extracted_structure = Some(r#"{"epics":[],"userStories":[],"tasks":[],"acceptanceCriteria":[]}"#.to_string());
-        db.create_chat_session(&session).unwrap();
-
-        // Clear structure
-        db.update_chat_session_extracted_structure("clear-structure", None).unwrap();
-
-        let retrieved = db.get_chat_session("clear-structure").unwrap();
-        assert!(retrieved.extracted_structure.is_none());
-    }
-
-    #[test]
     fn test_build_prd_chat_prompt_structured_mode() {
         let mut session = make_test_session("test");
         session.structured_mode = true;
@@ -4352,37 +3760,6 @@ mod tests {
 
         let tasks_section = sections.iter().find(|s| s["id"] == "tasks").unwrap();
         assert!(tasks_section["content"].as_str().unwrap().contains("T-1.1.1"));
-    }
-
-    #[test]
-    fn test_session_structured_mode_persists_across_operations() {
-        let db = create_test_db();
-
-        // Create session with structured mode
-        let mut session = make_test_session("persist-test");
-        session.structured_mode = true;
-        db.create_chat_session(&session).unwrap();
-
-        // Add some messages
-        let msg = ChatMessage {
-            id: "msg-1".to_string(),
-            session_id: "persist-test".to_string(),
-            role: MessageRole::User,
-            content: "Test message".to_string(),
-            created_at: "2026-01-17T00:01:00Z".to_string(),
-        };
-        db.create_chat_message(&msg).unwrap();
-
-        // Update timestamp
-        update_chat_session_timestamp(db.get_connection(), "persist-test", "2026-01-17T12:00:00Z").unwrap();
-
-        // Update quality score
-        update_chat_session_quality_score(db.get_connection(), "persist-test", 75).unwrap();
-
-        // Verify structured_mode is still true
-        let retrieved = db.get_chat_session("persist-test").unwrap();
-        assert!(retrieved.structured_mode);
-        assert_eq!(retrieved.quality_score, Some(75));
     }
 
     // -------------------------------------------------------------------------

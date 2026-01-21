@@ -1,179 +1,116 @@
 // Tauri commands for project management
+//
+// Uses file-based storage in ~/.ralph-ui/projects.json (global registry)
 
-use crate::database::{Database, projects};
-use crate::session_files;
-use crate::utils::{lock_db, ResultExt};
+use crate::file_storage::projects::{self as file_projects, ApiProject};
 use std::path::Path;
-use std::sync::Mutex;
-use tauri::State;
-
-pub type DbState = Mutex<Database>;
 
 /// Register (or get existing) project from a folder path
 /// Also imports any sessions from the project's .ralph-ui/sessions/ directory
 #[tauri::command]
 pub fn register_project(
-    db: State<DbState>,
     path: String,
     name: Option<String>,
-) -> Result<projects::Project, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    let project = projects::upsert_project(conn, &path, name.as_deref())
-        .with_context("Failed to register project")?;
+) -> Result<ApiProject, String> {
+    let entry = file_projects::register_project(&path, name.as_deref())?;
 
     // Import any sessions from the project's .ralph-ui/sessions/ directory
-    // This ensures sessions saved to files are available in the database
+    // This ensures sessions saved to files are available
     let project_path = Path::new(&path);
     if project_path.exists() {
-        match session_files::import_sessions_from_project(conn, project_path) {
-            Ok(imported) => {
-                if !imported.is_empty() {
-                    log::info!(
-                        "Imported {} sessions from project '{}': {:?}",
-                        imported.len(),
-                        path,
-                        imported
-                    );
-                }
-            }
-            Err(e) => {
-                log::warn!("Failed to import sessions from project '{}': {}", path, e);
-                // Don't fail the command - this is a secondary operation
-            }
+        // Initialize the .ralph-ui directory for this project
+        if let Err(e) = crate::file_storage::init_ralph_ui_dir(project_path) {
+            log::warn!("Failed to initialize .ralph-ui directory: {}", e);
         }
+
+        // Note: Session import will be handled by session_files module
+        // which now reads from files directly
     }
 
-    Ok(project)
+    Ok(entry.to_api_project())
 }
 
 /// Get a project by ID
 #[tauri::command]
 pub fn get_project(
-    db: State<DbState>,
     project_id: String,
-) -> Result<projects::Project, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::get_project(conn, &project_id)
-        .with_context("Failed to get project")
+) -> Result<ApiProject, String> {
+    file_projects::get_project(&project_id)?
+        .map(|e| e.to_api_project())
+        .ok_or_else(|| format!("Project not found: {}", project_id))
 }
 
 /// Get a project by path
 #[tauri::command]
 pub fn get_project_by_path(
-    db: State<DbState>,
     path: String,
-) -> Result<projects::Project, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::get_project_by_path(conn, &path)
-        .with_context("Failed to get project by path")
+) -> Result<ApiProject, String> {
+    file_projects::get_project_by_path(&path)?
+        .map(|e| e.to_api_project())
+        .ok_or_else(|| format!("Project not found for path: {}", path))
 }
 
 /// Get all projects
 #[tauri::command]
-pub fn get_all_projects(
-    db: State<DbState>,
-) -> Result<Vec<projects::Project>, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::get_all_projects(conn)
-        .with_context("Failed to get all projects")
+pub fn get_all_projects() -> Result<Vec<ApiProject>, String> {
+    let entries = file_projects::get_all_projects()?;
+    Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Get recent projects (limited)
 #[tauri::command]
 pub fn get_recent_projects(
-    db: State<DbState>,
     limit: Option<i32>,
-) -> Result<Vec<projects::Project>, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::get_recent_projects(conn, limit.unwrap_or(5))
-        .with_context("Failed to get recent projects")
+) -> Result<Vec<ApiProject>, String> {
+    let entries = file_projects::get_recent_projects(limit.unwrap_or(5) as usize)?;
+    Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Get favorite projects
 #[tauri::command]
-pub fn get_favorite_projects(
-    db: State<DbState>,
-) -> Result<Vec<projects::Project>, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::get_favorite_projects(conn)
-        .with_context("Failed to get favorite projects")
+pub fn get_favorite_projects() -> Result<Vec<ApiProject>, String> {
+    let entries = file_projects::get_favorite_projects()?;
+    Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Update project name
 #[tauri::command]
 pub fn update_project_name(
-    db: State<DbState>,
     project_id: String,
     name: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::update_project_name(conn, &project_id, &name)
-        .with_context("Failed to update project name")
+    file_projects::update_project_name(&project_id, &name)
 }
 
 /// Toggle project favorite status
 #[tauri::command]
 pub fn toggle_project_favorite(
-    db: State<DbState>,
     project_id: String,
 ) -> Result<bool, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::toggle_project_favorite(conn, &project_id)
-        .with_context("Failed to toggle project favorite")
+    file_projects::toggle_project_favorite(&project_id)
 }
 
 /// Set project favorite status explicitly
 #[tauri::command]
 pub fn set_project_favorite(
-    db: State<DbState>,
     project_id: String,
     is_favorite: bool,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::set_project_favorite(conn, &project_id, is_favorite)
-        .with_context("Failed to set project favorite")
+    file_projects::set_project_favorite(&project_id, is_favorite)
 }
 
 /// Touch project (update last_used_at)
 #[tauri::command]
 pub fn touch_project(
-    db: State<DbState>,
     project_id: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::touch_project(conn, &project_id)
-        .with_context("Failed to touch project")
+    file_projects::touch_project(&project_id)
 }
 
 /// Delete a project
 #[tauri::command]
 pub fn delete_project(
-    db: State<DbState>,
     project_id: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    projects::delete_project(conn, &project_id)
-        .with_context("Failed to delete project")
+    file_projects::delete_project(&project_id)
 }

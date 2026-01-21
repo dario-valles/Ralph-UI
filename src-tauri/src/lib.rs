@@ -15,6 +15,7 @@ pub mod shutdown;
 pub mod watchers;
 pub mod session_files;
 pub mod ralph_loop;
+pub mod file_storage;
 
 // Re-export models for use in commands
 pub use models::*;

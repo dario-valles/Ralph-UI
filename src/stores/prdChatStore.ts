@@ -13,7 +13,7 @@ import type {
 
 interface StartSessionOptions {
   agentType: string
-  projectPath?: string
+  projectPath: string // Required for file-based storage
   prdId?: string
   prdType?: PRDTypeValue
   guidedMode?: boolean
@@ -40,7 +40,7 @@ interface PRDChatStore extends AsyncState {
   startSession: (options: StartSessionOptions) => Promise<void>
   sendMessage: (content: string) => Promise<void>
   loadHistory: (sessionId: string) => Promise<void>
-  loadSessions: () => Promise<void>
+  loadSessions: (projectPath?: string) => Promise<void>
   setCurrentSession: (session: ChatSession | null) => void
   deleteSession: (sessionId: string) => Promise<void>
   clearError: () => void
@@ -94,7 +94,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
       // Load history to get the welcome message (created by backend in guided mode)
       if (options.guidedMode !== false) {
-        const messages = await prdChatApi.getHistory(session.id)
+        const messages = await prdChatApi.getHistory(session.id, options.projectPath)
         set({ messages })
       }
 
@@ -117,6 +117,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     if (!currentSession) {
       throw new Error('No active session')
     }
+    if (!currentSession.projectPath) {
+      throw new Error('Session has no project path')
+    }
 
     // Create optimistic user message with UUID to prevent collision
     const optimisticMessage: ChatMessage = {
@@ -136,7 +139,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     }))
 
     try {
-      const response = await prdChatApi.sendMessage(currentSession.id, content)
+      const response = await prdChatApi.sendMessage(currentSession.id, content, currentSession.projectPath)
 
       // Replace optimistic message with actual messages and update session message count
       set((state) => {
@@ -179,16 +182,25 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Load message history for a session
   loadHistory: async (sessionId: string) => {
+    const { currentSession } = get()
+    if (!currentSession?.projectPath) {
+      set({ error: 'No project path available' })
+      return
+    }
     await asyncAction(set, async () => {
-      const messages = await prdChatApi.getHistory(sessionId)
+      const messages = await prdChatApi.getHistory(sessionId, currentSession.projectPath!)
       return { messages }
     })
   },
 
-  // Load all chat sessions
-  loadSessions: async () => {
+  // Load all chat sessions (requires project path from current context)
+  loadSessions: async (projectPath?: string) => {
+    if (!projectPath) {
+      set({ error: 'Project path is required to load sessions' })
+      return
+    }
     await asyncAction(set, async () => {
-      const sessions = await prdChatApi.getSessions()
+      const sessions = await prdChatApi.getSessions(projectPath)
       return { sessions }
     })
   },
@@ -203,13 +215,19 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Delete a chat session
   deleteSession: async (sessionId: string) => {
+    const state = get()
+    const sessionToDelete = state.sessions.find(s => s.id === sessionId)
+    if (!sessionToDelete?.projectPath) {
+      set({ error: 'Cannot delete session without project path' })
+      return
+    }
     await asyncAction(set, async () => {
-      await prdChatApi.deleteSession(sessionId)
-      const state = get()
+      await prdChatApi.deleteSession(sessionId, sessionToDelete.projectPath!)
+      const currentState = get()
       return {
-        sessions: state.sessions.filter((s) => s.id !== sessionId),
-        currentSession: state.currentSession?.id === sessionId ? null : state.currentSession,
-        messages: state.currentSession?.id === sessionId ? [] : state.messages,
+        sessions: currentState.sessions.filter((s) => s.id !== sessionId),
+        currentSession: currentState.currentSession?.id === sessionId ? null : currentState.currentSession,
+        messages: currentState.currentSession?.id === sessionId ? [] : currentState.messages,
       }
     }, { rethrow: true })
   },
@@ -222,13 +240,13 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Assess quality of current session
   assessQuality: async () => {
     const { currentSession } = get()
-    if (!currentSession) {
+    if (!currentSession || !currentSession.projectPath) {
       return null
     }
 
     set({ loading: true, error: null })
     try {
-      const assessment = await prdChatApi.assessQuality(currentSession.id)
+      const assessment = await prdChatApi.assessQuality(currentSession.id, currentSession.projectPath)
       set({ qualityAssessment: assessment, loading: false })
       return assessment
     } catch (error) {
@@ -255,13 +273,13 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Preview extraction before export
   previewExtraction: async () => {
     const { currentSession } = get()
-    if (!currentSession) {
+    if (!currentSession || !currentSession.projectPath) {
       return null
     }
 
     set({ loading: true, error: null })
     try {
-      const content = await prdChatApi.previewExtraction(currentSession.id)
+      const content = await prdChatApi.previewExtraction(currentSession.id, currentSession.projectPath)
       set({ extractedContent: content, loading: false })
       return content
     } catch (error) {
@@ -276,12 +294,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Set structured output mode for current session
   setStructuredMode: async (enabled: boolean) => {
     const { currentSession } = get()
-    if (!currentSession) {
+    if (!currentSession || !currentSession.projectPath) {
       return
     }
 
     try {
-      await prdChatApi.setStructuredMode(currentSession.id, enabled)
+      await prdChatApi.setStructuredMode(currentSession.id, currentSession.projectPath, enabled)
       // Update local state
       set((state) => {
         const updatedSession = state.currentSession
@@ -305,12 +323,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Clear extracted structure for current session
   clearExtractedStructure: async () => {
     const { currentSession } = get()
-    if (!currentSession) {
+    if (!currentSession || !currentSession.projectPath) {
       return
     }
 
     try {
-      await prdChatApi.clearExtractedStructure(currentSession.id)
+      await prdChatApi.clearExtractedStructure(currentSession.id, currentSession.projectPath)
     } catch (error) {
       set({
         error: error instanceof Error && error.message ? error.message : 'Failed to clear extracted structure',
@@ -321,12 +339,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   // Start watching the PRD plan file for the current session
   startWatchingPlanFile: async () => {
     const { currentSession, isWatchingPlan } = get()
-    if (!currentSession || isWatchingPlan) {
+    if (!currentSession || !currentSession.projectPath || isWatchingPlan) {
       return
     }
 
     try {
-      const result = await prdChatApi.startWatchingPlanFile(currentSession.id)
+      const result = await prdChatApi.startWatchingPlanFile(currentSession.id, currentSession.projectPath)
       if (result.success) {
         set({
           isWatchingPlan: true,

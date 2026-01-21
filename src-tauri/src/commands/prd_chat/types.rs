@@ -29,6 +29,8 @@ pub struct StartChatSessionRequest {
 pub struct SendMessageRequest {
     pub session_id: String,
     pub content: String,
+    /// Project path for file-based storage (required)
+    pub project_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +38,8 @@ pub struct SendMessageRequest {
 pub struct ExportToPRDRequest {
     pub session_id: String,
     pub title: String,
+    /// Project path for file-based storage (required)
+    pub project_path: String,
 }
 
 // ============================================================================
