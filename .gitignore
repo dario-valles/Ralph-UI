@@ -48,3 +48,7 @@ target
 
 # GitHub workflows (requires special permissions to commit)
 .github/workflows/
+
+# Runtime data
+src-tauri/ralph-ui.db
+.ralph-ui/
