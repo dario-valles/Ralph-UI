@@ -27,6 +27,11 @@ export const useToolCallStore = create<ToolCallStore>((set, get) => ({
       const newMap = new Map(state.toolCalls)
       const agentCalls = newMap.get(payload.agentId) || []
 
+      // Check if tool call with this ID already exists (prevent duplicates)
+      if (agentCalls.some((call) => call.id === payload.toolId)) {
+        return state // No change needed
+      }
+
       // Create new tool call
       const toolCall: ToolCall = {
         id: payload.toolId,

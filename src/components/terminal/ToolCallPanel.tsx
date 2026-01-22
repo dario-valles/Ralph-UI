@@ -334,7 +334,9 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
               <p className="text-xs text-zinc-600 mt-1">Tool calls will appear here as the agent works</p>
             </div>
           ) : (
-            agentToolCalls.map((toolCall) => <ToolCallItem key={toolCall.id} toolCall={toolCall} />)
+            agentToolCalls.map((toolCall, index) => (
+              <ToolCallItem key={`${toolCall.id}-${index}`} toolCall={toolCall} />
+            ))
           )}
         </div>
       </ScrollArea>

@@ -747,18 +747,19 @@ export function RalphLoopDashboard({
                   </Button>
                 </div>
 
-                {/* View content */}
-                <div className="flex-1 min-h-0">
-                  {terminalView === 'tools' ? (
+                {/* View content - both views stay mounted but hidden to preserve state */}
+                <div className="flex-1 min-h-0 relative">
+                  <div className={terminalView === 'tools' ? 'h-full' : 'hidden'}>
                     <ToolCallPanel agentId={currentAgentId} className="h-full" />
-                  ) : (
+                  </div>
+                  <div className={terminalView === 'terminal' ? 'h-full' : 'hidden'}>
                     <AgentTerminalInstance
                       key={`ralph-loop-${activeExecutionId}`}
                       terminalId={`ralph-loop-${activeExecutionId}`}
                       agentId={currentAgentId}
-                      isActive={activeTab === 'terminal'}
+                      isActive={activeTab === 'terminal' && terminalView === 'terminal'}
                     />
-                  )}
+                  </div>
                 </div>
               </div>
             ) : (
