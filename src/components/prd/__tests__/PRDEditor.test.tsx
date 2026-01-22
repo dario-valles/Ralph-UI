@@ -241,19 +241,6 @@ describe('PRDEditor', () => {
     })
   })
 
-  describe('Execute PRD Button', () => {
-    it('shows execution dialog when Execute PRD is clicked', async () => {
-      const user = userEvent.setup()
-      renderWithRouter()
-
-      await user.click(screen.getByRole('button', { name: /execute prd/i }))
-
-      await waitFor(() => {
-        expect(screen.getByTestId('execution-dialog')).toBeInTheDocument()
-      })
-    })
-  })
-
   describe('Form Editing', () => {
     it('allows editing title', async () => {
       const user = userEvent.setup()

@@ -288,10 +288,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       // Research
-      startResearch: async (projectPath, context) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void context
-        const { workflowState } = get()
+      startResearch: async (projectPath, context, agentType) => {
+        const { workflowState, selectedResearchAgent } = get()
         if (!workflowState) return
 
         // Mark all as running
@@ -308,7 +306,24 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           },
         })
 
-        // TODO: Call Tauri command start_research
+        try {
+          const status = await gsdApi.startResearch(
+            projectPath,
+            workflowState.sessionId,
+            context,
+            agentType || selectedResearchAgent || undefined
+          )
+          set({
+            workflowState: {
+              ...get().workflowState!,
+              researchStatus: status,
+              updatedAt: new Date().toISOString(),
+            },
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to start research'
+          set({ error: message })
+        }
       },
 
       updateResearchStatus: (status: ResearchStatus) => {
@@ -357,12 +372,10 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Requirements
       loadRequirements: async (projectPath, sessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true })
         try {
-          // TODO: Call Tauri command to load requirements
-          set({ isLoading: false })
+          const requirementsDoc = await gsdApi.loadRequirements(projectPath, sessionId)
+          set({ requirementsDoc, isLoading: false })
         } catch (error) {
           set({ isLoading: false })
           throw error
@@ -374,43 +387,50 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       applyScopeSelection: async (selection: ScopeSelection) => {
-        const { requirementsDoc } = get()
-        if (!requirementsDoc) return
+        const { requirementsDoc, workflowState } = get()
+        if (!requirementsDoc || !workflowState) return
 
-        // Apply selection to local state
-        const updatedRequirements = { ...requirementsDoc.requirements }
-        for (const id of selection.v1) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v1' }
-          }
-        }
-        for (const id of selection.v2) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v2' }
-          }
-        }
-        for (const id of selection.outOfScope) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = {
-              ...updatedRequirements[id],
-              scope: 'out_of_scope',
+        try {
+          // Call backend to persist and get updated doc
+          const updatedDoc = await gsdApi.scopeRequirements(
+            workflowState.projectPath,
+            workflowState.sessionId,
+            selection
+          )
+          set({ requirementsDoc: updatedDoc })
+        } catch (error) {
+          // Fall back to local state update if backend fails
+          const updatedRequirements = { ...requirementsDoc.requirements }
+          for (const id of selection.v1) {
+            if (updatedRequirements[id]) {
+              updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v1' }
             }
           }
+          for (const id of selection.v2) {
+            if (updatedRequirements[id]) {
+              updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v2' }
+            }
+          }
+          for (const id of selection.outOfScope) {
+            if (updatedRequirements[id]) {
+              updatedRequirements[id] = {
+                ...updatedRequirements[id],
+                scope: 'out_of_scope',
+              }
+            }
+          }
+          set({ requirementsDoc: { requirements: updatedRequirements } })
+          const message = error instanceof Error ? error.message : 'Failed to persist scope'
+          set({ error: message })
         }
-
-        set({ requirementsDoc: { requirements: updatedRequirements } })
-
-        // TODO: Call Tauri command to persist
       },
 
       // Roadmap
       loadRoadmap: async (projectPath, sessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true })
         try {
-          // TODO: Call Tauri command to load roadmap
-          set({ isLoading: false })
+          const roadmapDoc = await gsdApi.loadRoadmap(projectPath, sessionId)
+          set({ roadmapDoc, isLoading: false })
         } catch (error) {
           set({ isLoading: false })
           throw error
@@ -418,12 +438,10 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       generateRoadmap: async (projectPath, sessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true })
         try {
-          // TODO: Call Tauri command to generate roadmap
-          set({ isLoading: false })
+          const roadmapDoc = await gsdApi.createRoadmap(projectPath, sessionId)
+          set({ roadmapDoc, isLoading: false })
         } catch (error) {
           set({ isLoading: false })
           throw error
@@ -436,27 +454,16 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Verification
       runVerification: async (projectPath, sessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true })
         try {
-          // TODO: Call Tauri command verify_plans
+          const iterationResult = await gsdApi.verifyPlans(projectPath, sessionId)
+          // Convert VerificationIterationResult to VerificationResult for local state
           const result: VerificationResult = {
-            passed: true,
-            coveragePercentage: 100,
-            issues: [],
-            warnings: [],
-            stats: {
-              totalRequirements: 0,
-              v1Count: 0,
-              v2Count: 0,
-              outOfScopeCount: 0,
-              unscopedCount: 0,
-              inRoadmapCount: 0,
-              notInRoadmapCount: 0,
-              withDependenciesCount: 0,
-              orphanedDependencies: 0,
-            },
+            passed: iterationResult.passed,
+            coveragePercentage: iterationResult.coveragePercentage,
+            issues: iterationResult.issues,
+            warnings: iterationResult.warnings,
+            stats: iterationResult.stats,
           }
           set({ verificationResult: result, isLoading: false })
           return result
@@ -472,20 +479,9 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Conversion/Export
       exportToRalph: async (projectPath, sessionId, prdName, branch) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true })
         try {
-          // TODO: Call Tauri command export_gsd_to_ralph
-          const result: ConversionResult = {
-            prd: {
-              title: prdName,
-              branch,
-              stories: [],
-            },
-            storyCount: 0,
-            skipped: [],
-          }
+          const result = await gsdApi.exportToRalph(projectPath, sessionId, prdName, branch)
           set({ isLoading: false })
           return result
         } catch (error) {
@@ -538,9 +534,13 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Planning sessions
       loadPlanningSessions: async (projectPath) => {
-        void projectPath // Will be used when Tauri command is implemented
-        // TODO: Call Tauri command list_planning_sessions
-        set({ planningSessions: [] })
+        try {
+          const planningSessions = await gsdApi.listSessions(projectPath)
+          set({ planningSessions })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to load planning sessions'
+          set({ error: message, planningSessions: [] })
+        }
       },
     }),
     { name: 'gsd-store' }

@@ -87,7 +87,7 @@ describe('prdChatStore', () => {
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, undefined, undefined)
       expect(usePRDChatStore.getState().currentSession).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions).toContainEqual(mockSession)
       // In guided mode (default), welcome message is loaded
@@ -112,7 +112,7 @@ describe('prdChatStore', () => {
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project', prdId: 'prd-123' })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', 'prd-123', undefined, undefined, undefined, undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', 'prd-123', undefined, undefined, undefined, undefined, undefined)
       expect(usePRDChatStore.getState().currentSession).toEqual(sessionWithPrd)
     })
 
@@ -697,7 +697,7 @@ describe('prdChatStore', () => {
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project', structuredMode: true })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, true)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, true, undefined)
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(true)
     })
   })

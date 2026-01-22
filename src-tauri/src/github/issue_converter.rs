@@ -22,7 +22,7 @@ pub struct IssueImportResult {
 }
 
 /// Options for importing GitHub issues
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct IssueImportOptions {
     /// Only import issues with these labels
     pub labels: Option<Vec<String>>,
@@ -32,6 +32,17 @@ pub struct IssueImportOptions {
     pub include_body: bool,
     /// Whether to use issue labels as story tags
     pub use_labels_as_tags: bool,
+}
+
+impl Default for IssueImportOptions {
+    fn default() -> Self {
+        Self {
+            labels: None,
+            id_prefix: "gh".to_string(),
+            include_body: true,
+            use_labels_as_tags: true,
+        }
+    }
 }
 
 /// Convert a GitHub issue to a Ralph story
@@ -256,7 +267,7 @@ mod tests {
     #[test]
     fn test_issue_to_story_basic() {
         let issue = make_issue(123, "Add login feature", Some("User should be able to log in"), vec![]);
-        let options = IssueImportOptions::new();
+        let options = IssueImportOptions::default();
 
         let story = issue_to_story(&issue, &options);
 
@@ -304,7 +315,7 @@ mod tests {
             make_issue(3, "Another bug", None, vec!["bug", "urgent"]),
         ];
 
-        let mut options = IssueImportOptions::new();
+        let mut options = IssueImportOptions::default();
         options.labels = Some(vec!["bug".to_string()]);
 
         let filtered = filter_issues(&issues, &options);
@@ -314,7 +325,7 @@ mod tests {
     #[test]
     fn test_labels_as_tags() {
         let issue = make_issue(1, "Test", None, vec!["bug", "frontend", "size/m"]);
-        let options = IssueImportOptions::new();
+        let options = IssueImportOptions::default();
 
         let story = issue_to_story(&issue, &options);
 

@@ -29,18 +29,9 @@ function App() {
         const staleExecutions = await ralphLoopApi.checkStaleExecutions(120)
 
         if (staleExecutions.length > 0) {
-          console.log(
-            `[App] Found ${staleExecutions.length} stale Ralph Loop executions, recovering...`
-          )
-
           for (const exec of staleExecutions) {
             try {
-              const recovered = await ralphLoopApi.recoverStaleIterations(exec.executionId)
-              if (recovered > 0) {
-                console.log(
-                  `[App] Recovered ${recovered} stale iterations for execution ${exec.executionId}`
-                )
-              }
+              await ralphLoopApi.recoverStaleIterations(exec.executionId)
             } catch (err) {
               console.warn(`[App] Failed to recover execution ${exec.executionId}:`, err)
             }
@@ -49,10 +40,7 @@ function App() {
 
         // Also cleanup old iteration history (keep 30 days)
         try {
-          const deleted = await ralphLoopApi.cleanupIterationHistory(30)
-          if (deleted > 0) {
-            console.log(`[App] Cleaned up ${deleted} old iteration history records`)
-          }
+          await ralphLoopApi.cleanupIterationHistory(30)
         } catch (err) {
           console.warn('[App] Failed to cleanup old iterations:', err)
         }

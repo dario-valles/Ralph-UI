@@ -891,7 +891,7 @@ mod tests {
                 assert_eq!(max_attempts, 3);
                 assert_eq!(backoff_ms, 5000);
             }
-            _ => panic!("Default should be Retry"),
+            _ => unreachable!("Default should be Retry"),
         }
     }
 

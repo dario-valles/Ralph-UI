@@ -378,16 +378,6 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
           ralphLoopApi.getCurrentAgentId(executionId),
           ralphLoopApi.getWorktreePath(executionId),
         ])
-        // DEBUG: Log state changes
-        const prevState = get().executionState
-        if (prevState?.type !== executionState?.type) {
-          console.log(
-            '[RalphLoopStore] Execution state changed:',
-            prevState?.type,
-            '->',
-            executionState?.type
-          )
-        }
         return { executionState, currentAgentId, worktreePath }
       },
       { silent }
@@ -446,16 +436,6 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       set,
       async () => {
         const snapshot = await ralphLoopApi.getSnapshot(executionId)
-        // DEBUG: Log state changes
-        const prevState = get().executionState
-        if (prevState?.type !== snapshot.state?.type) {
-          console.log(
-            '[RalphLoopStore] Execution state changed:',
-            prevState?.type,
-            '->',
-            snapshot.state?.type
-          )
-        }
         return {
           executionState: snapshot.state,
           executionMetrics: snapshot.metrics,

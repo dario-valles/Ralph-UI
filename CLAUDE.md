@@ -18,7 +18,7 @@ bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test",
 bun run test:run               # Run tests once
 bun run test:coverage          # With coverage report
 bun run e2e                    # E2E tests (Playwright)
-cd src-tauri && cargo test     # Rust backend tests (575+ tests)
+cd src-tauri && cargo test     # Rust backend tests (650+ tests)
 
 # Code Quality
 bun run lint                   # ESLint (strict, 0 warnings allowed)
@@ -33,7 +33,7 @@ bun run tauri build            # Production bundle
 
 ### Frontend (src/)
 - **React 19 + TypeScript** with Vite bundler
-- **Zustand stores** (`src/stores/`): 7 feature-isolated stores (session, task, agent, prd, prdChat, project, ui, toast)
+- **Zustand stores** (`src/stores/`): 8 feature-isolated stores (session, task, agent, prd, prdChat, gsd, project, ui, toast, ralphLoop)
 - **Tauri API wrappers** (`src/lib/`): Centralized IPC calls to Rust backend
 - **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
 - **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
@@ -107,6 +107,23 @@ Pages and their context requirements:
 
 Fully integrated: Claude Code, OpenCode, Cursor Agent, Codex CLI
 
+## GSD Workflow
+
+The GSD (Get Stuff Done) workflow provides guided PRD creation through 8 phases:
+1. **Questioning** - Chat-based context gathering (what/why/who/done)
+2. **Research** - Parallel AI agent research on requirements
+3. **Requirements** - Auto-generated requirements from research
+4. **Scoping** - Kanban drag-and-drop for V1/V2/Out of Scope categorization
+5. **Roadmap** - Visual feature version planning
+6. **Verification** - Requirements coverage validation
+7. **Export** - Convert to Ralph PRD format
+8. **Complete** - Workflow completion
+
+Key files:
+- `src/stores/gsdStore.ts` - Workflow state management
+- `src-tauri/src/commands/gsd.rs` - Backend commands
+- `src/types/gsd.ts` - Type definitions
+
 ## Data Storage
 
 ### File-Based Storage (Primary)
@@ -117,6 +134,11 @@ Data is stored in `.ralph-ui/` directories within each project for git-trackable
 ├── sessions/{id}.json     # Session state with embedded tasks
 ├── prds/{name}.json       # PRD documents with stories/progress
 ├── chat/{id}.json         # Chat sessions with embedded messages
+├── planning/{id}/         # GSD planning sessions
+│   ├── PROJECT.md         # Generated project context
+│   ├── SUMMARY.md         # Research synthesis
+│   ├── REQUIREMENTS.md    # Generated requirements
+│   └── ROADMAP.md         # Feature roadmap
 └── .gitignore             # Excludes runtime files (agents/, *.lock)
 ```
 
@@ -127,7 +149,7 @@ SQLite database in `src-tauri/src/database/` is being phased out. New features s
 
 ## Testing
 
-- **Unit tests**: Vitest with jsdom, 575+ tests, 80% coverage targets
+- **Unit tests**: Vitest with jsdom, 386+ tests, 80% coverage targets
 - **E2E tests**: Playwright (Chromium), 240+ tests
-- **Backend tests**: cargo test, 575+ tests
-- **Accessibility**: jest-axe integration
+- **Backend tests**: cargo test, 650+ tests
+- **Accessibility**: jest-axe integration with WCAG 2.1 AA coverage

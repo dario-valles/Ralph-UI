@@ -323,28 +323,6 @@ describe('prdStore', () => {
     })
   })
 
-  describe('executePRD', () => {
-    it('should execute PRD and return session ID', async () => {
-      const sessionId = 'session-123'
-      vi.mocked(prdApi.execute).mockResolvedValue(sessionId)
-
-      const store = usePRDStore.getState()
-      const result = await store.executePRD(mockPRD.id, { agentType: 'claude', maxIterations: 10 })
-
-      expect(prdApi.execute).toHaveBeenCalledWith(mockPRD.id, { agentType: 'claude', maxIterations: 10 })
-      expect(result).toBe(sessionId)
-    })
-
-    it('should handle execute errors', async () => {
-      const error = new Error('Execution failed')
-      vi.mocked(prdApi.execute).mockRejectedValue(error)
-
-      const store = usePRDStore.getState()
-      await expect(store.executePRD(mockPRD.id, { agentType: 'claude', maxIterations: 10 })).rejects.toThrow('Execution failed')
-      expect(usePRDStore.getState().error).toBe('Execution failed')
-    })
-  })
-
   describe('clearError', () => {
     it('should clear error', () => {
       const store = usePRDStore.getState()

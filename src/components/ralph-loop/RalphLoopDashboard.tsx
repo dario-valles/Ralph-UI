@@ -179,24 +179,8 @@ export function RalphLoopDashboard({
     loadCommits,
   ])
 
-  // DEBUG: Log state changes to diagnose loop reload issue
-  useEffect(() => {
-    console.log('[RalphLoopDashboard] State changed:', {
-      activeExecutionId,
-      executionState: executionState?.type,
-      prdStories: prd?.stories?.length,
-      prdStatus: prdStatus ? `${prdStatus.passed}/${prdStatus.total}` : null,
-    })
-  }, [activeExecutionId, executionState, prd, prdStatus])
-
   // Check for active execution after PRD loads (to restore button state after navigation)
   useEffect(() => {
-    console.log(
-      '[RalphLoopDashboard] Checking for active execution, prd:',
-      !!prd,
-      'activeExecutionId:',
-      activeExecutionId
-    )
     if (prd && !activeExecutionId) {
       checkForActiveExecution()
     }
@@ -205,11 +189,8 @@ export function RalphLoopDashboard({
   // Poll for updates during active execution
   useEffect(() => {
     if (!activeExecutionId) {
-      console.log('[RalphLoopDashboard] Polling disabled - no activeExecutionId')
       return
     }
-
-    console.log('[RalphLoopDashboard] Starting polling for execution:', activeExecutionId)
 
     // Use worktree path if available (where agent writes), otherwise project path
     const pollPath = effectiveDataPath
@@ -229,7 +210,6 @@ export function RalphLoopDashboard({
         currentState === 'failed' ||
         currentState === 'cancelled'
       ) {
-        console.log('[RalphLoopDashboard] Execution ended, stopping poll')
         return
       }
 
@@ -241,7 +221,6 @@ export function RalphLoopDashboard({
     const interval = setInterval(poll, 2000)
 
     return () => {
-      console.log('[RalphLoopDashboard] Stopping polling for execution:', activeExecutionId)
       clearInterval(interval)
     }
   }, [
