@@ -1,5 +1,7 @@
 // GitHub API integration for PRs and Issues
 
+pub mod issue_converter;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

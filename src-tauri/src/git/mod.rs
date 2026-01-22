@@ -2,6 +2,8 @@
 
 #![allow(dead_code)] // Git infrastructure (some methods not yet used)
 
+pub mod ai_resolver;
+
 use git2::{
     Branch, BranchType, Commit, Delta, Diff, DiffOptions, Error as GitError, Oid, Repository,
     Signature, Status, StatusOptions, Worktree,

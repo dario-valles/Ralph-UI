@@ -1,7 +1,9 @@
 use crate::git::{
+    ai_resolver::{ConflictResolverConfig, ConflictResolver, MergeResolutionResult},
     BranchInfo, CommitInfo, ConflictInfo, DiffInfo, FileStatus, GitManager, MergeResult,
     WorktreeInfo,
 };
+use crate::models::AgentType;
 use crate::utils::ResultExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -326,6 +328,83 @@ pub fn git_push_branch(
     state.with_manager(&repo_path, |manager| {
         manager.push_branch(&branch_name, force)
     })
+}
+
+/// Resolve all conflicts using AI (Claude Code or other CLI agent).
+/// This command:
+/// 1. Gets conflict details (3-way diff) for all conflicted files
+/// 2. Runs an AI agent to resolve each conflict
+/// 3. Applies the resolved content and stages the files
+///
+/// After this succeeds, call git_complete_merge to create the merge commit.
+#[tauri::command]
+pub async fn git_resolve_conflicts_with_ai(
+    repo_path: String,
+    agent_type: Option<String>,
+    model: Option<String>,
+    timeout_secs: Option<u64>,
+    state: State<'_, GitState>,
+) -> Result<MergeResolutionResult, String> {
+    log::info!(
+        "[Git] Resolving conflicts with AI in {} using {:?}",
+        repo_path,
+        agent_type
+    );
+
+    // Get conflict details first
+    let conflicts = state.with_manager(&repo_path, |manager| manager.get_conflict_details())?;
+
+    if conflicts.is_empty() {
+        return Ok(MergeResolutionResult {
+            resolutions: vec![],
+            resolved_count: 0,
+            failed_count: 0,
+            total_duration_secs: 0.0,
+        });
+    }
+
+    // Parse agent type
+    let agent = agent_type
+        .as_deref()
+        .map(|s| s.parse::<AgentType>())
+        .transpose()?
+        .unwrap_or_default();
+
+    // Create resolver config
+    let config = ConflictResolverConfig {
+        agent_type: agent,
+        model,
+        timeout_secs: timeout_secs.unwrap_or(120),
+        project_path: repo_path.clone(),
+    };
+
+    // Create resolver and run resolution
+    let resolver = ConflictResolver::new(config);
+    let result = resolver.resolve_all(&conflicts).await;
+
+    // Apply successful resolutions
+    for resolution in &result.resolutions {
+        if resolution.success {
+            if let Some(ref content) = resolution.resolved_content {
+                // Apply the resolved content
+                state
+                    .with_manager(&repo_path, |manager| {
+                        manager.resolve_conflict(&resolution.path, content)
+                    })
+                    .map_err(|e| {
+                        format!("Failed to apply resolution for {}: {}", resolution.path, e)
+                    })?;
+            }
+        }
+    }
+
+    log::info!(
+        "[Git] AI resolution complete: {}/{} conflicts resolved",
+        result.resolved_count,
+        result.resolutions.len()
+    );
+
+    Ok(result)
 }
 
 #[cfg(test)]

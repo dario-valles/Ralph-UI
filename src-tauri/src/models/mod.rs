@@ -59,6 +59,63 @@ pub enum AgentType {
     Droid,
 }
 
+impl AgentType {
+    /// Returns all available agent types
+    pub fn all() -> &'static [AgentType] {
+        &[
+            AgentType::Claude,
+            AgentType::Opencode,
+            AgentType::Cursor,
+            AgentType::Codex,
+            AgentType::Qwen,
+            AgentType::Droid,
+        ]
+    }
+
+    /// Returns the string representation of this agent type
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AgentType::Claude => "claude",
+            AgentType::Opencode => "opencode",
+            AgentType::Cursor => "cursor",
+            AgentType::Codex => "codex",
+            AgentType::Qwen => "qwen",
+            AgentType::Droid => "droid",
+        }
+    }
+}
+
+impl std::fmt::Display for AgentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for AgentType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "claude" => Ok(AgentType::Claude),
+            "opencode" => Ok(AgentType::Opencode),
+            "cursor" => Ok(AgentType::Cursor),
+            "codex" => Ok(AgentType::Codex),
+            "qwen" => Ok(AgentType::Qwen),
+            "droid" => Ok(AgentType::Droid),
+            _ => Err(format!(
+                "Unknown agent type: '{}'. Expected one of: claude, opencode, cursor, codex, qwen, droid",
+                s
+            )),
+        }
+    }
+}
+
+impl Default for AgentType {
+    fn default() -> Self {
+        AgentType::Claude
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionConfig {

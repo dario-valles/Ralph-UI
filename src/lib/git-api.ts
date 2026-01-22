@@ -84,6 +84,16 @@ export interface Issue {
   updated_at: string
 }
 
+/**
+ * Result of importing GitHub issues to a PRD
+ */
+export interface IssueImportResult {
+  importedCount: number
+  skippedCount: number
+  importedStoryIds: string[]
+  warnings: string[]
+}
+
 // ========================================
 // Conflict Resolution Types
 // ========================================
@@ -130,6 +140,32 @@ export interface MergeWorkflowResult {
   conflicts_resolved?: number // Count of AI-resolved conflicts
   error?: string
 }
+
+/**
+ * Result of resolving a single conflict with AI
+ */
+export interface ConflictResolutionResult {
+  path: string
+  success: boolean
+  resolvedContent?: string
+  error?: string
+  durationSecs: number
+}
+
+/**
+ * Result of resolving all conflicts in a merge with AI
+ */
+export interface MergeResolutionResult {
+  resolutions: ConflictResolutionResult[]
+  resolvedCount: number
+  failedCount: number
+  totalDurationSecs: number
+}
+
+/**
+ * Supported AI agent types for conflict resolution
+ */
+export type ConflictResolverAgent = 'claude' | 'opencode' | 'cursor' | 'codex' | 'qwen' | 'droid'
 
 // ========================================
 // Git API Functions
@@ -365,6 +401,34 @@ export const gitApi = {
   ): Promise<void> => {
     return invoke('git_push_branch', { repoPath, branchName, force })
   },
+
+  /**
+   * Resolve all conflicts using AI (Claude Code or other CLI agent).
+   * This command:
+   * 1. Gets conflict details (3-way diff) for all conflicted files
+   * 2. Runs an AI agent to resolve each conflict
+   * 3. Applies the resolved content and stages the files
+   *
+   * After this succeeds, call completeMerge to create the merge commit.
+   *
+   * @param repoPath - Path to the git repository
+   * @param agentType - AI agent to use (defaults to 'claude')
+   * @param model - Optional model override
+   * @param timeoutSecs - Timeout per conflict in seconds (defaults to 120)
+   */
+  resolveConflictsWithAI: async (
+    repoPath: string,
+    agentType?: ConflictResolverAgent,
+    model?: string,
+    timeoutSecs?: number
+  ): Promise<MergeResolutionResult> => {
+    return invoke('git_resolve_conflicts_with_ai', {
+      repoPath,
+      agentType,
+      model,
+      timeoutSecs,
+    })
+  },
 }
 
 // ========================================
@@ -448,6 +512,40 @@ export const githubApi = {
     state?: string
   ): Promise<Issue[]> => {
     return invoke('github_list_issues', { token, owner, repo, state })
+  },
+
+  /**
+   * Import GitHub issues into a Ralph PRD as stories
+   *
+   * @param token - GitHub personal access token
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @param projectPath - Path to the project directory
+   * @param prdName - Name for the PRD file
+   * @param labels - Only import issues with these labels (optional)
+   * @param includeBody - Include issue body as story description (default: true)
+   * @param useLabelsAsTags - Use issue labels as story tags (default: true)
+   */
+  importIssuesToPrd: async (
+    token: string,
+    owner: string,
+    repo: string,
+    projectPath: string,
+    prdName: string,
+    labels?: string[],
+    includeBody?: boolean,
+    useLabelsAsTags?: boolean
+  ): Promise<IssueImportResult> => {
+    return invoke('github_import_issues_to_prd', {
+      token,
+      owner,
+      repo,
+      projectPath,
+      prdName,
+      labels,
+      includeBody,
+      useLabelsAsTags,
+    })
   },
 }
 

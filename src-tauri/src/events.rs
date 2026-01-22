@@ -22,6 +22,11 @@ pub const EVENT_SUBAGENT_PROGRESS: &str = "subagent:progress";
 pub const EVENT_SUBAGENT_COMPLETED: &str = "subagent:completed";
 pub const EVENT_SUBAGENT_FAILED: &str = "subagent:failed";
 
+// Ralph Loop execution events (for real-time progress streaming)
+pub const EVENT_RALPH_PROGRESS: &str = "ralph:progress";
+pub const EVENT_RALPH_ITERATION_STARTED: &str = "ralph:iteration_started";
+pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
+
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -311,6 +316,128 @@ pub fn emit_subagent_failed(
     app_handle
         .emit(EVENT_SUBAGENT_FAILED, payload)
         .with_context("Failed to emit subagent failed event")
+}
+
+// ============================================================================
+// Ralph Loop Progress Events (for real-time streaming feedback)
+// ============================================================================
+
+/// Phase of the Ralph Loop execution
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RalphPhase {
+    /// Starting up the execution
+    Starting,
+    /// Analyzing current state
+    Analyzing,
+    /// Agent is implementing
+    Implementing,
+    /// Running tests
+    Testing,
+    /// Committing changes
+    Committing,
+    /// Evaluating results
+    Evaluating,
+    /// Iteration complete
+    Complete,
+    /// Execution stopped
+    Stopped,
+    /// Execution failed
+    Failed,
+}
+
+/// Payload for Ralph Loop progress events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphProgressPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Current phase
+    pub phase: RalphPhase,
+    /// Current iteration number
+    pub iteration: u32,
+    /// Total stories in PRD
+    pub total_stories: u32,
+    /// Number of passing stories
+    pub passing_stories: u32,
+    /// Progress within current phase (0.0 - 1.0)
+    pub progress: f32,
+    /// Current file being processed (if any)
+    pub current_file: Option<String>,
+    /// Human-readable message
+    pub message: String,
+    /// Timestamp
+    pub timestamp: String,
+}
+
+/// Payload for Ralph Loop iteration started events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphIterationStartedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Iteration number
+    pub iteration: u32,
+    /// Story being worked on
+    pub current_story: Option<String>,
+    /// Timestamp
+    pub timestamp: String,
+}
+
+/// Payload for Ralph Loop iteration completed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphIterationCompletedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Iteration number
+    pub iteration: u32,
+    /// Whether the iteration was successful
+    pub success: bool,
+    /// Stories that passed after this iteration
+    pub passing_stories: u32,
+    /// Duration in seconds
+    pub duration_secs: f64,
+    /// Timestamp
+    pub timestamp: String,
+    /// Summary message
+    pub summary: Option<String>,
+}
+
+/// Emit a Ralph Loop progress event
+pub fn emit_ralph_progress(
+    app_handle: &tauri::AppHandle,
+    payload: RalphProgressPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_PROGRESS, payload)
+        .with_context("Failed to emit Ralph progress event")
+}
+
+/// Emit a Ralph Loop iteration started event
+pub fn emit_ralph_iteration_started(
+    app_handle: &tauri::AppHandle,
+    payload: RalphIterationStartedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_ITERATION_STARTED, payload)
+        .with_context("Failed to emit Ralph iteration started event")
+}
+
+/// Emit a Ralph Loop iteration completed event
+pub fn emit_ralph_iteration_completed(
+    app_handle: &tauri::AppHandle,
+    payload: RalphIterationCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_ITERATION_COMPLETED, payload)
+        .with_context("Failed to emit Ralph iteration completed event")
 }
 
 #[cfg(test)]

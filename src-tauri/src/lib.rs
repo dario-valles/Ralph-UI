@@ -24,7 +24,7 @@ pub use models::*;
 
 use std::path::Path;
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokio::sync::mpsc;
 
 /// State for rate limit event forwarding to the frontend
@@ -312,12 +312,14 @@ pub fn run() {
             commands::git_resolve_conflict,
             commands::git_complete_merge,
             commands::git_push_branch,
+            commands::git_resolve_conflicts_with_ai,
             // GitHub commands
             commands::github_create_pull_request,
             commands::github_get_pull_request,
             commands::github_list_pull_requests,
             commands::github_get_issue,
             commands::github_list_issues,
+            commands::github_import_issues_to_prd,
             commands::export_session_json,
             commands::create_session_template,
             commands::get_session_templates,
@@ -465,6 +467,7 @@ pub fn run() {
             commands::add_requirement,
             commands::get_verification_history,
             commands::clear_verification_history,
+            commands::get_available_research_agents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
