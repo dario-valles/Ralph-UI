@@ -133,20 +133,20 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
         >
           {/* Expand/Collapse indicator */}
           {isOpen ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <ChevronDown className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <ChevronRight className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
           )}
 
           {/* Tool icon */}
-          <span className="text-muted-foreground flex-shrink-0">{getToolIcon(toolCall.toolName)}</span>
+          <span className="text-zinc-400 flex-shrink-0">{getToolIcon(toolCall.toolName)}</span>
 
           {/* Tool name */}
-          <span className="font-medium text-sm flex-shrink-0">{toolCall.toolName}</span>
+          <span className="font-medium text-sm flex-shrink-0 text-zinc-100">{toolCall.toolName}</span>
 
           {/* Input summary */}
           {inputSummary && (
-            <span className="text-xs text-muted-foreground truncate flex-1 font-mono">
+            <span className="text-xs text-zinc-400 truncate flex-1 font-mono">
               {inputSummary}
             </span>
           )}
@@ -154,11 +154,11 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
           {/* Status indicator */}
           <span className="flex items-center gap-2 flex-shrink-0 ml-auto">
             {toolCall.durationMs !== undefined && (
-              <span className="text-xs text-muted-foreground">{formatDuration(toolCall.durationMs)}</span>
+              <span className="text-xs text-zinc-400">{formatDuration(toolCall.durationMs)}</span>
             )}
-            {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
-            {toolCall.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
-            {isFailed && <XCircle className="h-3.5 w-3.5 text-red-500" />}
+            {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />}
+            {toolCall.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />}
+            {isFailed && <XCircle className="h-3.5 w-3.5 text-red-400" />}
           </span>
         </button>
       </CollapsibleTrigger>
@@ -169,11 +169,11 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
           {hasInput && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Input</span>
+                <span className="text-xs font-medium text-zinc-400">Input</span>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0"
+                  className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-300"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigator.clipboard.writeText(formatInput(toolCall.input))
@@ -182,7 +182,7 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
                   <Copy className="h-3 w-3" />
                 </Button>
               </div>
-              <pre className="text-xs bg-zinc-900/50 p-2 rounded overflow-x-auto max-h-40 font-mono">
+              <pre className="text-xs bg-zinc-900 p-2 rounded overflow-x-auto max-h-40 font-mono text-zinc-200 border border-zinc-800">
                 {formatInput(toolCall.input)}
               </pre>
             </div>
@@ -192,13 +192,13 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
           {hasOutput && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-zinc-400">
                   {isFailed ? 'Error' : 'Output'}
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0"
+                  className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-300"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigator.clipboard.writeText(toolCall.output || '')
@@ -209,8 +209,10 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
               </div>
               <pre
                 className={cn(
-                  'text-xs p-2 rounded overflow-x-auto max-h-60 font-mono whitespace-pre-wrap',
-                  isFailed ? 'bg-red-500/10 text-red-400' : 'bg-zinc-900/50'
+                  'text-xs p-2 rounded overflow-x-auto max-h-60 font-mono whitespace-pre-wrap border',
+                  isFailed
+                    ? 'bg-red-950/50 text-red-300 border-red-900/50'
+                    : 'bg-zinc-900 text-zinc-200 border-zinc-800'
                 )}
               >
                 {toolCall.output}
@@ -219,7 +221,7 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
           )}
 
           {/* Timestamps */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-zinc-500">
             <span>Started: {new Date(toolCall.startedAt).toLocaleTimeString()}</span>
             {toolCall.completedAt && (
               <span>Completed: {new Date(toolCall.completedAt).toLocaleTimeString()}</span>
@@ -290,8 +292,8 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
         <div className="flex items-center gap-2">
-          <Wrench className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Tool Calls</span>
+          <Wrench className="h-4 w-4 text-zinc-400" />
+          <span className="text-sm font-medium text-zinc-200">Tool Calls</span>
           <div className="flex items-center gap-1.5 ml-2">
             {runningCount > 0 && (
               <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
@@ -316,7 +318,7 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
             variant="ghost"
             size="sm"
             onClick={() => clearToolCalls(agentId)}
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200"
           >
             <Trash2 className="h-3 w-3 mr-1" />
             Clear
@@ -329,9 +331,9 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
         <div className="p-2 space-y-1">
           {agentToolCalls.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Wrench className="h-10 w-10 text-zinc-700 mb-3" />
-              <p className="text-sm text-zinc-500">No tool calls yet</p>
-              <p className="text-xs text-zinc-600 mt-1">Tool calls will appear here as the agent works</p>
+              <Wrench className="h-10 w-10 text-zinc-600 mb-3" />
+              <p className="text-sm text-zinc-400">No tool calls yet</p>
+              <p className="text-xs text-zinc-500 mt-1">Tool calls will appear here as the agent works</p>
             </div>
           ) : (
             agentToolCalls.map((toolCall, index) => (
