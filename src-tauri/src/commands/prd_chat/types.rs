@@ -1,6 +1,5 @@
 // PRD Chat request/response types
 
-use crate::database::prd::PRDDocument;
 use crate::models::ChatMessage;
 use serde::{Deserialize, Serialize};
 
@@ -35,15 +34,6 @@ pub struct SendMessageRequest {
     pub project_path: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportToPRDRequest {
-    pub session_id: String,
-    pub title: String,
-    /// Project path for file-based storage (required)
-    pub project_path: String,
-}
-
 // ============================================================================
 // Response Types
 // ============================================================================
@@ -53,15 +43,4 @@ pub struct ExportToPRDRequest {
 pub struct SendMessageResponse {
     pub user_message: ChatMessage,
     pub assistant_message: ChatMessage,
-}
-
-/// Result of exporting a PRD chat session
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportResult {
-    pub prd: PRDDocument,
-    /// Session ID if tasks were created (for navigation to Tasks page)
-    pub session_id: Option<String>,
-    /// Number of tasks created from the PRD
-    pub task_count: usize,
 }

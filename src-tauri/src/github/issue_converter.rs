@@ -26,26 +26,12 @@ pub struct IssueImportResult {
 pub struct IssueImportOptions {
     /// Only import issues with these labels
     pub labels: Option<Vec<String>>,
-    /// Only import issues from this milestone
-    pub milestone: Option<String>,
     /// Prefix for generated story IDs (default: "gh")
     pub id_prefix: String,
     /// Whether to include issue body as description
     pub include_body: bool,
     /// Whether to use issue labels as story tags
     pub use_labels_as_tags: bool,
-}
-
-impl IssueImportOptions {
-    pub fn new() -> Self {
-        Self {
-            labels: None,
-            milestone: None,
-            id_prefix: "gh".to_string(),
-            include_body: true,
-            use_labels_as_tags: true,
-        }
-    }
 }
 
 /// Convert a GitHub issue to a Ralph story

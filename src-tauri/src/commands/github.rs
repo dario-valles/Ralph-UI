@@ -144,7 +144,6 @@ pub async fn github_import_issues_to_prd(
     // Set up import options
     let options = IssueImportOptions {
         labels,
-        milestone: None,
         id_prefix: "gh".to_string(),
         include_body: include_body.unwrap_or(true),
         use_labels_as_tags: use_labels_as_tags.unwrap_or(true),
