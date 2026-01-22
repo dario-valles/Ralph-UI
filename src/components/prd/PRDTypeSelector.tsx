@@ -15,6 +15,7 @@ import {
   FolderOpen,
   ChevronDown,
   Rocket,
+  Workflow,
 } from 'lucide-react'
 import { PRD_TYPES as PRD_TYPE_CONFIG, type PRDTypeConfig } from '@/config/prdTypes'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
@@ -69,7 +70,7 @@ function getColorClass(value: PRDTypeValue): string {
 }
 
 interface PRDTypeSelectorProps {
-  onSelect: (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string) => void
+  onSelect: (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, gsdMode?: boolean) => void
   loading?: boolean
   className?: string
   defaultProjectPath?: string
@@ -83,6 +84,7 @@ export function PRDTypeSelector({
 }: PRDTypeSelectorProps) {
   const [selectedType, setSelectedType] = useState<PRDTypeValue | null>(null)
   const [guidedMode, setGuidedMode] = useState(true)
+  const [gsdMode, setGsdMode] = useState(false)
   // Use defaultProjectPath as initial value; parent should use key prop to reset if needed
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
   const [showProjectPicker, setShowProjectPicker] = useState(!defaultProjectPath)
@@ -92,7 +94,7 @@ export function PRDTypeSelector({
 
   const handleContinue = () => {
     if (selectedType) {
-      onSelect(selectedType, guidedMode, projectPath || undefined)
+      onSelect(selectedType, guidedMode, projectPath || undefined, gsdMode)
     }
   }
 
@@ -184,6 +186,46 @@ export function PRDTypeSelector({
             id="guided-mode"
             checked={guidedMode}
             onCheckedChange={setGuidedMode}
+            disabled={loading || gsdMode}
+          />
+        </div>
+
+        {/* GSD Workflow Mode Toggle */}
+        <div className={cn(
+          "flex items-center justify-between p-4 rounded-lg border-2 transition-all",
+          gsdMode
+            ? "bg-primary/5 border-primary"
+            : "bg-muted/50 border-transparent"
+        )}>
+          <div className="flex items-start gap-3">
+            <Workflow className={cn(
+              "h-5 w-5 mt-0.5",
+              gsdMode ? "text-primary" : "text-muted-foreground"
+            )} />
+            <div className="space-y-0.5">
+              <Label htmlFor="gsd-mode" className="text-sm font-medium">
+                GSD Workflow Mode
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Full spec-driven workflow with deep questioning, research agents, requirements scoping, and roadmap generation
+              </p>
+              {gsdMode && (
+                <Badge variant="secondary" className="mt-1">
+                  Recommended for new projects
+                </Badge>
+              )}
+            </div>
+          </div>
+          <Switch
+            id="gsd-mode"
+            checked={gsdMode}
+            onCheckedChange={(checked) => {
+              setGsdMode(checked)
+              // GSD mode uses its own questioning, so disable regular guided mode
+              if (checked) {
+                setGuidedMode(false)
+              }
+            }}
             disabled={loading}
           />
         </div>

@@ -19,6 +19,7 @@ interface StartSessionOptions {
   guidedMode?: boolean
   templateId?: string
   structuredMode?: boolean
+  gsdMode?: boolean // GSD workflow mode
 }
 
 interface PRDChatStore extends AsyncState {
@@ -84,7 +85,8 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         options.prdType,
         options.guidedMode,
         options.templateId,
-        options.structuredMode
+        options.structuredMode,
+        options.gsdMode
       )
       set((state) => ({
         sessions: [session, ...state.sessions],

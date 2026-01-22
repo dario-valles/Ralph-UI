@@ -187,10 +187,11 @@ export const prdChatApi = {
     prdType?: PRDTypeValue,
     guidedMode?: boolean,
     templateId?: string,
-    structuredMode?: boolean
+    structuredMode?: boolean,
+    gsdMode?: boolean
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
-      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode },
+      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode, gsdMode },
     })
   },
 
@@ -653,5 +654,169 @@ export const ralphLoopApi = {
    */
   cleanupIterationHistory: async (daysToKeep?: number): Promise<number> => {
     return await invoke('cleanup_ralph_iteration_history', { daysToKeep })
+  },
+}
+
+// Import GSD types
+import type {
+  GsdWorkflowState,
+  GsdPhase,
+  QuestioningContext,
+  ResearchStatus,
+  ResearchResult,
+  ResearchSynthesis,
+  PlanningSessionInfo,
+} from '@/types/gsd'
+
+import type {
+  RequirementsDoc,
+  RoadmapDoc,
+  VerificationResult,
+  ScopeSelection,
+  ConversionResult,
+} from '@/types/planning'
+
+// GSD Workflow API
+export const gsdApi = {
+  /** Start a new GSD workflow session */
+  startSession: async (projectPath: string, chatSessionId: string): Promise<GsdWorkflowState> => {
+    return await invoke('start_gsd_session', { projectPath, chatSessionId })
+  },
+
+  /** Get the current GSD workflow state for a session */
+  getState: async (projectPath: string, sessionId: string): Promise<GsdWorkflowState | null> => {
+    return await invoke('get_gsd_state', { projectPath, sessionId })
+  },
+
+  /** Update the GSD workflow phase */
+  updatePhase: async (
+    projectPath: string,
+    sessionId: string,
+    phase: GsdPhase
+  ): Promise<GsdWorkflowState> => {
+    return await invoke('update_gsd_phase', { projectPath, sessionId, phase })
+  },
+
+  /** Update questioning context */
+  updateQuestioningContext: async (
+    projectPath: string,
+    sessionId: string,
+    context: QuestioningContext
+  ): Promise<GsdWorkflowState> => {
+    return await invoke('update_questioning_context', { projectPath, sessionId, context })
+  },
+
+  /** Generate PROJECT.md from questioning context */
+  generateProjectDocument: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<string> => {
+    return await invoke('generate_project_document', { projectPath, sessionId })
+  },
+
+  /** Start parallel research agents */
+  startResearch: async (
+    projectPath: string,
+    sessionId: string,
+    context: string
+  ): Promise<ResearchStatus> => {
+    return await invoke('start_research', { projectPath, sessionId, context })
+  },
+
+  /** Get research results for a session */
+  getResearchResults: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<ResearchResult[]> => {
+    return await invoke('get_research_results', { projectPath, sessionId })
+  },
+
+  /** Synthesize research into SUMMARY.md */
+  synthesizeResearch: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<ResearchSynthesis> => {
+    return await invoke('synthesize_research_cmd', { projectPath, sessionId })
+  },
+
+  /** Apply scope selections to requirements */
+  scopeRequirements: async (
+    projectPath: string,
+    sessionId: string,
+    selections: ScopeSelection
+  ): Promise<RequirementsDoc> => {
+    return await invoke('scope_requirements', { projectPath, sessionId, selections })
+  },
+
+  /** Save requirements document */
+  saveRequirements: async (
+    projectPath: string,
+    sessionId: string,
+    requirements: RequirementsDoc
+  ): Promise<void> => {
+    return await invoke('save_requirements', { projectPath, sessionId, requirements })
+  },
+
+  /** Load requirements document */
+  loadRequirements: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<RequirementsDoc | null> => {
+    return await invoke('load_requirements', { projectPath, sessionId })
+  },
+
+  /** Create roadmap from requirements */
+  createRoadmap: async (projectPath: string, sessionId: string): Promise<RoadmapDoc> => {
+    return await invoke('create_roadmap', { projectPath, sessionId })
+  },
+
+  /** Load roadmap document */
+  loadRoadmap: async (projectPath: string, sessionId: string): Promise<RoadmapDoc | null> => {
+    return await invoke('load_roadmap', { projectPath, sessionId })
+  },
+
+  /** Verify plans for completeness */
+  verifyPlans: async (projectPath: string, sessionId: string): Promise<VerificationResult> => {
+    return await invoke('verify_gsd_plans', { projectPath, sessionId })
+  },
+
+  /** Export GSD plans to Ralph PRD format */
+  exportToRalph: async (
+    projectPath: string,
+    sessionId: string,
+    prdName: string,
+    branch: string,
+    includeV2?: boolean
+  ): Promise<ConversionResult> => {
+    return await invoke('export_gsd_to_ralph', { projectPath, sessionId, prdName, branch, includeV2 })
+  },
+
+  /** Save a planning file (generic) */
+  savePlanningFile: async (
+    projectPath: string,
+    sessionId: string,
+    fileType: 'project' | 'summary' | 'requirements' | 'scoped' | 'roadmap' | 'verification',
+    content: string
+  ): Promise<string> => {
+    return await invoke('save_planning_file', { projectPath, sessionId, fileType, content })
+  },
+
+  /** Read a planning file (generic) */
+  readPlanningFile: async (
+    projectPath: string,
+    sessionId: string,
+    fileType: 'project' | 'summary' | 'requirements' | 'scoped' | 'roadmap' | 'verification'
+  ): Promise<string | null> => {
+    return await invoke('read_gsd_planning_file', { projectPath, sessionId, fileType })
+  },
+
+  /** List all planning sessions for a project */
+  listSessions: async (projectPath: string): Promise<PlanningSessionInfo[]> => {
+    return await invoke('list_gsd_sessions', { projectPath })
+  },
+
+  /** Delete a planning session */
+  deleteSession: async (projectPath: string, sessionId: string): Promise<void> => {
+    return await invoke('delete_gsd_session', { projectPath, sessionId })
   },
 }

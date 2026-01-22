@@ -17,6 +17,7 @@ pub mod session_files;
 pub mod ralph_loop;
 pub mod file_storage;
 pub mod plugins;
+pub mod gsd;
 
 // Re-export models for use in commands
 pub use models::*;
@@ -439,6 +440,26 @@ pub fn run() {
             commands::delete_ralph_iteration_history,
             commands::get_ralph_loop_snapshot,
             commands::cleanup_ralph_iteration_history,
+            // GSD workflow commands
+            commands::start_gsd_session,
+            commands::get_gsd_state,
+            commands::update_gsd_phase,
+            commands::update_questioning_context,
+            commands::generate_project_document,
+            commands::start_research,
+            commands::get_research_results,
+            commands::synthesize_research_cmd,
+            commands::scope_requirements,
+            commands::save_requirements,
+            commands::load_requirements,
+            commands::create_roadmap,
+            commands::load_roadmap,
+            commands::verify_gsd_plans,
+            commands::export_gsd_to_ralph,
+            commands::save_planning_file,
+            commands::read_gsd_planning_file,
+            commands::list_gsd_sessions,
+            commands::delete_gsd_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

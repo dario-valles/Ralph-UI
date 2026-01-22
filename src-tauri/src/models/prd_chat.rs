@@ -71,6 +71,12 @@ pub struct ChatSession {
     pub structured_mode: bool,
     /// Extracted PRD structure (JSON-serialized ExtractedPRDStructure)
     pub extracted_structure: Option<String>,
+    /// Whether GSD (Get Stuff Done) workflow mode is enabled
+    #[serde(default)]
+    pub gsd_mode: bool,
+    /// GSD workflow state (JSON-serialized GsdWorkflowState)
+    #[serde(default)]
+    pub gsd_state: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_deserializing)]

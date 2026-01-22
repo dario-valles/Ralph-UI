@@ -56,6 +56,8 @@ impl super::Database {
                     template_id: row.get(8)?,
                     structured_mode: structured_mode_int != 0,
                     extracted_structure: row.get(10)?,
+                    gsd_mode: false, // Not stored in legacy DB
+                    gsd_state: None, // Not stored in legacy DB
                     created_at: row.get(11)?,
                     updated_at: row.get(12)?,
                     message_count: row.get(13)?,
@@ -90,6 +92,8 @@ impl super::Database {
                 template_id: row.get(8)?,
                 structured_mode: structured_mode_int != 0,
                 extracted_structure: row.get(10)?,
+                gsd_mode: false, // Not stored in legacy DB
+                gsd_state: None, // Not stored in legacy DB
                 created_at: row.get(11)?,
                 updated_at: row.get(12)?,
                 message_count: row.get(13)?,
@@ -228,6 +232,8 @@ mod tests {
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         }
     }
 
@@ -271,6 +277,8 @@ mod tests {
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -363,6 +371,8 @@ mod tests {
             created_at: session.created_at.clone(),
             updated_at: "2026-01-17T12:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         };
 
         let result = db.update_chat_session(&updated_session);
@@ -599,6 +609,8 @@ mod tests {
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -628,6 +640,8 @@ mod tests {
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         };
 
         let result = db.create_chat_session(&session);
@@ -656,6 +670,8 @@ mod tests {
             created_at: "2026-01-17T10:00:00Z".to_string(),
             updated_at: "2026-01-17T10:00:00Z".to_string(),
             message_count: None,
+            gsd_mode: false,
+            gsd_state: None,
         };
         db.create_chat_session(&session).unwrap();
 

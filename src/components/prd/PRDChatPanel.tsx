@@ -32,6 +32,7 @@ import {
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
+import { GSDWorkflow } from './GSDWorkflow'
 import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
@@ -180,6 +181,7 @@ export function PRDChatPanel() {
     prdIdFromUrl,
     currentSession,
     startSession,
+    setCurrentSession,
     activeProject?.path,
     initialLoadComplete,
     sessions,
@@ -299,7 +301,7 @@ export function PRDChatPanel() {
     setShowTypeSelector(true)
   }
 
-  const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string) => {
+  const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, gsdMode?: boolean) => {
     // Register the project when starting a session
     if (projectPath) {
       registerProject(projectPath)
@@ -308,6 +310,7 @@ export function PRDChatPanel() {
       agentType: currentSession?.agentType || 'claude',
       prdType,
       guidedMode,
+      gsdMode: gsdMode || false,
       projectPath: projectPath || activeProject?.path || '',
     })
     setShowTypeSelector(false)
@@ -528,91 +531,103 @@ export function PRDChatPanel() {
             </div>
           )}
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {!currentSession ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <MessageSquare className="h-12 w-12 text-muted-foreground mb-3" />
-                <h3 className="font-medium mb-1">Create a new session</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Start a conversation to create your PRD
-                </p>
-                <div className="flex gap-2">
-                  <Button onClick={handleCreateSession} aria-label="New session">
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Session
-                  </Button>
-                  <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start">
-                    Quick Start
-                  </Button>
-                </div>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <Bot className="h-12 w-12 text-muted-foreground mb-3" />
-                <h3 className="font-medium mb-1">Start a conversation</h3>
-                <p className="text-sm text-muted-foreground">
-                  {currentSession.prdType
-                    ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
-                    : 'Ask the AI to help you create your PRD'}
-                </p>
-                {currentSession.guidedMode && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Guided mode is on - AI will ask structured questions
-                  </p>
+          {/* GSD Workflow Mode */}
+          {currentSession?.gsdMode && currentSession.projectPath ? (
+            <div className="flex-1 overflow-y-auto">
+              <GSDWorkflow
+                projectPath={currentSession.projectPath}
+                sessionId={currentSession.id}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {!currentSession ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <MessageSquare className="h-12 w-12 text-muted-foreground mb-3" />
+                    <h3 className="font-medium mb-1">Create a new session</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Start a conversation to create your PRD
+                    </p>
+                    <div className="flex gap-2">
+                      <Button onClick={handleCreateSession} aria-label="New session">
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Session
+                      </Button>
+                      <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start">
+                        Quick Start
+                      </Button>
+                    </div>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <Bot className="h-12 w-12 text-muted-foreground mb-3" />
+                    <h3 className="font-medium mb-1">Start a conversation</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {currentSession.prdType
+                        ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
+                        : 'Ask the AI to help you create your PRD'}
+                    </p>
+                    {currentSession.guidedMode && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Guided mode is on - AI will ask structured questions
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-4 max-w-md justify-center">
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-secondary/80"
+                        onClick={() => handleSendMessage('Help me create a PRD')}
+                      >
+                        Help me create a PRD
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-secondary/80"
+                        onClick={() => handleSendMessage('What should my PRD include?')}
+                      >
+                        What should my PRD include?
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-secondary/80"
+                        onClick={() => handleSendMessage('PRD best practices')}
+                      >
+                        PRD best practices
+                      </Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <ChatMessageItem key={message.id} message={message} />
+                    ))}
+                    {streaming && (
+                      <StreamingIndicator
+                        startedAt={streamingStartedAt || undefined}
+                        onRetry={handleRetryMessage}
+                        onCancel={handleCancelStreaming}
+                        content={streamingContent}
+                      />
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
                 )}
-                <div className="flex flex-wrap gap-2 mt-4 max-w-md justify-center">
-                  <Badge
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage('Help me create a PRD')}
-                  >
-                    Help me create a PRD
-                  </Badge>
-                  <Badge
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage('What should my PRD include?')}
-                  >
-                    What should my PRD include?
-                  </Badge>
-                  <Badge
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage('PRD best practices')}
-                  >
-                    PRD best practices
-                  </Badge>
-                </div>
               </div>
-            ) : (
-              <>
-                {messages.map((message) => (
-                  <ChatMessageItem key={message.id} message={message} />
-                ))}
-                {streaming && (
-                  <StreamingIndicator
-                    startedAt={streamingStartedAt || undefined}
-                    onRetry={handleRetryMessage}
-                    onCancel={handleCancelStreaming}
-                    content={streamingContent}
-                  />
-                )}
-                <div ref={messagesEndRef} />
-              </>
-            )}
-          </div>
 
-          {/* Input Area */}
-          <div className="border-t p-4">
-            <ChatInput
-              onSend={handleSendMessage}
-              disabled={isDisabled}
-              placeholder={
-                !currentSession ? 'Create a session to start chatting...' : 'Type your message...'
-              }
-            />
-          </div>
+              {/* Input Area */}
+              <div className="border-t p-4">
+                <ChatInput
+                  onSend={handleSendMessage}
+                  disabled={isDisabled}
+                  placeholder={
+                    !currentSession ? 'Create a session to start chatting...' : 'Type your message...'
+                  }
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

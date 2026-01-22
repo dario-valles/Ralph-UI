@@ -549,6 +549,10 @@ export interface ChatSession {
   structuredMode: boolean
   /** Extracted PRD structure (JSON string) */
   extractedStructure?: string
+  /** Whether GSD (Get Stuff Done) workflow mode is enabled */
+  gsdMode?: boolean
+  /** GSD workflow state (JSON-serialized GsdWorkflowState) */
+  gsdState?: string
   createdAt: string
   updatedAt: string
   messageCount?: number
@@ -888,3 +892,62 @@ export interface RalphWorktreeInfo {
   branch?: string
   isLocked: boolean
 }
+
+// ============================================================================
+// GSD (Get Stuff Done) Types - Re-export from dedicated files
+// ============================================================================
+
+export type {
+  GsdPhase,
+  GsdPhaseInfo,
+  QuestioningContext,
+  AgentResearchStatus,
+  ResearchStatus,
+  GsdDecision,
+  GsdWorkflowState,
+  ResearchResult,
+  ResearchSynthesis,
+  GsdConfig,
+  PlanningSessionInfo,
+} from './gsd'
+
+export {
+  GSD_PHASES,
+  getPhaseInfo,
+  getNextPhase,
+  getPreviousPhase,
+  isQuestioningComplete,
+  getMissingContextItems,
+  isResearchComplete,
+  getResearchCompletionPercentage,
+  getWorkflowCompletionPercentage,
+} from './gsd'
+
+export type {
+  RequirementCategory,
+  ScopeLevel,
+  Requirement,
+  RequirementsDoc,
+  ScopeSelection,
+  RoadmapPhase,
+  RoadmapDoc,
+  IssueSeverity,
+  VerificationIssue,
+  VerificationWarning,
+  VerificationStats,
+  VerificationResult,
+  ConversionOptions,
+  SkippedRequirement,
+  ConversionResult,
+} from './planning'
+
+export {
+  REQUIREMENT_CATEGORIES,
+  SCOPE_LEVELS,
+  getRequirementsByScope,
+  getRequirementsByCategory,
+  countRequirementsByScope,
+  getUnscopedRequirements,
+  parseReqId,
+  getCategoryFromReqId,
+} from './planning'

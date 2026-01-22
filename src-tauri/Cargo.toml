@@ -72,6 +72,9 @@ tera = "1.19"
 # Home directory resolution
 dirs = "5.0"
 
+# Executable path resolution
+which = "6.0"
+
 # TOML config parsing
 toml = "0.8"
 

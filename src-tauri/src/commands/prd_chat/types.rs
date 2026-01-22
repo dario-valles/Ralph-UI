@@ -22,6 +22,8 @@ pub struct StartChatSessionRequest {
     pub template_id: Option<String>,
     /// Whether to use structured output mode (JSON blocks)
     pub structured_mode: Option<bool>,
+    /// Whether to use GSD workflow mode
+    pub gsd_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
