@@ -468,6 +468,10 @@ impl RalphLoopOrchestrator {
                     let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
                 }
+                // Sync PRD files to main project before exiting
+                if let Err(e) = self.sync_prd_to_main() {
+                    log::warn!("[RalphLoop] Failed to sync PRD on cancel: {}", e);
+                }
                 self.state = RalphLoopState::Cancelled { iteration };
                 self.emit_status();
                 return Ok(self.metrics.clone());
@@ -480,6 +484,10 @@ impl RalphLoopOrchestrator {
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
+                }
+                // Sync PRD files to main project before exiting
+                if let Err(e) = self.sync_prd_to_main() {
+                    log::warn!("[RalphLoop] Failed to sync PRD on max iterations: {}", e);
                 }
                 self.state = RalphLoopState::Failed {
                     iteration,
@@ -497,6 +505,10 @@ impl RalphLoopOrchestrator {
                     if let Some(agent_id) = self.current_agent_id.take() {
                         let manager = lock_mutex_recover(&agent_manager_arc);
                         manager.unregister_pty(&agent_id);
+                    }
+                    // Sync PRD files to main project before exiting
+                    if let Err(e) = self.sync_prd_to_main() {
+                        log::warn!("[RalphLoop] Failed to sync PRD on max cost: {}", e);
                     }
                     self.state = RalphLoopState::Failed {
                         iteration,
@@ -536,6 +548,10 @@ impl RalphLoopOrchestrator {
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
                     manager.unregister_pty(&agent_id);
+                }
+                // Sync PRD files to main project before exiting
+                if let Err(e) = self.sync_prd_to_main() {
+                    log::warn!("[RalphLoop] Failed to sync PRD on completion: {}", e);
                 }
                 self.state = RalphLoopState::Completed {
                     total_iterations: iteration - 1,
@@ -613,6 +629,10 @@ impl RalphLoopOrchestrator {
                         let manager = lock_mutex_recover(&agent_manager_arc);
                         manager.unregister_pty(&agent_id);
                     }
+                    // Sync PRD files to main project before exiting
+                    if let Err(e) = self.sync_prd_to_main() {
+                        log::warn!("[RalphLoop] Failed to sync PRD on completion promise: {}", e);
+                    }
                     self.state = RalphLoopState::Completed {
                         total_iterations: iteration,
                     };
@@ -625,6 +645,12 @@ impl RalphLoopOrchestrator {
                     log::info!("[RalphLoop] Completion promise detected but {} stories still incomplete: {:?}. Continuing...", 
                         prd_status.failed, prd_status.incomplete_story_ids);
                 }
+            }
+
+            // Sync PRD files to main project after each iteration
+            // This ensures progress is persisted even if the app crashes or restarts
+            if let Err(e) = self.sync_prd_to_main() {
+                log::warn!("[RalphLoop] Failed to sync PRD after iteration {}: {}", iteration, e);
             }
 
             log::info!("[RalphLoop] Continuing to iteration {}", iteration + 1);
@@ -1067,6 +1093,54 @@ impl RalphLoopOrchestrator {
         *lock_mutex_recover(&self.cancelled) = true;
     }
 
+    /// Sync PRD files from worktree back to main project directory.
+    /// This ensures progress is persisted even if the app restarts.
+    /// Called after each iteration and on completion/failure/cancel.
+    fn sync_prd_to_main(&self) -> Result<(), String> {
+        // Only sync if we're using a worktree
+        let worktree_path = match &self.worktree_path {
+            Some(p) => p,
+            None => return Ok(()), // No worktree, nothing to sync
+        };
+
+        // Only sync for new-format PRDs (with prd_name)
+        let prd_name = match &self.config.prd_name {
+            Some(name) => name,
+            None => return Ok(()), // Legacy format doesn't need sync (uses .ralph/)
+        };
+
+        let src_dir = worktree_path.join(".ralph-ui").join("prds");
+        let dst_dir = self.config.project_path.join(".ralph-ui").join("prds");
+
+        // Ensure destination directory exists
+        if !dst_dir.exists() {
+            std::fs::create_dir_all(&dst_dir)
+                .map_err(|e| format!("Failed to create .ralph-ui/prds directory: {}", e))?;
+        }
+
+        // Files to sync: {prd_name}.json, {prd_name}-progress.txt
+        let files_to_sync = [
+            format!("{}.json", prd_name),
+            format!("{}-progress.txt", prd_name),
+        ];
+
+        for filename in &files_to_sync {
+            let src = src_dir.join(filename);
+            let dst = dst_dir.join(filename);
+
+            if src.exists() {
+                if let Err(e) = std::fs::copy(&src, &dst) {
+                    log::warn!("[RalphLoop] Failed to sync {} to main project: {}", filename, e);
+                } else {
+                    log::debug!("[RalphLoop] Synced {} to main project", filename);
+                }
+            }
+        }
+
+        log::info!("[RalphLoop] Synced PRD files from worktree to main project");
+        Ok(())
+    }
+
     /// Setup worktree for isolated execution
     ///
     /// Creates a git worktree at {project}/.worktrees/ralph-{execution_id}
@@ -1156,51 +1230,58 @@ impl RalphLoopOrchestrator {
             );
         }
 
-        // Sync PRD files to worktree based on prd_name setting
-        if let Some(ref prd_name) = self.config.prd_name {
-            // New format: sync .ralph-ui/prds/ directory
-            let src_prds_dir = self.config.project_path.join(".ralph-ui").join("prds");
-            let dst_prds_dir = worktree_path.join(".ralph-ui").join("prds");
+        // Sync PRD files based on prd_name setting
+        // IMPORTANT: When resuming an existing worktree, we should NOT overwrite
+        // the worktree's data with stale main project data. Only sync main→worktree
+        // when creating a NEW worktree.
+        if !worktree_exists {
+            if let Some(ref prd_name) = self.config.prd_name {
+                // New format: sync .ralph-ui/prds/ directory
+                let src_prds_dir = self.config.project_path.join(".ralph-ui").join("prds");
+                let dst_prds_dir = worktree_path.join(".ralph-ui").join("prds");
 
-            if src_prds_dir.exists() {
-                // Ensure .ralph-ui/prds exists in worktree
-                std::fs::create_dir_all(&dst_prds_dir)
-                    .map_err(|e| format!("Failed to create .ralph-ui/prds directory: {}", e))?;
+                if src_prds_dir.exists() {
+                    // Ensure .ralph-ui/prds exists in worktree
+                    std::fs::create_dir_all(&dst_prds_dir)
+                        .map_err(|e| format!("Failed to create .ralph-ui/prds directory: {}", e))?;
 
-                // Copy PRD-specific files (only for this PRD, not all)
-                for ext in &["json", "txt", "md"] {
-                    let filename = if *ext == "json" {
-                        format!("{}.{}", prd_name, ext)
-                    } else if *ext == "txt" {
-                        format!("{}-progress.{}", prd_name, ext)
-                    } else {
-                        format!("{}-prompt.{}", prd_name, ext)
-                    };
-                    let src_file = src_prds_dir.join(&filename);
-                    let dst_file = dst_prds_dir.join(&filename);
+                    // Copy PRD-specific files (only for this PRD, not all)
+                    for ext in &["json", "txt", "md"] {
+                        let filename = if *ext == "json" {
+                            format!("{}.{}", prd_name, ext)
+                        } else if *ext == "txt" {
+                            format!("{}-progress.{}", prd_name, ext)
+                        } else {
+                            format!("{}-prompt.{}", prd_name, ext)
+                        };
+                        let src_file = src_prds_dir.join(&filename);
+                        let dst_file = dst_prds_dir.join(&filename);
 
-                    if src_file.exists() {
-                        std::fs::copy(&src_file, &dst_file)
-                            .map_err(|e| format!("Failed to copy {}: {}", filename, e))?;
+                        if src_file.exists() {
+                            std::fs::copy(&src_file, &dst_file)
+                                .map_err(|e| format!("Failed to copy {}: {}", filename, e))?;
+                        }
                     }
+                    log::info!("[RalphLoop] Synced .ralph-ui/prds/ files to new worktree");
                 }
-                log::info!("[RalphLoop] Synced .ralph-ui/prds/ files to worktree");
+            } else {
+                // Legacy format: sync .ralph/ directory
+                let src_ralph_dir = self.config.project_path.join(".ralph");
+                let dst_ralph_dir = worktree_path.join(".ralph");
+
+                if src_ralph_dir.exists() {
+                    // Remove old .ralph dir in worktree and copy fresh version
+                    if dst_ralph_dir.exists() {
+                        std::fs::remove_dir_all(&dst_ralph_dir)
+                            .map_err(|e| format!("Failed to remove old .ralph directory: {}", e))?;
+                    }
+                    Self::copy_dir_recursive(&src_ralph_dir, &dst_ralph_dir)
+                        .map_err(|e| format!("Failed to copy .ralph directory: {}", e))?;
+                    log::info!("[RalphLoop] Synced .ralph directory to new worktree");
+                }
             }
         } else {
-            // Legacy format: sync .ralph/ directory
-            let src_ralph_dir = self.config.project_path.join(".ralph");
-            let dst_ralph_dir = worktree_path.join(".ralph");
-
-            if src_ralph_dir.exists() {
-                // Remove old .ralph dir in worktree and copy fresh version
-                if dst_ralph_dir.exists() {
-                    std::fs::remove_dir_all(&dst_ralph_dir)
-                        .map_err(|e| format!("Failed to remove old .ralph directory: {}", e))?;
-                }
-                Self::copy_dir_recursive(&src_ralph_dir, &dst_ralph_dir)
-                    .map_err(|e| format!("Failed to copy .ralph directory: {}", e))?;
-                log::info!("[RalphLoop] Synced .ralph directory to worktree");
-            }
+            log::info!("[RalphLoop] Resuming existing worktree - keeping worktree PRD data (not overwriting with main)");
         }
 
         // Update working path and reinitialize components
