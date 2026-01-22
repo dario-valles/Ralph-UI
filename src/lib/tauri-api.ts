@@ -760,3 +760,43 @@ export const gsdApi = {
     return await invoke('get_available_research_agents')
   },
 }
+
+// Import TemplateInfo type
+import type { TemplateInfo } from '@/types'
+
+// Template Editor API (US-012)
+export const templateApi = {
+  /** List all available templates (project, global, builtin) */
+  list: async (projectPath?: string): Promise<TemplateInfo[]> => {
+    return await invoke('list_templates', { projectPath })
+  },
+
+  /** Get template content by name */
+  getContent: async (name: string, projectPath?: string): Promise<string> => {
+    return await invoke('get_template_content', { name, projectPath })
+  },
+
+  /** Save a template to project or global scope */
+  save: async (
+    name: string,
+    content: string,
+    scope: 'project' | 'global',
+    projectPath?: string
+  ): Promise<void> => {
+    return await invoke('save_template', { name, content, scope, projectPath })
+  },
+
+  /** Delete a template from project or global scope */
+  delete: async (
+    name: string,
+    scope: 'project' | 'global',
+    projectPath?: string
+  ): Promise<void> => {
+    return await invoke('delete_template', { name, scope, projectPath })
+  },
+
+  /** List builtin template names */
+  listBuiltin: async (): Promise<string[]> => {
+    return await invoke('list_builtin_templates')
+  },
+}

@@ -360,6 +360,8 @@ pub fn run() {
             commands::render_template,
             commands::render_task_prompt,
             commands::get_template_content,
+            commands::save_template,
+            commands::delete_template,
             // Recovery commands
             commands::check_stale_sessions,
             commands::recover_stale_session,

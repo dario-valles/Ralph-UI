@@ -188,6 +188,107 @@ pub async fn get_template_content(
     Ok(template.content)
 }
 
+/// Save a template to project or global location
+///
+/// - If project_path is provided, saves to {project_path}/.ralph-ui/templates/{name}.tera
+/// - Otherwise saves to ~/.ralph-ui/templates/{name}.tera
+/// - Cannot save to builtin templates (read-only)
+#[tauri::command]
+pub async fn save_template(
+    name: String,
+    content: String,
+    scope: String,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    // Determine target directory based on scope
+    let template_dir: PathBuf = match scope.as_str() {
+        "project" => {
+            let project = project_path.ok_or("Project path required for project-scoped template")?;
+            PathBuf::from(&project).join(".ralph-ui").join("templates")
+        }
+        "global" => {
+            dirs::home_dir()
+                .ok_or("Could not determine home directory")?
+                .join(".ralph-ui")
+                .join("templates")
+        }
+        "builtin" => {
+            return Err("Cannot save to builtin templates (read-only)".to_string());
+        }
+        _ => {
+            return Err(format!("Invalid scope '{}'. Use 'project' or 'global'", scope));
+        }
+    };
+
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&template_dir)
+        .map_err(|e| format!("Failed to create template directory: {}", e))?;
+
+    // Write template file with .tera extension
+    let template_path = template_dir.join(format!("{}.tera", name));
+    fs::write(&template_path, &content)
+        .map_err(|e| format!("Failed to write template: {}", e))?;
+
+    log::info!("Saved template '{}' to {:?}", name, template_path);
+
+    Ok(())
+}
+
+/// Delete a template from project or global location
+///
+/// - If project_path is provided, deletes from {project_path}/.ralph-ui/templates/{name}.tera
+/// - Otherwise deletes from ~/.ralph-ui/templates/{name}.tera
+/// - Cannot delete builtin templates (read-only)
+#[tauri::command]
+pub async fn delete_template(
+    name: String,
+    scope: String,
+    project_path: Option<String>,
+) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    // Determine target directory based on scope
+    let template_path: PathBuf = match scope.as_str() {
+        "project" => {
+            let project = project_path.ok_or("Project path required for project-scoped template")?;
+            PathBuf::from(&project)
+                .join(".ralph-ui")
+                .join("templates")
+                .join(format!("{}.tera", name))
+        }
+        "global" => {
+            dirs::home_dir()
+                .ok_or("Could not determine home directory")?
+                .join(".ralph-ui")
+                .join("templates")
+                .join(format!("{}.tera", name))
+        }
+        "builtin" => {
+            return Err("Cannot delete builtin templates (read-only)".to_string());
+        }
+        _ => {
+            return Err(format!("Invalid scope '{}'. Use 'project' or 'global'", scope));
+        }
+    };
+
+    // Check if file exists
+    if !template_path.exists() {
+        return Err(format!("Template '{}' not found at {:?}", name, template_path));
+    }
+
+    // Delete the file
+    fs::remove_file(&template_path)
+        .map_err(|e| format!("Failed to delete template: {}", e))?;
+
+    log::info!("Deleted template '{}' from {:?}", name, template_path);
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
