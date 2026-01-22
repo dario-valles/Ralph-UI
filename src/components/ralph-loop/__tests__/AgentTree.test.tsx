@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { AgentTree } from '../AgentTree'
 import type { SubagentNode } from '@/hooks/useSubagentEvents'
 
@@ -48,6 +48,13 @@ describe('AgentTree', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useFakeTimers()
+    // Mock scrollTo since jsdom doesn't support it
+    Element.prototype.scrollTo = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders empty state when no subagents', () => {
@@ -233,5 +240,183 @@ describe('AgentTree', () => {
     render(<AgentTree agentId="agent-1" />)
 
     expect(screen.getByText('2m 5s')).toBeInTheDocument()
+  })
+
+  it('highlights new nodes with animation class', () => {
+    const subagentMap = new Map<string, SubagentNode>()
+    subagentMap.set(mockSubagentNode.id, mockSubagentNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [mockSubagentNode],
+      subagentMap,
+      activeCount: 1,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    render(<AgentTree agentId="agent-1" />)
+
+    // New node should have data-new-node attribute
+    const nodeButton = screen.getByText('Search for files').closest('button')!
+    expect(nodeButton).toHaveAttribute('data-new-node', 'true')
+    expect(nodeButton).toHaveClass('animate-highlight-fade')
+  })
+
+  it('removes highlight animation after duration', async () => {
+    const subagentMap = new Map<string, SubagentNode>()
+    subagentMap.set(mockSubagentNode.id, mockSubagentNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [mockSubagentNode],
+      subagentMap,
+      activeCount: 1,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    render(<AgentTree agentId="agent-1" />)
+
+    // Initially should have highlight
+    const nodeButton = screen.getByText('Search for files').closest('button')!
+    expect(nodeButton).toHaveAttribute('data-new-node', 'true')
+
+    // Advance timers past the highlight duration (2000ms)
+    act(() => {
+      vi.advanceTimersByTime(2100)
+    })
+
+    // After timeout, highlight should be removed
+    expect(nodeButton).not.toHaveAttribute('data-new-node')
+    expect(nodeButton).not.toHaveClass('animate-highlight-fade')
+  })
+
+  it('supports autoScroll prop', () => {
+    const subagentMap = new Map<string, SubagentNode>()
+    subagentMap.set(mockSubagentNode.id, mockSubagentNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [mockSubagentNode],
+      subagentMap,
+      activeCount: 1,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    // Should not throw when autoScroll is enabled (default)
+    const { rerender } = render(<AgentTree agentId="agent-1" />)
+
+    // Should not throw when autoScroll is disabled
+    rerender(<AgentTree agentId="agent-1" autoScroll={false} />)
+
+    expect(screen.getByText('Search for files')).toBeInTheDocument()
+  })
+
+  it('shows live status updates when node status changes', () => {
+    const subagentMap = new Map<string, SubagentNode>()
+    subagentMap.set(mockSubagentNode.id, mockSubagentNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [mockSubagentNode],
+      subagentMap,
+      activeCount: 1,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    const { rerender } = render(<AgentTree agentId="agent-1" />)
+
+    // Initially running
+    expect(screen.getByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('1 running')).toBeInTheDocument()
+
+    // Update to completed
+    const completedNode: SubagentNode = {
+      ...mockSubagentNode,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      durationSecs: 10,
+    }
+    const updatedMap = new Map<string, SubagentNode>()
+    updatedMap.set(completedNode.id, completedNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [completedNode],
+      subagentMap: updatedMap,
+      activeCount: 0,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    rerender(<AgentTree agentId="agent-1" />)
+
+    // Now showing completed
+    expect(screen.queryByText('Running')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 running')).not.toBeInTheDocument()
+    expect(screen.getByText('10s')).toBeInTheDocument()
+  })
+
+  it('handles status transition from running to failed', () => {
+    const subagentMap = new Map<string, SubagentNode>()
+    subagentMap.set(mockSubagentNode.id, mockSubagentNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [mockSubagentNode],
+      subagentMap,
+      activeCount: 1,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    const { rerender } = render(<AgentTree agentId="agent-1" />)
+
+    // Initially running
+    expect(screen.getByText('Running')).toBeInTheDocument()
+
+    // Update to failed
+    const failedNode: SubagentNode = {
+      ...mockSubagentNode,
+      status: 'failed',
+      completedAt: new Date().toISOString(),
+      durationSecs: 5,
+      error: 'Task failed',
+    }
+    const updatedMap = new Map<string, SubagentNode>()
+    updatedMap.set(failedNode.id, failedNode)
+
+    mockUseSubagentEvents.mockReturnValue({
+      subagents: [failedNode],
+      subagentMap: updatedMap,
+      activeCount: 0,
+      totalCount: 1,
+      activityCount: 0,
+      resetActivityCount: vi.fn(),
+      clear: vi.fn(),
+      isListening: true,
+    })
+
+    rerender(<AgentTree agentId="agent-1" />)
+
+    // Now showing failed
+    expect(screen.queryByText('Running')).not.toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('5s')).toBeInTheDocument()
   })
 })

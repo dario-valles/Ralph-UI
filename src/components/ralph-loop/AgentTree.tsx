@@ -3,9 +3,10 @@
  *
  * Hierarchical visualization of agent/subagent tree structure.
  * Shows real-time updates as subagents spawn and complete.
+ * Includes visual animations for new nodes and auto-scroll functionality.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -21,6 +22,9 @@ import {
 import { cn } from '@/lib/utils'
 import { useSubagentEvents, type SubagentNode, type SubagentStatus } from '@/hooks/useSubagentEvents'
 
+// Duration in ms for which a node is considered "new" (shows highlight animation)
+const NEW_NODE_HIGHLIGHT_DURATION = 2000
+
 export interface AgentTreeProps {
   /** The root agent ID to show subagents for */
   agentId: string
@@ -30,6 +34,8 @@ export interface AgentTreeProps {
   maxHeight?: string
   /** Whether to auto-expand nodes by default (default: true for depth < 2) */
   defaultExpanded?: boolean
+  /** Whether to auto-scroll to show new nodes (default: true) */
+  autoScroll?: boolean
 }
 
 export function AgentTree({
@@ -37,10 +43,68 @@ export function AgentTree({
   className,
   maxHeight = '300px',
   defaultExpanded = true,
+  autoScroll = true,
 }: AgentTreeProps): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Force re-render to clear highlights after timeout
+  const [, forceUpdate] = useState(0)
+
   const { subagents, subagentMap, activeCount, totalCount, isListening } = useSubagentEvents({
     agentId,
+    onNewActivity: useCallback(() => {
+      // Auto-scroll when new activity detected
+      if (autoScroll && scrollRef.current) {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({
+            top: 0, // Newest nodes are at the top
+            behavior: 'smooth',
+          })
+        })
+      }
+    }, [autoScroll]),
   })
+
+  // Set up timer to clear highlights after duration
+  // This timer triggers a re-render which will re-evaluate isNodeNew
+  useEffect(() => {
+    if (subagentMap.size === 0) return
+
+    // Find the next node that needs its highlight cleared
+    const now = Date.now()
+    let nextClearTime = Infinity
+
+    for (const node of subagentMap.values()) {
+      const nodeTime = new Date(node.startedAt).getTime()
+      const elapsed = now - nodeTime
+      if (elapsed < NEW_NODE_HIGHLIGHT_DURATION) {
+        const remaining = NEW_NODE_HIGHLIGHT_DURATION - elapsed
+        if (remaining < nextClearTime) {
+          nextClearTime = remaining
+        }
+      }
+    }
+
+    if (nextClearTime !== Infinity && nextClearTime > 0) {
+      const timerId = setTimeout(() => {
+        // Force re-render to update highlight states
+        forceUpdate((n) => n + 1)
+      }, nextClearTime + 50) // Add small buffer
+
+      return () => clearTimeout(timerId)
+    }
+  }, [subagentMap, forceUpdate])
+
+  // Callback to check if a node is "new" (started within the highlight duration)
+  const isNodeNew = useCallback(
+    (nodeId: string) => {
+      const node = subagentMap.get(nodeId)
+      if (!node) return false
+      const nodeTime = new Date(node.startedAt).getTime()
+      const elapsed = Date.now() - nodeTime
+      return elapsed < NEW_NODE_HIGHLIGHT_DURATION
+    },
+    [subagentMap]
+  )
 
   // Build hierarchical structure from flat map
   // The useSubagentEvents hook returns depth-1 nodes as root, but we need to build full tree
@@ -114,7 +178,7 @@ export function AgentTree({
       </div>
 
       {/* Tree view */}
-      <ScrollArea className="rounded-md border" style={{ maxHeight }}>
+      <ScrollArea className="rounded-md border" style={{ maxHeight }} ref={scrollRef}>
         <div className="p-2 space-y-1">
           {treeNodes.map((node) => (
             <AgentTreeNode
@@ -122,6 +186,8 @@ export function AgentTree({
               node={node}
               depth={0}
               defaultExpanded={defaultExpanded}
+              isNew={isNodeNew(node.id)}
+              isNodeNew={isNodeNew}
             />
           ))}
         </div>
@@ -134,9 +200,13 @@ interface AgentTreeNodeProps {
   node: SubagentNode
   depth: number
   defaultExpanded: boolean
+  /** Whether this node is newly added (shows highlight animation) */
+  isNew: boolean
+  /** Callback to check if a child node is new */
+  isNodeNew: (nodeId: string) => boolean
 }
 
-function AgentTreeNode({ node, depth, defaultExpanded }: AgentTreeNodeProps): React.JSX.Element {
+function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: AgentTreeNodeProps): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(defaultExpanded && depth < 2)
   const hasChildren = node.children.length > 0
 
@@ -157,9 +227,12 @@ function AgentTreeNode({ node, depth, defaultExpanded }: AgentTreeNodeProps): Re
             className={cn(
               'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
               'hover:bg-muted/50 transition-colors',
-              node.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20'
+              node.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20',
+              // New node highlight animation
+              isNew && 'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
             )}
             style={{ paddingLeft: `${depth * 16 + 8}px` }}
+            data-new-node={isNew ? 'true' : undefined}
           >
             {/* Expand/collapse indicator */}
             {hasChildren ? (
@@ -213,6 +286,8 @@ function AgentTreeNode({ node, depth, defaultExpanded }: AgentTreeNodeProps): Re
                   node={child}
                   depth={depth + 1}
                   defaultExpanded={defaultExpanded}
+                  isNew={isNodeNew(child.id)}
+                  isNodeNew={isNodeNew}
                 />
               ))}
             </div>
