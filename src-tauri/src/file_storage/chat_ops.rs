@@ -145,6 +145,21 @@ pub fn update_chat_session_extracted_structure(
     Ok(())
 }
 
+/// Update chat session agent type
+pub fn update_chat_session_agent(
+    project_path: &Path,
+    session_id: &str,
+    agent_type: &str,
+) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.agent_type = agent_type.to_string();
+    chat_file.updated_at = Utc::now();
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

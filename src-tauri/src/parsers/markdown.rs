@@ -219,7 +219,10 @@ impl ParserState {
         if let Some(title) = self.current_task_title.take() {
             // Handle empty descriptions by using title as fallback
             let description = if self.current_task_description.trim().is_empty() {
-                log::warn!("[Parser] Task '{}' has no description, using title as prompt", title);
+                log::warn!(
+                    "[Parser] Task '{}' has no description, using title as prompt",
+                    title
+                );
                 format!("Implement: {}", title)
             } else {
                 self.current_task_description.trim().to_string()
@@ -232,15 +235,13 @@ impl ParserState {
             }
 
             if !self.current_task_metadata.dependencies.is_empty() {
-                task = task.with_dependencies(
-                    std::mem::take(&mut self.current_task_metadata.dependencies)
-                );
+                task = task.with_dependencies(std::mem::take(
+                    &mut self.current_task_metadata.dependencies,
+                ));
             }
 
             if !self.current_task_metadata.tags.is_empty() {
-                task = task.with_tags(
-                    std::mem::take(&mut self.current_task_metadata.tags)
-                );
+                task = task.with_tags(std::mem::take(&mut self.current_task_metadata.tags));
             }
 
             if let Some(tokens) = self.current_task_metadata.estimated_tokens {
@@ -256,8 +257,7 @@ impl ParserState {
     fn finalize(mut self) -> Result<PRDDocument> {
         self.save_current_task();
 
-        let title = self.title
-            .unwrap_or_else(|| "Untitled PRD".to_string());
+        let title = self.title.unwrap_or_else(|| "Untitled PRD".to_string());
 
         let description = if self.description.trim().is_empty() {
             None
@@ -276,10 +276,23 @@ impl ParserState {
 /// Check if an H2 heading indicates a task section
 fn is_task_section_heading(text: &str) -> bool {
     let task_section_patterns = [
-        "tasks", "epic", "implementation", "features", "milestones",
-        "stories", "user stories", "work items", "deliverables",
-        "action items", "to do", "todo", "backlog", "sprint",
-        "phase", "step", "stage",
+        "tasks",
+        "epic",
+        "implementation",
+        "features",
+        "milestones",
+        "stories",
+        "user stories",
+        "work items",
+        "deliverables",
+        "action items",
+        "to do",
+        "todo",
+        "backlog",
+        "sprint",
+        "phase",
+        "step",
+        "stage",
     ];
 
     // Check for exact matches or patterns
@@ -291,22 +304,54 @@ fn is_task_section_heading(text: &str) -> bool {
 /// Check if a heading looks like a task (for H3/H4 headings)
 fn looks_like_task_heading(text: &str) -> bool {
     let action_verbs = [
-        "implement", "create", "build", "add", "update", "fix", "refactor",
-        "design", "test", "deploy", "setup", "set up", "configure", "install",
-        "integrate", "migrate", "remove", "delete", "optimize", "improve",
-        "write", "develop", "enable", "disable", "connect", "validate",
+        "implement",
+        "create",
+        "build",
+        "add",
+        "update",
+        "fix",
+        "refactor",
+        "design",
+        "test",
+        "deploy",
+        "setup",
+        "set up",
+        "configure",
+        "install",
+        "integrate",
+        "migrate",
+        "remove",
+        "delete",
+        "optimize",
+        "improve",
+        "write",
+        "develop",
+        "enable",
+        "disable",
+        "connect",
+        "validate",
     ];
 
     // Check if starts with an action verb
     let starts_with_verb = action_verbs.iter().any(|v| text.starts_with(v));
 
     // Check if starts with a number (like "1.1 Setup database")
-    let starts_with_number = text.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+    let starts_with_number = text
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false);
 
     // Check if contains "task" keyword
     let contains_task = text.contains("task");
 
-    starts_with_verb || starts_with_number || contains_task
+    // Check if it looks like a user story ID (US-XXX or T-XXX)
+    let has_id_pattern = text.starts_with("US-")
+        || text.starts_with("T-")
+        || text.contains("US-")
+        || text.contains("T-");
+
+    starts_with_verb || starts_with_number || contains_task || has_id_pattern
 }
 
 /// Extract priority from heading text like "Task Title [priority: 1]"
@@ -314,8 +359,7 @@ fn extract_priority(text: &str) -> (String, Option<i32>) {
     let re = Regex::new(r"\[priority:\s*(\d+)\]").unwrap();
 
     if let Some(cap) = re.captures(text) {
-        let priority = cap.get(1)
-            .and_then(|m| m.as_str().parse::<i32>().ok());
+        let priority = cap.get(1).and_then(|m| m.as_str().parse::<i32>().ok());
         let title = re.replace(text, "").trim().to_string();
         (title, priority)
     } else {
@@ -395,7 +439,10 @@ First task description.
 
         let doc = result.unwrap();
         assert_eq!(doc.title, "Test Project");
-        assert_eq!(doc.description, Some("A test project description.".to_string()));
+        assert_eq!(
+            doc.description,
+            Some("A test project description.".to_string())
+        );
         assert_eq!(doc.tasks.len(), 1);
         assert_eq!(doc.tasks[0].title, "Task 1");
         assert_eq!(doc.tasks[0].description, "First task description.");
@@ -502,7 +549,14 @@ Just a description.
     #[test]
     fn test_extract_dependencies() {
         let deps = extract_dependencies("**Dependencies:** task-1, task-2, task-3");
-        assert_eq!(deps, Some(vec!["task-1".to_string(), "task-2".to_string(), "task-3".to_string()]));
+        assert_eq!(
+            deps,
+            Some(vec![
+                "task-1".to_string(),
+                "task-2".to_string(),
+                "task-3".to_string()
+            ])
+        );
 
         let deps = extract_dependencies("**dependencies:** task-1");
         assert_eq!(deps, Some(vec!["task-1".to_string()]));
@@ -514,7 +568,10 @@ Just a description.
     #[test]
     fn test_extract_tags() {
         let tags = extract_tags("**Tags:** feature, backend");
-        assert_eq!(tags, Some(vec!["feature".to_string(), "backend".to_string()]));
+        assert_eq!(
+            tags,
+            Some(vec!["feature".to_string(), "backend".to_string()])
+        );
 
         let tags = extract_tags("**labels:** test");
         assert_eq!(tags, Some(vec!["test".to_string()]));

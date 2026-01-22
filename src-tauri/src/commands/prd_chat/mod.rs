@@ -309,6 +309,7 @@ pub async fn export_chat_to_prd(
             &request.project_path,
             &request.session_id,
             session.title.as_deref(),
+            session.prd_id.as_deref(),
         );
 
         if plan_path.exists() {
@@ -504,6 +505,7 @@ pub async fn assess_prd_quality(
         &project_path,
         &session_id,
         session.title.as_deref(),
+        session.prd_id.as_deref(),
     );
 
     let assessment = if plan_path.exists() {
@@ -657,6 +659,21 @@ pub async fn clear_extracted_structure(
 
     chat_ops::update_chat_session_extracted_structure(project_path_obj, &session_id, None)
         .map_err(|e| format!("Failed to clear structure: {}", e))?;
+
+    Ok(())
+}
+
+/// Update agent type for a chat session
+#[tauri::command]
+pub async fn update_prd_chat_agent(
+    session_id: String,
+    project_path: String,
+    agent_type: String,
+) -> Result<(), String> {
+    let project_path_obj = Path::new(&project_path);
+
+    chat_ops::update_chat_session_agent(project_path_obj, &session_id, &agent_type)
+        .map_err(|e| format!("Failed to update agent type: {}", e))?;
 
     Ok(())
 }
@@ -1112,6 +1129,7 @@ pub async fn start_watching_prd_file(
         &project_path,
         &session_id,
         session.title.as_deref(),
+        session.prd_id.as_deref(),
     );
 
     // Get the watcher manager and start watching
@@ -1164,6 +1182,7 @@ pub async fn get_prd_plan_content(
         &project_path,
         &session_id,
         session.title.as_deref(),
+        session.prd_id.as_deref(),
     );
 
     // Read the file content if it exists
@@ -2409,6 +2428,13 @@ fn build_prd_chat_prompt(
     prompt.push_str("- Identifying technical requirements and constraints\n");
     prompt.push_str("- Suggesting success metrics and validation criteria\n\n");
 
+    prompt.push_str("When defining user stories for a feature, you MUST use this 5-point recipe to ensure completeness:\n");
+    prompt.push_str("1. **Core Implementation**: The main happy-path functionality.\n");
+    prompt.push_str("2. **Input Validation & Error Handling**: How invalid inputs and error states are handled.\n");
+    prompt.push_str("3. **Observability**: Logging, metrics, and how success is tracked.\n");
+    prompt.push_str("4. **Edge Cases**: Robustness against system limits, concurrency, network issues, etc.\n");
+    prompt.push_str("5. **Documentation**: User guides, tooltips, or API documentation.\n\n");
+
     // Add structured output instructions if enabled
     if session.structured_mode {
         prompt.push_str("=== STRUCTURED OUTPUT MODE ===\n\n");
@@ -2505,7 +2531,7 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
         This file should contain:\n\
         - Current understanding of requirements\n\
         - Key decisions and rationale\n\
-        - Draft user stories and tasks as they emerge\n\
+        - Draft user stories (using format: `### US-XXX: Title`)\n\
         - Open questions to resolve\n\n\
         UPDATE THIS FILE NOW with any new insights from this exchange.\n\
         Write the file content using your file writing capabilities.\n\n\
@@ -2541,7 +2567,7 @@ async fn execute_chat_agent(
         }
         AgentType::Opencode => {
             // Use opencode CLI
-            ("opencode", vec!["chat".to_string(), prompt.to_string()])
+            ("opencode", vec!["run".to_string(), prompt.to_string()])
         }
         AgentType::Cursor => {
             // Use cursor agent CLI

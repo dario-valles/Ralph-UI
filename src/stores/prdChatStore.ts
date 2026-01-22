@@ -38,6 +38,7 @@ interface PRDChatStore extends AsyncState {
 
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
+  updateSessionAgent: (agentType: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
   loadHistory: (sessionId: string) => Promise<void>
   loadSessions: (projectPath?: string) => Promise<void>
@@ -111,6 +112,22 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     }
   },
 
+  updateSessionAgent: async (agentType: string) => {
+    const { currentSession } = get()
+    if (!currentSession || !currentSession.projectPath) return
+
+    try {
+      await prdChatApi.updateSessionAgent(currentSession.id, currentSession.projectPath, agentType)
+
+      set((state) => ({
+        currentSession: state.currentSession ? { ...state.currentSession, agentType } : null,
+        sessions: state.sessions.map((s) => s.id === currentSession.id ? { ...s, agentType } : s)
+      }))
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to update agent' })
+    }
+  },
+
   // Send a message and receive a response
   sendMessage: async (content: string) => {
     const { currentSession } = get()
@@ -146,9 +163,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         // Update current session's message count locally
         const updatedSession = state.currentSession
           ? {
-              ...state.currentSession,
-              messageCount: (state.currentSession.messageCount || 0) + 2,
-            }
+            ...state.currentSession,
+            messageCount: (state.currentSession.messageCount || 0) + 2,
+          }
           : null
 
         // Also update the session in the sessions list

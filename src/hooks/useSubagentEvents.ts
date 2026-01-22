@@ -102,9 +102,7 @@ export function useSubagentEvents({
   onNewActivity,
   maxSubagents = 1000,
 }: UseSubagentEventsOptions): UseSubagentEventsResult {
-  const [subagentMap, setSubagentMap] = useState<Map<string, SubagentNode>>(
-    new Map()
-  )
+  const [subagentMap, setSubagentMap] = useState<Map<string, SubagentNode>>(new Map())
   const [activityCount, setActivityCount] = useState(0)
   const [isListening, setIsListening] = useState(false)
   const unlistenersRef = useRef<UnlistenFn[]>([])
@@ -153,7 +151,7 @@ export function useSubagentEvents({
 
   // Set up event listeners
   useEffect(() => {
-    if (!isTauri() || !agentId) {
+    if (!isTauri || !agentId) {
       return
     }
 
@@ -162,59 +160,50 @@ export function useSubagentEvents({
 
       // Listen for spawned events
       unlisteners.push(
-        await listen<SubagentSpawnedPayload>(
-          EVENT_SUBAGENT_SPAWNED,
-          (event) => {
-            const payload = event.payload
-            // Only track subagents for our agent
-            if (payload.parentAgentId !== agentId) return
+        await listen<SubagentSpawnedPayload>(EVENT_SUBAGENT_SPAWNED, (event) => {
+          const payload = event.payload
+          // Only track subagents for our agent
+          if (payload.parentAgentId !== agentId) return
 
-            updateSubagent(payload.subagentId, {
-              id: payload.subagentId,
-              parentAgentId: payload.parentAgentId,
-              description: payload.description,
-              status: 'running',
-              startedAt: payload.timestamp,
-              depth: payload.depth,
-              subagentType: payload.subagentType,
-              children: [],
-            })
-          }
-        )
+          updateSubagent(payload.subagentId, {
+            id: payload.subagentId,
+            parentAgentId: payload.parentAgentId,
+            description: payload.description,
+            status: 'running',
+            startedAt: payload.timestamp,
+            depth: payload.depth,
+            subagentType: payload.subagentType,
+            children: [],
+          })
+        })
       )
 
       // Listen for progress events
       unlisteners.push(
-        await listen<SubagentProgressPayload>(
-          EVENT_SUBAGENT_PROGRESS,
-          (event) => {
-            const payload = event.payload
-            if (payload.parentAgentId !== agentId) return
+        await listen<SubagentProgressPayload>(EVENT_SUBAGENT_PROGRESS, (event) => {
+          const payload = event.payload
+          if (payload.parentAgentId !== agentId) return
 
-            // Progress events update the description
-            updateSubagent(payload.subagentId, {
-              description: payload.message,
-            })
-          }
-        )
+          // Progress events update the description
+          updateSubagent(payload.subagentId, {
+            description: payload.message,
+          })
+        })
       )
 
       // Listen for completed events
       unlisteners.push(
-        await listen<SubagentCompletedPayload>(
-          EVENT_SUBAGENT_COMPLETED,
-          (event) => {
-            const payload = event.payload
-            if (payload.parentAgentId !== agentId) return
+        await listen<SubagentCompletedPayload>(EVENT_SUBAGENT_COMPLETED, (event) => {
+          const payload = event.payload
+          if (payload.parentAgentId !== agentId) return
 
-            updateSubagent(payload.subagentId, {
-              status: 'completed',
-              completedAt: payload.timestamp,
-              durationSecs: payload.durationSecs,
-              summary: payload.summary,
-            })
-          }
-        )
+          updateSubagent(payload.subagentId, {
+            status: 'completed',
+            completedAt: payload.timestamp,
+            durationSecs: payload.durationSecs,
+            summary: payload.summary,
+          })
+        })
       )
 
       // Listen for failed events
@@ -258,8 +247,7 @@ export function useSubagentEvents({
 
     // Sort by start time (newest first)
     return rootNodes.sort(
-      (a, b) =>
-        new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     )
   }, [subagentMap])
 

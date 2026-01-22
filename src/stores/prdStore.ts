@@ -7,7 +7,6 @@ import type {
   PRDTemplate,
   CreatePRDRequest,
   UpdatePRDRequest,
-  ExecutionConfig,
 } from '@/types'
 
 interface PRDStore extends AsyncState {
@@ -24,7 +23,6 @@ interface PRDStore extends AsyncState {
   deletePRD: (id: string) => Promise<void>
   setCurrentPRD: (id: string | null) => Promise<void>
   analyzeQuality: (id: string) => Promise<void>
-  executePRD: (id: string, config: ExecutionConfig) => Promise<string | undefined>
   clearError: () => void
 }
 
@@ -110,14 +108,6 @@ export const usePRDStore = create<PRDStore>((set, get) => ({
         prds: state.prds.map((p) => (p.id === updatedPRD.id ? updatedPRD : p)),
         currentPRD: state.currentPRD?.id === updatedPRD.id ? updatedPRD : state.currentPRD,
       }
-    }, { rethrow: true })
-  },
-
-  // Execute PRD (create tasks and launch agents)
-  executePRD: async (id: string, config: ExecutionConfig) => {
-    return asyncAction(set, async () => {
-      const sessionId = await prdApi.execute(id, config)
-      return { __result: sessionId }
     }, { rethrow: true })
   },
 

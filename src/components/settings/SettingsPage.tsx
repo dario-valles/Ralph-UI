@@ -7,7 +7,17 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Slider } from '@/components/ui/slider'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Save, RotateCcw, RefreshCw, Loader2, AlertCircle, X, GripVertical, ArrowUp, ArrowDown } from 'lucide-react'
+import {
+  Save,
+  RotateCcw,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  X,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react'
 import { configApi } from '@/lib/config-api'
 import { isTauri } from '@/lib/tauri-check'
 import type {
@@ -19,6 +29,7 @@ import type {
   AgentType,
 } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 
 // UI-only settings that remain in localStorage
 interface UISettings {
@@ -320,11 +331,17 @@ export function SettingsPage() {
                       {modelsLoading ? (
                         <option>Loading models...</option>
                       ) : (
-                        models.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))
+                        Object.entries(groupModelsByProvider(models)).map(
+                          ([provider, providerModels]) => (
+                            <optgroup key={provider} label={formatProviderName(provider)}>
+                              {providerModels.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )
+                        )
                       )}
                     </Select>
                   </div>
@@ -373,9 +390,7 @@ export function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="maxRetries">
-                      Max Retries: {config.execution.maxRetries}
-                    </Label>
+                    <Label htmlFor="maxRetries">Max Retries: {config.execution.maxRetries}</Label>
                     <Slider
                       id="maxRetries"
                       min={0}
@@ -461,7 +476,9 @@ export function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Validation Configuration</CardTitle>
-              <CardDescription>Configure test and lint settings for task validation</CardDescription>
+              <CardDescription>
+                Configure test and lint settings for task validation
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {config ? (
@@ -556,7 +573,8 @@ export function SettingsPage() {
                     <div className="grid gap-3">
                       <div
                         className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy
+                          config.fallback.errorStrategy?.type === 'retry' ||
+                          !config.fallback.errorStrategy
                             ? 'border-primary bg-primary/5'
                             : 'border-border hover:border-muted-foreground/50'
                         }`}
@@ -564,46 +582,61 @@ export function SettingsPage() {
                           updateFallbackConfig({
                             errorStrategy: {
                               type: 'retry',
-                              max_attempts: config.fallback.errorStrategy?.type === 'retry'
-                                ? config.fallback.errorStrategy.max_attempts
-                                : 3,
-                              backoff_ms: config.fallback.errorStrategy?.type === 'retry'
-                                ? config.fallback.errorStrategy.backoff_ms
-                                : 1000,
+                              max_attempts:
+                                config.fallback.errorStrategy?.type === 'retry'
+                                  ? config.fallback.errorStrategy.max_attempts
+                                  : 3,
+                              backoff_ms:
+                                config.fallback.errorStrategy?.type === 'retry'
+                                  ? config.fallback.errorStrategy.backoff_ms
+                                  : 1000,
                             },
                           })
                         }
                       >
                         <input
                           type="radio"
-                          checked={config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy}
+                          checked={
+                            config.fallback.errorStrategy?.type === 'retry' ||
+                            !config.fallback.errorStrategy
+                          }
                           readOnly
                           className="mt-1"
                         />
                         <div className="flex-1">
                           <div className="font-medium">Retry (Recommended)</div>
                           <p className="text-sm text-muted-foreground">
-                            Retry failed iterations with exponential backoff before trying fallback agents
+                            Retry failed iterations with exponential backoff before trying fallback
+                            agents
                           </p>
-                          {(config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy) && (
+                          {(config.fallback.errorStrategy?.type === 'retry' ||
+                            !config.fallback.errorStrategy) && (
                             <div className="grid grid-cols-2 gap-4 mt-3">
                               <div className="space-y-2">
                                 <Label className="text-xs">
-                                  Max Attempts: {config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.max_attempts : 3}
+                                  Max Attempts:{' '}
+                                  {config.fallback.errorStrategy?.type === 'retry'
+                                    ? config.fallback.errorStrategy.max_attempts
+                                    : 3}
                                 </Label>
                                 <Slider
                                   min={1}
                                   max={10}
                                   step={1}
-                                  value={[config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.max_attempts : 3]}
+                                  value={[
+                                    config.fallback.errorStrategy?.type === 'retry'
+                                      ? config.fallback.errorStrategy.max_attempts
+                                      : 3,
+                                  ]}
                                   onValueChange={([v]) =>
                                     updateFallbackConfig({
                                       errorStrategy: {
                                         type: 'retry',
                                         max_attempts: v,
-                                        backoff_ms: config.fallback.errorStrategy?.type === 'retry'
-                                          ? config.fallback.errorStrategy.backoff_ms
-                                          : 1000,
+                                        backoff_ms:
+                                          config.fallback.errorStrategy?.type === 'retry'
+                                            ? config.fallback.errorStrategy.backoff_ms
+                                            : 1000,
                                       },
                                     })
                                   }
@@ -611,20 +644,29 @@ export function SettingsPage() {
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-xs">
-                                  Backoff: {config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.backoff_ms : 1000}ms
+                                  Backoff:{' '}
+                                  {config.fallback.errorStrategy?.type === 'retry'
+                                    ? config.fallback.errorStrategy.backoff_ms
+                                    : 1000}
+                                  ms
                                 </Label>
                                 <Slider
                                   min={100}
                                   max={5000}
                                   step={100}
-                                  value={[config.fallback.errorStrategy?.type === 'retry' ? config.fallback.errorStrategy.backoff_ms : 1000]}
+                                  value={[
+                                    config.fallback.errorStrategy?.type === 'retry'
+                                      ? config.fallback.errorStrategy.backoff_ms
+                                      : 1000,
+                                  ]}
                                   onValueChange={([v]) =>
                                     updateFallbackConfig({
                                       errorStrategy: {
                                         type: 'retry',
-                                        max_attempts: config.fallback.errorStrategy?.type === 'retry'
-                                          ? config.fallback.errorStrategy.max_attempts
-                                          : 3,
+                                        max_attempts:
+                                          config.fallback.errorStrategy?.type === 'retry'
+                                            ? config.fallback.errorStrategy.max_attempts
+                                            : 3,
                                         backoff_ms: v,
                                       },
                                     })
@@ -717,7 +759,9 @@ export function SettingsPage() {
                   <div className="space-y-3">
                     <Label>Agent Priority Chain</Label>
                     <div className="space-y-2">
-                      {(config.fallback.fallbackChain || [config.execution.agentType as AgentType]).map((agent, index) => (
+                      {(
+                        config.fallback.fallbackChain || [config.execution.agentType as AgentType]
+                      ).map((agent, index) => (
                         <div
                           key={`${agent}-${index}`}
                           className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30"
@@ -733,7 +777,11 @@ export function SettingsPage() {
                               className="h-7 w-7 p-0"
                               disabled={index === 0 || !config.fallback.enabled}
                               onClick={() => {
-                                const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                                const chain = [
+                                  ...(config.fallback.fallbackChain || [
+                                    config.execution.agentType as AgentType,
+                                  ]),
+                                ]
                                 ;[chain[index - 1], chain[index]] = [chain[index], chain[index - 1]]
                                 updateFallbackConfig({ fallbackChain: chain })
                               }}
@@ -749,7 +797,11 @@ export function SettingsPage() {
                                 !config.fallback.enabled
                               }
                               onClick={() => {
-                                const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                                const chain = [
+                                  ...(config.fallback.fallbackChain || [
+                                    config.execution.agentType as AgentType,
+                                  ]),
+                                ]
                                 ;[chain[index], chain[index + 1]] = [chain[index + 1], chain[index]]
                                 updateFallbackConfig({ fallbackChain: chain })
                               }}
@@ -760,9 +812,14 @@ export function SettingsPage() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                              disabled={(config.fallback.fallbackChain || []).length <= 1 || !config.fallback.enabled}
+                              disabled={
+                                (config.fallback.fallbackChain || []).length <= 1 ||
+                                !config.fallback.enabled
+                              }
                               onClick={() => {
-                                const chain = (config.fallback.fallbackChain || []).filter((_, i) => i !== index)
+                                const chain = (config.fallback.fallbackChain || []).filter(
+                                  (_, i) => i !== index
+                                )
                                 updateFallbackConfig({ fallbackChain: chain })
                               }}
                             >
@@ -782,7 +839,11 @@ export function SettingsPage() {
                         onChange={(e) => {
                           const agent = e.target.value as AgentType
                           if (agent) {
-                            const chain = [...(config.fallback.fallbackChain || [config.execution.agentType as AgentType])]
+                            const chain = [
+                              ...(config.fallback.fallbackChain || [
+                                config.execution.agentType as AgentType,
+                              ]),
+                            ]
                             if (!chain.includes(agent)) {
                               chain.push(agent)
                               updateFallbackConfig({ fallbackChain: chain })
@@ -793,7 +854,14 @@ export function SettingsPage() {
                       >
                         <option value="">Add agent to chain...</option>
                         {(['claude', 'opencode', 'cursor', 'codex'] as AgentType[])
-                          .filter((a) => !(config.fallback.fallbackChain || [config.execution.agentType as AgentType]).includes(a))
+                          .filter(
+                            (a) =>
+                              !(
+                                config.fallback.fallbackChain || [
+                                  config.execution.agentType as AgentType,
+                                ]
+                              ).includes(a)
+                          )
                           .map((agent) => (
                             <option key={agent} value={agent}>
                               {agent.charAt(0).toUpperCase() + agent.slice(1)}
@@ -822,7 +890,8 @@ export function SettingsPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="recoveryTestInterval">
-                        Recovery Test Interval: Every {config.fallback.recoveryTestInterval ?? 5} iterations
+                        Recovery Test Interval: Every {config.fallback.recoveryTestInterval ?? 5}{' '}
+                        iterations
                       </Label>
                       <Slider
                         id="recoveryTestInterval"
@@ -834,7 +903,8 @@ export function SettingsPage() {
                         disabled={!config.fallback.enabled || !config.fallback.testPrimaryRecovery}
                       />
                       <p className="text-xs text-muted-foreground">
-                        How often to check if the primary agent is available again after switching to a fallback.
+                        How often to check if the primary agent is available again after switching
+                        to a fallback.
                       </p>
                     </div>
                   </div>
@@ -885,7 +955,8 @@ export function SettingsPage() {
                   <div className="space-y-4 pt-4 border-t">
                     <h4 className="text-sm font-medium text-muted-foreground">Legacy Settings</h4>
                     <p className="text-xs text-muted-foreground">
-                      These settings are for backward compatibility. Use the Agent Chain above for more control.
+                      These settings are for backward compatibility. Use the Agent Chain above for
+                      more control.
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
@@ -918,7 +989,11 @@ export function SettingsPage() {
                               fallbackModel: e.target.value || undefined,
                             })
                           }
-                          disabled={!config.fallback.enabled || !config.fallback.fallbackAgent || fallbackModelsLoading}
+                          disabled={
+                            !config.fallback.enabled ||
+                            !config.fallback.fallbackAgent ||
+                            fallbackModelsLoading
+                          }
                         >
                           {fallbackModelsLoading ? (
                             <option>Loading models...</option>
@@ -958,7 +1033,9 @@ export function SettingsPage() {
                     id="theme"
                     value={uiSettings.theme}
                     onChange={(e) =>
-                      updateUISettingsLocal({ theme: e.target.value as 'light' | 'dark' | 'system' })
+                      updateUISettingsLocal({
+                        theme: e.target.value as 'light' | 'dark' | 'system',
+                      })
                     }
                   >
                     <option value="light">Light</option>

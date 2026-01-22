@@ -458,11 +458,11 @@ impl RalphLoopOrchestrator {
         log::debug!("[RalphLoop] State set to Running, emitted status");
 
         loop {
-            log::debug!("[RalphLoop] Loop iteration {} starting", iteration);
+            log::info!("[RalphLoop] ======== Loop iteration {} starting ========", iteration);
 
             // Check for cancellation
             if *lock_mutex_recover(&self.cancelled) {
-                log::debug!("[RalphLoop] Cancelled at iteration {}", iteration);
+                log::warn!("[RalphLoop] EXIT REASON: Cancelled at iteration {}", iteration);
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -475,7 +475,7 @@ impl RalphLoopOrchestrator {
 
             // Check max iterations
             if iteration > self.config.max_iterations {
-                log::debug!("[RalphLoop] Max iterations ({}) reached", self.config.max_iterations);
+                log::warn!("[RalphLoop] EXIT REASON: Max iterations ({}) reached at iteration {}", self.config.max_iterations, iteration);
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -492,7 +492,7 @@ impl RalphLoopOrchestrator {
             // Check max cost
             if let Some(max_cost) = self.config.max_cost {
                 if self.metrics.total_cost >= max_cost {
-                    log::debug!("[RalphLoop] Max cost exceeded");
+                    log::warn!("[RalphLoop] EXIT REASON: Max cost (${:.2}) exceeded at iteration {}", max_cost, iteration);
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
                         let manager = lock_mutex_recover(&agent_manager_arc);
@@ -508,14 +508,14 @@ impl RalphLoopOrchestrator {
             }
 
             // Read current PRD status
-            log::debug!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
+            log::info!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
             let prd = match self.prd_executor.read_prd() {
                 Ok(p) => {
-                    log::debug!("[RalphLoop] PRD read successfully with {} stories", p.stories.len());
+                    log::info!("[RalphLoop] PRD read successfully with {} stories", p.stories.len());
                     p
                 }
                 Err(e) => {
-                    log::error!("[RalphLoop] ERROR reading PRD: {}", e);
+                    log::error!("[RalphLoop] EXIT REASON: ERROR reading PRD: {}", e);
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
                         let manager = lock_mutex_recover(&agent_manager_arc);
@@ -525,11 +525,13 @@ impl RalphLoopOrchestrator {
                 }
             };
             let prd_status = self.prd_executor.get_status(&prd);
-            log::debug!("[RalphLoop] PRD status: {}/{} passing, all_pass={}", prd_status.passed, prd_status.total, prd_status.all_pass);
+            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}", 
+                prd_status.passed, prd_status.total, prd_status.progress_percent as u32,
+                prd_status.all_pass, prd_status.incomplete_story_ids);
 
             // Check if all stories pass
             if prd_status.all_pass {
-                log::debug!("[RalphLoop] All stories pass! Completing.");
+                log::warn!("[RalphLoop] EXIT REASON: All {} stories pass! Completing at iteration {}.", prd_status.total, iteration);
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -597,11 +599,15 @@ impl RalphLoopOrchestrator {
 
             // Check for completion promise in output
             if iteration_result.completion_detected {
+                log::info!("[RalphLoop] Completion promise detected in output, verifying PRD status...");
                 // Double-check PRD status
                 let prd = self.prd_executor.read_prd()?;
                 let prd_status = self.prd_executor.get_status(&prd);
+                log::info!("[RalphLoop] Post-completion check: {}/{} passing, all_pass={}", 
+                    prd_status.passed, prd_status.total, prd_status.all_pass);
 
                 if prd_status.all_pass {
+                    log::warn!("[RalphLoop] EXIT REASON: Completion promise confirmed - all {} stories pass!", prd_status.total);
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
                         let manager = lock_mutex_recover(&agent_manager_arc);
@@ -615,9 +621,13 @@ impl RalphLoopOrchestrator {
                     self.metrics.total_duration_secs = start_time.elapsed().as_secs_f64();
                     self.emit_status();
                     return Ok(self.metrics.clone());
+                } else {
+                    log::info!("[RalphLoop] Completion promise detected but {} stories still incomplete: {:?}. Continuing...", 
+                        prd_status.failed, prd_status.incomplete_story_ids);
                 }
             }
 
+            log::info!("[RalphLoop] Continuing to iteration {}", iteration + 1);
             iteration += 1;
         }
     }
@@ -690,6 +700,7 @@ impl RalphLoopOrchestrator {
                 prompt: Some(prompt.clone()),
                 model: self.config.model.clone(),
                 spawn_mode: AgentSpawnMode::Pty,
+                plugin_config: None,
             };
             log::debug!("[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
                 spawn_config.worktree_path, spawn_config.branch, spawn_config.model);
