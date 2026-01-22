@@ -2,10 +2,6 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { MissionControlPage } from './components/mission-control'
-import { TasksPage } from './components/tasks/TasksPage'
-import { AgentsPage } from './components/agents/AgentsPage'
-import { SessionsPage } from './components/dashboard/SessionsPage'
-import { SessionDetailPage } from './components/sessions'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { PRDList } from './components/prd/PRDList'
 import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
@@ -75,10 +71,6 @@ function App() {
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<MissionControlPage />} />
-            <Route path="tasks" element={<TasksPage />} />
-            <Route path="agents" element={<AgentsPage />} />
-            <Route path="sessions" element={<SessionsPage />} />
-            <Route path="sessions/:id" element={<SessionDetailPage />} />
             <Route path="prds" element={<PRDList />} />
             <Route path="prds/new" element={<PRDTemplateSelector />} />
             <Route path="prds/chat" element={<PRDChatPanel />} />

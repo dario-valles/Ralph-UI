@@ -1,6 +1,6 @@
 // Global statistics banner for Mission Control dashboard
 
-import { Activity, CheckCircle2, DollarSign, FolderOpen } from 'lucide-react'
+import { Repeat, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GlobalStats } from '@/hooks/useMissionControlData'
 
@@ -54,39 +54,17 @@ function StatItem({ icon: Icon, label, value, subtext, highlight, loading }: Sta
 }
 
 export function GlobalStatsBar({ stats, loading }: GlobalStatsBarProps) {
-  const hasActiveAgents = stats.activeAgentsCount > 0
-  const taskProgress = stats.totalTasksToday > 0
-    ? `${stats.tasksCompletedToday}/${stats.totalTasksToday}`
-    : stats.tasksCompletedToday.toString()
+  const hasActiveExecutions = stats.activeExecutionsCount > 0
 
   return (
     <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
       <div className="flex items-center justify-between gap-6 px-4 py-3 overflow-x-auto">
         <StatItem
-          icon={Activity}
-          label="Active Agents"
-          value={stats.activeAgentsCount}
-          subtext={hasActiveAgents ? 'Working' : 'All idle'}
-          highlight={hasActiveAgents}
-          loading={loading}
-        />
-
-        <div className="h-8 w-px bg-border flex-shrink-0" />
-
-        <StatItem
-          icon={CheckCircle2}
-          label="Tasks Today"
-          value={taskProgress}
-          subtext={stats.tasksInProgress > 0 ? `${stats.tasksInProgress} in progress` : undefined}
-          loading={loading}
-        />
-
-        <div className="h-8 w-px bg-border flex-shrink-0" />
-
-        <StatItem
-          icon={DollarSign}
-          label="Cost Today"
-          value={`$${stats.totalCostToday.toFixed(2)}`}
+          icon={Repeat}
+          label="Active Executions"
+          value={stats.activeExecutionsCount}
+          subtext={hasActiveExecutions ? 'Running' : 'None running'}
+          highlight={hasActiveExecutions}
           loading={loading}
         />
 
@@ -95,13 +73,13 @@ export function GlobalStatsBar({ stats, loading }: GlobalStatsBarProps) {
         <StatItem
           icon={FolderOpen}
           label="Projects"
-          value={stats.activeProjectsCount > 0 ? `${stats.activeProjectsCount}/${stats.totalProjects}` : stats.totalProjects}
-          subtext={stats.activeProjectsCount > 0 ? 'Active' : 'None active'}
+          value={stats.totalProjects}
+          subtext={stats.activeProjectsCount > 0 ? `${stats.activeProjectsCount} active` : 'None active'}
           loading={loading}
         />
 
-        {/* Pulse indicator when agents are active */}
-        {hasActiveAgents && !loading && (
+        {/* Pulse indicator when executions are active */}
+        {hasActiveExecutions && !loading && (
           <div className="flex items-center gap-2 ml-auto">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />

@@ -3,96 +3,7 @@
  * Provides mock data factories and common setup patterns.
  */
 
-import type { Session, SessionStatus, Task, TaskStatus } from '@/types'
-import type { Agent, AgentStatus, LogEntry } from '@/lib/agent-api'
-
-// ============================================================================
-// Mock Session Factory
-// ============================================================================
-
-export function createMockSession(overrides?: Partial<Session>): Session {
-  return {
-    id: 'session-1',
-    name: 'Test Session',
-    projectPath: '/test/path',
-    createdAt: '2026-01-17T10:00:00Z',
-    lastResumedAt: undefined,
-    status: 'active' as SessionStatus,
-    config: {
-      maxParallel: 3,
-      maxIterations: 10,
-      maxRetries: 3,
-      agentType: 'claude',
-      autoCreatePRs: true,
-      draftPRs: false,
-      runTests: true,
-      runLint: true,
-    },
-    tasks: [],
-    totalCost: 0,
-    totalTokens: 0,
-    ...overrides,
-  }
-}
-
-// ============================================================================
-// Mock Task Factory
-// ============================================================================
-
-export function createMockTask(overrides?: Partial<Task>): Task {
-  return {
-    id: 'task-1',
-    title: 'Test Task',
-    description: 'Test task description',
-    status: 'pending' as TaskStatus,
-    priority: 1,
-    dependencies: [],
-    assignedAgent: undefined,
-    estimatedTokens: 1000,
-    actualTokens: 0,
-    startedAt: undefined,
-    completedAt: undefined,
-    branch: undefined,
-    worktreePath: undefined,
-    error: undefined,
-    ...overrides,
-  }
-}
-
-// ============================================================================
-// Mock Agent Factory
-// ============================================================================
-
-export function createMockAgent(overrides?: Partial<Agent>): Agent {
-  return {
-    id: 'agent-1',
-    sessionId: 'session-1',
-    taskId: 'task-1',
-    status: 'idle' as AgentStatus,
-    processId: 12345,
-    worktreePath: '/path/to/worktree',
-    branch: 'feature/test',
-    iterationCount: 0,
-    tokens: 0,
-    cost: 0,
-    logs: [],
-    subagents: [],
-    ...overrides,
-  }
-}
-
-// ============================================================================
-// Mock Log Entry Factory
-// ============================================================================
-
-export function createMockLogEntry(overrides?: Partial<LogEntry>): LogEntry {
-  return {
-    timestamp: new Date().toISOString(),
-    level: 'info',
-    message: 'Test log message',
-    ...overrides,
-  }
-}
+import { vi, expect } from 'vitest'
 
 // ============================================================================
 // Store Reset Helpers
@@ -100,7 +11,7 @@ export function createMockLogEntry(overrides?: Partial<LogEntry>): LogEntry {
 
 /**
  * Reset a store to its initial state.
- * Usage: resetStore(useSessionStore, { sessions: [], currentSession: null, loading: false, error: null })
+ * Usage: resetStore(useProjectStore, { projects: [], activeProject: null, loading: false, error: null })
  */
 export function resetStore<T extends object>(
   store: { getState: () => T },
@@ -124,35 +35,6 @@ export const INITIAL_ASYNC_STATE = {
 } as const
 
 /**
- * Initial state for session store.
- */
-export const SESSION_STORE_INITIAL_STATE = {
-  sessions: [],
-  currentSession: null,
-  ...INITIAL_ASYNC_STATE,
-}
-
-/**
- * Initial state for task store.
- */
-export const TASK_STORE_INITIAL_STATE = {
-  tasks: [],
-  currentTask: null,
-  ...INITIAL_ASYNC_STATE,
-}
-
-/**
- * Initial state for agent store.
- */
-export const AGENT_STORE_INITIAL_STATE = {
-  agents: [],
-  activeAgents: [],
-  currentAgent: null,
-  agentLogs: {},
-  ...INITIAL_ASYNC_STATE,
-}
-
-/**
  * Initial state for PRD store.
  */
 export const PRD_STORE_INITIAL_STATE = {
@@ -162,57 +44,20 @@ export const PRD_STORE_INITIAL_STATE = {
   ...INITIAL_ASYNC_STATE,
 }
 
+/**
+ * Initial state for project store.
+ */
+export const PROJECT_STORE_INITIAL_STATE = {
+  projects: [],
+  activeProject: null,
+  recentProjects: [],
+  favoriteProjects: [],
+  ...INITIAL_ASYNC_STATE,
+}
+
 // ============================================================================
 // Mock API Factories
 // ============================================================================
-
-/**
- * Creates a mock session API with all methods mocked.
- * Use with vi.mock('@/lib/tauri-api', () => ({ sessionApi: createMockSessionApi() }))
- */
-export function createMockSessionApi() {
-  return {
-    create: vi.fn(),
-    getAll: vi.fn(),
-    getById: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    updateStatus: vi.fn(),
-  }
-}
-
-/**
- * Creates a mock task API with all methods mocked.
- */
-export function createMockTaskApi() {
-  return {
-    create: vi.fn(),
-    getBySession: vi.fn(),
-    getById: vi.fn(),
-    update: vi.fn(),
-    updateStatus: vi.fn(),
-    delete: vi.fn(),
-    bulkCreate: vi.fn(),
-    reorderTasks: vi.fn(),
-  }
-}
-
-/**
- * Creates a mock agent API with all methods mocked.
- */
-export function createMockAgentApi() {
-  return {
-    spawn: vi.fn(),
-    getBySession: vi.fn(),
-    getById: vi.fn(),
-    getActiveForSession: vi.fn(),
-    updateStatus: vi.fn(),
-    getLogs: vi.fn(),
-    stop: vi.fn(),
-    restart: vi.fn(),
-    cleanup: vi.fn(),
-  }
-}
 
 /**
  * Creates a mock PRD API with all methods mocked.
@@ -227,6 +72,70 @@ export function createMockPrdApi() {
     listTemplates: vi.fn(),
     analyzeQuality: vi.fn(),
     execute: vi.fn(),
+  }
+}
+
+/**
+ * Creates a mock project API with all methods mocked.
+ */
+export function createMockProjectApi() {
+  return {
+    register: vi.fn(),
+    getById: vi.fn(),
+    getByPath: vi.fn(),
+    getAll: vi.fn(),
+    getRecent: vi.fn(),
+    getFavorites: vi.fn(),
+    updateName: vi.fn(),
+    toggleFavorite: vi.fn(),
+    setFavorite: vi.fn(),
+    touch: vi.fn(),
+    delete: vi.fn(),
+  }
+}
+
+/**
+ * Creates a mock Ralph Loop API with all methods mocked.
+ */
+export function createMockRalphLoopApi() {
+  return {
+    initPrd: vi.fn(),
+    getPrd: vi.fn(),
+    getPrdStatus: vi.fn(),
+    markStoryPassing: vi.fn(),
+    markStoryFailing: vi.fn(),
+    addStory: vi.fn(),
+    removeStory: vi.fn(),
+    getProgress: vi.fn(),
+    getProgressSummary: vi.fn(),
+    addProgressNote: vi.fn(),
+    clearProgress: vi.fn(),
+    getPrompt: vi.fn(),
+    setPrompt: vi.fn(),
+    startLoop: vi.fn(),
+    stopLoop: vi.fn(),
+    getLoopState: vi.fn(),
+    getLoopMetrics: vi.fn(),
+    listExecutions: vi.fn(),
+    getCurrentAgentId: vi.fn(),
+    getWorktreePath: vi.fn(),
+    cleanupWorktree: vi.fn(),
+    listWorktrees: vi.fn(),
+    convertPrdToRalph: vi.fn(),
+    hasRalphFiles: vi.fn(),
+    getRalphFiles: vi.fn(),
+    getConfig: vi.fn(),
+    setConfig: vi.fn(),
+    initConfig: vi.fn(),
+    updateConfig: vi.fn(),
+    getIterationHistory: vi.fn(),
+    getIterationStats: vi.fn(),
+    getAllIterations: vi.fn(),
+    checkStaleExecutions: vi.fn(),
+    recoverStaleIterations: vi.fn(),
+    deleteIterationHistory: vi.fn(),
+    getSnapshot: vi.fn(),
+    cleanupIterationHistory: vi.fn(),
   }
 }
 
@@ -271,6 +180,3 @@ export function expectError<T extends { loading: boolean; error: string | null }
     expect(state.error).not.toBeNull()
   }
 }
-
-// Import vi from vitest for mock creation
-import { vi, expect } from 'vitest'

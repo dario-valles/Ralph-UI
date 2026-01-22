@@ -24,15 +24,6 @@ vi.mock('@/stores/prdChatStore', () => ({
   usePRDChatStore: () => mockUsePRDChatStore(),
 }))
 
-// Mock the session store
-vi.mock('@/stores/sessionStore', () => ({
-  useSessionStore: {
-    getState: () => ({
-      fetchSession: vi.fn().mockResolvedValue(undefined),
-    }),
-  },
-}))
-
 // Mock the project store
 const mockActiveProject = {
   id: 'project-1',

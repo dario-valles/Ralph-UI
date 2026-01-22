@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, RefreshCw, Repeat, GitBranch } from 'lucide-react'
 import { ralphLoopApi } from '@/lib/tauri-api'

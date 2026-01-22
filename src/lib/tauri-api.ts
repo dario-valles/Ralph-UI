@@ -1,14 +1,6 @@
 // Tauri API wrappers for backend commands
 
 import type {
-  Session,
-  Task,
-  SessionStatus,
-  TaskStatus,
-  SessionTemplate,
-  SessionRecoveryState,
-  SessionComparison,
-  SessionAnalytics,
   PRDDocument,
   PRDFile,
   PRDTemplate,
@@ -26,109 +18,11 @@ import type {
   ExecutionStateSnapshot,
   IterationStats,
   RalphLoopSnapshot,
+  AgentType,
 } from '@/types'
 import { invoke } from './invoke'
 
-// Session API
-export const sessionApi = {
-  create: async (name: string, projectPath: string): Promise<Session> => {
-    return await invoke('create_session', { name, projectPath })
-  },
-
-  getAll: async (): Promise<Session[]> => {
-    return await invoke('get_sessions')
-  },
-
-  getById: async (id: string): Promise<Session> => {
-    return await invoke('get_session', { id })
-  },
-
-  update: async (session: Session): Promise<Session> => {
-    return await invoke('update_session', { session })
-  },
-
-  delete: async (id: string): Promise<void> => {
-    return await invoke('delete_session', { id })
-  },
-
-  updateStatus: async (sessionId: string, status: SessionStatus): Promise<void> => {
-    return await invoke('update_session_status', { sessionId, status })
-  },
-
-  // Phase 6: Session Management Features
-  exportJson: async (sessionId: string): Promise<string> => {
-    return await invoke('export_session_json', { sessionId })
-  },
-
-  createTemplate: async (
-    sessionId: string,
-    templateName: string,
-    description: string
-  ): Promise<SessionTemplate> => {
-    return await invoke('create_session_template', { sessionId, templateName, description })
-  },
-
-  getTemplates: async (): Promise<SessionTemplate[]> => {
-    return await invoke('get_session_templates')
-  },
-
-  createFromTemplate: async (
-    templateId: string,
-    name: string,
-    projectPath: string
-  ): Promise<Session> => {
-    return await invoke('create_session_from_template', { templateId, name, projectPath })
-  },
-
-  saveRecoveryState: async (sessionId: string): Promise<void> => {
-    return await invoke('save_recovery_state', { sessionId })
-  },
-
-  getRecoveryState: async (sessionId: string): Promise<SessionRecoveryState | null> => {
-    return await invoke('get_recovery_state', { sessionId })
-  },
-
-  compareSessions: async (session1Id: string, session2Id: string): Promise<SessionComparison> => {
-    return await invoke('compare_sessions', { session1Id, session2Id })
-  },
-
-  getAnalytics: async (sessionId: string): Promise<SessionAnalytics> => {
-    return await invoke('get_session_analytics', { sessionId })
-  },
-}
-
-// Task API
-export const taskApi = {
-  create: async (sessionId: string, task: Task): Promise<Task> => {
-    return await invoke('create_task', { sessionId, task })
-  },
-
-  getById: async (taskId: string): Promise<Task> => {
-    return await invoke('get_task', { taskId })
-  },
-
-  getForSession: async (sessionId: string): Promise<Task[]> => {
-    return await invoke('get_tasks_for_session', { sessionId })
-  },
-
-  update: async (task: Task): Promise<Task> => {
-    return await invoke('update_task', { task })
-  },
-
-  delete: async (taskId: string): Promise<void> => {
-    return await invoke('delete_task', { taskId })
-  },
-
-  updateStatus: async (taskId: string, status: TaskStatus): Promise<void> => {
-    return await invoke('update_task_status', { taskId, status })
-  },
-
-  importPRD: async (sessionId: string, content: string, format?: string): Promise<Task[]> => {
-    return await invoke('import_prd', { sessionId, content, format })
-  },
-}
-
-// PRD API (Phase 7.5)
+// PRD API
 export const prdApi = {
   create: async (request: CreatePRDRequest): Promise<PRDDocument> => {
     return await invoke('create_prd', { request })
@@ -721,9 +615,10 @@ export const gsdApi = {
   startResearch: async (
     projectPath: string,
     sessionId: string,
-    context: string
+    context: string,
+    agentType?: string
   ): Promise<ResearchStatus> => {
-    return await invoke('start_research', { projectPath, sessionId, context })
+    return await invoke('start_research', { projectPath, sessionId, context, agentType })
   },
 
   /** Get research results for a session */
@@ -858,5 +753,10 @@ export const gsdApi = {
   /** Delete a planning session */
   deleteSession: async (projectPath: string, sessionId: string): Promise<void> => {
     return await invoke('delete_gsd_session', { projectPath, sessionId })
+  },
+
+  /** Get list of available CLI agents for research */
+  getAvailableAgents: async (): Promise<AgentType[]> => {
+    return await invoke('get_available_research_agents')
   },
 }

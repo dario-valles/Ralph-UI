@@ -5,7 +5,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/select'
 import { FolderOpen, AlertCircle, ArrowLeft, RefreshCw, GitBranch } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
