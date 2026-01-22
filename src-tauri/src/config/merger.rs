@@ -1,7 +1,8 @@
 // Configuration merging with priority
 
 use crate::config::loader::{
-    ExecutionConfig, FallbackSettings, GitConfig, RalphConfig, TemplateConfig, ValidationConfig,
+    ErrorStrategyConfig, ExecutionConfig, FallbackSettings, GitConfig, RalphConfig, TemplateConfig,
+    ValidationConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -60,6 +61,10 @@ pub struct PartialFallbackSettings {
     pub max_backoff_ms: Option<u64>,
     pub fallback_agent: Option<String>,
     pub fallback_model: Option<String>,
+    pub error_strategy: Option<ErrorStrategyConfig>,
+    pub fallback_chain: Option<Vec<String>>,
+    pub test_primary_recovery: Option<bool>,
+    pub recovery_test_interval: Option<u32>,
 }
 
 /// Configuration merger
@@ -209,6 +214,10 @@ impl ConfigMerger {
             max_backoff_ms: over.max_backoff_ms,
             fallback_agent: over.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
             fallback_model: over.fallback_model.clone().or_else(|| base.fallback_model.clone()),
+            error_strategy: over.error_strategy.clone().or_else(|| base.error_strategy.clone()),
+            fallback_chain: over.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
+            test_primary_recovery: over.test_primary_recovery.or(base.test_primary_recovery),
+            recovery_test_interval: over.recovery_test_interval.or(base.recovery_test_interval),
         }
     }
 
@@ -273,6 +282,10 @@ impl ConfigMerger {
             max_backoff_ms: partial.max_backoff_ms.unwrap_or(base.max_backoff_ms),
             fallback_agent: partial.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
             fallback_model: partial.fallback_model.clone().or_else(|| base.fallback_model.clone()),
+            error_strategy: partial.error_strategy.clone().or_else(|| base.error_strategy.clone()),
+            fallback_chain: partial.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
+            test_primary_recovery: partial.test_primary_recovery.or(base.test_primary_recovery),
+            recovery_test_interval: partial.recovery_test_interval.or(base.recovery_test_interval),
         }
     }
 }

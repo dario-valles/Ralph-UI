@@ -139,6 +139,30 @@ pub struct TemplateConfig {
     pub templates_dir: Option<String>,
 }
 
+/// Error strategy configuration for handling agent failures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ErrorStrategyConfig {
+    /// Retry with exponential backoff
+    Retry {
+        max_attempts: u32,
+        backoff_ms: u64,
+    },
+    /// Skip the failing task and continue
+    Skip,
+    /// Abort the entire execution
+    Abort,
+}
+
+impl Default for ErrorStrategyConfig {
+    fn default() -> Self {
+        Self::Retry {
+            max_attempts: 3,
+            backoff_ms: 1000,
+        }
+    }
+}
+
 /// Fallback settings for rate limiting
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FallbackSettings {
@@ -157,6 +181,18 @@ pub struct FallbackSettings {
     /// Fallback model to use (e.g., "claude-sonnet-4-5")
     #[serde(rename = "fallbackModel", alias = "fallback_model", default)]
     pub fallback_model: Option<String>,
+    /// Error handling strategy (retry, skip, abort)
+    #[serde(rename = "errorStrategy", alias = "error_strategy", default)]
+    pub error_strategy: Option<ErrorStrategyConfig>,
+    /// Ordered list of fallback agents (advanced mode)
+    #[serde(rename = "fallbackChain", alias = "fallback_chain", default)]
+    pub fallback_chain: Option<Vec<String>>,
+    /// Whether to test if primary agent has recovered
+    #[serde(rename = "testPrimaryRecovery", alias = "test_primary_recovery", default)]
+    pub test_primary_recovery: Option<bool>,
+    /// Test primary recovery every N iterations
+    #[serde(rename = "recoveryTestInterval", alias = "recovery_test_interval", default)]
+    pub recovery_test_interval: Option<u32>,
 }
 
 fn default_backoff() -> u64 { 5000 }
@@ -170,6 +206,10 @@ impl Default for FallbackSettings {
             max_backoff_ms: default_max_backoff(),
             fallback_agent: None,
             fallback_model: None,
+            error_strategy: None,
+            fallback_chain: None,
+            test_primary_recovery: None,
+            recovery_test_interval: None,
         }
     }
 }

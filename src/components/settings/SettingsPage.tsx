@@ -317,6 +317,7 @@ export function SettingsPage() {
                       <option value="claude">Claude</option>
                       <option value="opencode">OpenCode</option>
                       <option value="cursor">Cursor</option>
+                      <option value="codex">Codex</option>
                     </Select>
                   </div>
 

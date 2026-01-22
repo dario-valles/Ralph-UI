@@ -469,28 +469,50 @@ pub async fn start_ralph_loop(
     };
 
     // Get fallback config from user settings
-    let fallback_config = config_state.get_config().ok().and_then(|config| {
+    let user_config = config_state.get_config().ok();
+
+    let fallback_config = user_config.as_ref().and_then(|config| {
         if config.fallback.enabled {
-            // Build fallback chain: primary agent + optional fallback agent
-            let mut fallback_chain = vec![agent_type.clone()];
-            if let Some(ref fallback_str) = config.fallback.fallback_agent {
-                let fallback_agent = match fallback_str.to_lowercase().as_str() {
-                    "claude" => Some(AgentType::Claude),
-                    "opencode" => Some(AgentType::Opencode),
-                    "cursor" => Some(AgentType::Cursor),
-                    "codex" => Some(AgentType::Codex),
-                    _ => None,
-                };
-                if let Some(agent) = fallback_agent {
-                    if agent != agent_type {
-                        fallback_chain.push(agent);
+            // Use fallback_chain from config if available, otherwise build from legacy fallback_agent
+            let fallback_chain = config.fallback.fallback_chain
+                .clone()
+                .map(|chain| {
+                    // Convert string agent names to AgentType
+                    chain.into_iter()
+                        .filter_map(|s| match s.to_lowercase().as_str() {
+                            "claude" => Some(AgentType::Claude),
+                            "opencode" => Some(AgentType::Opencode),
+                            "cursor" => Some(AgentType::Cursor),
+                            "codex" => Some(AgentType::Codex),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| {
+                    // Legacy behavior: build chain from primary + fallback_agent
+                    let mut chain = vec![agent_type.clone()];
+                    if let Some(ref fallback_str) = config.fallback.fallback_agent {
+                        let fallback_agent = match fallback_str.to_lowercase().as_str() {
+                            "claude" => Some(AgentType::Claude),
+                            "opencode" => Some(AgentType::Opencode),
+                            "cursor" => Some(AgentType::Cursor),
+                            "codex" => Some(AgentType::Codex),
+                            _ => None,
+                        };
+                        if let Some(agent) = fallback_agent {
+                            if agent != agent_type {
+                                chain.push(agent);
+                            }
+                        }
                     }
-                }
-            }
+                    chain
+                });
+
             Some(FallbackChainConfig {
                 fallback_chain,
-                test_primary_recovery: true,
-                recovery_test_interval: 5,
+                // Use config values instead of hardcoding!
+                test_primary_recovery: config.fallback.test_primary_recovery.unwrap_or(true),
+                recovery_test_interval: config.fallback.recovery_test_interval.unwrap_or(5),
                 base_backoff_ms: config.fallback.base_backoff_ms,
                 max_backoff_ms: config.fallback.max_backoff_ms,
                 enabled: true,
@@ -499,6 +521,21 @@ pub async fn start_ralph_loop(
             None
         }
     });
+
+    // Convert ErrorStrategyConfig from user settings to ErrorStrategy
+    let error_strategy = user_config
+        .and_then(|c| c.fallback.error_strategy)
+        .map(|es| {
+            use crate::config::ErrorStrategyConfig;
+            match es {
+                ErrorStrategyConfig::Retry { max_attempts, backoff_ms } => {
+                    ErrorStrategy::Retry { max_attempts, backoff_ms }
+                }
+                ErrorStrategyConfig::Skip => ErrorStrategy::Skip,
+                ErrorStrategyConfig::Abort => ErrorStrategy::Abort,
+            }
+        })
+        .unwrap_or_default();
 
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
@@ -512,7 +549,7 @@ pub async fn start_ralph_loop(
         max_cost: request.max_cost,
         use_worktree: request.use_worktree.unwrap_or(true), // Use worktree for isolation by default
         retry_config: RetryConfig::default(),
-        error_strategy: ErrorStrategy::default(),
+        error_strategy,  // Use config value instead of hardcoded default
         fallback_config,
         agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
         prd_name: request.prd_name.clone(),

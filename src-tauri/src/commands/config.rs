@@ -218,6 +218,11 @@ pub async fn update_fallback_config(
     max_backoff_ms: Option<u64>,
     fallback_agent: Option<String>,
     fallback_model: Option<String>,
+    // New parameters for advanced fallback settings
+    error_strategy: Option<serde_json::Value>,
+    fallback_chain: Option<Vec<String>>,
+    test_primary_recovery: Option<bool>,
+    recovery_test_interval: Option<u32>,
     config_state: State<'_, ConfigState>,
 ) -> Result<FallbackSettings, String> {
     let mut config = config_state.config.write()
@@ -237,6 +242,19 @@ pub async fn update_fallback_config(
     }
     if fallback_model.is_some() {
         config.fallback.fallback_model = fallback_model;
+    }
+    // Update new fields
+    if let Some(v) = error_strategy {
+        config.fallback.error_strategy = serde_json::from_value(v).ok();
+    }
+    if fallback_chain.is_some() {
+        config.fallback.fallback_chain = fallback_chain;
+    }
+    if test_primary_recovery.is_some() {
+        config.fallback.test_primary_recovery = test_primary_recovery;
+    }
+    if recovery_test_interval.is_some() {
+        config.fallback.recovery_test_interval = recovery_test_interval;
     }
 
     Ok(config.fallback.clone())
