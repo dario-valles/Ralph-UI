@@ -14,26 +14,11 @@
 import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useSubagentEvents } from '@/hooks/useSubagentEvents'
-import {
-  ChevronDown,
-  ChevronRight,
-  Activity,
-  GitBranch,
-  RotateCcw,
-  Scroll,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Activity, GitBranch, RotateCcw, Scroll } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Tooltip } from '@/components/ui/tooltip'
 
 interface SubagentTreePanelProps {
   agentId: string
@@ -109,7 +94,10 @@ export function SubagentTreePanel({
                 </Badge>
               )}
               {!isExpanded && activityCount > 0 && (
-                <Badge variant="outline" className="h-5 px-1.5 text-orange-500 border-orange-500/30">
+                <Badge
+                  variant="outline"
+                  className="h-5 px-1.5 text-orange-500 border-orange-500/30"
+                >
                   +{activityCount} new
                 </Badge>
               )}
@@ -133,37 +121,24 @@ export function SubagentTreePanel({
         {/* Controls */}
         <div className="flex items-center justify-between px-3 py-1.5 border-t border-b border-border/50 bg-muted/30">
           <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'h-7 px-2',
-                    autoScroll && 'text-blue-500'
-                  )}
-                  onClick={handleToggleAutoScroll}
-                >
-                  <Scroll className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
-              </TooltipContent>
+            <Tooltip
+              content={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
+              side="bottom"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn('h-7 px-2', autoScroll && 'text-blue-500')}
+                onClick={handleToggleAutoScroll}
+              >
+                <Scroll className="h-3.5 w-3.5" />
+              </Button>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={handleClear}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Clear history</TooltipContent>
+            <Tooltip content="Clear history" side="bottom">
+              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleClear}>
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
             </Tooltip>
           </div>
 
@@ -173,17 +148,12 @@ export function SubagentTreePanel({
         </div>
 
         {/* Subagent list */}
-        <div
-          className="overflow-y-auto"
-          style={{ maxHeight }}
-        >
+        <div className="overflow-y-auto" style={{ maxHeight }}>
           {subagents.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <GitBranch className="h-8 w-8 mb-2 opacity-50" />
               <p className="text-sm">No subagent activity yet</p>
-              <p className="text-xs">
-                Subagents will appear here when the agent spawns tasks
-              </p>
+              <p className="text-xs">Subagents will appear here when the agent spawns tasks</p>
             </div>
           ) : (
             <div className="divide-y divide-border/30">
@@ -223,17 +193,10 @@ function SubagentItem({ node }: SubagentItemProps) {
   const config = statusConfig[node.status] || statusConfig.running
 
   return (
-    <div
-      className={cn(
-        'px-3 py-2 text-sm',
-        node.status === 'running' && 'bg-blue-500/5'
-      )}
-    >
+    <div className={cn('px-3 py-2 text-sm', node.status === 'running' && 'bg-blue-500/5')}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={cn('font-mono text-lg', config.className)}>
-            {config.icon}
-          </span>
+          <span className={cn('font-mono text-lg', config.className)}>{config.icon}</span>
           <span className="truncate" title={node.description}>
             {node.description}
           </span>
@@ -268,10 +231,7 @@ function SubagentItem({ node }: SubagentItemProps) {
       )}
 
       {node.summary && (
-        <div
-          className="mt-1 text-xs text-muted-foreground truncate"
-          title={node.summary}
-        >
+        <div className="mt-1 text-xs text-muted-foreground truncate" title={node.summary}>
           {node.summary}
         </div>
       )}

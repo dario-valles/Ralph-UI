@@ -8,6 +8,8 @@
 //! - Legacy format: `.ralph/prd.json` (for backwards compatibility)
 
 use super::types::{PrdStatus, RalphPrd, RalphStory};
+use fs2::FileExt;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 /// PRD file executor for reading/writing PRD JSON files
@@ -41,10 +43,7 @@ impl PrdExecutor {
     /// The `ralph_dir` parameter should be the `.ralph` directory path.
     pub fn new(ralph_dir: &Path) -> Self {
         // Extract project path by going up from .ralph directory
-        let project_path = ralph_dir
-            .parent()
-            .unwrap_or(ralph_dir)
-            .to_path_buf();
+        let project_path = ralph_dir.parent().unwrap_or(ralph_dir).to_path_buf();
         Self {
             project_path,
             prd_name: None,
@@ -54,7 +53,8 @@ impl PrdExecutor {
     /// Get the path to prd.json
     pub fn prd_path(&self) -> PathBuf {
         match &self.prd_name {
-            Some(name) => self.project_path
+            Some(name) => self
+                .project_path
                 .join(".ralph-ui")
                 .join("prds")
                 .join(format!("{}.json", name)),
@@ -70,6 +70,50 @@ impl PrdExecutor {
         }
     }
 
+    /// Get the path to the lock file for exclusive PRD access
+    fn lock_path(&self) -> PathBuf {
+        self.prd_path().with_extension("json.lock")
+    }
+
+    /// Execute a read-modify-write operation with file locking
+    /// This prevents race conditions when multiple processes try to modify the PRD
+    fn with_prd_lock<F, T>(&self, operation: F) -> Result<T, String>
+    where
+        F: FnOnce(&mut RalphPrd) -> Result<T, String>,
+    {
+        // Ensure directory exists for lock file
+        let prd_dir = self.prd_dir();
+        std::fs::create_dir_all(&prd_dir).map_err(|e| {
+            format!(
+                "Failed to create PRD directory {}: {}",
+                prd_dir.display(),
+                e
+            )
+        })?;
+
+        // Create or open lock file
+        let lock_path = self.lock_path();
+        let lock_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&lock_path)
+            .map_err(|e| format!("Failed to create lock file: {}", e))?;
+
+        // Acquire exclusive lock (blocks until available)
+        lock_file
+            .lock_exclusive()
+            .map_err(|e| format!("Failed to acquire PRD lock: {}", e))?;
+
+        // Read, modify, write
+        let mut prd = self.read_prd()?;
+        let result = operation(&mut prd)?;
+        self.write_prd(&prd)?;
+
+        // Lock is automatically released when lock_file is dropped
+        Ok(result)
+    }
+
     /// Check if a PRD file exists
     pub fn prd_exists(&self) -> bool {
         self.prd_path().exists()
@@ -80,29 +124,44 @@ impl PrdExecutor {
         let path = self.prd_path();
 
         if !path.exists() {
-            return Err(format!("PRD file not found at {:?}", path));
+            return Err(format!("PRD file not found at {}", path.display()));
         }
 
         let content = std::fs::read_to_string(&path)
             .map_err(|e| format!("Failed to read PRD file: {}", e))?;
 
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse PRD file: {}", e))
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse PRD file: {}", e))
     }
 
-    /// Write the PRD to disk
+    /// Write the PRD to disk using atomic write pattern (temp file + rename)
+    /// This prevents file corruption if the process crashes during write
     pub fn write_prd(&self, prd: &RalphPrd) -> Result<(), String> {
         // Ensure PRD directory exists
         let prd_dir = self.prd_dir();
-        std::fs::create_dir_all(&prd_dir)
-            .map_err(|e| format!("Failed to create PRD directory {:?}: {}", prd_dir, e))?;
+        std::fs::create_dir_all(&prd_dir).map_err(|e| {
+            format!(
+                "Failed to create PRD directory {}: {}",
+                prd_dir.display(),
+                e
+            )
+        })?;
 
         let path = self.prd_path();
         let content = serde_json::to_string_pretty(prd)
             .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
 
-        std::fs::write(&path, content)
-            .map_err(|e| format!("Failed to write PRD file: {}", e))?;
+        // Atomic write: write to temp file first, then rename
+        // Rename is atomic on most filesystems (POSIX guarantees this)
+        let temp_path = path.with_extension("json.tmp");
+
+        std::fs::write(&temp_path, &content)
+            .map_err(|e| format!("Failed to write temp PRD file: {}", e))?;
+
+        std::fs::rename(&temp_path, &path).map_err(|e| {
+            // Clean up temp file if rename fails
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp PRD file: {}", e)
+        })?;
 
         Ok(())
     }
@@ -118,38 +177,34 @@ impl PrdExecutor {
         self.write_prd(&prd)
     }
 
-    /// Mark a story as passing
+    /// Mark a story as passing (with file locking for concurrent safety)
     pub fn mark_story_passing(&self, story_id: &str) -> Result<bool, String> {
-        let mut prd = self.read_prd()?;
-        let result = prd.mark_story_passing(story_id);
-
-        if result {
-            // Update metadata
-            if let Some(ref mut metadata) = prd.metadata {
-                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+        let story_id = story_id.to_string();
+        self.with_prd_lock(|prd| {
+            let result = prd.mark_story_passing(&story_id);
+            if result {
+                if let Some(ref mut metadata) = prd.metadata {
+                    metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                }
             }
-            self.write_prd(&prd)?;
-        }
-
-        Ok(result)
+            Ok(result)
+        })
     }
 
-    /// Mark a story as failing
+    /// Mark a story as failing (with file locking for concurrent safety)
     pub fn mark_story_failing(&self, story_id: &str) -> Result<bool, String> {
-        let mut prd = self.read_prd()?;
-
-        if let Some(story) = prd.stories.iter_mut().find(|s| s.id == story_id) {
-            story.passes = false;
-
-            if let Some(ref mut metadata) = prd.metadata {
-                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+        let story_id = story_id.to_string();
+        self.with_prd_lock(|prd| {
+            if let Some(story) = prd.stories.iter_mut().find(|s| s.id == story_id) {
+                story.passes = false;
+                if let Some(ref mut metadata) = prd.metadata {
+                    metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                }
+                Ok(true)
+            } else {
+                Ok(false)
             }
-
-            self.write_prd(&prd)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        })
     }
 
     /// Get the status summary of the PRD
@@ -184,27 +239,25 @@ impl PrdExecutor {
         }
     }
 
-    /// Update iteration count in metadata
+    /// Update iteration count in metadata (with file locking for concurrent safety)
     pub fn increment_iteration_count(&self) -> Result<u32, String> {
-        let mut prd = self.read_prd()?;
-
-        let new_count = if let Some(ref mut metadata) = prd.metadata {
-            metadata.total_iterations += 1;
-            metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
-            metadata.total_iterations
-        } else {
-            prd.metadata = Some(super::types::PrdMetadata {
-                created_at: None,
-                updated_at: Some(chrono::Utc::now().to_rfc3339()),
-                source_chat_id: None,
-                total_iterations: 1,
-                last_execution_id: None,
-            });
-            1
-        };
-
-        self.write_prd(&prd)?;
-        Ok(new_count)
+        self.with_prd_lock(|prd| {
+            let new_count = if let Some(ref mut metadata) = prd.metadata {
+                metadata.total_iterations += 1;
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                metadata.total_iterations
+            } else {
+                prd.metadata = Some(super::types::PrdMetadata {
+                    created_at: None,
+                    updated_at: Some(chrono::Utc::now().to_rfc3339()),
+                    source_chat_id: None,
+                    total_iterations: 1,
+                    last_execution_id: None,
+                });
+                1
+            };
+            Ok(new_count)
+        })
     }
 
     /// Set the last execution ID in metadata
@@ -356,7 +409,11 @@ mod tests {
         let executor = PrdExecutor::new(&ralph_dir);
 
         let mut prd = RalphPrd::new("Test PRD", "feature/test");
-        prd.add_story(RalphStory::new("1", "First task", "Complete the first task"));
+        prd.add_story(RalphStory::new(
+            "1",
+            "First task",
+            "Complete the first task",
+        ));
 
         // Write
         executor.write_prd(&prd).unwrap();

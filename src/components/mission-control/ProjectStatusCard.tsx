@@ -2,7 +2,17 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderOpen, Play, Pause, CheckCircle2, AlertCircle, Clock, Bot, ArrowRight, Square } from 'lucide-react'
+import {
+  FolderOpen,
+  Play,
+  Pause,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Bot,
+  ArrowRight,
+  Square,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -140,7 +150,16 @@ function SessionActions({ session, onStatusChange, isLoading }: SessionActionsPr
 }
 
 export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCardProps) {
-  const { project, activeSessions, runningAgentsCount, totalTasks, completedTasks, health, lastActivity, totalCost } = projectStatus
+  const {
+    project,
+    activeSessions,
+    runningAgentsCount,
+    totalTasks,
+    completedTasks,
+    health,
+    lastActivity,
+    totalCost,
+  } = projectStatus
 
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const updateSessionStatus = useSessionStore((s) => s.updateSessionStatus)
@@ -160,27 +179,27 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
   const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
 
   return (
-    <Card className={cn(
-      "transition-all hover:shadow-md",
-      health === 'healthy' && "border-green-500/20",
-      health === 'error' && "border-red-500/20"
-    )}>
+    <Card
+      className={cn(
+        'transition-all hover:shadow-md',
+        health === 'healthy' && 'border-green-500/20',
+        health === 'error' && 'border-red-500/20'
+      )}
+    >
       <CardContent className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className={cn("p-1.5 rounded", config.bgColor)}>
-              <FolderOpen className={cn("h-4 w-4", config.color)} />
+            <div className={cn('p-1.5 rounded', config.bgColor)}>
+              <FolderOpen className={cn('h-4 w-4', config.color)} />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-medium truncate">{project.name}</h3>
-              <p className="text-xs text-muted-foreground truncate">
-                {project.path}
-              </p>
+              <p className="text-xs text-muted-foreground truncate">{project.path}</p>
             </div>
           </div>
 
-          <Badge variant="outline" className={cn("flex-shrink-0", config.bgColor, config.color)}>
+          <Badge variant="outline" className={cn('flex-shrink-0', config.bgColor, config.color)}>
             <HealthIcon className="h-3 w-3 mr-1" />
             {config.label}
           </Badge>
@@ -205,9 +224,7 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
           </div>
 
           <div className="rounded-md bg-muted/50 p-2">
-            <div className="text-sm font-medium tabular-nums">
-              ${totalCost.toFixed(2)}
-            </div>
+            <div className="text-sm font-medium tabular-nums">${totalCost.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Cost</p>
           </div>
         </div>
@@ -232,9 +249,9 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
                   <Badge
                     variant="outline"
                     className={cn(
-                      "h-5 px-1.5 text-[10px]",
-                      session.status === 'active' && "bg-green-500/10 text-green-500",
-                      session.status === 'paused' && "bg-yellow-500/10 text-yellow-500"
+                      'h-5 px-1.5 text-[10px]',
+                      session.status === 'active' && 'bg-green-500/10 text-green-500',
+                      session.status === 'paused' && 'bg-yellow-500/10 text-yellow-500'
                     )}
                   >
                     {session.status === 'active' ? 'Active' : 'Paused'}

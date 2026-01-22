@@ -14,7 +14,6 @@ import type {
   PRDTemplate,
   CreatePRDRequest,
   UpdatePRDRequest,
-  ExecutionConfig,
   ChatSession,
   ChatMessage,
   SendMessageResponse,
@@ -26,6 +25,7 @@ import type {
   IterationRecord,
   ExecutionStateSnapshot,
   IterationStats,
+  RalphLoopSnapshot,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -88,10 +88,7 @@ export const sessionApi = {
     return await invoke('get_recovery_state', { sessionId })
   },
 
-  compareSessions: async (
-    session1Id: string,
-    session2Id: string
-  ): Promise<SessionComparison> => {
+  compareSessions: async (session1Id: string, session2Id: string): Promise<SessionComparison> => {
     return await invoke('compare_sessions', { session1Id, session2Id })
   },
 
@@ -126,11 +123,7 @@ export const taskApi = {
     return await invoke('update_task_status', { taskId, status })
   },
 
-  importPRD: async (
-    sessionId: string,
-    content: string,
-    format?: string
-  ): Promise<Task[]> => {
+  importPRD: async (sessionId: string, content: string, format?: string): Promise<Task[]> => {
     return await invoke('import_prd', { sessionId, content, format })
   },
 }
@@ -169,10 +162,6 @@ export const prdApi = {
     return await invoke('analyze_prd_quality', { prdId })
   },
 
-  execute: async (prdId: string, config: ExecutionConfig): Promise<string> => {
-    return await invoke('execute_prd', { prdId, config })
-  },
-
   /** Scan .ralph-ui/prds/ directory for PRD markdown files */
   scanFiles: async (projectPath: string): Promise<PRDFile[]> => {
     return await invoke('scan_prd_files', { projectPath })
@@ -201,7 +190,7 @@ export const prdChatApi = {
     structuredMode?: boolean
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
-      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode }
+      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode },
     })
   },
 
@@ -211,7 +200,7 @@ export const prdChatApi = {
     projectPath: string
   ): Promise<SendMessageResponse> => {
     return await invoke('send_prd_chat_message', {
-      request: { sessionId, content, projectPath }
+      request: { sessionId, content, projectPath },
     })
   },
 
@@ -221,6 +210,15 @@ export const prdChatApi = {
 
   getSessions: async (projectPath: string): Promise<ChatSession[]> => {
     return await invoke('list_prd_chat_sessions', { projectPath })
+  },
+
+  /** Update agent type for a session */
+  updateSessionAgent: async (
+    sessionId: string,
+    projectPath: string,
+    agentType: string
+  ): Promise<void> => {
+    return await invoke('update_prd_chat_agent', { sessionId, projectPath, agentType })
   },
 
   deleteSession: async (sessionId: string, projectPath: string): Promise<void> => {
@@ -238,7 +236,10 @@ export const prdChatApi = {
   },
 
   /** Preview extracted PRD content before export */
-  previewExtraction: async (sessionId: string, projectPath: string): Promise<ExtractedPRDContent> => {
+  previewExtraction: async (
+    sessionId: string,
+    projectPath: string
+  ): Promise<ExtractedPRDContent> => {
     return await invoke('preview_prd_extraction', { sessionId, projectPath })
   },
 
@@ -248,7 +249,11 @@ export const prdChatApi = {
   },
 
   /** Set structured output mode for a session */
-  setStructuredMode: async (sessionId: string, projectPath: string, enabled: boolean): Promise<void> => {
+  setStructuredMode: async (
+    sessionId: string,
+    projectPath: string,
+    enabled: boolean
+  ): Promise<void> => {
     return await invoke('set_structured_mode', { sessionId, projectPath, enabled })
   },
 
@@ -258,7 +263,10 @@ export const prdChatApi = {
   },
 
   /** Start watching a PRD plan file for changes */
-  startWatchingPlanFile: async (sessionId: string, projectPath: string): Promise<WatchFileResponse> => {
+  startWatchingPlanFile: async (
+    sessionId: string,
+    projectPath: string
+  ): Promise<WatchFileResponse> => {
     return await invoke('start_watching_prd_file', { sessionId, projectPath })
   },
 
@@ -349,7 +357,13 @@ export interface WatchFileResponse {
 export interface ActivityEvent {
   id: string
   timestamp: string
-  eventType: 'task_completed' | 'task_started' | 'task_failed' | 'agent_spawned' | 'session_started' | 'session_completed'
+  eventType:
+    | 'task_completed'
+    | 'task_started'
+    | 'task_failed'
+    | 'agent_spawned'
+    | 'session_started'
+    | 'session_completed'
   projectPath: string
   projectName: string
   sessionName: string
@@ -400,14 +414,14 @@ export const ralphLoopApi = {
     return await invoke('init_ralph_prd', { request })
   },
 
-  /** Read the Ralph PRD from .ralph/prd.json */
-  getPrd: async (projectPath: string): Promise<RalphPrd> => {
-    return await invoke('get_ralph_prd', { projectPath })
+  /** Read the Ralph PRD from .ralph-ui/prds/{prdName}.json */
+  getPrd: async (projectPath: string, prdName: string): Promise<RalphPrd> => {
+    return await invoke('get_ralph_prd', { projectPath, prdName })
   },
 
   /** Get the status of the Ralph PRD */
-  getPrdStatus: async (projectPath: string): Promise<RalphPrdStatus> => {
-    return await invoke('get_ralph_prd_status', { projectPath })
+  getPrdStatus: async (projectPath: string, prdName: string): Promise<RalphPrdStatus> => {
+    return await invoke('get_ralph_prd_status', { projectPath, prdName })
   },
 
   /** Mark a story as passing in the PRD */
@@ -431,13 +445,16 @@ export const ralphLoopApi = {
   },
 
   /** Get progress.txt content */
-  getProgress: async (projectPath: string): Promise<string> => {
-    return await invoke('get_ralph_progress', { projectPath })
+  getProgress: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('get_ralph_progress', { projectPath, prdName })
   },
 
   /** Get progress summary */
-  getProgressSummary: async (projectPath: string): Promise<RalphProgressSummary> => {
-    return await invoke('get_ralph_progress_summary', { projectPath })
+  getProgressSummary: async (
+    projectPath: string,
+    prdName: string
+  ): Promise<RalphProgressSummary> => {
+    return await invoke('get_ralph_progress_summary', { projectPath, prdName })
   },
 
   /** Add a note to progress.txt */
@@ -451,8 +468,8 @@ export const ralphLoopApi = {
   },
 
   /** Get the prompt.md content */
-  getPrompt: async (projectPath: string): Promise<string> => {
-    return await invoke('get_ralph_prompt', { projectPath })
+  getPrompt: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('get_ralph_prompt', { projectPath, prdName })
   },
 
   /** Update the prompt.md content */
@@ -621,5 +638,20 @@ export const ralphLoopApi = {
   /** Delete iteration history for an execution */
   deleteIterationHistory: async (executionId: string): Promise<number> => {
     return await invoke('delete_ralph_iteration_history', { executionId })
+  },
+
+  /** Get consolidated snapshot for efficient polling
+   * Combines state, metrics, agent ID, worktree path, and iteration history in a single IPC call
+   */
+  getSnapshot: async (executionId: string): Promise<RalphLoopSnapshot> => {
+    return await invoke('get_ralph_loop_snapshot', { executionId })
+  },
+
+  /** Cleanup old iteration history records (maintenance)
+   * Deletes iterations older than the specified number of days (default: 30)
+   * @returns Number of records deleted
+   */
+  cleanupIterationHistory: async (daysToKeep?: number): Promise<number> => {
+    return await invoke('cleanup_ralph_iteration_history', { daysToKeep })
   },
 }

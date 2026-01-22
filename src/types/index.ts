@@ -21,15 +21,15 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
 // Error categories for task failures
 export type ErrorCategory =
-  | 'test_failure'      // Test assertions failed
-  | 'lint_error'        // Linting/formatting errors
-  | 'build_error'       // Compilation/build failures
-  | 'timeout'           // Task exceeded time limit
-  | 'crash'             // Process crash or unexpected termination
-  | 'rate_limit'        // API rate limiting
-  | 'conflict'          // Git merge conflicts
-  | 'dependency'        // Missing or incompatible dependencies
-  | 'unknown'           // Uncategorized errors
+  | 'test_failure' // Test assertions failed
+  | 'lint_error' // Linting/formatting errors
+  | 'build_error' // Compilation/build failures
+  | 'timeout' // Task exceeded time limit
+  | 'crash' // Process crash or unexpected termination
+  | 'rate_limit' // API rate limiting
+  | 'conflict' // Git merge conflicts
+  | 'dependency' // Missing or incompatible dependencies
+  | 'unknown' // Uncategorized errors
 
 export interface CategorizedError {
   category: ErrorCategory
@@ -240,7 +240,12 @@ export interface PRDExecution {
 }
 
 /** Scheduling strategy - determines task ordering and parallelism */
-export type SchedulingStrategy = 'sequential' | 'dependency_first' | 'priority' | 'fifo' | 'cost_first'
+export type SchedulingStrategy =
+  | 'sequential'
+  | 'dependency_first'
+  | 'priority'
+  | 'fifo'
+  | 'cost_first'
 
 export interface ExecutionConfig {
   sessionName?: string
@@ -518,7 +523,13 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>
 }
 
-export type PRDTypeValue = 'new_feature' | 'bug_fix' | 'refactoring' | 'api_integration' | 'general' | 'full_new_app'
+export type PRDTypeValue =
+  | 'new_feature'
+  | 'bug_fix'
+  | 'refactoring'
+  | 'api_integration'
+  | 'general'
+  | 'full_new_app'
 
 export interface ChatSession {
   id: string
@@ -722,6 +733,17 @@ export interface RalphLoopMetrics {
   iterations: RalphIterationMetrics[]
 }
 
+/** Consolidated snapshot for efficient polling
+ * Combines multiple data sources in a single IPC call
+ */
+export interface RalphLoopSnapshot {
+  state: RalphLoopState | null
+  metrics: RalphLoopMetrics | null
+  currentAgentId: string | null
+  worktreePath: string | null
+  iterationHistory: IterationRecord[]
+}
+
 /** Status update event during Ralph loop execution */
 export interface RalphLoopStatusEvent {
   executionId: string
@@ -773,6 +795,8 @@ export interface RalphFiles {
   progressPath: string
   promptPath: string
   configPath: string
+  /** Names of PRD files found in .ralph-ui/prds/ */
+  prdNames: string[]
 }
 
 /** Project-specific configuration */

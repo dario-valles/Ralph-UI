@@ -4,7 +4,7 @@ mod models;
 mod database;
 mod git;
 mod github;
-mod agents;
+pub mod agents;
 mod utils;
 pub mod parsers;
 mod session;
@@ -16,13 +16,14 @@ pub mod watchers;
 pub mod session_files;
 pub mod ralph_loop;
 pub mod file_storage;
+pub mod plugins;
 
 // Re-export models for use in commands
 pub use models::*;
 
 use std::path::Path;
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 
 /// State for rate limit event forwarding to the frontend
@@ -84,9 +85,13 @@ pub struct AgentManagerState {
 }
 
 impl AgentManagerState {
-    pub fn new(pty_data_tx: mpsc::UnboundedSender<agents::AgentPtyDataEvent>) -> Self {
+    pub fn new(
+        pty_data_tx: mpsc::UnboundedSender<agents::AgentPtyDataEvent>,
+        subagent_tx: mpsc::UnboundedSender<agents::SubagentEvent>,
+    ) -> Self {
         let mut manager = agents::AgentManager::new();
         manager.set_pty_data_sender(pty_data_tx);
+        manager.set_subagent_sender(subagent_tx);
         Self {
             manager: Arc::new(std::sync::Mutex::new(manager)),
         }
@@ -95,6 +100,25 @@ impl AgentManagerState {
     /// Get a clone of the Arc for sharing with async tasks
     pub fn clone_manager(&self) -> Arc<std::sync::Mutex<agents::AgentManager>> {
         self.manager.clone()
+    }
+}
+
+/// State for Plugin Registry
+pub struct PluginRegistryState {
+    pub registry: std::sync::Mutex<plugins::PluginRegistry>,
+}
+
+impl PluginRegistryState {
+    pub fn new() -> Self {
+        Self {
+            registry: std::sync::Mutex::new(plugins::PluginRegistry::new()),
+        }
+    }
+}
+
+impl Default for PluginRegistryState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -134,9 +158,6 @@ pub fn run() {
     // Initialize config state
     let config_state = commands::config::ConfigState::new();
 
-    // Initialize trace state for subagent tracking
-    let trace_state = commands::traces::TraceState::new();
-
     // Initialize model cache state for dynamic model discovery
     let model_cache_state = commands::models::ModelCacheState::new();
 
@@ -155,8 +176,14 @@ pub fn run() {
     // Create PTY data event channel for forwarding agent output to frontend
     let (pty_data_tx, pty_data_rx) = mpsc::unbounded_channel::<agents::AgentPtyDataEvent>();
 
+    // Create subagent event channel for forwarding structured agent events to frontend
+    let (subagent_tx, subagent_rx) = mpsc::unbounded_channel::<agents::SubagentEvent>();
+
     // Initialize AgentManager state for PTY tracking (with PTY data sender)
-    let agent_manager_state = AgentManagerState::new(pty_data_tx);
+    let agent_manager_state = AgentManagerState::new(pty_data_tx, subagent_tx);
+
+    // Initialize Plugin Registry state
+    let plugin_registry_state = PluginRegistryState::new();
 
     // Initialize Ralph loop state for external loop orchestration
     let ralph_loop_state = commands::ralph_loop::RalphLoopManagerState::new();
@@ -169,13 +196,13 @@ pub fn run() {
         .manage(std::sync::Mutex::new(db))
         .manage(git_state)
         .manage(config_state)
-        .manage(trace_state)
         .manage(shutdown_state)
         .manage(rate_limit_state)
         .manage(completion_state)
         .manage(model_cache_state)
         .manage(prd_file_watcher_state)
         .manage(agent_manager_state)
+        .manage(plugin_registry_state)
         .manage(ralph_loop_state)
         .setup(move |app| {
             // Spawn task to forward rate limit events to Tauri frontend events
@@ -183,6 +210,7 @@ pub fn run() {
             let app_handle_clone = app_handle.clone();
             let app_handle_clone2 = app_handle.clone();
             let app_handle_clone3 = app_handle.clone();
+            let app_handle_clone4 = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 forward_rate_limit_events(app_handle, rate_limit_rx).await;
             });
@@ -197,6 +225,10 @@ pub fn run() {
             // Spawn task to forward PTY data events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
                 forward_pty_data_events(app_handle_clone3, pty_data_rx).await;
+            });
+            // Spawn task to forward subagent events to Tauri frontend events
+            tauri::async_runtime::spawn(async move {
+                forward_subagent_events(app_handle_clone4, subagent_rx).await;
             });
             Ok(())
         })
@@ -229,7 +261,8 @@ pub fn run() {
             commands::list_prd_templates,
             commands::export_prd,
             commands::analyze_prd_quality,
-            commands::execute_prd,
+            // NOTE: execute_prd is deprecated - use convert_prd_file_to_ralph instead
+            // commands::execute_prd,
             commands::create_agent,
             commands::get_agent,
             commands::get_agents_for_session,
@@ -321,6 +354,7 @@ pub fn run() {
             commands::clear_trace_data,
             commands::is_subagent_active,
             // PRD Chat commands
+            commands::update_prd_chat_agent,
             commands::start_prd_chat_session,
             commands::send_prd_chat_message,
             commands::get_prd_chat_history,
@@ -399,6 +433,8 @@ pub fn run() {
             commands::check_stale_ralph_executions,
             commands::recover_stale_ralph_iterations,
             commands::delete_ralph_iteration_history,
+            commands::get_ralph_loop_snapshot,
+            commands::cleanup_ralph_iteration_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -697,4 +733,33 @@ async fn forward_pty_data_events(
     }
 
     log::debug!("PTY data event forwarder stopped");
+}
+
+/// Forward subagent events to Tauri frontend events
+/// This runs as a background task that listens for subagent events on the channel
+/// and emits them to the frontend via Tauri's event system.
+async fn forward_subagent_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::SubagentEvent>,
+) {
+    use crate::agents::SubagentEventType;
+
+    log::debug!("Subagent event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        let event_name = match event.event_type {
+            SubagentEventType::Spawned => "subagent:spawned",
+            SubagentEventType::Progress => "subagent:progress",
+            SubagentEventType::Completed => "subagent:completed",
+            SubagentEventType::Failed => "subagent:failed",
+        };
+
+        if let Err(e) = app_handle.emit(event_name, &event) {
+            log::warn!("Failed to emit {}: {}", event_name, e);
+        } else {
+            log::debug!("Emitted {} for agent {}", event_name, event.parent_agent_id);
+        }
+    }
+
+    log::debug!("Subagent event forwarder stopped");
 }

@@ -10,11 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Play,
   Pause,
@@ -40,12 +36,17 @@ import { AgentTerminalInstance } from '@/components/terminal/AgentTerminalInstan
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
+import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 
 interface RalphLoopDashboardProps {
   projectPath: string
+  prdName: string // Required for file-based PRDs in .ralph-ui/prds/
 }
 
-export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): React.JSX.Element {
+export function RalphLoopDashboard({
+  projectPath,
+  prdName,
+}: RalphLoopDashboardProps): React.JSX.Element {
   const {
     prd,
     prdStatus,
@@ -72,9 +73,7 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     updateConfig,
     startLoop,
     stopLoop,
-    loadLoopState,
-    loadLoopMetrics,
-    loadIterationHistory,
+    loadSnapshot,
     markStoryPassing,
     markStoryFailing,
     refreshAll,
@@ -96,13 +95,20 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   const [configOverrides, setConfigOverrides] = useState<ConfigOverrides>({})
 
   // Derive effective config: merge saved config with local overrides
-  const effectiveConfig = useMemo(() => ({
-    maxIterations: configOverrides.maxIterations ?? (config?.ralph.maxIterations != null ? String(config.ralph.maxIterations) : '50'),
-    maxCost: configOverrides.maxCost ?? (config?.ralph.maxCost != null ? String(config.ralph.maxCost) : ''),
-    agent: configOverrides.agent ?? (config?.ralph.agent || 'claude'),
-    runTests: configOverrides.runTests ?? true,
-    runLint: configOverrides.runLint ?? true,
-  }), [config, configOverrides])
+  const effectiveConfig = useMemo(
+    () => ({
+      maxIterations:
+        configOverrides.maxIterations ??
+        (config?.ralph.maxIterations != null ? String(config.ralph.maxIterations) : '50'),
+      maxCost:
+        configOverrides.maxCost ??
+        (config?.ralph.maxCost != null ? String(config.ralph.maxCost) : ''),
+      agent: configOverrides.agent ?? (config?.ralph.agent || 'claude'),
+      runTests: configOverrides.runTests ?? true,
+      runLint: configOverrides.runLint ?? true,
+    }),
+    [config, configOverrides]
+  )
 
   // Shorthand for effective values (maintains backwards compatibility with existing JSX)
   const effectiveMaxIterations = effectiveConfig.maxIterations
@@ -121,24 +127,76 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
   // Determine effective model - check if saved model is compatible with current agent
   // If agent changed and saved model isn't in the available models, ignore it
   const savedModel = config?.ralph.model || ''
-  const isSavedModelCompatible = !savedModel || availableModels.some(m => m.id === savedModel)
+  const isSavedModelCompatible = !savedModel || availableModels.some((m) => m.id === savedModel)
   const effectiveModel = configOverrides.model ?? (isSavedModelCompatible ? savedModel : '')
 
-  // Load data when project path changes
+  // Determine effective path for data loading (use worktree if active, otherwise project path)
+  // This ensures we read PRD/progress from the correct location during execution
+  const effectiveDataPath = worktreePath || projectPath
+
+  // Load data when project path or prdName changes
   useEffect(() => {
     if (projectPath) {
-      setProjectPath(projectPath)
-      loadPrd(projectPath)
-      loadPrdStatus(projectPath)
-      loadProgress(projectPath)
-      loadProgressSummary(projectPath)
+      setProjectPath(projectPath, prdName)
+      loadPrd(projectPath, prdName)
+      loadPrdStatus(projectPath, prdName)
+      loadProgress(projectPath, prdName)
+      loadProgressSummary(projectPath, prdName)
       loadCommits(projectPath)
       loadConfig(projectPath)
     }
-  }, [projectPath, setProjectPath, loadPrd, loadPrdStatus, loadProgress, loadProgressSummary, loadCommits, loadConfig])
+  }, [
+    projectPath,
+    prdName,
+    setProjectPath,
+    loadPrd,
+    loadPrdStatus,
+    loadProgress,
+    loadProgressSummary,
+    loadCommits,
+    loadConfig,
+  ])
+
+  // Reload data from worktree path when it becomes available
+  // This ensures we show current data during active execution
+  useEffect(() => {
+    if (worktreePath && prdName) {
+      // Load PRD and progress data from the worktree where the agent is writing
+      loadPrd(worktreePath, prdName)
+      loadPrdStatus(worktreePath, prdName)
+      loadProgress(worktreePath, prdName)
+      loadProgressSummary(worktreePath, prdName)
+      // Load commits from worktree (which has the execution branch)
+      loadCommits(worktreePath)
+    }
+  }, [
+    worktreePath,
+    prdName,
+    loadPrd,
+    loadPrdStatus,
+    loadProgress,
+    loadProgressSummary,
+    loadCommits,
+  ])
+
+  // DEBUG: Log state changes to diagnose loop reload issue
+  useEffect(() => {
+    console.log('[RalphLoopDashboard] State changed:', {
+      activeExecutionId,
+      executionState: executionState?.type,
+      prdStories: prd?.stories?.length,
+      prdStatus: prdStatus ? `${prdStatus.passed}/${prdStatus.total}` : null,
+    })
+  }, [activeExecutionId, executionState, prd, prdStatus])
 
   // Check for active execution after PRD loads (to restore button state after navigation)
   useEffect(() => {
+    console.log(
+      '[RalphLoopDashboard] Checking for active execution, prd:',
+      !!prd,
+      'activeExecutionId:',
+      activeExecutionId
+    )
     if (prd && !activeExecutionId) {
       checkForActiveExecution()
     }
@@ -146,26 +204,56 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
 
   // Poll for updates during active execution
   useEffect(() => {
-    if (!activeExecutionId) return
+    if (!activeExecutionId) {
+      console.log('[RalphLoopDashboard] Polling disabled - no activeExecutionId')
+      return
+    }
+
+    console.log('[RalphLoopDashboard] Starting polling for execution:', activeExecutionId)
+
+    // Use worktree path if available (where agent writes), otherwise project path
+    const pollPath = effectiveDataPath
 
     // Poll immediately (not silent), then silently every 2 seconds
-    loadLoopState()
-    loadLoopMetrics()
-    loadIterationHistory()
-    loadPrdStatus(projectPath)
+    // Use consolidated snapshot API for state/metrics/history (1 IPC call instead of 4)
+    loadSnapshot()
+    loadPrdStatus(pollPath, prdName)
+    loadCommits(pollPath)
 
     // Silent polling to avoid re-render storms
     const poll = () => {
-      loadLoopState(true) // silent
-      loadLoopMetrics(true) // silent
-      loadIterationHistory(true) // silent
-      loadPrdStatusSilent(projectPath)
+      // Check if execution has ended - stop polling if completed or failed
+      const currentState = executionState?.type
+      if (
+        currentState === 'completed' ||
+        currentState === 'failed' ||
+        currentState === 'cancelled'
+      ) {
+        console.log('[RalphLoopDashboard] Execution ended, stopping poll')
+        return
+      }
+
+      // Consolidated API: state + metrics + agentId + worktreePath + iterationHistory in 1 call
+      loadSnapshot(true) // silent
+      loadPrdStatusSilent(pollPath, prdName)
     }
 
     const interval = setInterval(poll, 2000)
 
-    return () => clearInterval(interval)
-  }, [activeExecutionId, loadLoopState, loadLoopMetrics, loadIterationHistory, loadPrdStatus, loadPrdStatusSilent, projectPath])
+    return () => {
+      console.log('[RalphLoopDashboard] Stopping polling for execution:', activeExecutionId)
+      clearInterval(interval)
+    }
+  }, [
+    activeExecutionId,
+    loadSnapshot,
+    loadPrdStatus,
+    loadPrdStatusSilent,
+    loadCommits,
+    effectiveDataPath,
+    prdName,
+    executionState?.type,
+  ])
 
   const handleStartLoop = async () => {
     if (!prd) {
@@ -176,6 +264,11 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
     const maxIterations = effectiveMaxIterations ? parseInt(effectiveMaxIterations, 10) : undefined
     const maxCost = effectiveMaxCost ? parseFloat(effectiveMaxCost) : undefined
 
+    // Calculate the model exactly as it appears in the UI to ensure WYSIWYG
+    // This prevents discrepancies between frontend defaults and backend/CLI defaults
+    const displayedModel =
+      effectiveModel || getDefaultModel((effectiveAgent || 'claude') as AgentType)
+
     const request = {
       projectPath,
       agentType: effectiveAgent || 'claude',
@@ -184,7 +277,8 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
       runLint: effectiveRunLint,
       maxIterations,
       maxCost,
-      model: effectiveModel || undefined,
+      model: displayedModel, // Send explicit model instead of undefined
+      prdName,
     }
 
     try {
@@ -241,15 +335,27 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
       case 'running':
         return { label: `Running (Iteration ${state.iteration})`, color: 'default', icon: Loader2 }
       case 'retrying':
-        return { label: `Retrying (Iteration ${state.iteration}, attempt ${state.attempt})`, color: 'outline', icon: RefreshCw }
+        return {
+          label: `Retrying (Iteration ${state.iteration}, attempt ${state.attempt})`,
+          color: 'outline',
+          icon: RefreshCw,
+        }
       case 'paused':
         return { label: `Paused (Iteration ${state.iteration})`, color: 'outline', icon: Pause }
       case 'completed':
-        return { label: `Completed (${state.totalIterations} iterations)`, color: 'default', icon: CheckCircle2 }
+        return {
+          label: `Completed (${state.totalIterations} iterations)`,
+          color: 'default',
+          icon: CheckCircle2,
+        }
       case 'failed':
         return { label: `Failed: ${state.reason}`, color: 'destructive', icon: XCircle }
       case 'cancelled':
-        return { label: `Cancelled (Iteration ${state.iteration})`, color: 'outline', icon: StopCircle }
+        return {
+          label: `Cancelled (Iteration ${state.iteration})`,
+          color: 'outline',
+          icon: StopCircle,
+        }
       default:
         return { label: 'Unknown', color: 'secondary', icon: AlertCircle }
     }
@@ -293,7 +399,9 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}>
+              <Badge
+                variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
+              >
                 <stateDisplay.icon className={`mr-1 h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
                 {stateDisplay.label}
               </Badge>
@@ -323,11 +431,14 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   Loop Configuration
                   {config && (
                     <span className="text-muted-foreground text-xs">
-                      (max {effectiveMaxIterations} iterations{effectiveMaxCost ? `, $${effectiveMaxCost} limit` : ''})
+                      (max {effectiveMaxIterations} iterations
+                      {effectiveMaxCost ? `, $${effectiveMaxCost} limit` : ''})
                     </span>
                   )}
                 </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${configOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${configOpen ? 'rotate-180' : ''}`}
+                />
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4">
@@ -341,7 +452,9 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     max={1000}
                     placeholder="50"
                     value={effectiveMaxIterations}
-                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, maxIterations: e.target.value }))}
+                    onChange={(e) =>
+                      setConfigOverrides((prev) => ({ ...prev, maxIterations: e.target.value }))
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
                     Maximum loop iterations before stopping
@@ -356,7 +469,9 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     step={0.5}
                     placeholder="No limit"
                     value={effectiveMaxCost}
-                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, maxCost: e.target.value }))}
+                    onChange={(e) =>
+                      setConfigOverrides((prev) => ({ ...prev, maxCost: e.target.value }))
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
                     Stop when API costs exceed this limit
@@ -369,7 +484,11 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                     value={effectiveAgent}
                     onChange={(e) => {
                       // Reset model when agent changes (set model to undefined to clear override)
-                      setConfigOverrides(prev => ({ ...prev, agent: e.target.value, model: undefined }))
+                      setConfigOverrides((prev) => ({
+                        ...prev,
+                        agent: e.target.value,
+                        model: undefined,
+                      }))
                     }}
                   >
                     <option value="claude">Claude Code</option>
@@ -394,32 +513,35 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <Select
                     id="model"
                     value={effectiveModel || getDefaultModel(effectiveAgent as AgentType)}
-                    onChange={(e) => setConfigOverrides(prev => ({ ...prev, model: e.target.value }))}
+                    onChange={(e) =>
+                      setConfigOverrides((prev) => ({ ...prev, model: e.target.value }))
+                    }
                     disabled={modelsLoading}
                   >
                     {modelsLoading ? (
                       <option>Loading models...</option>
                     ) : (
-                      availableModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))
+                      Object.entries(groupModelsByProvider(availableModels)).map(
+                        ([provider, providerModels]) => (
+                          <optgroup key={provider} label={formatProviderName(provider)}>
+                            {providerModels.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )
+                      )
                     )}
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Model to use for the agent
-                  </p>
+                  <p className="text-xs text-muted-foreground">Model to use for the agent</p>
                 </div>
               </div>
 
               {/* Worktree Isolation - Read-only indicator */}
               <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-3">
                 <label className="flex items-center gap-3">
-                  <Checkbox
-                    checked={!!worktreePath}
-                    disabled
-                  />
+                  <Checkbox checked={!!worktreePath} disabled />
                   <div className="flex-1">
                     <span className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                       <GitBranch className="h-4 w-4" />
@@ -442,14 +564,18 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <label className="flex items-center gap-2">
                     <Checkbox
                       checked={effectiveRunTests}
-                      onCheckedChange={(checked) => setConfigOverrides(prev => ({ ...prev, runTests: checked as boolean }))}
+                      onCheckedChange={(checked) =>
+                        setConfigOverrides((prev) => ({ ...prev, runTests: checked as boolean }))
+                      }
                     />
                     <span className="text-sm">Run tests before marking tasks complete</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <Checkbox
                       checked={effectiveRunLint}
-                      onCheckedChange={(checked) => setConfigOverrides(prev => ({ ...prev, runLint: checked as boolean }))}
+                      onCheckedChange={(checked) =>
+                        setConfigOverrides((prev) => ({ ...prev, runLint: checked as boolean }))
+                      }
                     />
                     <span className="text-sm">Run linter before marking tasks complete</span>
                   </label>
@@ -495,7 +621,10 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <GitBranch className="h-4 w-4 text-green-500 flex-shrink-0" />
                   <div className="min-w-0">
                     <span className="text-sm font-medium">Worktree Isolation Active</span>
-                    <p className="text-xs text-muted-foreground font-mono truncate" title={worktreePath}>
+                    <p
+                      className="text-xs text-muted-foreground font-mono truncate"
+                      title={worktreePath}
+                    >
                       {worktreePath}
                     </p>
                   </div>
@@ -505,9 +634,11 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   size="sm"
                   onClick={() => {
                     // Open worktree folder in file explorer
-                    import('@tauri-apps/plugin-shell').then(({ open }) => {
-                      open(worktreePath)
-                    }).catch(console.error)
+                    import('@tauri-apps/plugin-shell')
+                      .then(({ open }) => {
+                        open(worktreePath)
+                      })
+                      .catch(console.error)
                   }}
                 >
                   <FolderOpen className="mr-2 h-4 w-4" />
@@ -529,11 +660,15 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                 <div className="text-xs text-muted-foreground">Completed</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{(executionMetrics.totalTokens ?? 0).toLocaleString()}</div>
+                <div className="text-2xl font-bold">
+                  {(executionMetrics.totalTokens ?? 0).toLocaleString()}
+                </div>
                 <div className="text-xs text-muted-foreground">Tokens</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">${(executionMetrics.totalCost ?? 0).toFixed(2)}</div>
+                <div className="text-2xl font-bold">
+                  ${(executionMetrics.totalCost ?? 0).toFixed(2)}
+                </div>
                 <div className="text-xs text-muted-foreground">Cost</div>
               </div>
             </div>
@@ -545,23 +680,38 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
       <Card>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full justify-start border-b rounded-none h-auto p-0">
-            <TabsTrigger value="stories" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+            <TabsTrigger
+              value="stories"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
             </TabsTrigger>
-            <TabsTrigger value="progress" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+            <TabsTrigger
+              value="progress"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
               <BookOpen className="mr-2 h-4 w-4" />
               Progress ({progressSummary?.learningsCount ?? 0} learnings)
             </TabsTrigger>
-            <TabsTrigger value="terminal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+            <TabsTrigger
+              value="terminal"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
               <Terminal className="mr-2 h-4 w-4" />
               Terminal
             </TabsTrigger>
-            <TabsTrigger value="commits" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+            <TabsTrigger
+              value="commits"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
               <GitCommit className="mr-2 h-4 w-4" />
               Commits
             </TabsTrigger>
-            <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+            <TabsTrigger
+              value="history"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
               <Clock className="mr-2 h-4 w-4" />
               History ({iterationHistory.length})
             </TabsTrigger>
@@ -621,12 +771,12 @@ export function RalphLoopDashboard({ projectPath }: RalphLoopDashboardProps): Re
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <GitCommit className="h-12 w-12 text-muted-foreground mb-2 opacity-50" />
                     <p className="text-muted-foreground">No commits found</p>
-                    <p className="text-sm text-muted-foreground">Commits will appear here as the agent works</p>
+                    <p className="text-sm text-muted-foreground">
+                      Commits will appear here as the agent works
+                    </p>
                   </div>
                 ) : (
-                  commits.map((commit) => (
-                    <CommitCard key={commit.id} commit={commit} />
-                  ))
+                  commits.map((commit) => <CommitCard key={commit.id} commit={commit} />)
                 )}
               </div>
             </ScrollArea>
@@ -693,11 +843,13 @@ function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JSX.Eleme
                 </Badge>
               )}
             </div>
-            <h4 className={`font-medium ${story.passes ? 'line-through text-muted-foreground' : ''}`}>
+            <h4
+              className={`font-medium ${story.passes ? 'line-through text-muted-foreground' : ''}`}
+            >
               {story.title}
             </h4>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{story.acceptance}</p>
-            {story.tags.length > 0 && (
+            {story.tags && story.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {story.tags.map((tag) => (
                   <Badge key={tag} variant="outline" className="text-xs">

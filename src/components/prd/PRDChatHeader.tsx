@@ -10,15 +10,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  FileText,
-  BarChart3,
-  ScrollText,
-  ChevronDown,
-  CheckCircle2,
-} from 'lucide-react'
+import { FileText, BarChart3, ScrollText, ChevronDown, CheckCircle2 } from 'lucide-react'
 import type { ChatSession, QualityAssessment, AgentType } from '@/types'
 import type { ModelInfo } from '@/lib/model-api'
+import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 
 interface PRDChatHeaderProps {
   currentSession: ChatSession | null
@@ -102,10 +97,14 @@ export function PRDChatHeader({
               {modelsLoading ? (
                 <option>Loading...</option>
               ) : (
-                models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
+                Object.entries(groupModelsByProvider(models)).map(([provider, providerModels]) => (
+                  <optgroup key={provider} label={formatProviderName(provider)}>
+                    {providerModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))
               )}
             </Select>
@@ -138,12 +137,7 @@ export function PRDChatHeader({
           {/* Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1 px-2"
-                disabled={streaming}
-              >
+              <Button variant="outline" size="sm" className="h-8 gap-1 px-2" disabled={streaming}>
                 <span className="hidden xl:inline text-xs">Actions</span>
                 <ChevronDown className="h-3 w-3" />
               </Button>
@@ -172,7 +166,10 @@ export function PRDChatHeader({
                     )}
                     Export to PRD
                     {isReadyToExport && (
-                      <Badge variant="secondary" className="ml-auto bg-green-100 text-green-700 text-xs">
+                      <Badge
+                        variant="secondary"
+                        className="ml-auto bg-green-100 text-green-700 text-xs"
+                      >
                         Ready
                       </Badge>
                     )}

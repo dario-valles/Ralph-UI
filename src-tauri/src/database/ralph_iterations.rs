@@ -5,6 +5,7 @@
 //! - Execution state snapshots (ralph_execution_state table)
 
 use crate::ralph_loop::{ExecutionStateSnapshot, IterationOutcome, IterationRecord};
+use chrono::Utc;
 use rusqlite::{params, Connection, Result};
 
 // ============================================================================
@@ -78,9 +79,7 @@ pub fn get_iterations_for_execution(
             id: row.get(0)?,
             execution_id: row.get(1)?,
             iteration: row.get(2)?,
-            outcome: outcome_str
-                .parse()
-                .unwrap_or(IterationOutcome::Interrupted),
+            outcome: outcome_str.parse().unwrap_or(IterationOutcome::Interrupted),
             duration_secs: row.get(4)?,
             agent_type: parse_agent_type(&agent_type_str),
             rate_limit_encountered: row.get::<_, i32>(6)? != 0,
@@ -137,9 +136,7 @@ pub fn get_iteration_history(
             id: row.get(0)?,
             execution_id: row.get(1)?,
             iteration: row.get(2)?,
-            outcome: outcome_str
-                .parse()
-                .unwrap_or(IterationOutcome::Interrupted),
+            outcome: outcome_str.parse().unwrap_or(IterationOutcome::Interrupted),
             duration_secs: row.get(4)?,
             agent_type: parse_agent_type(&agent_type_str),
             rate_limit_encountered: row.get::<_, i32>(6)? != 0,
@@ -153,10 +150,7 @@ pub fn get_iteration_history(
 }
 
 /// Get summary statistics for an execution
-pub fn get_execution_stats(
-    conn: &Connection,
-    execution_id: &str,
-) -> Result<IterationStats> {
+pub fn get_execution_stats(conn: &Connection, execution_id: &str) -> Result<IterationStats> {
     let mut stmt = conn.prepare(
         "SELECT
             COUNT(*) as total,
@@ -188,6 +182,16 @@ pub fn delete_iterations_for_execution(conn: &Connection, execution_id: &str) ->
     conn.execute(
         "DELETE FROM ralph_iteration_history WHERE execution_id = ?1",
         params![execution_id],
+    )
+}
+
+/// Cleanup old iteration history records
+/// Returns the number of records deleted
+pub fn cleanup_old_iterations(conn: &Connection, days_to_keep: i64) -> Result<usize> {
+    let threshold = chrono::Utc::now() - chrono::Duration::days(days_to_keep);
+    conn.execute(
+        "DELETE FROM ralph_iteration_history WHERE started_at < ?1",
+        params![threshold.to_rfc3339()],
     )
 }
 
@@ -249,8 +253,7 @@ pub fn get_stale_executions(
     conn: &Connection,
     threshold_secs: i64,
 ) -> Result<Vec<ExecutionStateSnapshot>> {
-    let threshold_time =
-        chrono::Utc::now() - chrono::Duration::seconds(threshold_secs);
+    let threshold_time = chrono::Utc::now() - chrono::Duration::seconds(threshold_secs);
     let threshold_str = threshold_time.to_rfc3339();
 
     let mut stmt = conn.prepare(
@@ -419,7 +422,10 @@ mod tests {
 
         let iterations = get_iterations_for_execution(&conn, "exec-1").unwrap();
         assert_eq!(iterations[0].outcome, IterationOutcome::Failed);
-        assert_eq!(iterations[0].error_message, Some("Connection timeout".to_string()));
+        assert_eq!(
+            iterations[0].error_message,
+            Some("Connection timeout".to_string())
+        );
     }
 
     #[test]
@@ -506,12 +512,7 @@ mod tests {
         insert_iteration(&conn, &record).unwrap();
 
         // Mark as interrupted
-        let updated = mark_interrupted_iterations(
-            &conn,
-            "exec-1",
-            "2024-01-01T00:05:00Z",
-        )
-        .unwrap();
+        let updated = mark_interrupted_iterations(&conn, "exec-1", "2024-01-01T00:05:00Z").unwrap();
 
         assert_eq!(updated, 1);
 

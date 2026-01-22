@@ -41,15 +41,15 @@ export function SessionsSidebar({
   onRefreshQuality,
 }: SessionsSidebarProps) {
   return (
-    <Card className={cn(
-      'shrink-0 flex flex-col transition-all duration-200',
-      collapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64'
-    )}>
+    <Card
+      className={cn(
+        'shrink-0 flex flex-col transition-all duration-200',
+        collapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64'
+      )}
+    >
       <CardHeader className={cn('pb-2', collapsed && 'px-2')}>
         <div className="flex items-center justify-between gap-1">
-          {!collapsed && (
-            <CardTitle className="text-sm font-medium truncate">Sessions</CardTitle>
-          )}
+          {!collapsed && <CardTitle className="text-sm font-medium truncate">Sessions</CardTitle>}
           <div className="flex items-center gap-0.5">
             {!collapsed && (
               <Button
@@ -66,7 +66,7 @@ export function SessionsSidebar({
               variant="ghost"
               size="sm"
               onClick={() => onCollapsedChange(!collapsed)}
-              aria-label={collapsed ? "Expand sessions" : "Collapse sessions"}
+              aria-label={collapsed ? 'Expand sessions' : 'Collapse sessions'}
               className="h-7 w-7 p-0"
             >
               {collapsed ? (

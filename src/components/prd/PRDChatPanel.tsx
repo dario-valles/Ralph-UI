@@ -42,6 +42,7 @@ import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 
 // ============================================================================
@@ -72,6 +73,8 @@ export function PRDChatPanel() {
   const [showPlanSidebar, setShowPlanSidebar] = useState(true)
   // Sessions sidebar collapsed state for smaller screens
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
+  // Track if sessions have been initially loaded
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false)
 
   const {
     sessions,
@@ -95,6 +98,7 @@ export function PRDChatPanel() {
     startWatchingPlanFile,
     stopWatchingPlanFile,
     updatePlanContent,
+    updateSessionAgent,
   } = usePRDChatStore()
 
   // Load available models for the current agent type
@@ -131,17 +135,23 @@ export function PRDChatPanel() {
 
   // Load sessions on mount and auto-refresh if returning after processing
   useEffect(() => {
-    if (activeProject?.path) {
-      loadSessions(activeProject.path)
+    const init = async () => {
+      setInitialLoadComplete(false)
+      if (activeProject?.path) {
+        await loadSessions(activeProject.path)
+        setInitialLoadComplete(true)
+      }
+
+      // If we had a processing session stored and we're returning to this view,
+      // reload its history to show the new messages
+      const storedProcessingId = prevProcessingSessionIdRef.current
+      if (storedProcessingId && !processingSessionId) {
+        // Processing completed while we were away - reload history
+        loadHistory(storedProcessingId)
+      }
     }
 
-    // If we had a processing session stored and we're returning to this view,
-    // reload its history to show the new messages
-    const storedProcessingId = prevProcessingSessionIdRef.current
-    if (storedProcessingId && !processingSessionId) {
-      // Processing completed while we were away - reload history
-      loadHistory(storedProcessingId)
-    }
+    init()
   }, [loadSessions, loadHistory, processingSessionId, activeProject?.path])
 
   // Keep track of processing session ID changes
@@ -151,15 +161,29 @@ export function PRDChatPanel() {
 
   // Handle prdId URL param for "Continue in Chat" functionality
   useEffect(() => {
-    if (prdIdFromUrl && !currentSession) {
-      startSession({
-        agentType: 'claude',
-        prdId: prdIdFromUrl,
-        guidedMode: true,
-        projectPath: activeProject?.path,
-      })
+    if (prdIdFromUrl && !currentSession && initialLoadComplete && activeProject?.path) {
+      // Check if we already have a session for this PRD
+      const existingSession = sessions.find((s) => s.prdId === prdIdFromUrl)
+
+      if (existingSession) {
+        setCurrentSession(existingSession)
+      } else {
+        startSession({
+          agentType: 'claude',
+          prdId: prdIdFromUrl,
+          guidedMode: true,
+          projectPath: activeProject.path,
+        })
+      }
     }
-  }, [prdIdFromUrl, currentSession, startSession, activeProject?.path])
+  }, [
+    prdIdFromUrl,
+    currentSession,
+    startSession,
+    activeProject?.path,
+    initialLoadComplete,
+    sessions,
+  ])
 
   // Load history when session changes
   useEffect(() => {
@@ -232,10 +256,17 @@ export function PRDChatPanel() {
         setAgentError(result.error || `Agent '${newAgentType}' is not available`)
         return
       }
-      // Agent is available - show type selector to create new session
-      setShowTypeSelector(true)
+      // Agent is available
+      if (currentSession) {
+        await updateSessionAgent(newAgentType)
+      } else {
+        // No active session - show type selector to create new one
+        setShowTypeSelector(true)
+      }
     } catch (err) {
-      setAgentError(`Failed to check agent availability: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setAgentError(
+        `Failed to check agent availability: ${err instanceof Error ? err.message : 'Unknown error'}`
+      )
     }
   }
 
@@ -277,7 +308,7 @@ export function PRDChatPanel() {
       agentType: currentSession?.agentType || 'claude',
       prdType,
       guidedMode,
-      projectPath,
+      projectPath: projectPath || activeProject?.path || '',
     })
     setShowTypeSelector(false)
   }
@@ -289,7 +320,7 @@ export function PRDChatPanel() {
       agentType: 'claude',
       prdType: 'general',
       guidedMode: true,
-      projectPath: activeProject?.path,
+      projectPath: activeProject?.path || '',
     })
     setShowTypeSelector(false)
   }
@@ -392,11 +423,17 @@ export function PRDChatPanel() {
                   {modelsLoading ? (
                     <option>Loading...</option>
                   ) : (
-                    models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))
+                    Object.entries(groupModelsByProvider(models)).map(
+                      ([provider, providerModels]) => (
+                        <optgroup key={provider} label={formatProviderName(provider)}>
+                          {providerModels.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )
+                    )
                   )}
                 </Select>
               </div>
@@ -528,21 +565,21 @@ export function PRDChatPanel() {
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage("Help me create a PRD")}
+                    onClick={() => handleSendMessage('Help me create a PRD')}
                   >
                     Help me create a PRD
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage("What should my PRD include?")}
+                    onClick={() => handleSendMessage('What should my PRD include?')}
                   >
                     What should my PRD include?
                   </Badge>
                   <Badge
                     variant="secondary"
                     className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => handleSendMessage("PRD best practices")}
+                    onClick={() => handleSendMessage('PRD best practices')}
                   >
                     PRD best practices
                   </Badge>
@@ -572,9 +609,7 @@ export function PRDChatPanel() {
               onSend={handleSendMessage}
               disabled={isDisabled}
               placeholder={
-                !currentSession
-                  ? 'Create a session to start chatting...'
-                  : 'Type your message...'
+                !currentSession ? 'Create a session to start chatting...' : 'Type your message...'
               }
             />
           </div>
@@ -598,8 +633,8 @@ export function PRDChatPanel() {
           <DialogHeader>
             <DialogTitle>Delete Session?</DialogTitle>
             <DialogDescription>
-              This will permanently delete the session and all its messages.
-              This action cannot be undone.
+              This will permanently delete the session and all its messages. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

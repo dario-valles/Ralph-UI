@@ -221,19 +221,19 @@ pub fn init_ralph_prd(request: InitRalphPrdRequest) -> Result<RalphPrd, String> 
     Ok(prd)
 }
 
-/// Read the Ralph PRD from .ralph/prd.json
+/// Read the Ralph PRD from .ralph-ui/prds/{prd_name}.json
 #[tauri::command]
-pub fn get_ralph_prd(project_path: String) -> Result<RalphPrd, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let executor = PrdExecutor::new_with_name(&project_path_buf, &prd_name);
     executor.read_prd()
 }
 
 /// Get the status of the Ralph PRD
 #[tauri::command]
-pub fn get_ralph_prd_status(project_path: String) -> Result<PrdStatus, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<PrdStatus, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let executor = PrdExecutor::new_with_name(&project_path_buf, &prd_name);
     let prd = executor.read_prd()?;
     Ok(executor.get_status(&prd))
 }
@@ -280,17 +280,17 @@ pub fn remove_ralph_story(project_path: String, story_id: String) -> Result<bool
 
 /// Get progress.txt content
 #[tauri::command]
-pub fn get_ralph_progress(project_path: String) -> Result<String, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let tracker = ProgressTracker::new(&ralph_dir);
+pub fn get_ralph_progress(project_path: String, prd_name: String) -> Result<String, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let tracker = ProgressTracker::new_with_name(&project_path_buf, &prd_name);
     tracker.read_raw()
 }
 
 /// Get progress summary
 #[tauri::command]
-pub fn get_ralph_progress_summary(project_path: String) -> Result<ProgressSummary, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let tracker = ProgressTracker::new(&ralph_dir);
+pub fn get_ralph_progress_summary(project_path: String, prd_name: String) -> Result<ProgressSummary, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let tracker = ProgressTracker::new_with_name(&project_path_buf, &prd_name);
     tracker.get_summary()
 }
 
@@ -312,9 +312,9 @@ pub fn clear_ralph_progress(project_path: String) -> Result<(), String> {
 
 /// Get the prompt.md content
 #[tauri::command]
-pub fn get_ralph_prompt(project_path: String) -> Result<String, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let builder = PromptBuilder::new(&ralph_dir);
+pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let builder = PromptBuilder::new_with_name(&project_path_buf, &prd_name);
     builder.read_prompt()
 }
 
@@ -427,7 +427,23 @@ pub async fn start_ralph_loop(
             PrdExecutor::new(&ralph_dir)
         }
     };
-    let prd = executor.read_prd()?;
+    let mut prd = executor.read_prd()?;
+
+    // Update metadata with current execution ID immediately so frontend can recover
+    use crate::ralph_loop::PrdMetadata;
+    if let Some(ref mut meta) = prd.metadata {
+        meta.last_execution_id = Some(execution_id.clone());
+        meta.updated_at = Some(chrono::Utc::now().to_rfc3339());
+    } else {
+        prd.metadata = Some(PrdMetadata {
+            last_execution_id: Some(execution_id.clone()),
+            created_at: Some(chrono::Utc::now().to_rfc3339()),
+            updated_at: None,
+            source_chat_id: None,
+            total_iterations: 0,
+        });
+    }
+
     orchestrator.initialize(&prd)?;
 
     // Save initial execution state for crash recovery
@@ -919,29 +935,63 @@ pub fn convert_prd_file_to_ralph(
             ralph_prd.add_story(story);
         }
     } else {
-        // Parse markdown to extract tasks (simple parsing)
-        // Look for ## or ### headers as tasks
-        let mut task_index = 0;
+        // Parse markdown to extract tasks
+        let mut stories = Vec::new();
+        
+        // Pass 1: Look for explicit US/Task patterns (e.g., "### US-1: Title")
+        // This is robust against section headers being mistaken for tasks
         for line in content.lines() {
-            if line.starts_with("## ") || line.starts_with("### ") {
-                let task_title = line.trim_start_matches('#').trim();
-                // Skip common section headers
-                if !["overview", "requirements", "tasks", "summary", "description", "background"]
-                    .iter()
-                    .any(|s| task_title.to_lowercase().starts_with(s))
-                {
-                    let story = RalphStory::new(
-                        &format!("task-{}", task_index + 1),
-                        task_title,
-                        task_title, // Use title as acceptance criteria
-                    );
-                    ralph_prd.add_story(story);
-                    task_index += 1;
+            if line.contains("### US-") || line.contains("### T-") {
+                // Extract ID and Title
+                // Example: "1. ### US-SP-1: Create StreamingParser Struct"
+                // Example: "### US-1: Title"
+                if let Some(start_idx) = line.find("### ") {
+                    let text = &line[start_idx + 4..]; // Skip "### "
+                    // Split by colon to separate ID and Title
+                    if let Some((id_part, title_part)) = text.split_once(':') {
+                        let id = id_part.trim();
+                        let title = title_part.trim();
+                        stories.push(RalphStory::new(id, title, title));
+                    } else {
+                        // Fallback: use whole text as title, try to extract ID
+                        let parts: Vec<&str> = text.split_whitespace().collect();
+                        if !parts.is_empty() {
+                            let id = parts[0];
+                            let title = text;
+                            stories.push(RalphStory::new(id, title, title));
+                        }
+                    }
                 }
             }
         }
 
-        // If no tasks found, create a single task from the PRD
+        // Pass 2: Fallback to headers if no explicit stories found
+        if stories.is_empty() {
+            let mut task_index = 0;
+            for line in content.lines() {
+                if line.starts_with("## ") || line.starts_with("### ") {
+                    let task_title = line.trim_start_matches('#').trim();
+                    // Skip common section headers
+                    if !["overview", "requirements", "tasks", "summary", "description", "background", "phase", "feature", "metrics", "notes", "questions", "table", "dependency", "migration"]
+                        .iter()
+                        .any(|s| task_title.to_lowercase().starts_with(s))
+                    {
+                        stories.push(RalphStory::new(
+                            &format!("task-{}", task_index + 1),
+                            task_title,
+                            task_title,
+                        ));
+                        task_index += 1;
+                    }
+                }
+            }
+        }
+
+        for story in stories {
+            ralph_prd.add_story(story);
+        }
+
+        // If STILL no tasks found, create a single task from the PRD
         if ralph_prd.stories.is_empty() {
             let story = RalphStory::new(
                 "task-1",
@@ -1003,29 +1053,87 @@ pub fn convert_prd_file_to_ralph(
 /// Check if a project has Ralph loop files
 #[tauri::command]
 pub fn has_ralph_files(project_path: String) -> bool {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    ralph_dir.join("prd.json").exists()
+    let prds_dir = PathBuf::from(&project_path).join(".ralph-ui").join("prds");
+
+    // Check if any .json files exist in the prds directory
+    if prds_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&prds_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "json").unwrap_or(false) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Also check legacy .ralph/prd.json location
+    let legacy_dir = PathBuf::from(&project_path).join(".ralph");
+    legacy_dir.join("prd.json").exists()
 }
 
 /// Get all Ralph files for a project
 #[tauri::command]
 pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
+    let prds_dir = PathBuf::from(&project_path).join(".ralph-ui").join("prds");
 
-    let prd_path = ralph_dir.join("prd.json");
-    let progress_path = ralph_dir.join("progress.txt");
-    let prompt_path = ralph_dir.join("prompt.md");
-    let config_path = ralph_dir.join("config.yaml");
+    // Check new .ralph-ui/prds/ directory for any PRD JSON files
+    let mut has_prd = false;
+    let mut has_progress = false;
+    let mut has_prompt = false;
+    let mut prd_names: Vec<String> = Vec::new();
+
+    if prds_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&prds_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(ext) = path.extension() {
+                    if ext == "json" {
+                        has_prd = true;
+                        if let Some(stem) = path.file_stem() {
+                            prd_names.push(stem.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                // Check for progress and prompt files
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.ends_with("-progress.txt") {
+                        has_progress = true;
+                    }
+                    if name.ends_with("-prompt.md") {
+                        has_prompt = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Also check legacy .ralph/ directory
+    let legacy_dir = PathBuf::from(&project_path).join(".ralph");
+    let legacy_prd_path = legacy_dir.join("prd.json");
+    if legacy_prd_path.exists() && !has_prd {
+        has_prd = true;
+    }
+    if legacy_dir.join("progress.txt").exists() && !has_progress {
+        has_progress = true;
+    }
+    if legacy_dir.join("prompt.md").exists() && !has_prompt {
+        has_prompt = true;
+    }
+
+    // Config is still in .ralph/ for now
+    let config_path = legacy_dir.join("config.yaml");
 
     Ok(RalphFiles {
-        has_prd: prd_path.exists(),
-        has_progress: progress_path.exists(),
-        has_prompt: prompt_path.exists(),
+        has_prd,
+        has_progress,
+        has_prompt,
         has_config: config_path.exists(),
-        prd_path: prd_path.to_string_lossy().to_string(),
-        progress_path: progress_path.to_string_lossy().to_string(),
-        prompt_path: prompt_path.to_string_lossy().to_string(),
+        prd_path: prds_dir.to_string_lossy().to_string(),
+        progress_path: prds_dir.to_string_lossy().to_string(),
+        prompt_path: prds_dir.to_string_lossy().to_string(),
         config_path: config_path.to_string_lossy().to_string(),
+        prd_names,
     })
 }
 
@@ -1041,6 +1149,8 @@ pub struct RalphFiles {
     pub progress_path: String,
     pub prompt_path: String,
     pub config_path: String,
+    /// Names of PRD files found in .ralph-ui/prds/
+    pub prd_names: Vec<String>,
 }
 
 // ============================================================================
@@ -1305,5 +1415,89 @@ pub fn delete_ralph_iteration_history(
     let count = ralph_iterations::delete_iterations_for_execution(db.get_connection(), &execution_id)
         .map_err(|e| format!("Failed to delete iterations: {}", e))?;
 
+    Ok(count as u32)
+}
+
+/// Consolidated snapshot response for efficient polling
+/// Combines state, metrics, agent ID, worktree path, and iteration history in a single IPC call
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphLoopSnapshot {
+    pub state: Option<RalphLoopExecutionState>,
+    pub metrics: Option<RalphLoopMetrics>,
+    pub current_agent_id: Option<String>,
+    pub worktree_path: Option<String>,
+    pub iteration_history: Vec<IterationRecord>,
+}
+
+/// Get a consolidated snapshot of Ralph loop execution state
+/// 
+/// This combines multiple data sources into a single IPC call for efficient polling:
+/// - Execution state (running, completed, etc.)
+/// - Execution metrics (iterations, cost, tokens)
+/// - Current agent ID (for terminal connection)
+/// - Worktree path (for file operations)
+/// - Iteration history (from database)
+#[tauri::command]
+pub async fn get_ralph_loop_snapshot(
+    execution_id: String,
+    ralph_state: State<'_, RalphLoopManagerState>,
+    db: State<'_, Mutex<Database>>,
+) -> Result<RalphLoopSnapshot, String> {
+    // Get in-memory snapshot
+    let snapshot = ralph_state.get_snapshot(&execution_id);
+    
+    // Get iteration history from database
+    let iteration_history = {
+        let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+        ralph_iterations::get_iterations_for_execution(db.get_connection(), &execution_id)
+            .unwrap_or_default()
+    };
+    
+    if let Some(snap) = snapshot {
+        Ok(RalphLoopSnapshot {
+            state: snap.state,
+            metrics: snap.metrics,
+            current_agent_id: snap.current_agent_id,
+            worktree_path: snap.worktree_path,
+            iteration_history,
+        })
+    } else {
+        // Check if execution exists at all
+        let exists = {
+            let executions = ralph_state.executions.lock()
+                .map_err(|e| format!("Executions lock error: {}", e))?;
+            executions.contains_key(&execution_id)
+        };
+        
+        if exists {
+            // Execution exists but no snapshot yet
+            Ok(RalphLoopSnapshot {
+                state: Some(RalphLoopExecutionState::Idle),
+                metrics: Some(RalphLoopMetrics::default()),
+                current_agent_id: None,
+                worktree_path: None,
+                iteration_history,
+            })
+        } else {
+            Err(format!("No execution found with ID: {}", execution_id))
+        }
+    }
+}
+
+/// Cleanup old iteration history records (maintenance)
+/// Deletes iterations older than the specified number of days
+#[tauri::command]
+pub fn cleanup_ralph_iteration_history(
+    days_to_keep: Option<i64>,
+    db: State<'_, Mutex<Database>>,
+) -> Result<u32, String> {
+    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let days = days_to_keep.unwrap_or(30); // Default: keep 30 days
+
+    let count = ralph_iterations::cleanup_old_iterations(db.get_connection(), days)
+        .map_err(|e| format!("Failed to cleanup iterations: {}", e))?;
+
+    log::info!("[RalphLoop] Cleaned up {} old iteration records (older than {} days)", count, days);
     Ok(count as u32)
 }

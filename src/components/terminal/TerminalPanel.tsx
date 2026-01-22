@@ -1,7 +1,14 @@
 // Terminal panel component - main container for terminals
 
 import { useCallback, useRef } from 'react'
-import { Minus, Maximize2, Minimize2, X, SplitSquareHorizontal, SplitSquareVertical } from 'lucide-react'
+import {
+  Minus,
+  Maximize2,
+  Minimize2,
+  X,
+  SplitSquareHorizontal,
+  SplitSquareVertical,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTerminalStore, type PaneNode } from '@/stores/terminalStore'
 import { TerminalInstance } from './TerminalInstance'
@@ -28,11 +35,17 @@ interface PaneRendererProps {
   onUpdateSizes: (paneId: string, sizes: number[]) => void
 }
 
-function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onUpdateSizes }: PaneRendererProps) {
+function PaneRenderer({
+  node,
+  terminals,
+  activeTerminalId,
+  onSelectTerminal,
+  onUpdateSizes,
+}: PaneRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   if (node.type === 'terminal') {
-    const terminal = terminals.find(t => t.id === node.terminalId)
+    const terminal = terminals.find((t) => t.id === node.terminalId)
     if (!terminal) return null
 
     return (
@@ -50,11 +63,7 @@ function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onU
             isActive={true}
           />
         ) : (
-          <TerminalInstance
-            terminalId={node.terminalId}
-            cwd={terminal.cwd}
-            isActive={true}
-          />
+          <TerminalInstance terminalId={node.terminalId} cwd={terminal.cwd} isActive={true} />
         )}
       </div>
     )
@@ -78,7 +87,7 @@ function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onU
 
     // Normalize
     const total = newSizes.reduce((a, b) => a + b, 0)
-    const normalizedSizes = newSizes.map(s => (s / total) * 100)
+    const normalizedSizes = newSizes.map((s) => (s / total) * 100)
 
     onUpdateSizes(node.id, normalizedSizes)
   }
@@ -86,10 +95,7 @@ function PaneRenderer({ node, terminals, activeTerminalId, onSelectTerminal, onU
   return (
     <div
       ref={containerRef}
-      className={cn(
-        'flex h-full w-full',
-        isVertical ? 'flex-col' : 'flex-row'
-      )}
+      className={cn('flex h-full w-full', isVertical ? 'flex-col' : 'flex-row')}
     >
       {node.children.map((child, index) => (
         <div key={child.id} className="contents">
@@ -214,7 +220,11 @@ export function TerminalPanel() {
               onClick={minimizePanel}
               className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              {isMinimized ? <Maximize2 className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
+              {isMinimized ? (
+                <Maximize2 className="h-3.5 w-3.5" />
+              ) : (
+                <Minus className="h-3.5 w-3.5" />
+              )}
             </button>
           </Tooltip>
 
@@ -223,7 +233,11 @@ export function TerminalPanel() {
               onClick={maximizePanel}
               className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             >
-              {isFullScreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {isFullScreen ? (
+                <Minimize2 className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" />
+              )}
             </button>
           </Tooltip>
 
@@ -248,7 +262,7 @@ export function TerminalPanel() {
           ) : (
             <PaneRenderer
               node={rootPane}
-              terminals={terminals.map(t => ({
+              terminals={terminals.map((t) => ({
                 id: t.id,
                 cwd: t.cwd,
                 terminalType: t.terminalType,

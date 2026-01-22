@@ -24,10 +24,7 @@ export function TitleBar() {
   }
 
   return (
-    <div
-      data-tauri-drag-region
-      className="flex items-center h-9 border-b bg-card select-none"
-    >
+    <div data-tauri-drag-region className="flex items-center h-9 border-b bg-card select-none">
       {/* Left section - traffic lights space + sidebar toggle */}
       <div className="flex items-center pl-[70px] pr-2">
         <Tooltip content={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} side="bottom">

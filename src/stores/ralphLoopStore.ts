@@ -20,6 +20,7 @@ import type {
 interface RalphLoopStore extends AsyncState {
   // State
   currentProjectPath: string | null
+  currentPrdName: string | null // For file-based PRDs in .ralph-ui/prds/
   prd: RalphPrd | null
   prdStatus: RalphPrdStatus | null
   progress: string
@@ -40,9 +41,9 @@ interface RalphLoopStore extends AsyncState {
   iterationHistory: IterationRecord[]
 
   // Actions - PRD Management
-  setProjectPath: (path: string | null) => void
-  loadPrd: (projectPath: string) => Promise<void>
-  loadPrdStatus: (projectPath: string) => Promise<void>
+  setProjectPath: (path: string | null, prdName: string | null) => void
+  loadPrd: (projectPath: string, prdName: string) => Promise<void>
+  loadPrdStatus: (projectPath: string, prdName: string) => Promise<void>
   initPrd: (request: InitRalphPrdRequest) => Promise<RalphPrd | undefined>
   markStoryPassing: (storyId: string) => Promise<boolean>
   markStoryFailing: (storyId: string) => Promise<boolean>
@@ -50,13 +51,13 @@ interface RalphLoopStore extends AsyncState {
   removeStory: (storyId: string) => Promise<boolean>
 
   // Actions - Progress Management
-  loadProgress: (projectPath: string) => Promise<void>
-  loadProgressSummary: (projectPath: string) => Promise<void>
+  loadProgress: (projectPath: string, prdName: string) => Promise<void>
+  loadProgressSummary: (projectPath: string, prdName: string) => Promise<void>
   addProgressNote: (iteration: number, note: string) => Promise<void>
   clearProgress: () => Promise<void>
 
   // Actions - Prompt Management
-  loadPrompt: (projectPath: string) => Promise<void>
+  loadPrompt: (projectPath: string, prdName: string) => Promise<void>
   updatePrompt: (content: string) => Promise<void>
 
   // Actions - Loop Execution
@@ -65,7 +66,9 @@ interface RalphLoopStore extends AsyncState {
   loadLoopState: (silent?: boolean) => Promise<void>
   loadLoopMetrics: (silent?: boolean) => Promise<void>
   loadIterationHistory: (silent?: boolean) => Promise<void>
-  loadPrdStatusSilent: (projectPath: string) => Promise<void>
+  loadPrdStatusSilent: (projectPath: string, prdName: string) => Promise<void>
+  /** Load consolidated snapshot (state, metrics, history) in a single IPC call */
+  loadSnapshot: (silent?: boolean) => Promise<void>
   listExecutions: () => Promise<void>
 
   // Actions - Git
@@ -103,19 +106,19 @@ interface RalphLoopStore extends AsyncState {
 }
 
 // Helper: reload PRD and status data for a project
-const reloadPrdData = async (projectPath: string) => {
+const reloadPrdData = async (projectPath: string, prdName: string) => {
   const [prd, prdStatus] = await Promise.all([
-    ralphLoopApi.getPrd(projectPath),
-    ralphLoopApi.getPrdStatus(projectPath),
+    ralphLoopApi.getPrd(projectPath, prdName),
+    ralphLoopApi.getPrdStatus(projectPath, prdName),
   ])
   return { prd, prdStatus }
 }
 
 // Helper: reload progress data for a project
-const reloadProgressData = async (projectPath: string) => {
+const reloadProgressData = async (projectPath: string, prdName: string) => {
   const [progress, progressSummary] = await Promise.all([
-    ralphLoopApi.getProgress(projectPath),
-    ralphLoopApi.getProgressSummary(projectPath),
+    ralphLoopApi.getProgress(projectPath, prdName),
+    ralphLoopApi.getProgressSummary(projectPath, prdName),
   ])
   return { progress, progressSummary }
 }
@@ -123,6 +126,7 @@ const reloadProgressData = async (projectPath: string) => {
 export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   // Initial state
   currentProjectPath: null,
+  currentPrdName: null,
   prd: null,
   prdStatus: null,
   progress: '',
@@ -142,41 +146,42 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   loading: false,
   error: null,
 
-  // Set the current project path
-  setProjectPath: (path: string | null) => {
-    set({ currentProjectPath: path })
+  // Set the current project path and optional prdName
+  setProjectPath: (path: string | null, prdName?: string | null) => {
+    set({ currentProjectPath: path, currentPrdName: prdName || null })
     if (path) {
       // Load Ralph files for the project
       get().checkRalphFiles(path)
     }
   },
 
-  // Load PRD from .ralph/prd.json
-  loadPrd: async (projectPath: string) => {
+  // Load PRD from .ralph-ui/prds/{prdName}.json
+  loadPrd: async (projectPath: string, prdName: string) => {
     await asyncAction(set, async () => {
-      const prd = await ralphLoopApi.getPrd(projectPath)
-      return { prd, currentProjectPath: projectPath }
+      const prd = await ralphLoopApi.getPrd(projectPath, prdName)
+      return { prd, currentProjectPath: projectPath, currentPrdName: prdName }
     })
   },
 
   // Load PRD status
-  loadPrdStatus: async (projectPath: string) => {
+  loadPrdStatus: async (projectPath: string, prdName: string) => {
     await asyncAction(set, async () => {
-      const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
+      const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
       return { prdStatus }
     })
   },
 
-  // Initialize a new Ralph PRD
+  // Initialize a new Ralph PRD (legacy - creates in .ralph/ format)
+  // Note: This is deprecated in favor of file-based PRDs
   initPrd: async (request: InitRalphPrdRequest) => {
+    // This creates a legacy PRD - prdName would come from the created PRD ID
+    // For now, skip prdStatus since it's legacy
     return asyncAction(
       set,
       async () => {
         const prd = await ralphLoopApi.initPrd(request)
-        const prdStatus = await ralphLoopApi.getPrdStatus(request.projectPath)
         return {
           prd,
-          prdStatus,
           currentProjectPath: request.projectPath,
           __result: prd,
         }
@@ -187,15 +192,15 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Mark a story as passing
   markStoryPassing: async (storyId: string) => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return false
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return false
 
     const result = await asyncAction(
       set,
       async () => {
-        const success = await ralphLoopApi.markStoryPassing(projectPath, storyId)
+        const success = await ralphLoopApi.markStoryPassing(currentProjectPath, storyId)
         if (success) {
-          return { ...await reloadPrdData(projectPath), __result: success }
+          return { ...(await reloadPrdData(currentProjectPath, currentPrdName)), __result: success }
         }
         return { __result: success }
       },
@@ -206,15 +211,15 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Mark a story as failing
   markStoryFailing: async (storyId: string) => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return false
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return false
 
     const result = await asyncAction(
       set,
       async () => {
-        const success = await ralphLoopApi.markStoryFailing(projectPath, storyId)
+        const success = await ralphLoopApi.markStoryFailing(currentProjectPath, storyId)
         if (success) {
-          return { ...await reloadPrdData(projectPath), __result: success }
+          return { ...(await reloadPrdData(currentProjectPath, currentPrdName)), __result: success }
         }
         return { __result: success }
       },
@@ -225,14 +230,14 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Add a story to the PRD
   addStory: async (story: RalphStoryInput) => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return
 
     await asyncAction(
       set,
       async () => {
-        await ralphLoopApi.addStory(projectPath, story)
-        return await reloadPrdData(projectPath)
+        await ralphLoopApi.addStory(currentProjectPath, story)
+        return await reloadPrdData(currentProjectPath, currentPrdName)
       },
       { rethrow: true }
     )
@@ -240,15 +245,15 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Remove a story from the PRD
   removeStory: async (storyId: string) => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return false
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return false
 
     const result = await asyncAction(
       set,
       async () => {
-        const success = await ralphLoopApi.removeStory(projectPath, storyId)
+        const success = await ralphLoopApi.removeStory(currentProjectPath, storyId)
         if (success) {
-          return { ...await reloadPrdData(projectPath), __result: success }
+          return { ...(await reloadPrdData(currentProjectPath, currentPrdName)), __result: success }
         }
         return { __result: success }
       },
@@ -258,31 +263,31 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   },
 
   // Load progress.txt content
-  loadProgress: async (projectPath: string) => {
+  loadProgress: async (projectPath: string, prdName: string) => {
     await asyncAction(set, async () => {
-      const progress = await ralphLoopApi.getProgress(projectPath)
+      const progress = await ralphLoopApi.getProgress(projectPath, prdName)
       return { progress }
     })
   },
 
   // Load progress summary
-  loadProgressSummary: async (projectPath: string) => {
+  loadProgressSummary: async (projectPath: string, prdName: string) => {
     await asyncAction(set, async () => {
-      const progressSummary = await ralphLoopApi.getProgressSummary(projectPath)
+      const progressSummary = await ralphLoopApi.getProgressSummary(projectPath, prdName)
       return { progressSummary }
     })
   },
 
   // Add a note to progress.txt
   addProgressNote: async (iteration: number, note: string) => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return
 
     await asyncAction(
       set,
       async () => {
-        await ralphLoopApi.addProgressNote(projectPath, iteration, note)
-        return await reloadProgressData(projectPath)
+        await ralphLoopApi.addProgressNote(currentProjectPath, iteration, note)
+        return await reloadProgressData(currentProjectPath, currentPrdName)
       },
       { rethrow: true }
     )
@@ -304,9 +309,9 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   },
 
   // Load prompt.md content
-  loadPrompt: async (projectPath: string) => {
+  loadPrompt: async (projectPath: string, prdName: string) => {
     await asyncAction(set, async () => {
-      const prompt = await ralphLoopApi.getPrompt(projectPath)
+      const prompt = await ralphLoopApi.getPrompt(projectPath, prdName)
       return { prompt }
     })
   },
@@ -365,14 +370,28 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     const executionId = get().activeExecutionId
     if (!executionId) return
 
-    await asyncAction(set, async () => {
-      const [executionState, currentAgentId, worktreePath] = await Promise.all([
-        ralphLoopApi.getLoopState(executionId),
-        ralphLoopApi.getCurrentAgentId(executionId),
-        ralphLoopApi.getWorktreePath(executionId),
-      ])
-      return { executionState, currentAgentId, worktreePath }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const [executionState, currentAgentId, worktreePath] = await Promise.all([
+          ralphLoopApi.getLoopState(executionId),
+          ralphLoopApi.getCurrentAgentId(executionId),
+          ralphLoopApi.getWorktreePath(executionId),
+        ])
+        // DEBUG: Log state changes
+        const prevState = get().executionState
+        if (prevState?.type !== executionState?.type) {
+          console.log(
+            '[RalphLoopStore] Execution state changed:',
+            prevState?.type,
+            '->',
+            executionState?.type
+          )
+        }
+        return { executionState, currentAgentId, worktreePath }
+      },
+      { silent }
+    )
   },
 
   // Load loop metrics
@@ -380,10 +399,14 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     const executionId = get().activeExecutionId
     if (!executionId) return
 
-    await asyncAction(set, async () => {
-      const executionMetrics = await ralphLoopApi.getLoopMetrics(executionId)
-      return { executionMetrics }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const executionMetrics = await ralphLoopApi.getLoopMetrics(executionId)
+        return { executionMetrics }
+      },
+      { silent }
+    )
   },
 
   // Load iteration history for the active execution
@@ -391,18 +414,58 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     const executionId = get().activeExecutionId
     if (!executionId) return
 
-    await asyncAction(set, async () => {
-      const iterationHistory = await ralphLoopApi.getIterationHistory(executionId)
-      return { iterationHistory }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const iterationHistory = await ralphLoopApi.getIterationHistory(executionId)
+        return { iterationHistory }
+      },
+      { silent }
+    )
   },
 
   // Load PRD status silently (for background polling)
-  loadPrdStatusSilent: async (projectPath: string) => {
-    await asyncAction(set, async () => {
-      const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-      return { prdStatus }
-    }, { silent: true })
+  loadPrdStatusSilent: async (projectPath: string, prdName: string) => {
+    await asyncAction(
+      set,
+      async () => {
+        const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
+        return { prdStatus }
+      },
+      { silent: true }
+    )
+  },
+
+  // Load consolidated snapshot (state, metrics, agent ID, worktree, iteration history)
+  // This combines 4 separate IPC calls into 1 for efficient polling
+  loadSnapshot: async (silent?: boolean) => {
+    const executionId = get().activeExecutionId
+    if (!executionId) return
+
+    await asyncAction(
+      set,
+      async () => {
+        const snapshot = await ralphLoopApi.getSnapshot(executionId)
+        // DEBUG: Log state changes
+        const prevState = get().executionState
+        if (prevState?.type !== snapshot.state?.type) {
+          console.log(
+            '[RalphLoopStore] Execution state changed:',
+            prevState?.type,
+            '->',
+            snapshot.state?.type
+          )
+        }
+        return {
+          executionState: snapshot.state,
+          executionMetrics: snapshot.metrics,
+          currentAgentId: snapshot.currentAgentId,
+          worktreePath: snapshot.worktreePath,
+          iterationHistory: snapshot.iterationHistory,
+        }
+      },
+      { silent }
+    )
   },
 
   // List all active executions
@@ -501,7 +564,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     })
   },
 
-  // Convert a database PRD to Ralph format
+  // Convert a database PRD to Ralph format (legacy)
   convertPrdToRalph: async (request: {
     prdId: string
     branch: string
@@ -512,15 +575,11 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
     runTests?: boolean
     runLint?: boolean
   }) => {
+    // This is legacy - creates .ralph/ format files
     return asyncAction(
       set,
       async () => {
         const prd = await ralphLoopApi.convertPrdToRalph(request)
-        const projectPath = get().currentProjectPath
-        if (projectPath) {
-          const prdStatus = await ralphLoopApi.getPrdStatus(projectPath)
-          return { prd, prdStatus, __result: prd }
-        }
         return { prd, __result: prd }
       },
       { rethrow: true }
@@ -529,20 +588,21 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Refresh all data for the current project
   refreshAll: async () => {
-    const projectPath = get().currentProjectPath
-    if (!projectPath) return
+    const { currentProjectPath, currentPrdName } = get()
+    if (!currentProjectPath || !currentPrdName) return
 
     await asyncAction(set, async () => {
-      const [prd, prdStatus, progress, progressSummary, prompt, ralphFiles, commits, config] = await Promise.all([
-        ralphLoopApi.getPrd(projectPath).catch(() => null),
-        ralphLoopApi.getPrdStatus(projectPath).catch(() => null),
-        ralphLoopApi.getProgress(projectPath).catch(() => ''),
-        ralphLoopApi.getProgressSummary(projectPath).catch(() => null),
-        ralphLoopApi.getPrompt(projectPath).catch(() => ''),
-        ralphLoopApi.getRalphFiles(projectPath).catch(() => null),
-        gitApi.getCommitHistory(projectPath, 50).catch(() => []),
-        ralphLoopApi.getConfig(projectPath).catch(() => null),
-      ])
+      const [prd, prdStatus, progress, progressSummary, prompt, ralphFiles, commits, config] =
+        await Promise.all([
+          ralphLoopApi.getPrd(currentProjectPath, currentPrdName).catch(() => null),
+          ralphLoopApi.getPrdStatus(currentProjectPath, currentPrdName).catch(() => null),
+          ralphLoopApi.getProgress(currentProjectPath, currentPrdName).catch(() => ''),
+          ralphLoopApi.getProgressSummary(currentProjectPath, currentPrdName).catch(() => null),
+          ralphLoopApi.getPrompt(currentProjectPath, currentPrdName).catch(() => ''),
+          ralphLoopApi.getRalphFiles(currentProjectPath).catch(() => null),
+          gitApi.getCommitHistory(currentProjectPath, 50).catch(() => []),
+          ralphLoopApi.getConfig(currentProjectPath).catch(() => null),
+        ])
       return { prd, prdStatus, progress, progressSummary, prompt, ralphFiles, commits, config }
     })
   },
