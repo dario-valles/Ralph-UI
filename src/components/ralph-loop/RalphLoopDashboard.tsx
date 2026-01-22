@@ -34,6 +34,7 @@ import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import type { CommitInfo } from '@/lib/git-api'
 import { UnifiedTerminalView } from '@/components/terminal/UnifiedTerminalView'
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
+import { AgentTree } from '@/components/ralph-loop/AgentTree'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
@@ -721,12 +722,23 @@ export function RalphLoopDashboard({
 
           <TabsContent value="terminal" className="p-0 mt-0">
             {currentAgentId && activeExecutionId ? (
-              <div className="h-[400px]">
-                <UnifiedTerminalView
-                  key={`unified-${activeExecutionId}`}
-                  agentId={currentAgentId}
-                  className="h-full"
-                />
+              <div className="flex flex-col h-[500px]">
+                {/* Agent Tree - Hierarchical Subagent Visualization */}
+                <div className="border-b">
+                  <AgentTree
+                    agentId={currentAgentId}
+                    maxHeight="150px"
+                    className="p-2"
+                  />
+                </div>
+                {/* Terminal Output */}
+                <div className="flex-1 min-h-0">
+                  <UnifiedTerminalView
+                    key={`unified-${activeExecutionId}`}
+                    agentId={currentAgentId}
+                    className="h-full"
+                  />
+                </div>
               </div>
             ) : (
               <div className="h-[400px] bg-zinc-950 flex items-center justify-center">
