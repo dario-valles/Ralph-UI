@@ -3,7 +3,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/stores/toastStore'
 import type { RalphLoopErrorPayload, RalphLoopCompletedPayload } from '@/types'
-import { triggerNotificationSound } from '@/hooks/useNotificationSound'
+import { triggerNotificationSound, isNotificationEnabled } from '@/hooks/useNotificationSound'
 
 /**
  * Hook that listens for Ralph Loop error events and shows in-app notifications
@@ -19,31 +19,34 @@ export function useRalphLoopNotifications(): void {
 
     const setupListeners = async () => {
       try {
-        // Listen for Ralph loop completion events (US-004: play sound)
+        // Listen for Ralph loop completion events (US-004: play sound, US-005: check toggles)
         const unlistenCompleted = await listen<RalphLoopCompletedPayload>(
           'ralph:loop_completed',
           () => {
-            // Play completion sound
-            triggerNotificationSound('completion')
+            // Only play sound if completion notifications are enabled
+            if (isNotificationEnabled('completion')) {
+              triggerNotificationSound('completion')
+            }
           }
         )
         unlisteners.push(unlistenCompleted)
 
-        // Listen for Ralph loop error events
+        // Listen for Ralph loop error events (US-004: play sound, US-005: check toggles)
         const unlistenError = await listen<RalphLoopErrorPayload>(
           'ralph:loop_error',
           (event) => {
             const payload = event.payload
 
-            // Play appropriate sound based on error type (US-004)
+            // Play appropriate sound based on error type (US-004, US-005)
+            // triggerNotificationSound already checks if the notification type is enabled
             if (payload.errorType === 'max_iterations') {
               triggerNotificationSound('max_iterations')
             } else {
               triggerNotificationSound('error')
             }
 
-            // Handle max_iterations specifically with action buttons
-            if (payload.errorType === 'max_iterations') {
+            // Handle max_iterations specifically with action buttons (only if enabled)
+            if (payload.errorType === 'max_iterations' && isNotificationEnabled('max_iterations')) {
               const storiesInfo =
                 payload.storiesRemaining !== undefined && payload.totalStories !== undefined
                   ? `${payload.storiesRemaining} of ${payload.totalStories} stories remaining`

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,6 +21,12 @@ import {
   Volume2,
   VolumeX,
   Play,
+  Bell,
+  BellOff,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  ListChecks,
 } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
 import { isTauri } from '@/lib/tauri-check'
@@ -35,6 +42,14 @@ import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 import { type SoundMode, playPreviewSound, resumeAudioContext } from '@/lib/audio'
 
+// Notification type toggles for granular control (US-005)
+interface NotificationToggles {
+  completion: boolean // When all stories pass
+  error: boolean // When errors occur
+  maxIterations: boolean // When max iterations hit
+  storyComplete: boolean // When individual story completes (optional)
+}
+
 // UI-only settings that remain in localStorage
 interface UISettings {
   theme: 'light' | 'dark' | 'system'
@@ -44,6 +59,16 @@ interface UISettings {
   // Notification sound settings (US-004)
   soundMode: SoundMode
   soundVolume: number // 0-100
+  // Notification settings (US-005)
+  notificationsEnabled: boolean // Master toggle
+  notificationToggles: NotificationToggles
+}
+
+const defaultNotificationToggles: NotificationToggles = {
+  completion: true,
+  error: true,
+  maxIterations: true,
+  storyComplete: false, // Optional, off by default
 }
 
 const defaultUISettings: UISettings = {
@@ -53,6 +78,8 @@ const defaultUISettings: UISettings = {
   confirmDestructiveActions: true,
   soundMode: 'system',
   soundVolume: 50,
+  notificationsEnabled: true,
+  notificationToggles: defaultNotificationToggles,
 }
 
 const UI_SETTINGS_KEY = 'ralph-ui-settings'
@@ -1029,13 +1056,177 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Notification Settings (US-004) */}
+        {/* Notification Settings (US-004 & US-005) */}
         <TabsContent value="notifications" className="space-y-4">
+          {/* Master Toggle Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    {uiSettings.notificationsEnabled ? (
+                      <Bell className="h-5 w-5" />
+                    ) : (
+                      <BellOff className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    Desktop Notifications
+                  </CardTitle>
+                  <CardDescription>
+                    Control desktop notifications for Ralph Loop events
+                  </CardDescription>
+                </div>
+                <Switch
+                  id="notificationsEnabled"
+                  checked={uiSettings.notificationsEnabled}
+                  onCheckedChange={(checked) =>
+                    updateUISettingsLocal({ notificationsEnabled: checked })
+                  }
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Notification Type Toggles */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Notification Types</h4>
+                <div className="grid gap-3">
+                  {/* Completion notifications */}
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      !uiSettings.notificationsEnabled ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <div>
+                        <Label htmlFor="notify-completion" className="font-medium">
+                          Loop Completion
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          When all stories in a Ralph loop pass
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="notify-completion"
+                      checked={uiSettings.notificationToggles.completion}
+                      onCheckedChange={(checked) =>
+                        updateUISettingsLocal({
+                          notificationToggles: {
+                            ...uiSettings.notificationToggles,
+                            completion: checked,
+                          },
+                        })
+                      }
+                      disabled={!uiSettings.notificationsEnabled}
+                    />
+                  </div>
+
+                  {/* Error notifications */}
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      !uiSettings.notificationsEnabled ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <div>
+                        <Label htmlFor="notify-error" className="font-medium">
+                          Errors & Failures
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Agent crashes, parse errors, git conflicts, rate limits
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="notify-error"
+                      checked={uiSettings.notificationToggles.error}
+                      onCheckedChange={(checked) =>
+                        updateUISettingsLocal({
+                          notificationToggles: {
+                            ...uiSettings.notificationToggles,
+                            error: checked,
+                          },
+                        })
+                      }
+                      disabled={!uiSettings.notificationsEnabled}
+                    />
+                  </div>
+
+                  {/* Max iterations notifications */}
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      !uiSettings.notificationsEnabled ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                      <div>
+                        <Label htmlFor="notify-max-iterations" className="font-medium">
+                          Max Iterations
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          When the iteration limit is reached
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="notify-max-iterations"
+                      checked={uiSettings.notificationToggles.maxIterations}
+                      onCheckedChange={(checked) =>
+                        updateUISettingsLocal({
+                          notificationToggles: {
+                            ...uiSettings.notificationToggles,
+                            maxIterations: checked,
+                          },
+                        })
+                      }
+                      disabled={!uiSettings.notificationsEnabled}
+                    />
+                  </div>
+
+                  {/* Story completion notifications (optional) */}
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      !uiSettings.notificationsEnabled ? 'opacity-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <ListChecks className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <Label htmlFor="notify-story-complete" className="font-medium">
+                          Story Completion
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          When individual stories pass (can be frequent)
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="notify-story-complete"
+                      checked={uiSettings.notificationToggles.storyComplete}
+                      onCheckedChange={(checked) =>
+                        updateUISettingsLocal({
+                          notificationToggles: {
+                            ...uiSettings.notificationToggles,
+                            storyComplete: checked,
+                          },
+                        })
+                      }
+                      disabled={!uiSettings.notificationsEnabled}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sound Settings Card */}
           <Card>
             <CardHeader>
               <CardTitle>Notification Sounds</CardTitle>
               <CardDescription>
-                Configure sound notifications for Ralph Loop events
+                Configure sound effects for Ralph Loop events
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1085,7 +1276,7 @@ export function SettingsPage() {
                       }}
                     >
                       <Play className="h-4 w-4 mr-1" />
-                      Preview
+                      Preview Sound
                     </Button>
                   </div>
                   <Slider
@@ -1099,28 +1290,45 @@ export function SettingsPage() {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="rounded-lg border p-4 bg-muted/30">
-                <h4 className="text-sm font-medium mb-2">When sounds play</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
-                  <li>
-                    <span className="font-medium text-green-600 dark:text-green-400">
-                      Completion
-                    </span>{' '}
-                    - When all stories in a Ralph loop pass
-                  </li>
-                  <li>
-                    <span className="font-medium text-destructive">Error</span> - When the
-                    loop encounters an error
-                  </li>
-                  <li>
-                    <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                      Max Iterations
-                    </span>{' '}
-                    - When the iteration limit is reached
-                  </li>
-                </ul>
-              </div>
+          {/* Test Notification Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Test Notifications</CardTitle>
+              <CardDescription>
+                Verify your notification settings are working correctly
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={async () => {
+                  // Play sound if enabled
+                  if (uiSettings.soundMode !== 'off') {
+                    resumeAudioContext()
+                    playPreviewSound(uiSettings.soundMode, uiSettings.soundVolume)
+                  }
+                  // Send desktop notification if enabled and in Tauri
+                  if (uiSettings.notificationsEnabled && isTauri) {
+                    try {
+                      const { invoke } = await import('@tauri-apps/api/core')
+                      await invoke('send_test_notification')
+                    } catch (err) {
+                      console.error('Failed to send test notification:', err)
+                    }
+                  }
+                }}
+                disabled={!uiSettings.notificationsEnabled && uiSettings.soundMode === 'off'}
+              >
+                <Bell className="h-4 w-4 mr-2" />
+                Send Test Notification
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                {!uiSettings.notificationsEnabled && uiSettings.soundMode === 'off'
+                  ? 'Enable notifications or sounds to test.'
+                  : 'This will send a test desktop notification and play the configured sound.'}
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

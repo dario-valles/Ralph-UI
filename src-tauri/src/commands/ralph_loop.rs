@@ -1896,3 +1896,26 @@ fn send_error_notification(
         }
     }
 }
+
+/// Send a test notification to verify notification settings (US-005)
+#[tauri::command]
+pub fn send_test_notification(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+
+    match app_handle
+        .notification()
+        .builder()
+        .title("Ralph UI Test Notification")
+        .body("If you can see this, notifications are working! Ralph says hi.")
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[Notification] Test notification sent successfully");
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("[Notification] Failed to send test notification: {}", e);
+            Err(format!("Failed to send test notification: {}", e))
+        }
+    }
+}
