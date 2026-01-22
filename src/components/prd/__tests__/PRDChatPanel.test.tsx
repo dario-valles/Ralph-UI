@@ -121,6 +121,7 @@ describe('PRDChatPanel', () => {
   const mockStartWatchingPlanFile = vi.fn()
   const mockStopWatchingPlanFile = vi.fn()
   const mockUpdatePlanContent = vi.fn()
+  const mockUpdateSessionAgent = vi.fn()
 
   const defaultStoreState = {
     sessions: mockSessions,
@@ -151,6 +152,7 @@ describe('PRDChatPanel', () => {
     startWatchingPlanFile: mockStartWatchingPlanFile,
     stopWatchingPlanFile: mockStopWatchingPlanFile,
     updatePlanContent: mockUpdatePlanContent,
+    updateSessionAgent: mockUpdateSessionAgent,
   }
 
   beforeEach(() => {
@@ -196,15 +198,15 @@ describe('PRDChatPanel', () => {
       expect(agentSelector).toHaveValue('claude')
     })
 
-    it('shows type selector when agent is changed', async () => {
+    it('updates session agent when agent is changed', async () => {
       renderWithRouter(<PRDChatPanel />)
 
       const agentSelector = screen.getByRole('combobox', { name: /agent/i })
       fireEvent.change(agentSelector, { target: { value: 'opencode' } })
 
-      // Changing agent should show the type selector modal
+      // Changing agent with a current session should update the session's agent
       await waitFor(() => {
-        expect(screen.getByText(/What type of PRD are you creating/i)).toBeInTheDocument()
+        expect(mockUpdateSessionAgent).toHaveBeenCalledWith('opencode')
       })
     })
 
@@ -464,7 +466,7 @@ describe('PRDChatPanel', () => {
   // ============================================================================
 
   describe('No Session State', () => {
-    it('disables input when no session is selected', () => {
+    it('shows PRDTypeSelector when no session is selected', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         currentSession: null,
@@ -473,12 +475,12 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      // When no session, placeholder is different
-      const input = screen.getByPlaceholderText(/Create a session to start chatting/i)
-      expect(input).toBeDisabled()
+      // When no session, show the type selector to create a new one
+      expect(screen.getByRole('button', { name: /Guided Interview/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /GSD Workflow/i })).toBeInTheDocument()
     })
 
-    it('shows prompt to create session when none selected', () => {
+    it('shows workflow options when no session is selected', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         currentSession: null,
@@ -487,10 +489,10 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      expect(screen.getByText(/Create a new session/i)).toBeInTheDocument()
+      expect(screen.getByText(/How would you like to create your PRD/i)).toBeInTheDocument()
     })
 
-    it('disables send button when no session', () => {
+    it('does not show chat input when no session', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         currentSession: null,
@@ -499,8 +501,8 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      const sendButton = screen.getByRole('button', { name: /send/i })
-      expect(sendButton).toBeDisabled()
+      // Chat input should not be visible when showing type selector
+      expect(screen.queryByPlaceholderText(/Type your message/i)).not.toBeInTheDocument()
     })
   })
 
@@ -609,10 +611,12 @@ describe('PRDChatPanel', () => {
       const createButton = screen.getByRole('button', { name: /new session/i })
       await user.click(createButton)
 
-      // Should show the type selector modal
+      // Should show the workflow mode selector (step 1)
       await waitFor(() => {
-        expect(screen.getByText(/What type of PRD are you creating/i)).toBeInTheDocument()
+        expect(screen.getByText(/How would you like to create your PRD/i)).toBeInTheDocument()
       })
+      expect(screen.getByRole('button', { name: /Guided Interview/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /GSD Workflow/i })).toBeInTheDocument()
     })
 
     it('calls setCurrentSession when session is selected (useEffect handles loadHistory)', async () => {
@@ -660,7 +664,7 @@ describe('PRDChatPanel', () => {
       expect(mockDeleteSession).toHaveBeenCalledWith('session-1')
     })
 
-    it('shows empty state when no sessions exist', () => {
+    it('shows type selector when no sessions exist', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         sessions: [],
@@ -670,7 +674,8 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      expect(screen.getByText(/No sessions yet/i)).toBeInTheDocument()
+      // Type selector is shown instead of empty state
+      expect(screen.getByRole('button', { name: /Guided Interview/i })).toBeInTheDocument()
     })
   })
 

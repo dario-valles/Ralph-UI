@@ -358,14 +358,14 @@ export function PRDChatPanel() {
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
-  // Show type selector when creating a new session
-  if (showTypeSelector) {
+  // Show type selector when creating a new session or when no session is selected
+  if (showTypeSelector || !currentSession) {
     return (
       <div className="flex h-full items-center justify-center p-4">
         <PRDTypeSelector
           onSelect={handleTypeSelected}
           loading={loading}
-          defaultProjectPath={currentSession?.projectPath || activeProject?.path}
+          defaultProjectPath={activeProject?.path}
         />
       </div>
     )
