@@ -8,6 +8,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -18,6 +19,10 @@ import {
   XCircle,
   Bot,
   GitFork,
+  Copy,
+  Clock,
+  AlertCircle,
+  Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSubagentEvents, type SubagentNode, type SubagentStatus } from '@/hooks/useSubagentEvents'
@@ -48,6 +53,8 @@ export function AgentTree({
   const scrollRef = useRef<HTMLDivElement>(null)
   // Force re-render to clear highlights after timeout
   const [, forceUpdate] = useState(0)
+  // Track selected node for detail panel
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
   const { subagents, subagentMap, activeCount, totalCount, isListening } = useSubagentEvents({
     agentId,
@@ -188,6 +195,8 @@ export function AgentTree({
               defaultExpanded={defaultExpanded}
               isNew={isNodeNew(node.id)}
               isNodeNew={isNodeNew}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
             />
           ))}
         </div>
@@ -204,11 +213,24 @@ interface AgentTreeNodeProps {
   isNew: boolean
   /** Callback to check if a child node is new */
   isNodeNew: (nodeId: string) => boolean
+  /** Currently selected node ID for detail panel */
+  selectedNodeId: string | null
+  /** Callback when a node is selected */
+  onSelectNode: (nodeId: string | null) => void
 }
 
-function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: AgentTreeNodeProps): React.JSX.Element {
+function AgentTreeNode({
+  node,
+  depth,
+  defaultExpanded,
+  isNew,
+  isNodeNew,
+  selectedNodeId,
+  onSelectNode,
+}: AgentTreeNodeProps): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(defaultExpanded && depth < 2)
   const hasChildren = node.children.length > 0
+  const isSelected = selectedNodeId === node.id
 
   // Format duration
   const formatDuration = (secs?: number): string => {
@@ -217,6 +239,15 @@ function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: Agent
     const mins = Math.floor(secs / 60)
     const remainingSecs = secs % 60
     return `${mins}m ${remainingSecs}s`
+  }
+
+  // Handle node click to toggle detail panel
+  const handleNodeClick = (e: React.MouseEvent) => {
+    // Don't toggle detail when clicking the chevron for expand/collapse
+    const target = e.target as HTMLElement
+    if (target.closest('[data-chevron]')) return
+
+    onSelectNode(isSelected ? null : node.id)
   }
 
   return (
@@ -228,19 +259,31 @@ function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: Agent
               'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
               'hover:bg-muted/50 transition-colors',
               node.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20',
+              // Selected state
+              isSelected && 'ring-2 ring-primary bg-primary/5',
               // New node highlight animation
-              isNew && 'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
+              isNew && !isSelected && 'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
             )}
             style={{ paddingLeft: `${depth * 16 + 8}px` }}
             data-new-node={isNew ? 'true' : undefined}
+            onClick={handleNodeClick}
           >
             {/* Expand/collapse indicator */}
             {hasChildren ? (
-              isOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              )
+              <span
+                data-chevron
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsOpen(!isOpen)
+                }}
+                className="cursor-pointer"
+              >
+                {isOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                )}
+              </span>
             ) : (
               <span className="w-4 flex-shrink-0" />
             )}
@@ -277,6 +320,9 @@ function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: Agent
           </button>
         </CollapsibleTrigger>
 
+        {/* Detail Panel - shows when node is selected */}
+        {isSelected && <SubagentDetailPanel node={node} />}
+
         {hasChildren && (
           <CollapsibleContent>
             <div className="mt-1 space-y-1">
@@ -288,12 +334,127 @@ function AgentTreeNode({ node, depth, defaultExpanded, isNew, isNodeNew }: Agent
                   defaultExpanded={defaultExpanded}
                   isNew={isNodeNew(child.id)}
                   isNodeNew={isNodeNew}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={onSelectNode}
                 />
               ))}
             </div>
           </CollapsibleContent>
         )}
       </Collapsible>
+    </div>
+  )
+}
+
+// Detail panel for selected subagent
+interface SubagentDetailPanelProps {
+  node: SubagentNode
+}
+
+function SubagentDetailPanel({ node }: SubagentDetailPanelProps): React.JSX.Element {
+  // Format timestamps for display
+  const formatTime = (isoString: string): string => {
+    return new Date(isoString).toLocaleString()
+  }
+
+  // Copy all agent details to clipboard
+  const copyDetails = () => {
+    const details = [
+      `Agent ID: ${node.id}`,
+      `Description: ${node.description}`,
+      `Status: ${node.status}`,
+      `Type: ${node.subagentType || 'Unknown'}`,
+      `Start Time: ${formatTime(node.startedAt)}`,
+      node.completedAt ? `End Time: ${formatTime(node.completedAt)}` : null,
+      node.durationSecs !== undefined ? `Duration: ${node.durationSecs}s` : null,
+      node.summary ? `Summary: ${node.summary}` : null,
+      node.error ? `Error: ${node.error}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    navigator.clipboard.writeText(details)
+  }
+
+  return (
+    <div
+      className="mt-1 ml-6 mr-2 p-3 rounded-md border bg-card text-card-foreground"
+      data-testid="subagent-detail-panel"
+    >
+      {/* Header with copy button */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Agent Details</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={copyDetails}
+          data-testid="copy-details-button"
+        >
+          <Copy className="h-3 w-3 mr-1" />
+          Copy
+        </Button>
+      </div>
+
+      {/* Full description */}
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-muted-foreground">Task</label>
+          <p className="text-sm mt-0.5">{node.description}</p>
+        </div>
+
+        {/* Agent type if available */}
+        {node.subagentType && (
+          <div>
+            <label className="text-xs text-muted-foreground">Agent Type</label>
+            <p className="text-sm mt-0.5">{node.subagentType}</p>
+          </div>
+        )}
+
+        {/* Timestamps */}
+        <div className="flex gap-4">
+          <div>
+            <label className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Start Time
+            </label>
+            <p className="text-sm mt-0.5">{formatTime(node.startedAt)}</p>
+          </div>
+          {node.completedAt && (
+            <div>
+              <label className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                End Time
+              </label>
+              <p className="text-sm mt-0.5">{formatTime(node.completedAt)}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Summary if available */}
+        {node.summary && (
+          <div>
+            <label className="text-xs text-muted-foreground">Summary</label>
+            <p className="text-sm mt-0.5 text-muted-foreground">{node.summary}</p>
+          </div>
+        )}
+
+        {/* Error section for failed agents */}
+        {node.status === 'failed' && node.error && (
+          <div className="mt-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+            <div className="flex items-center gap-1.5 mb-1">
+              <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+              <label className="text-xs font-medium text-destructive">Error Message</label>
+            </div>
+            <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
+              {node.error}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

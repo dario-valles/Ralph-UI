@@ -419,4 +419,240 @@ describe('AgentTree', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
     expect(screen.getByText('5s')).toBeInTheDocument()
   })
+
+  describe('Subagent Detail Panel', () => {
+    const mockDetailNode: SubagentNode = {
+      id: 'agent-1-sub-1',
+      parentAgentId: 'agent-1',
+      description: 'Search for files',
+      status: 'completed',
+      startedAt: '2026-01-22T10:00:00.000Z',
+      completedAt: '2026-01-22T10:00:10.000Z',
+      durationSecs: 10,
+      depth: 1,
+      subagentType: 'Explore',
+      summary: 'Found 5 matching files',
+      children: [],
+    }
+
+    const mockFailedDetailNode: SubagentNode = {
+      id: 'agent-1-sub-2',
+      parentAgentId: 'agent-1',
+      description: 'Failed task',
+      status: 'failed',
+      startedAt: '2026-01-22T10:00:00.000Z',
+      completedAt: '2026-01-22T10:00:05.000Z',
+      durationSecs: 5,
+      error: 'Connection timed out after 5000ms',
+      depth: 1,
+      children: [],
+    }
+
+    it('opens detail panel when clicking a node', () => {
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockDetailNode.id, mockDetailNode)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockDetailNode],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 1,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Detail panel should not be visible initially
+      expect(screen.queryByTestId('subagent-detail-panel')).not.toBeInTheDocument()
+
+      // Click the node to open detail panel
+      const nodeButton = screen.getByText('Search for files').closest('button')!
+      fireEvent.click(nodeButton)
+
+      // Detail panel should now be visible
+      expect(screen.getByTestId('subagent-detail-panel')).toBeInTheDocument()
+      expect(screen.getByText('Agent Details')).toBeInTheDocument()
+    })
+
+    it('shows full agent details in panel', () => {
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockDetailNode.id, mockDetailNode)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockDetailNode],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 1,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Click to open detail panel
+      const nodeButton = screen.getByText('Search for files').closest('button')!
+      fireEvent.click(nodeButton)
+
+      // Check all detail fields are displayed
+      expect(screen.getByText('Task')).toBeInTheDocument()
+      expect(screen.getByText('Agent Type')).toBeInTheDocument()
+      expect(screen.getByText('Explore')).toBeInTheDocument()
+      expect(screen.getByText('Start Time')).toBeInTheDocument()
+      expect(screen.getByText('End Time')).toBeInTheDocument()
+      expect(screen.getByText('Summary')).toBeInTheDocument()
+      expect(screen.getByText('Found 5 matching files')).toBeInTheDocument()
+    })
+
+    it('shows error message for failed agents', () => {
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockFailedDetailNode.id, mockFailedDetailNode)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockFailedDetailNode],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 1,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Click to open detail panel
+      const nodeButton = screen.getByText('Failed task').closest('button')!
+      fireEvent.click(nodeButton)
+
+      // Check error message is displayed
+      expect(screen.getByText('Error Message')).toBeInTheDocument()
+      expect(screen.getByText('Connection timed out after 5000ms')).toBeInTheDocument()
+    })
+
+    it('closes detail panel when clicking the same node again', () => {
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockDetailNode.id, mockDetailNode)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockDetailNode],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 1,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Click to open detail panel
+      const nodeButton = screen.getByText('Search for files').closest('button')!
+      fireEvent.click(nodeButton)
+
+      // Detail panel should be visible
+      expect(screen.getByTestId('subagent-detail-panel')).toBeInTheDocument()
+
+      // Click the same node again to close
+      fireEvent.click(nodeButton)
+
+      // Detail panel should be hidden
+      expect(screen.queryByTestId('subagent-detail-panel')).not.toBeInTheDocument()
+    })
+
+    it('has a copy button that copies agent details to clipboard', async () => {
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockDetailNode.id, mockDetailNode)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockDetailNode],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 1,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      // Mock clipboard API
+      const writeTextMock = vi.fn().mockResolvedValue(undefined)
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Click to open detail panel
+      const nodeButton = screen.getByText('Search for files').closest('button')!
+      fireEvent.click(nodeButton)
+
+      // Find and click the copy button
+      const copyButton = screen.getByTestId('copy-details-button')
+      fireEvent.click(copyButton)
+
+      // Verify clipboard was called with agent details
+      expect(writeTextMock).toHaveBeenCalledTimes(1)
+      const copiedText = writeTextMock.mock.calls[0][0]
+      expect(copiedText).toContain('Agent ID: agent-1-sub-1')
+      expect(copiedText).toContain('Description: Search for files')
+      expect(copiedText).toContain('Status: completed')
+      expect(copiedText).toContain('Type: Explore')
+      expect(copiedText).toContain('Summary: Found 5 matching files')
+    })
+
+    it('switches detail panel when clicking a different node', () => {
+      const node2: SubagentNode = {
+        id: 'agent-1-sub-2',
+        parentAgentId: 'agent-1',
+        description: 'Another task',
+        status: 'completed',
+        startedAt: '2026-01-22T10:00:00.000Z',
+        durationSecs: 15,
+        depth: 1,
+        children: [],
+      }
+
+      const subagentMap = new Map<string, SubagentNode>()
+      subagentMap.set(mockDetailNode.id, mockDetailNode)
+      subagentMap.set(node2.id, node2)
+
+      mockUseSubagentEvents.mockReturnValue({
+        subagents: [mockDetailNode, node2],
+        subagentMap,
+        activeCount: 0,
+        totalCount: 2,
+        activityCount: 0,
+        resetActivityCount: vi.fn(),
+        clear: vi.fn(),
+        isListening: true,
+      })
+
+      render(<AgentTree agentId="agent-1" />)
+
+      // Click the first node
+      const node1Button = screen.getByText('Search for files').closest('button')!
+      fireEvent.click(node1Button)
+
+      // First node's detail panel should be visible
+      expect(screen.getByTestId('subagent-detail-panel')).toBeInTheDocument()
+      expect(screen.getByText('Explore')).toBeInTheDocument()
+
+      // Click the second node
+      const node2Button = screen.getByText('Another task').closest('button')!
+      fireEvent.click(node2Button)
+
+      // Second node's detail panel should be visible (first should be closed)
+      const panels = screen.getAllByTestId('subagent-detail-panel')
+      expect(panels).toHaveLength(1)
+      expect(screen.queryByText('Explore')).not.toBeInTheDocument()
+    })
+  })
 })
