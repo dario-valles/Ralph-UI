@@ -34,7 +34,9 @@ macro_rules! map_err_str {
 }
 
 /// Error type for mutex lock failures
-#[allow(dead_code)]
+///
+/// Provides a structured error type for mutex lock operations that can be
+/// converted to/from PoisonError and displayed in error messages.
 #[derive(Debug)]
 pub struct LockError(String);
 
@@ -54,9 +56,12 @@ impl<T> From<PoisonError<T>> for LockError {
 
 /// Safely acquire a mutex lock, returning a Result instead of panicking.
 /// Use this instead of `.lock().unwrap()` or `.lock().expect(...)`.
-#[allow(dead_code)]
+///
+/// Note: Currently not used in the codebase but provided as a reusable utility.
 pub fn lock_mutex<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, LockError> {
-    mutex.lock().map_err(|e| LockError(format!("Failed to acquire lock: {}", e)))
+    mutex
+        .lock()
+        .map_err(|e| LockError(format!("Failed to acquire lock: {}", e)))
 }
 
 /// Safely acquire a mutex lock, recovering from poisoning by returning the guard.
@@ -75,20 +80,24 @@ pub fn lock_mutex_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// Lock database mutex for Tauri commands, returning a String error for IPC compatibility.
 /// Use this in command handlers: `let db = lock_db(&db)?;`
 pub fn lock_db<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
-    mutex.lock().map_err(|e| format!("Database lock error: {}", e))
+    mutex
+        .lock()
+        .map_err(|e| format!("Database lock error: {}", e))
 }
 
-#[allow(dead_code)]
+/// Generate a unique ID using timestamp and random string.
+///
+/// Note: Currently not used in the codebase but provided as a reusable utility.
 pub fn generate_id() -> String {
     // Generate a unique ID (using timestamp + random string for now)
     let now = Utc::now().timestamp_millis();
     format!("{}-{}", now, rand_string(8))
 }
 
-#[allow(dead_code)]
+/// Generate a random alphanumeric string of specified length.
 fn rand_string(len: usize) -> String {
-    use std::iter;
     use rand::Rng;
+    use std::iter;
     const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::thread_rng();
 
@@ -97,7 +106,9 @@ fn rand_string(len: usize) -> String {
         .collect()
 }
 
-#[allow(dead_code)]
+/// Calculate cost based on token count and cost per million tokens.
+///
+/// Note: Currently not used in the codebase but provided as a reusable utility.
 pub fn format_cost(tokens: i32, cost_per_million: f64) -> f64 {
     (tokens as f64 / 1_000_000.0) * cost_per_million
 }

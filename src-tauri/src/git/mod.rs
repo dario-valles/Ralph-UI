@@ -80,6 +80,21 @@ pub struct MergeResult {
     pub fast_forward: bool,
 }
 
+/// Detailed information about a single file in conflict
+/// Used for AI-assisted conflict resolution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictInfo {
+    pub path: String,
+    /// Content from target branch (ours)
+    pub our_content: String,
+    /// Content from source branch (theirs)
+    pub their_content: String,
+    /// Content from common ancestor
+    pub ancestor_content: String,
+    /// Full file content with conflict markers
+    pub conflict_markers: String,
+}
+
 impl GitManager {
     /// Create a new GitManager for the given repository path
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, GitError> {
@@ -119,7 +134,9 @@ impl GitManager {
         let tree = self.repo.find_tree(tree_id)?;
 
         // Create a signature
-        let signature = self.repo.signature()
+        let signature = self
+            .repo
+            .signature()
             .or_else(|_| git2::Signature::now("Ralph UI", "ralph@example.com"))?;
 
         // Create the initial commit
@@ -215,11 +232,9 @@ impl GitManager {
         let worktree_name = branch.replace('/', "-");
 
         // Create the worktree with the branch reference
-        let worktree = self.repo.worktree(
-            &worktree_name,
-            Path::new(path),
-            Some(&opts),
-        )?;
+        let worktree = self
+            .repo
+            .worktree(&worktree_name, Path::new(path), Some(&opts))?;
 
         Ok(self.worktree_to_info(&worktree)?)
     }
@@ -250,7 +265,9 @@ impl GitManager {
             if let Some(name_str) = name {
                 if let Ok(worktree) = self.repo.find_worktree(name_str) {
                     let worktree_path = worktree.path().to_string_lossy();
-                    if worktree_path == path || worktree_path.trim_end_matches('/') == path.trim_end_matches('/') {
+                    if worktree_path == path
+                        || worktree_path.trim_end_matches('/') == path.trim_end_matches('/')
+                    {
                         // Found the worktree, prune it
                         worktree.prune(None)?;
                         return Ok(());
@@ -404,20 +421,27 @@ impl GitManager {
         let head = self.repo.head()?.peel_to_commit()?;
         let tree = head.tree()?;
 
-        let diff = self.repo.diff_tree_to_workdir_with_index(
-            Some(&tree),
-            Some(&mut DiffOptions::new()),
-        )?;
+        let diff = self
+            .repo
+            .diff_tree_to_workdir_with_index(Some(&tree), Some(&mut DiffOptions::new()))?;
 
         Ok(self.diff_to_info(&diff)?)
     }
 
     /// Merge a source branch into a target branch
     /// Returns MergeResult with details about the merge outcome
-    pub fn merge_branch(&self, source_branch: &str, target_branch: &str) -> Result<MergeResult, GitError> {
-        use git2::{MergeOptions, build::CheckoutBuilder};
+    pub fn merge_branch(
+        &self,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<MergeResult, GitError> {
+        use git2::{build::CheckoutBuilder, MergeOptions};
 
-        log::info!("[GitManager] Merging {} into {}", source_branch, target_branch);
+        log::info!(
+            "[GitManager] Merging {} into {}",
+            source_branch,
+            target_branch
+        );
 
         // First checkout the target branch
         self.checkout_branch(target_branch)?;
@@ -447,12 +471,22 @@ impl GitManager {
 
             let target_ref_name = format!("refs/heads/{}", target_branch);
             let mut target_ref = self.repo.find_reference(&target_ref_name)?;
-            target_ref.set_target(source_commit.id(), &format!("Fast-forward merge {} into {}", source_branch, target_branch))?;
-            self.repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
+            target_ref.set_target(
+                source_commit.id(),
+                &format!(
+                    "Fast-forward merge {} into {}",
+                    source_branch, target_branch
+                ),
+            )?;
+            self.repo
+                .checkout_head(Some(CheckoutBuilder::default().force()))?;
 
             return Ok(MergeResult {
                 success: true,
-                message: format!("Fast-forward merged {} into {}", source_branch, target_branch),
+                message: format!(
+                    "Fast-forward merged {} into {}",
+                    source_branch, target_branch
+                ),
                 conflict_files: vec![],
                 commit_id: Some(source_commit.id().to_string()),
                 fast_forward: true,
@@ -464,7 +498,11 @@ impl GitManager {
         let mut checkout_opts = CheckoutBuilder::new();
         checkout_opts.safe();
 
-        self.repo.merge(&[&annotated_commit], Some(&mut merge_opts), Some(&mut checkout_opts))?;
+        self.repo.merge(
+            &[&annotated_commit],
+            Some(&mut merge_opts),
+            Some(&mut checkout_opts),
+        )?;
 
         // Check for conflicts
         let mut index = self.repo.index()?;
@@ -495,7 +533,9 @@ impl GitManager {
         let tree = self.repo.find_tree(tree_id)?;
 
         let head_commit = self.repo.head()?.peel_to_commit()?;
-        let signature = self.repo.signature()
+        let signature = self
+            .repo
+            .signature()
             .or_else(|_| git2::Signature::now("Ralph UI", "ralph@example.com"))?;
 
         let merge_commit = self.repo.commit(
@@ -514,7 +554,10 @@ impl GitManager {
 
         Ok(MergeResult {
             success: true,
-            message: format!("Successfully merged {} into {}", source_branch, target_branch),
+            message: format!(
+                "Successfully merged {} into {}",
+                source_branch, target_branch
+            ),
             conflict_files: vec![],
             commit_id: Some(merge_commit.to_string()),
             fast_forward: false,
@@ -527,7 +570,8 @@ impl GitManager {
 
         // Reset to HEAD
         let head = self.repo.head()?.peel_to_commit()?;
-        self.repo.reset(head.as_object(), git2::ResetType::Hard, None)?;
+        self.repo
+            .reset(head.as_object(), git2::ResetType::Hard, None)?;
 
         // Clean up merge state
         self.repo.cleanup_state()?;
@@ -536,7 +580,11 @@ impl GitManager {
     }
 
     /// Check if there are any conflicts between two branches
-    pub fn check_merge_conflicts(&self, source_branch: &str, target_branch: &str) -> Result<Vec<String>, GitError> {
+    pub fn check_merge_conflicts(
+        &self,
+        source_branch: &str,
+        target_branch: &str,
+    ) -> Result<Vec<String>, GitError> {
         use git2::MergeOptions;
 
         // Get the commits for both branches
@@ -547,7 +595,9 @@ impl GitManager {
         let target_commit = target_ref.get().peel_to_commit()?;
 
         // Find merge base
-        let merge_base = self.repo.merge_base(source_commit.id(), target_commit.id())?;
+        let merge_base = self
+            .repo
+            .merge_base(source_commit.id(), target_commit.id())?;
 
         // Get trees
         let source_tree = source_commit.tree()?;
@@ -557,7 +607,12 @@ impl GitManager {
 
         // Perform index merge
         let mut merge_opts = MergeOptions::new();
-        let index = self.repo.merge_trees(&base_tree, &target_tree, &source_tree, Some(&mut merge_opts))?;
+        let index = self.repo.merge_trees(
+            &base_tree,
+            &target_tree,
+            &source_tree,
+            Some(&mut merge_opts),
+        )?;
 
         let mut conflict_files = Vec::new();
         if index.has_conflicts() {
@@ -575,14 +630,192 @@ impl GitManager {
         Ok(conflict_files)
     }
 
+    /// Get detailed conflict information for all files in conflict.
+    /// This should be called when the repository is in a merge conflict state.
+    /// Returns content from our side, their side, and the ancestor for each conflicted file.
+    pub fn get_conflict_details(&self) -> Result<Vec<ConflictInfo>, GitError> {
+        use std::fs;
+
+        let index = self.repo.index()?;
+
+        if !index.has_conflicts() {
+            return Ok(Vec::new());
+        }
+
+        let mut conflicts = Vec::new();
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| GitError::from_str("Repository has no working directory"))?;
+
+        // Iterate through conflict entries
+        for conflict in index.conflicts()? {
+            let conflict = conflict?;
+
+            // Get the path from any of the conflict entries
+            let path = if let Some(ref entry) = conflict.our {
+                String::from_utf8_lossy(&entry.path).to_string()
+            } else if let Some(ref entry) = conflict.their {
+                String::from_utf8_lossy(&entry.path).to_string()
+            } else if let Some(ref entry) = conflict.ancestor {
+                String::from_utf8_lossy(&entry.path).to_string()
+            } else {
+                continue;
+            };
+
+            // Get content from each stage
+            let our_content = self.get_blob_content(conflict.our.as_ref())?;
+            let their_content = self.get_blob_content(conflict.their.as_ref())?;
+            let ancestor_content = self.get_blob_content(conflict.ancestor.as_ref())?;
+
+            // Read the working directory file (contains conflict markers)
+            let file_path = workdir.join(&path);
+            let conflict_markers = fs::read_to_string(&file_path).unwrap_or_else(|_| String::new());
+
+            conflicts.push(ConflictInfo {
+                path,
+                our_content,
+                their_content,
+                ancestor_content,
+                conflict_markers,
+            });
+        }
+
+        log::info!("[GitManager] Found {} conflict(s)", conflicts.len());
+        Ok(conflicts)
+    }
+
+    /// Helper to get blob content from an index entry
+    fn get_blob_content(&self, entry: Option<&git2::IndexEntry>) -> Result<String, GitError> {
+        match entry {
+            Some(entry) => {
+                let blob = self.repo.find_blob(entry.id)?;
+                Ok(String::from_utf8_lossy(blob.content()).to_string())
+            }
+            None => Ok(String::new()),
+        }
+    }
+
+    /// Apply resolved content to a conflicted file and stage it.
+    /// This writes the resolved content to the file and adds it to the index.
+    pub fn resolve_conflict(&self, path: &str, resolved_content: &str) -> Result<(), GitError> {
+        use std::fs;
+
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| GitError::from_str("Repository has no working directory"))?;
+
+        // Write the resolved content to the file
+        let file_path = workdir.join(path);
+        fs::write(&file_path, resolved_content)
+            .map_err(|e| GitError::from_str(&format!("Failed to write file: {}", e)))?;
+
+        // Stage the file
+        let mut index = self.repo.index()?;
+        index.add_path(Path::new(path))?;
+        index.write()?;
+
+        log::info!("[GitManager] Resolved and staged conflict for: {}", path);
+        Ok(())
+    }
+
+    /// Complete a merge after all conflicts have been resolved.
+    /// Creates the merge commit using the staged index.
+    pub fn complete_merge(
+        &self,
+        message: &str,
+        author_name: &str,
+        author_email: &str,
+    ) -> Result<CommitInfo, GitError> {
+        // Check if we're actually in a merge state
+        let merge_head_path = self.repo.path().join("MERGE_HEAD");
+        if !merge_head_path.exists() {
+            return Err(GitError::from_str("Not in a merge state"));
+        }
+
+        // Check that there are no remaining conflicts
+        let index = self.repo.index()?;
+        if index.has_conflicts() {
+            return Err(GitError::from_str(
+                "Cannot complete merge: unresolved conflicts remain",
+            ));
+        }
+
+        // Read MERGE_HEAD to get the other parent
+        let merge_head_content = std::fs::read_to_string(&merge_head_path)
+            .map_err(|e| GitError::from_str(&format!("Failed to read MERGE_HEAD: {}", e)))?;
+        let merge_head_oid = Oid::from_str(merge_head_content.trim())?;
+        let merge_commit = self.repo.find_commit(merge_head_oid)?;
+
+        // Get HEAD commit
+        let head_commit = self.repo.head()?.peel_to_commit()?;
+
+        // Write the tree from the index
+        let mut index = self.repo.index()?;
+        let tree_id = index.write_tree()?;
+        let tree = self.repo.find_tree(tree_id)?;
+
+        // Create signature
+        let signature = Signature::now(author_name, author_email)?;
+
+        // Create the merge commit with two parents
+        let commit_id = self.repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &[&head_commit, &merge_commit],
+        )?;
+
+        // Clean up merge state
+        self.repo.cleanup_state()?;
+
+        log::info!("[GitManager] Completed merge with commit: {}", commit_id);
+
+        // Return the commit info
+        let new_commit = self.repo.find_commit(commit_id)?;
+        self.commit_to_info(&new_commit)
+    }
+
+    /// Push a branch to the remote repository
+    pub fn push_branch(&self, branch_name: &str, force: bool) -> Result<(), GitError> {
+        // Find the remote (default to "origin")
+        let mut remote = self.repo.find_remote("origin")?;
+
+        // Build the refspec
+        let refspec = if force {
+            format!("+refs/heads/{}:refs/heads/{}", branch_name, branch_name)
+        } else {
+            format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name)
+        };
+
+        // Set up callbacks for authentication
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|_url, username_from_url, _allowed_types| {
+            git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
+        });
+
+        let mut push_options = git2::PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+
+        // Push
+        remote.push(&[&refspec], Some(&mut push_options))?;
+
+        log::info!("[GitManager] Pushed branch {} to origin", branch_name);
+        Ok(())
+    }
+
     // Helper methods
 
     fn branch_to_info(&self, branch: &Branch) -> Result<BranchInfo, GitError> {
         let name = branch.name()?.unwrap_or("").to_string();
         let is_head = branch.is_head();
-        let upstream = branch.upstream().ok().and_then(|b| {
-            b.name().ok().flatten().map(|s| s.to_string())
-        });
+        let upstream = branch
+            .upstream()
+            .ok()
+            .and_then(|b| b.name().ok().flatten().map(|s| s.to_string()));
 
         let commit = branch.get().peel_to_commit()?;
         let commit_id = commit.id().to_string();
@@ -598,10 +831,7 @@ impl GitManager {
     fn commit_to_info(&self, commit: &Commit) -> Result<CommitInfo, GitError> {
         let author = commit.author();
 
-        let parent_ids = commit
-            .parent_ids()
-            .map(|oid| oid.to_string())
-            .collect();
+        let parent_ids = commit.parent_ids().map(|oid| oid.to_string()).collect();
 
         Ok(CommitInfo {
             id: commit.id().to_string(),
@@ -617,7 +847,10 @@ impl GitManager {
     fn worktree_to_info(&self, worktree: &Worktree) -> Result<WorktreeInfo, GitError> {
         let name = worktree.name().unwrap_or("").to_string();
         let path = worktree.path().to_string_lossy().to_string();
-        let is_locked = worktree.is_locked().map(|status| !matches!(status, git2::WorktreeLockStatus::Unlocked)).unwrap_or(false);
+        let is_locked = worktree
+            .is_locked()
+            .map(|status| !matches!(status, git2::WorktreeLockStatus::Unlocked))
+            .unwrap_or(false);
 
         // Try to determine the branch for this worktree
         let branch = if let Ok(wt_repo) = Repository::open(worktree.path()) {
@@ -648,8 +881,14 @@ impl GitManager {
         let mut files = Vec::new();
         diff.foreach(
             &mut |delta, _| {
-                let old_path = delta.old_file().path().map(|p| p.to_string_lossy().to_string());
-                let new_path = delta.new_file().path().map(|p| p.to_string_lossy().to_string());
+                let old_path = delta
+                    .old_file()
+                    .path()
+                    .map(|p| p.to_string_lossy().to_string());
+                let new_path = delta
+                    .new_file()
+                    .path()
+                    .map(|p| p.to_string_lossy().to_string());
                 let status = self.delta_to_string(delta.status());
 
                 files.push(FileDiff {

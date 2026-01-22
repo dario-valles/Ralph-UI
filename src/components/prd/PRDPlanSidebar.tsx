@@ -15,12 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 interface PRDPlanSidebarProps {
@@ -40,16 +35,12 @@ function MarkdownContent({ content, className }: { content: string; className?: 
         components={{
           // Style code blocks
           pre: ({ children }) => (
-            <pre className="bg-secondary/50 rounded-md p-3 overflow-x-auto text-xs">
-              {children}
-            </pre>
+            <pre className="bg-secondary/50 rounded-md p-3 overflow-x-auto text-xs">{children}</pre>
           ),
           code: ({ children, className }) => {
             const isInline = !className
             return isInline ? (
-              <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">
-                {children}
-              </code>
+              <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">{children}</code>
             ) : (
               <code className={className}>{children}</code>
             )
@@ -65,12 +56,8 @@ function MarkdownContent({ content, className }: { content: string; className?: 
           h1: ({ children }) => (
             <h1 className="text-lg font-bold mt-4 mb-2 pb-1 border-b">{children}</h1>
           ),
-          h2: ({ children }) => (
-            <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
-          ),
+          h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
           // Style paragraphs
           p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
           // Style tables
@@ -79,17 +66,13 @@ function MarkdownContent({ content, className }: { content: string; className?: 
               <table className="min-w-full text-xs border-collapse">{children}</table>
             </div>
           ),
-          thead: ({ children }) => (
-            <thead className="bg-muted/70">{children}</thead>
-          ),
-          tbody: ({ children }) => (
-            <tbody className="divide-y divide-border">{children}</tbody>
-          ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
-          ),
+          thead: ({ children }) => <thead className="bg-muted/70">{children}</thead>,
+          tbody: ({ children }) => <tbody className="divide-y divide-border">{children}</tbody>,
+          tr: ({ children }) => <tr className="hover:bg-muted/30 transition-colors">{children}</tr>,
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
+            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">
+              {children}
+            </th>
           ),
           td: ({ children }) => (
             <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{children}</td>
@@ -103,9 +86,7 @@ function MarkdownContent({ content, className }: { content: string; className?: 
           // Style horizontal rules
           hr: () => <hr className="my-4 border-border" />,
           // Style strong/bold
-          strong: ({ children }) => (
-            <strong className="font-semibold">{children}</strong>
-          ),
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
         }}
       >
         {content}
@@ -172,11 +153,7 @@ export function PRDPlanSidebar({
         className="h-7 w-7 p-0"
         title={showRaw ? 'Show rendered markdown' : 'Show raw markdown'}
       >
-        {showRaw ? (
-          <FileText className="h-3.5 w-3.5" />
-        ) : (
-          <Code className="h-3.5 w-3.5" />
-        )}
+        {showRaw ? <FileText className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
       </Button>
       <Button
         variant="ghost"
@@ -185,11 +162,7 @@ export function PRDPlanSidebar({
         className="h-7 w-7 p-0"
         title={autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'}
       >
-        {autoScroll ? (
-          <Eye className="h-3.5 w-3.5" />
-        ) : (
-          <EyeOff className="h-3.5 w-3.5" />
-        )}
+        {autoScroll ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
       </Button>
       <Button
         variant="ghost"
@@ -274,10 +247,21 @@ export function PRDPlanSidebar({
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0 shrink-0"
-                  title="Open file location"
-                  onClick={() => {
-                    // TODO: Implement file opening functionality
-                    void path
+                  title="Reveal file in file manager"
+                  onClick={async () => {
+                    try {
+                      const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
+                      await revealItemInDir(path)
+                    } catch {
+                      // Fallback: try to open the parent folder
+                      try {
+                        const { open } = await import('@tauri-apps/plugin-shell')
+                        const parentDir = path.substring(0, path.lastIndexOf('/'))
+                        await open(parentDir || path)
+                      } catch {
+                        // Ignore if both fail (e.g., in browser dev mode)
+                      }
+                    }
                   }}
                 >
                   <ExternalLink className="h-3 w-3" />
@@ -287,10 +271,7 @@ export function PRDPlanSidebar({
           )}
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-hidden">
-          <div
-            ref={contentRef}
-            className="h-full overflow-y-auto px-3 py-2"
-          >
+          <div ref={contentRef} className="h-full overflow-y-auto px-3 py-2">
             {renderContent()}
           </div>
         </CardContent>
@@ -339,12 +320,7 @@ export function PRDPlanSidebar({
                   )}
                 </Button>
                 {onRefresh && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onRefresh}
-                    className="gap-1"
-                  >
+                  <Button variant="outline" size="sm" onClick={onRefresh} className="gap-1">
                     <RefreshCw className="h-3 w-3" />
                     Refresh
                   </Button>
@@ -355,9 +331,7 @@ export function PRDPlanSidebar({
           <div className="flex-1 overflow-y-auto border rounded-md p-4 bg-background">
             {content ? (
               showRaw ? (
-                <pre className="whitespace-pre-wrap text-sm font-mono">
-                  {content}
-                </pre>
+                <pre className="whitespace-pre-wrap text-sm font-mono">{content}</pre>
               ) : (
                 <MarkdownContent content={content} className="prose-base" />
               )

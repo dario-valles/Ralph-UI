@@ -307,6 +307,10 @@ pub fn run() {
             commands::git_merge_branch,
             commands::git_merge_abort,
             commands::git_check_merge_conflicts,
+            commands::git_get_conflict_details,
+            commands::git_resolve_conflict,
+            commands::git_complete_merge,
+            commands::git_push_branch,
             // GitHub commands
             commands::github_create_pull_request,
             commands::github_get_pull_request,

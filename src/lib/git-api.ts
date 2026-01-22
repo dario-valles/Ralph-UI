@@ -1,59 +1,59 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core'
 
 // ========================================
 // Git Types
 // ========================================
 
 export interface BranchInfo {
-  name: string;
-  is_head: boolean;
-  upstream: string | null;
-  commit_id: string;
+  name: string
+  is_head: boolean
+  upstream: string | null
+  commit_id: string
 }
 
 export interface CommitInfo {
-  id: string;
-  short_id: string;
-  message: string;
-  author: string;
-  email: string;
-  timestamp: number;
-  parent_ids: string[];
+  id: string
+  short_id: string
+  message: string
+  author: string
+  email: string
+  timestamp: number
+  parent_ids: string[]
 }
 
 export interface WorktreeInfo {
-  name: string;
-  path: string;
-  branch: string | null;
-  is_locked: boolean;
+  name: string
+  path: string
+  branch: string | null
+  is_locked: boolean
 }
 
 export interface FileStatus {
-  path: string;
-  status: string;
+  path: string
+  status: string
 }
 
 export interface DiffInfo {
-  files_changed: number;
-  insertions: number;
-  deletions: number;
-  files: FileDiff[];
+  files_changed: number
+  insertions: number
+  deletions: number
+  files: FileDiff[]
 }
 
 export interface FileDiff {
-  old_path: string | null;
-  new_path: string | null;
-  status: string;
-  insertions: number;
-  deletions: number;
+  old_path: string | null
+  new_path: string | null
+  status: string
+  insertions: number
+  deletions: number
 }
 
 export interface MergeResult {
-  success: boolean;
-  message: string;
-  conflict_files: string[];
-  commit_id: string | null;
-  fast_forward: boolean;
+  success: boolean
+  message: string
+  conflict_files: string[]
+  commit_id: string | null
+  fast_forward: boolean
 }
 
 // ========================================
@@ -61,27 +61,74 @@ export interface MergeResult {
 // ========================================
 
 export interface PullRequest {
-  number: number;
-  title: string;
-  body: string | null;
-  state: string;
-  html_url: string;
-  head_branch: string;
-  base_branch: string;
-  created_at: string;
-  updated_at: string;
-  merged: boolean;
+  number: number
+  title: string
+  body: string | null
+  state: string
+  html_url: string
+  head_branch: string
+  base_branch: string
+  created_at: string
+  updated_at: string
+  merged: boolean
 }
 
 export interface Issue {
-  number: number;
-  title: string;
-  body: string | null;
-  state: string;
-  html_url: string;
-  labels: string[];
-  created_at: string;
-  updated_at: string;
+  number: number
+  title: string
+  body: string | null
+  state: string
+  html_url: string
+  labels: string[]
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
+// Conflict Resolution Types
+// ========================================
+
+/**
+ * Detailed information about a single file in conflict
+ */
+export interface ConflictInfo {
+  path: string
+  our_content: string // Content from target branch (ours)
+  their_content: string // Content from source branch (theirs)
+  ancestor_content: string // Content from common ancestor
+  conflict_markers: string // Full file with conflict markers
+}
+
+/**
+ * Resolution for a single conflicted file
+ */
+export interface ConflictResolution {
+  path: string
+  resolved_content: string
+}
+
+/**
+ * Options for merge workflow (direct merge vs PR)
+ */
+export interface MergeOptions {
+  source_branch: string
+  target_branch: string
+  create_pr?: boolean // Create PR instead of direct merge
+  pr_title?: string
+  pr_body?: string
+  pr_draft?: boolean
+  auto_resolve_conflicts?: boolean // Use AI for conflict resolution
+}
+
+/**
+ * Result of a merge workflow operation
+ */
+export interface MergeWorkflowResult {
+  merged: boolean
+  pr_url?: string // If PR was created
+  commit_id?: string // If direct merge succeeded
+  conflicts_resolved?: number // Count of AI-resolved conflicts
+  error?: string
 }
 
 // ========================================
@@ -97,7 +144,7 @@ export const gitApi = {
     name: string,
     force: boolean = false
   ): Promise<BranchInfo> => {
-    return invoke("git_create_branch", { repoPath, name, force });
+    return invoke('git_create_branch', { repoPath, name, force })
   },
 
   /**
@@ -109,89 +156,82 @@ export const gitApi = {
     commitId: string,
     force: boolean = false
   ): Promise<BranchInfo> => {
-    return invoke("git_create_branch_from_commit", {
+    return invoke('git_create_branch_from_commit', {
       repoPath,
       name,
       commitId,
       force,
-    });
+    })
   },
 
   /**
    * Delete a branch
    */
   deleteBranch: async (repoPath: string, name: string): Promise<void> => {
-    return invoke("git_delete_branch", { repoPath, name });
+    return invoke('git_delete_branch', { repoPath, name })
   },
 
   /**
    * List all branches
    */
   listBranches: async (repoPath: string): Promise<BranchInfo[]> => {
-    return invoke("git_list_branches", { repoPath });
+    return invoke('git_list_branches', { repoPath })
   },
 
   /**
    * Get the current branch
    */
   getCurrentBranch: async (repoPath: string): Promise<BranchInfo> => {
-    return invoke("git_get_current_branch", { repoPath });
+    return invoke('git_get_current_branch', { repoPath })
   },
 
   /**
    * Checkout a branch
    */
   checkoutBranch: async (repoPath: string, name: string): Promise<void> => {
-    return invoke("git_checkout_branch", { repoPath, name });
+    return invoke('git_checkout_branch', { repoPath, name })
   },
 
   /**
    * Create a worktree
    */
-  createWorktree: async (
-    repoPath: string,
-    branch: string,
-    path: string
-  ): Promise<WorktreeInfo> => {
-    return invoke("git_create_worktree", { repoPath, branch, path });
+  createWorktree: async (repoPath: string, branch: string, path: string): Promise<WorktreeInfo> => {
+    return invoke('git_create_worktree', { repoPath, branch, path })
   },
 
   /**
    * List all worktrees
    */
   listWorktrees: async (repoPath: string): Promise<WorktreeInfo[]> => {
-    return invoke("git_list_worktrees", { repoPath });
+    return invoke('git_list_worktrees', { repoPath })
   },
 
   /**
    * Remove a worktree
    */
   removeWorktree: async (repoPath: string, name: string): Promise<void> => {
-    return invoke("git_remove_worktree", { repoPath, name });
+    return invoke('git_remove_worktree', { repoPath, name })
   },
 
   /**
    * Get git status
    */
   getStatus: async (repoPath: string): Promise<FileStatus[]> => {
-    return invoke("git_get_status", { repoPath });
+    return invoke('git_get_status', { repoPath })
   },
 
   /**
    * Get commit history
    */
-  getCommitHistory: async (
-    repoPath: string,
-    maxCount: number = 50
-  ): Promise<CommitInfo[]> => {
-    return invoke("git_get_commit_history", { repoPath, maxCount });
+  getCommitHistory: async (repoPath: string, maxCount: number = 50): Promise<CommitInfo[]> => {
+    return invoke('git_get_commit_history', { repoPath, maxCount })
   },
 
   /**
    * Get a specific commit
    */
   getCommit: async (repoPath: string, commitId: string): Promise<CommitInfo> => {
-    return invoke("git_get_commit", { repoPath, commitId });
+    return invoke('git_get_commit', { repoPath, commitId })
   },
 
   /**
@@ -203,44 +243,40 @@ export const gitApi = {
     authorName: string,
     authorEmail: string
   ): Promise<CommitInfo> => {
-    return invoke("git_create_commit", {
+    return invoke('git_create_commit', {
       repoPath,
       message,
       authorName,
       authorEmail,
-    });
+    })
   },
 
   /**
    * Stage files for commit
    */
   stageFiles: async (repoPath: string, paths: string[]): Promise<void> => {
-    return invoke("git_stage_files", { repoPath, paths });
+    return invoke('git_stage_files', { repoPath, paths })
   },
 
   /**
    * Stage all files
    */
   stageAll: async (repoPath: string): Promise<void> => {
-    return invoke("git_stage_all", { repoPath });
+    return invoke('git_stage_all', { repoPath })
   },
 
   /**
    * Get diff between commits
    */
-  getDiff: async (
-    repoPath: string,
-    fromCommit?: string,
-    toCommit?: string
-  ): Promise<DiffInfo> => {
-    return invoke("git_get_diff", { repoPath, fromCommit, toCommit });
+  getDiff: async (repoPath: string, fromCommit?: string, toCommit?: string): Promise<DiffInfo> => {
+    return invoke('git_get_diff', { repoPath, fromCommit, toCommit })
   },
 
   /**
    * Get working directory diff
    */
   getWorkingDiff: async (repoPath: string): Promise<DiffInfo> => {
-    return invoke("git_get_working_diff", { repoPath });
+    return invoke('git_get_working_diff', { repoPath })
   },
 
   /**
@@ -251,14 +287,14 @@ export const gitApi = {
     sourceBranch: string,
     targetBranch: string
   ): Promise<MergeResult> => {
-    return invoke("git_merge_branch", { repoPath, sourceBranch, targetBranch });
+    return invoke('git_merge_branch', { repoPath, sourceBranch, targetBranch })
   },
 
   /**
    * Abort an ongoing merge
    */
   mergeAbort: async (repoPath: string): Promise<void> => {
-    return invoke("git_merge_abort", { repoPath });
+    return invoke('git_merge_abort', { repoPath })
   },
 
   /**
@@ -269,13 +305,67 @@ export const gitApi = {
     sourceBranch: string,
     targetBranch: string
   ): Promise<string[]> => {
-    return invoke("git_check_merge_conflicts", {
+    return invoke('git_check_merge_conflicts', {
       repoPath,
       sourceBranch,
       targetBranch,
-    });
+    })
   },
-};
+
+  // ========================================
+  // Conflict Resolution Functions
+  // ========================================
+
+  /**
+   * Get detailed conflict information for files in a merge conflict state.
+   * Call this after mergeBranch returns with conflicts to get the content
+   * needed for AI-assisted resolution.
+   */
+  getConflictDetails: async (repoPath: string): Promise<ConflictInfo[]> => {
+    return invoke('git_get_conflict_details', { repoPath })
+  },
+
+  /**
+   * Apply a resolved file content and stage it.
+   * Use this after AI has resolved the conflict.
+   */
+  resolveConflict: async (repoPath: string, resolution: ConflictResolution): Promise<void> => {
+    return invoke('git_resolve_conflict', {
+      repoPath,
+      path: resolution.path,
+      resolvedContent: resolution.resolved_content,
+    })
+  },
+
+  /**
+   * Complete a merge after all conflicts have been resolved.
+   * Creates the merge commit.
+   */
+  completeMerge: async (
+    repoPath: string,
+    message: string,
+    authorName: string,
+    authorEmail: string
+  ): Promise<CommitInfo> => {
+    return invoke('git_complete_merge', {
+      repoPath,
+      message,
+      authorName,
+      authorEmail,
+    })
+  },
+
+  /**
+   * Push a branch to the remote repository
+   */
+  pushBranch: async (
+    repoPath: string,
+    branchName: string,
+    force: boolean = false
+  ): Promise<void> => {
+    return invoke('git_push_branch', { repoPath, branchName, force })
+  },
+}
 
 // ========================================
 // GitHub API Functions
@@ -295,7 +385,7 @@ export const githubApi = {
     base: string,
     draft: boolean = false
   ): Promise<PullRequest> => {
-    return invoke("github_create_pull_request", {
+    return invoke('github_create_pull_request', {
       token,
       owner,
       repo,
@@ -304,7 +394,7 @@ export const githubApi = {
       head,
       base,
       draft,
-    });
+    })
   },
 
   /**
@@ -316,12 +406,12 @@ export const githubApi = {
     repo: string,
     number: number
   ): Promise<PullRequest> => {
-    return invoke("github_get_pull_request", {
+    return invoke('github_get_pull_request', {
       token,
       owner,
       repo,
       number,
-    });
+    })
   },
 
   /**
@@ -333,24 +423,19 @@ export const githubApi = {
     repo: string,
     state?: string
   ): Promise<PullRequest[]> => {
-    return invoke("github_list_pull_requests", {
+    return invoke('github_list_pull_requests', {
       token,
       owner,
       repo,
       state,
-    });
+    })
   },
 
   /**
    * Get an issue by number
    */
-  getIssue: async (
-    token: string,
-    owner: string,
-    repo: string,
-    number: number
-  ): Promise<Issue> => {
-    return invoke("github_get_issue", { token, owner, repo, number });
+  getIssue: async (token: string, owner: string, repo: string, number: number): Promise<Issue> => {
+    return invoke('github_get_issue', { token, owner, repo, number })
   },
 
   /**
@@ -362,9 +447,9 @@ export const githubApi = {
     repo: string,
     state?: string
   ): Promise<Issue[]> => {
-    return invoke("github_list_issues", { token, owner, repo, state });
+    return invoke('github_list_issues', { token, owner, repo, state })
   },
-};
+}
 
 // ========================================
 // Helper Functions
@@ -375,60 +460,64 @@ export const gitHelpers = {
    * Format commit message for display
    */
   formatCommitMessage: (commit: CommitInfo, maxLength: number = 50): string => {
-    const firstLine = commit.message.split("\n")[0];
+    const firstLine = commit.message.split('\n')[0]
     if (firstLine.length <= maxLength) {
-      return firstLine;
+      return firstLine
     }
-    return firstLine.substring(0, maxLength - 3) + "...";
+    return firstLine.substring(0, maxLength - 3) + '...'
   },
 
   /**
    * Format timestamp to readable date
    */
   formatTimestamp: (timestamp: number): string => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleString();
+    const date = new Date(timestamp * 1000)
+    return date.toLocaleString()
   },
 
   /**
    * Get branch status badge color
    */
   getBranchStatusColor: (isHead: boolean): string => {
-    return isHead ? "bg-green-500" : "bg-gray-500";
+    return isHead ? 'bg-green-500' : 'bg-gray-500'
   },
 
   /**
    * Get file status color
    */
   getFileStatusColor: (status: string): string => {
-    if (status.includes("new")) return "text-green-600";
-    if (status.includes("modified")) return "text-yellow-600";
-    if (status.includes("deleted")) return "text-red-600";
-    return "text-gray-600";
+    if (status.includes('new')) return 'text-green-600'
+    if (status.includes('modified')) return 'text-yellow-600'
+    if (status.includes('deleted')) return 'text-red-600'
+    return 'text-gray-600'
   },
 
   /**
    * Get diff stats summary
    */
   getDiffSummary: (diff: DiffInfo): string => {
-    const { files_changed, insertions, deletions } = diff;
-    const parts = [];
+    const { files_changed, insertions, deletions } = diff
+    const parts = []
 
     if (files_changed > 0) {
-      parts.push(`${files_changed} file${files_changed !== 1 ? "s" : ""}`);
+      parts.push(`${files_changed} file${files_changed !== 1 ? 's' : ''}`)
     }
 
     if (insertions > 0) {
-      parts.push(`+${insertions}`);
+      parts.push(`+${insertions}`)
     }
 
     if (deletions > 0) {
-      parts.push(`-${deletions}`);
+      parts.push(`-${deletions}`)
     }
 
-    return parts.join(", ");
+    return parts.join(', ')
   },
-};
+}
+
+// ========================================
+// GitHub Helper Functions
+// ========================================
 
 export const githubHelpers = {
   /**
@@ -436,14 +525,14 @@ export const githubHelpers = {
    */
   getPRStateColor: (state: string): string => {
     switch (state.toLowerCase()) {
-      case "open":
-        return "bg-green-500";
-      case "closed":
-        return "bg-red-500";
-      case "merged":
-        return "bg-purple-500";
+      case 'open':
+        return 'bg-green-500'
+      case 'closed':
+        return 'bg-red-500'
+      case 'merged':
+        return 'bg-purple-500'
       default:
-        return "bg-gray-500";
+        return 'bg-gray-500'
     }
   },
 
@@ -451,14 +540,131 @@ export const githubHelpers = {
    * Get issue state badge color
    */
   getIssueStateColor: (state: string): string => {
-    return state.toLowerCase() === "open" ? "bg-green-500" : "bg-gray-500";
+    return state.toLowerCase() === 'open' ? 'bg-green-500' : 'bg-gray-500'
   },
 
   /**
    * Format date for display
    */
   formatDate: (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+    const date = new Date(dateString)
+    return date.toLocaleDateString()
   },
-};
+}
+
+// ========================================
+// Conflict Resolution Helpers
+// ========================================
+
+export const conflictHelpers = {
+  /**
+   * Build an AI prompt for resolving a merge conflict.
+   * The AI should return ONLY the resolved file content.
+   */
+  buildConflictResolutionPrompt: (conflict: ConflictInfo): string => {
+    return `Resolve this merge conflict for file: ${conflict.path}
+
+## Our version (target branch):
+\`\`\`
+${conflict.our_content}
+\`\`\`
+
+## Their version (source branch):
+\`\`\`
+${conflict.their_content}
+\`\`\`
+
+## Common ancestor:
+\`\`\`
+${conflict.ancestor_content}
+\`\`\`
+
+Instructions:
+1. Analyze both versions and the ancestor to understand what changed
+2. Merge the changes intelligently, keeping functionality from both sides where appropriate
+3. Return ONLY the resolved file content, no explanation or markdown code blocks
+4. Do NOT include conflict markers (<<<<<<, =======, >>>>>>>)
+5. The result must be valid, syntactically correct code
+6. Preserve proper indentation and formatting`
+  },
+
+  /**
+   * Check if content still contains conflict markers
+   */
+  hasConflictMarkers: (content: string): boolean => {
+    return content.includes('<<<<<<<') || content.includes('=======') || content.includes('>>>>>>>')
+  },
+
+  /**
+   * Validate resolved content has no conflict markers and basic syntax check.
+   * Returns an error message if invalid, or null if valid.
+   */
+  validateResolvedContent: (content: string, filePath: string): string | null => {
+    // Check for conflict markers
+    if (conflictHelpers.hasConflictMarkers(content)) {
+      return 'Resolved content still contains conflict markers'
+    }
+
+    // Basic syntax validation based on file extension
+    const ext = filePath.split('.').pop()?.toLowerCase()
+
+    if (ext === 'json') {
+      try {
+        JSON.parse(content)
+      } catch {
+        return 'Invalid JSON syntax'
+      }
+    }
+
+    // For other file types, we could add more validation
+    // but for now we'll rely on the AI to produce valid content
+    return null
+  },
+
+  /**
+   * Extract the resolved content from AI response.
+   * Handles cases where AI might wrap content in markdown code blocks.
+   */
+  parseAIResponse: (response: string): string => {
+    let content = response.trim()
+
+    // Remove markdown code block if present
+    const codeBlockMatch = content.match(/^```[\w]*\n([\s\S]*)\n```$/m)
+    if (codeBlockMatch) {
+      content = codeBlockMatch[1]
+    }
+
+    // Also handle single backtick wrapping
+    if (content.startsWith('`') && content.endsWith('`') && !content.includes('\n')) {
+      content = content.slice(1, -1)
+    }
+
+    return content
+  },
+
+  /**
+   * Create a ConflictResolution object from AI response
+   */
+  createResolution: (path: string, aiResponse: string): ConflictResolution => {
+    return {
+      path,
+      resolved_content: conflictHelpers.parseAIResponse(aiResponse),
+    }
+  },
+
+  /**
+   * Build retry prompt when initial resolution was invalid
+   */
+  buildRetryPrompt: (conflict: ConflictInfo, previousAttempt: string, error: string): string => {
+    return `Your previous conflict resolution attempt was invalid.
+
+Error: ${error}
+
+Previous attempt:
+\`\`\`
+${previousAttempt}
+\`\`\`
+
+Please try again. ${conflictHelpers.buildConflictResolutionPrompt(conflict)}`
+  },
+}

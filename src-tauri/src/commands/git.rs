@@ -1,8 +1,11 @@
-use crate::git::{BranchInfo, CommitInfo, DiffInfo, FileStatus, GitManager, MergeResult, WorktreeInfo};
+use crate::git::{
+    BranchInfo, CommitInfo, ConflictInfo, DiffInfo, FileStatus, GitManager, MergeResult,
+    WorktreeInfo,
+};
 use crate::utils::ResultExt;
-use tauri::State;
-use std::sync::Mutex;
 use std::collections::HashMap;
+use std::sync::Mutex;
+use tauri::State;
 
 /// Git manager state
 pub struct GitState {
@@ -20,8 +23,7 @@ impl GitState {
         let mut managers = self.managers.lock().with_context("Lock error")?;
 
         if !managers.contains_key(repo_path) {
-            let manager = GitManager::new(repo_path)
-                .with_context("Failed to open repository")?;
+            let manager = GitManager::new(repo_path).with_context("Failed to open repository")?;
             managers.insert(repo_path.to_string(), manager);
         }
 
@@ -34,7 +36,8 @@ impl GitState {
     {
         self.get_or_create(repo_path)?;
         let managers = self.managers.lock().with_context("Lock error")?;
-        let manager = managers.get(repo_path)
+        let manager = managers
+            .get(repo_path)
             .ok_or_else(|| "Repository not found".to_string())?;
         f(manager).with_context("Git operation failed")
     }
@@ -48,9 +51,7 @@ pub fn git_create_branch(
     force: bool,
     state: State<GitState>,
 ) -> Result<BranchInfo, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.create_branch(&name, force)
-    })
+    state.with_manager(&repo_path, |manager| manager.create_branch(&name, force))
 }
 
 /// Create a branch from a specific commit
@@ -74,9 +75,7 @@ pub fn git_delete_branch(
     name: String,
     state: State<GitState>,
 ) -> Result<(), String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.delete_branch(&name)
-    })
+    state.with_manager(&repo_path, |manager| manager.delete_branch(&name))
 }
 
 /// List all branches
@@ -85,9 +84,7 @@ pub fn git_list_branches(
     repo_path: String,
     state: State<GitState>,
 ) -> Result<Vec<BranchInfo>, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.list_branches()
-    })
+    state.with_manager(&repo_path, |manager| manager.list_branches())
 }
 
 /// Get current branch
@@ -96,9 +93,7 @@ pub fn git_get_current_branch(
     repo_path: String,
     state: State<GitState>,
 ) -> Result<BranchInfo, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.get_current_branch()
-    })
+    state.with_manager(&repo_path, |manager| manager.get_current_branch())
 }
 
 /// Checkout a branch
@@ -108,9 +103,7 @@ pub fn git_checkout_branch(
     name: String,
     state: State<GitState>,
 ) -> Result<(), String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.checkout_branch(&name)
-    })
+    state.with_manager(&repo_path, |manager| manager.checkout_branch(&name))
 }
 
 /// Create a worktree
@@ -132,9 +125,7 @@ pub fn git_list_worktrees(
     repo_path: String,
     state: State<GitState>,
 ) -> Result<Vec<WorktreeInfo>, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.list_worktrees()
-    })
+    state.with_manager(&repo_path, |manager| manager.list_worktrees())
 }
 
 /// Remove a worktree
@@ -144,9 +135,7 @@ pub fn git_remove_worktree(
     name: String,
     state: State<GitState>,
 ) -> Result<(), String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.remove_worktree(&name)
-    })
+    state.with_manager(&repo_path, |manager| manager.remove_worktree(&name))
 }
 
 /// Get git status
@@ -155,9 +144,7 @@ pub fn git_get_status(
     repo_path: String,
     state: State<GitState>,
 ) -> Result<Vec<FileStatus>, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.get_status()
-    })
+    state.with_manager(&repo_path, |manager| manager.get_status())
 }
 
 /// Get commit history
@@ -167,9 +154,7 @@ pub fn git_get_commit_history(
     max_count: usize,
     state: State<GitState>,
 ) -> Result<Vec<CommitInfo>, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.get_commit_history(max_count)
-    })
+    state.with_manager(&repo_path, |manager| manager.get_commit_history(max_count))
 }
 
 /// Get a specific commit
@@ -179,9 +164,7 @@ pub fn git_get_commit(
     commit_id: String,
     state: State<GitState>,
 ) -> Result<CommitInfo, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.get_commit(&commit_id)
-    })
+    state.with_manager(&repo_path, |manager| manager.get_commit(&commit_id))
 }
 
 /// Create a commit
@@ -213,13 +196,8 @@ pub fn git_stage_files(
 
 /// Stage all files
 #[tauri::command]
-pub fn git_stage_all(
-    repo_path: String,
-    state: State<GitState>,
-) -> Result<(), String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.stage_all()
-    })
+pub fn git_stage_all(repo_path: String, state: State<GitState>) -> Result<(), String> {
+    state.with_manager(&repo_path, |manager| manager.stage_all())
 }
 
 /// Get diff between commits
@@ -231,22 +209,14 @@ pub fn git_get_diff(
     state: State<GitState>,
 ) -> Result<DiffInfo, String> {
     state.with_manager(&repo_path, |manager| {
-        manager.get_diff(
-            from_commit.as_deref(),
-            to_commit.as_deref(),
-        )
+        manager.get_diff(from_commit.as_deref(), to_commit.as_deref())
     })
 }
 
 /// Get working directory diff
 #[tauri::command]
-pub fn git_get_working_diff(
-    repo_path: String,
-    state: State<GitState>,
-) -> Result<DiffInfo, String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.get_working_diff()
-    })
+pub fn git_get_working_diff(repo_path: String, state: State<GitState>) -> Result<DiffInfo, String> {
+    state.with_manager(&repo_path, |manager| manager.get_working_diff())
 }
 
 /// Check if a path is a git repository
@@ -268,8 +238,7 @@ pub fn git_init_repository(path: String) -> Result<(), String> {
         return Err(format!("Directory does not exist: {}", path));
     }
 
-    Repository::init(repo_path)
-        .with_context("Failed to initialize git repository")?;
+    Repository::init(repo_path).with_context("Failed to initialize git repository")?;
 
     log::info!("[Git] Initialized new repository at: {}", path);
     Ok(())
@@ -290,13 +259,8 @@ pub fn git_merge_branch(
 
 /// Abort an ongoing merge
 #[tauri::command]
-pub fn git_merge_abort(
-    repo_path: String,
-    state: State<GitState>,
-) -> Result<(), String> {
-    state.with_manager(&repo_path, |manager| {
-        manager.merge_abort()
-    })
+pub fn git_merge_abort(repo_path: String, state: State<GitState>) -> Result<(), String> {
+    state.with_manager(&repo_path, |manager| manager.merge_abort())
 }
 
 /// Check for merge conflicts between two branches without actually merging
@@ -312,13 +276,65 @@ pub fn git_check_merge_conflicts(
     })
 }
 
+/// Get detailed conflict information for files in a merge conflict state.
+/// Call this after git_merge_branch returns with conflicts.
+#[tauri::command]
+pub fn git_get_conflict_details(
+    repo_path: String,
+    state: State<GitState>,
+) -> Result<Vec<ConflictInfo>, String> {
+    state.with_manager(&repo_path, |manager| manager.get_conflict_details())
+}
+
+/// Apply resolved content to a conflicted file and stage it.
+/// Use this after AI has resolved the conflict.
+#[tauri::command]
+pub fn git_resolve_conflict(
+    repo_path: String,
+    path: String,
+    resolved_content: String,
+    state: State<GitState>,
+) -> Result<(), String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.resolve_conflict(&path, &resolved_content)
+    })
+}
+
+/// Complete a merge after all conflicts have been resolved.
+/// Creates the merge commit.
+#[tauri::command]
+pub fn git_complete_merge(
+    repo_path: String,
+    message: String,
+    author_name: String,
+    author_email: String,
+    state: State<GitState>,
+) -> Result<CommitInfo, String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.complete_merge(&message, &author_name, &author_email)
+    })
+}
+
+/// Push a branch to the remote repository
+#[tauri::command]
+pub fn git_push_branch(
+    repo_path: String,
+    branch_name: String,
+    force: bool,
+    state: State<GitState>,
+) -> Result<(), String> {
+    state.with_manager(&repo_path, |manager| {
+        manager.push_branch(&branch_name, force)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
     use git2::{Repository, Signature};
+    use std::fs;
     use std::path::Path;
+    use tempfile::TempDir;
 
     fn setup_test_repo() -> (TempDir, String, GitState) {
         let temp_dir = TempDir::new().unwrap();
@@ -369,9 +385,7 @@ mod tests {
             manager.create_branch("branch1", false)
         });
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.list_branches()
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.list_branches());
 
         assert!(result.is_ok());
         let branches = result.unwrap();
@@ -382,9 +396,7 @@ mod tests {
     fn test_git_get_current_branch_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.get_current_branch()
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.get_current_branch());
 
         assert!(result.is_ok());
         let branch = result.unwrap();
@@ -405,9 +417,9 @@ mod tests {
 
         assert!(result.is_ok());
 
-        let current = state.with_manager(&repo_path, |manager| {
-            manager.get_current_branch()
-        }).unwrap();
+        let current = state
+            .with_manager(&repo_path, |manager| manager.get_current_branch())
+            .unwrap();
         assert_eq!(current.name, "checkout-test");
     }
 
@@ -419,9 +431,7 @@ mod tests {
         let new_file = temp_dir.path().join("new.txt");
         fs::write(&new_file, "New content").unwrap();
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.get_status()
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.get_status());
 
         assert!(result.is_ok());
         let status = result.unwrap();
@@ -432,9 +442,7 @@ mod tests {
     fn test_git_get_commit_history_command() {
         let (_temp_dir, repo_path, state) = setup_test_repo();
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.get_commit_history(10)
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.get_commit_history(10));
 
         assert!(result.is_ok());
         let history = result.unwrap();
@@ -450,9 +458,7 @@ mod tests {
         let new_file = temp_dir.path().join("stage.txt");
         fs::write(&new_file, "Stage me").unwrap();
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.stage_files(&["stage.txt"])
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.stage_files(&["stage.txt"]));
 
         assert!(result.is_ok());
     }
@@ -481,9 +487,7 @@ mod tests {
             manager.create_worktree("wt1", worktree_path.to_str().unwrap())
         });
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.list_worktrees()
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.list_worktrees());
 
         assert!(result.is_ok());
         let worktrees = result.unwrap();
@@ -498,9 +502,7 @@ mod tests {
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "Modified").unwrap();
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.get_working_diff()
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.get_working_diff());
 
         assert!(result.is_ok());
         let diff = result.unwrap();
@@ -515,15 +517,13 @@ mod tests {
             manager.create_branch("delete-me", false)
         });
 
-        let result = state.with_manager(&repo_path, |manager| {
-            manager.delete_branch("delete-me")
-        });
+        let result = state.with_manager(&repo_path, |manager| manager.delete_branch("delete-me"));
 
         assert!(result.is_ok());
 
-        let branches = state.with_manager(&repo_path, |manager| {
-            manager.list_branches()
-        }).unwrap();
+        let branches = state
+            .with_manager(&repo_path, |manager| manager.list_branches())
+            .unwrap();
         let names: Vec<String> = branches.iter().map(|b| b.name.clone()).collect();
         assert!(!names.contains(&"delete-me".to_string()));
     }
