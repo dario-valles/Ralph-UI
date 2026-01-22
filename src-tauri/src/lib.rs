@@ -89,10 +89,14 @@ impl AgentManagerState {
     pub fn new(
         pty_data_tx: mpsc::UnboundedSender<agents::AgentPtyDataEvent>,
         subagent_tx: mpsc::UnboundedSender<agents::SubagentEvent>,
+        tool_call_tx: mpsc::UnboundedSender<agents::ToolCallStartEvent>,
+        tool_call_complete_tx: mpsc::UnboundedSender<agents::ToolCallCompleteEvent>,
     ) -> Self {
         let mut manager = agents::AgentManager::new();
         manager.set_pty_data_sender(pty_data_tx);
         manager.set_subagent_sender(subagent_tx);
+        manager.set_tool_call_sender(tool_call_tx);
+        manager.set_tool_call_complete_sender(tool_call_complete_tx);
         Self {
             manager: Arc::new(std::sync::Mutex::new(manager)),
         }
@@ -180,8 +184,14 @@ pub fn run() {
     // Create subagent event channel for forwarding structured agent events to frontend
     let (subagent_tx, subagent_rx) = mpsc::unbounded_channel::<agents::SubagentEvent>();
 
-    // Initialize AgentManager state for PTY tracking (with PTY data sender)
-    let agent_manager_state = AgentManagerState::new(pty_data_tx, subagent_tx);
+    // Create tool call event channels for forwarding tool call events to frontend
+    let (tool_call_tx, tool_call_rx) = mpsc::unbounded_channel::<agents::ToolCallStartEvent>();
+    let (tool_call_complete_tx, tool_call_complete_rx) =
+        mpsc::unbounded_channel::<agents::ToolCallCompleteEvent>();
+
+    // Initialize AgentManager state for PTY tracking (with PTY data sender and tool call senders)
+    let agent_manager_state =
+        AgentManagerState::new(pty_data_tx, subagent_tx, tool_call_tx, tool_call_complete_tx);
 
     // Initialize Plugin Registry state
     let plugin_registry_state = PluginRegistryState::new();
@@ -232,6 +242,17 @@ pub fn run() {
             // Spawn task to forward subagent events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
                 forward_subagent_events(subagent_handle, subagent_rx).await;
+            });
+            // Spawn task to forward tool call start events to Tauri frontend events
+            let tool_call_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                forward_tool_call_start_events(tool_call_handle, tool_call_rx).await;
+            });
+            // Spawn task to forward tool call complete events to Tauri frontend events
+            let tool_call_complete_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                forward_tool_call_complete_events(tool_call_complete_handle, tool_call_complete_rx)
+                    .await;
             });
             Ok(())
         })
@@ -788,4 +809,69 @@ async fn forward_subagent_events(
     }
 
     log::debug!("Subagent event forwarder stopped");
+}
+
+/// Forward tool call start events to Tauri frontend events
+/// This runs as a background task that listens for tool call events on the channel
+/// and emits them to the frontend via Tauri's event system for the tool call panel.
+async fn forward_tool_call_start_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::ToolCallStartEvent>,
+) {
+    log::debug!("Tool call start event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        log::trace!(
+            "Forwarding tool call start event for agent {} tool {}",
+            event.agent_id,
+            event.tool_name
+        );
+
+        let payload = events::ToolCallStartedPayload {
+            agent_id: event.agent_id,
+            tool_id: event.tool_id,
+            tool_name: event.tool_name,
+            input: event.input,
+            timestamp: event.timestamp,
+        };
+
+        if let Err(e) = events::emit_tool_call_started(&app_handle, payload) {
+            log::warn!("Failed to emit tool call started event: {}", e);
+        }
+    }
+
+    log::debug!("Tool call start event forwarder stopped");
+}
+
+/// Forward tool call complete events to Tauri frontend events
+/// This runs as a background task that listens for tool call completion events on the channel
+/// and emits them to the frontend via Tauri's event system for the tool call panel.
+async fn forward_tool_call_complete_events(
+    app_handle: tauri::AppHandle,
+    mut rx: mpsc::UnboundedReceiver<agents::ToolCallCompleteEvent>,
+) {
+    log::debug!("Tool call complete event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        log::trace!(
+            "Forwarding tool call complete event for agent {} tool_id {}",
+            event.agent_id,
+            event.tool_id
+        );
+
+        let payload = events::ToolCallCompletedPayload {
+            agent_id: event.agent_id,
+            tool_id: event.tool_id,
+            output: event.output,
+            duration_ms: None, // Duration calculated on frontend
+            timestamp: event.timestamp,
+            is_error: event.is_error,
+        };
+
+        if let Err(e) = events::emit_tool_call_completed(&app_handle, payload) {
+            log::warn!("Failed to emit tool call completed event: {}", e);
+        }
+    }
+
+    log::debug!("Tool call complete event forwarder stopped");
 }

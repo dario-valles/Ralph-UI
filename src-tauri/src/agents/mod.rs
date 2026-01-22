@@ -18,7 +18,7 @@ pub mod trace_parser;
 pub use config::{ConfigField, ConfigFieldType, PluginConfigSchema};
 pub use manager::{
     AgentCompletionEvent, AgentManager, AgentPtyDataEvent, AgentSpawnConfig, AgentSpawnMode,
-    RateLimitEvent,
+    RateLimitEvent, ToolCallCompleteEvent, ToolCallStartEvent,
 };
 pub use plugin::AgentPlugin;
 pub use registry::AgentRegistry;

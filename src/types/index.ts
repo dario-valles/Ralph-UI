@@ -637,6 +637,50 @@ export interface RateLimitEvent {
 }
 
 // ============================================================================
+// Tool Call Types (for collapsible tool call display)
+// ============================================================================
+
+export type ToolCallStatus = 'running' | 'completed' | 'failed'
+
+export interface ToolCall {
+  /** Unique tool call ID (from Claude's tool_use_id) */
+  id: string
+  /** Agent ID that made the tool call */
+  agentId: string
+  /** Name of the tool being called */
+  toolName: string
+  /** Tool input parameters */
+  input?: unknown
+  /** Tool output/result (may be truncated for large outputs) */
+  output?: string
+  /** Timestamp when tool call started */
+  startedAt: string
+  /** Timestamp when tool call completed */
+  completedAt?: string
+  /** Duration in milliseconds */
+  durationMs?: number
+  /** Status of the tool call */
+  status: ToolCallStatus
+}
+
+export interface ToolCallStartedPayload {
+  agentId: string
+  toolId: string
+  toolName: string
+  input?: unknown
+  timestamp: string
+}
+
+export interface ToolCallCompletedPayload {
+  agentId: string
+  toolId: string
+  output?: string
+  durationMs?: number
+  timestamp: string
+  isError: boolean
+}
+
+// ============================================================================
 // Terminal Types (re-exported from terminal.ts)
 // ============================================================================
 

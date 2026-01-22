@@ -20,10 +20,103 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::sync::mpsc;
 
+/// Parsed tool call from agent JSON output
+#[derive(Debug, Clone)]
+pub struct ParsedToolCall {
+    /// Tool call ID (from Claude's tool_use_id)
+    pub tool_id: String,
+    /// Tool name
+    pub tool_name: String,
+    /// Tool input parameters
+    pub input: Option<serde_json::Value>,
+}
+
+/// Parsed tool result from agent JSON output
+#[derive(Debug, Clone)]
+pub struct ParsedToolResult {
+    /// Tool call ID this result is for
+    pub tool_id: String,
+    /// Tool output (may be truncated)
+    pub output: String,
+    /// Whether the result indicates an error
+    pub is_error: bool,
+}
+
+/// Result of parsing agent JSON output
+#[derive(Debug, Clone, Default)]
+pub struct ParsedAgentOutput {
+    /// Display text for the terminal
+    pub display_text: String,
+    /// Tool calls found in this message
+    pub tool_calls: Vec<ParsedToolCall>,
+    /// Tool results found in this message
+    pub tool_results: Vec<ParsedToolResult>,
+}
+
+/// Parse agent JSON output and extract human-readable text and tool call data
+/// Supports Claude stream-json format and OpenCode JSON format
+/// Returns formatted text suitable for terminal display along with tool call info
+fn parse_agent_json_output_with_tools(line: &str) -> ParsedAgentOutput {
+    // Try to parse as JSON
+    let json: serde_json::Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(_) => {
+            return ParsedAgentOutput {
+                display_text: line.to_string(),
+                ..Default::default()
+            };
+        }
+    };
+
+    // Check for Claude stream-json format (has "type" field)
+    if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
+        return parse_claude_stream_json_with_tools(&json, msg_type);
+    }
+
+    // Check for OpenCode format (has "role" or "content" at top level)
+    if json.get("role").is_some() || json.get("content").is_some() {
+        return ParsedAgentOutput {
+            display_text: parse_opencode_json(&json),
+            ..Default::default()
+        };
+    }
+
+    // Check for generic message/text fields
+    if let Some(text) = json.get("text").and_then(|v| v.as_str()) {
+        return ParsedAgentOutput {
+            display_text: text.to_string(),
+            ..Default::default()
+        };
+    }
+    if let Some(message) = json.get("message").and_then(|v| v.as_str()) {
+        return ParsedAgentOutput {
+            display_text: message.to_string(),
+            ..Default::default()
+        };
+    }
+    if let Some(output) = json.get("output").and_then(|v| v.as_str()) {
+        return ParsedAgentOutput {
+            display_text: output.to_string(),
+            ..Default::default()
+        };
+    }
+
+    // Unknown JSON format - return as-is
+    ParsedAgentOutput {
+        display_text: line.to_string(),
+        ..Default::default()
+    }
+}
+
 /// Parse agent JSON output and extract human-readable text
 /// Supports Claude stream-json format and OpenCode JSON format
 /// Returns formatted text suitable for terminal display
 fn parse_agent_json_output(line: &str) -> String {
+    parse_agent_json_output_with_tools(line).display_text
+}
+
+/// Legacy function for compatibility
+fn _parse_agent_json_output_legacy(line: &str) -> String {
     // Try to parse as JSON
     let json: serde_json::Value = match serde_json::from_str(line) {
         Ok(v) => v,
@@ -53,6 +146,112 @@ fn parse_agent_json_output(line: &str) -> String {
 
     // Unknown JSON format - return as-is but formatted
     line.to_string()
+}
+
+/// Parse Claude stream-json format with tool call extraction
+fn parse_claude_stream_json_with_tools(json: &serde_json::Value, msg_type: &str) -> ParsedAgentOutput {
+    let mut result = ParsedAgentOutput::default();
+
+    match msg_type {
+        "system" => {
+            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
+            if subtype == "init" {
+                let model = json
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                result.display_text = format!("\x1b[36m[System] Initialized with model: {}\x1b[0m", model);
+            } else {
+                result.display_text = format!("\x1b[36m[System] {}\x1b[0m", subtype);
+            }
+        }
+        "assistant" => {
+            if let Some(message) = json.get("message") {
+                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                    let mut texts: Vec<String> = Vec::new();
+
+                    for item in content {
+                        if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                texts.push(text.to_string());
+                            }
+                        } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                            let tool_name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                            let tool_id = item.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+                            let tool_input = item.get("input").cloned();
+
+                            // Add to tool calls
+                            result.tool_calls.push(ParsedToolCall {
+                                tool_id: tool_id.clone(),
+                                tool_name: tool_name.to_string(),
+                                input: tool_input,
+                            });
+
+                            texts.push(format!("\x1b[33m[Using tool: {}]\x1b[0m", tool_name));
+                        }
+                    }
+
+                    if !texts.is_empty() {
+                        result.display_text = texts.join("\n");
+                    }
+                }
+            }
+        }
+        "user" => {
+            if let Some(message) = json.get("message") {
+                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                    for item in content {
+                        if item.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
+                            let tool_id = item
+                                .get("tool_use_id")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let content_str = item.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                            let is_error = item.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
+
+                            // Add to tool results
+                            result.tool_results.push(ParsedToolResult {
+                                tool_id: tool_id.clone(),
+                                output: content_str.to_string(),
+                                is_error,
+                            });
+
+                            let truncated = if content_str.len() > 200 {
+                                format!("{}...", &content_str[..200])
+                            } else {
+                                content_str.to_string()
+                            };
+                            result.display_text = format!(
+                                "\x1b[90m[Tool result {}]: {}\x1b[0m",
+                                &tool_id[..8.min(tool_id.len())],
+                                truncated
+                            );
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+        "result" => {
+            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
+            let duration = json
+                .get("duration_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cost = json
+                .get("total_cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            result.display_text = format!(
+                "\x1b[32m[Complete] {} - Duration: {}ms, Cost: ${:.4}\x1b[0m",
+                subtype, duration, cost
+            );
+        }
+        _ => {}
+    }
+
+    result
 }
 
 /// Parse Claude stream-json format
@@ -224,6 +423,10 @@ pub struct AgentManager {
     pty_exit_tx: Option<mpsc::UnboundedSender<AgentPtyExitEvent>>,
     /// Event sender for subagent events
     subagent_tx: Option<mpsc::UnboundedSender<SubagentEvent>>,
+    /// Event sender for tool call events
+    tool_call_tx: Option<mpsc::UnboundedSender<ToolCallStartEvent>>,
+    /// Event sender for tool call completion events
+    tool_call_complete_tx: Option<mpsc::UnboundedSender<ToolCallCompleteEvent>>,
     /// Trace parsers per agent
     parsers: Arc<Mutex<HashMap<String, StreamingParser>>>,
     /// Subagent trees per agent
@@ -270,6 +473,26 @@ pub struct AgentPtyExitEvent {
     pub exit_code: i32,
 }
 
+/// Event emitted when a tool call starts
+#[derive(Debug, Clone)]
+pub struct ToolCallStartEvent {
+    pub agent_id: String,
+    pub tool_id: String,
+    pub tool_name: String,
+    pub input: Option<serde_json::Value>,
+    pub timestamp: String,
+}
+
+/// Event emitted when a tool call completes
+#[derive(Debug, Clone)]
+pub struct ToolCallCompleteEvent {
+    pub agent_id: String,
+    pub tool_id: String,
+    pub output: Option<String>,
+    pub is_error: bool,
+    pub timestamp: String,
+}
+
 /// Configuration for spawning an agent
 #[derive(Debug, Clone)]
 pub struct AgentSpawnConfig {
@@ -301,6 +524,8 @@ impl AgentManager {
             pty_data_tx: None,
             pty_exit_tx: None,
             subagent_tx: None,
+            tool_call_tx: None,
+            tool_call_complete_tx: None,
             parsers: Arc::new(Mutex::new(HashMap::new())),
             subagent_trees: Arc::new(Mutex::new(HashMap::new())),
             monitor_cancellation: Arc::new(Mutex::new(HashMap::new())),
@@ -347,6 +572,16 @@ impl AgentManager {
     /// Set the subagent event sender for streaming subagent updates
     pub fn set_subagent_sender(&mut self, tx: mpsc::UnboundedSender<SubagentEvent>) {
         self.subagent_tx = Some(tx);
+    }
+
+    /// Set the tool call start event sender for streaming tool call updates
+    pub fn set_tool_call_sender(&mut self, tx: mpsc::UnboundedSender<ToolCallStartEvent>) {
+        self.tool_call_tx = Some(tx);
+    }
+
+    /// Set the tool call complete event sender for streaming tool call completion updates
+    pub fn set_tool_call_complete_sender(&mut self, tx: mpsc::UnboundedSender<ToolCallCompleteEvent>) {
+        self.tool_call_complete_tx = Some(tx);
     }
 
     /// Initialize trace parser for an agent
@@ -806,6 +1041,8 @@ impl AgentManager {
         if let Some(stdout) = stdout {
             let log_tx = self.log_tx.clone();
             let subagent_tx = self.subagent_tx.clone();
+            let tool_call_tx = self.tool_call_tx.clone();
+            let tool_call_complete_tx = self.tool_call_complete_tx.clone();
             let agent_logs = self.agent_logs.clone();
             let parsers = self.parsers.clone();
             let subagent_trees = self.subagent_trees.clone();
@@ -832,8 +1069,35 @@ impl AgentManager {
                         Ok(line) => {
                             log::info!("[Agent {}] {}", agent_id_clone, line);
 
-                            // Parse JSON output and extract readable text (supports Claude and OpenCode)
-                            let display_text = parse_agent_json_output(&line);
+                            // Parse JSON output and extract readable text + tool call data
+                            let parsed = parse_agent_json_output_with_tools(&line);
+                            let display_text = parsed.display_text.clone();
+
+                            // Emit tool call events
+                            for tool_call in parsed.tool_calls {
+                                if let Some(ref tx) = tool_call_tx {
+                                    let _ = tx.send(ToolCallStartEvent {
+                                        agent_id: agent_id_clone.clone(),
+                                        tool_id: tool_call.tool_id,
+                                        tool_name: tool_call.tool_name,
+                                        input: tool_call.input,
+                                        timestamp: Utc::now().to_rfc3339(),
+                                    });
+                                }
+                            }
+
+                            // Emit tool result events
+                            for tool_result in parsed.tool_results {
+                                if let Some(ref tx) = tool_call_complete_tx {
+                                    let _ = tx.send(ToolCallCompleteEvent {
+                                        agent_id: agent_id_clone.clone(),
+                                        tool_id: tool_result.tool_id,
+                                        output: Some(tool_result.output),
+                                        is_error: tool_result.is_error,
+                                        timestamp: Utc::now().to_rfc3339(),
+                                    });
+                                }
+                            }
 
                             // Skip empty lines (unknown JSON types return empty string)
                             if display_text.is_empty() {

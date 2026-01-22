@@ -27,6 +27,10 @@ pub const EVENT_RALPH_PROGRESS: &str = "ralph:progress";
 pub const EVENT_RALPH_ITERATION_STARTED: &str = "ralph:iteration_started";
 pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
 
+// Tool call events (for collapsible tool call display)
+pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
+pub const EVENT_TOOL_CALL_COMPLETED: &str = "tool:completed";
+
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -440,6 +444,64 @@ pub fn emit_ralph_iteration_completed(
         .with_context("Failed to emit Ralph iteration completed event")
 }
 
+// ============================================================================
+// Tool Call Events (for collapsible tool call display)
+// ============================================================================
+
+/// Payload for tool call started events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallStartedPayload {
+    /// Agent ID that made the tool call
+    pub agent_id: String,
+    /// Unique tool call ID (from Claude's tool_use_id)
+    pub tool_id: String,
+    /// Name of the tool being called
+    pub tool_name: String,
+    /// Tool input parameters (JSON value)
+    pub input: Option<serde_json::Value>,
+    /// Timestamp when tool call started
+    pub timestamp: String,
+}
+
+/// Payload for tool call completed events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallCompletedPayload {
+    /// Agent ID that made the tool call
+    pub agent_id: String,
+    /// Unique tool call ID (from Claude's tool_use_id)
+    pub tool_id: String,
+    /// Tool output/result (truncated for large outputs)
+    pub output: Option<String>,
+    /// Duration in milliseconds
+    pub duration_ms: Option<u64>,
+    /// Timestamp when tool call completed
+    pub timestamp: String,
+    /// Whether the tool call was successful
+    pub is_error: bool,
+}
+
+/// Emit a tool call started event
+pub fn emit_tool_call_started(
+    app_handle: &tauri::AppHandle,
+    payload: ToolCallStartedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_TOOL_CALL_STARTED, payload)
+        .with_context("Failed to emit tool call started event")
+}
+
+/// Emit a tool call completed event
+pub fn emit_tool_call_completed(
+    app_handle: &tauri::AppHandle,
+    payload: ToolCallCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_TOOL_CALL_COMPLETED, payload)
+        .with_context("Failed to emit tool call completed event")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -712,6 +774,47 @@ mod tests {
         let cloned = rate_limit_payload.clone();
         assert_eq!(rate_limit_payload.agent_id, cloned.agent_id);
         assert_eq!(rate_limit_payload.limit_type, cloned.limit_type);
+    }
+
+    #[test]
+    fn test_tool_call_event_constants() {
+        assert_eq!(EVENT_TOOL_CALL_STARTED, "tool:started");
+        assert_eq!(EVENT_TOOL_CALL_COMPLETED, "tool:completed");
+    }
+
+    #[test]
+    fn test_tool_call_started_payload_serialization() {
+        let payload = ToolCallStartedPayload {
+            agent_id: "agent-123".to_string(),
+            tool_id: "toolu_01abc".to_string(),
+            tool_name: "Read".to_string(),
+            input: Some(serde_json::json!({"file_path": "/test/file.txt"})),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"agentId\":\"agent-123\""));
+        assert!(json.contains("\"toolId\":\"toolu_01abc\""));
+        assert!(json.contains("\"toolName\":\"Read\""));
+        assert!(json.contains("\"input\":{\"file_path\":\"/test/file.txt\"}"));
+    }
+
+    #[test]
+    fn test_tool_call_completed_payload_serialization() {
+        let payload = ToolCallCompletedPayload {
+            agent_id: "agent-123".to_string(),
+            tool_id: "toolu_01abc".to_string(),
+            output: Some("File contents here...".to_string()),
+            duration_ms: Some(150),
+            timestamp: "2024-01-01T00:00:01Z".to_string(),
+            is_error: false,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"agentId\":\"agent-123\""));
+        assert!(json.contains("\"toolId\":\"toolu_01abc\""));
+        assert!(json.contains("\"durationMs\":150"));
+        assert!(json.contains("\"isError\":false"));
     }
 
     #[test]
