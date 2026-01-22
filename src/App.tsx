@@ -1,10 +1,9 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { MissionControlPage } from './components/mission-control'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { PRDList } from './components/prd/PRDList'
-import { PRDTemplateSelector } from './components/prd/PRDTemplateSelector'
 import { PRDEditor } from './components/prd/PRDEditor'
 import { PRDFileEditor } from './components/prd/PRDFileEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
@@ -72,7 +71,7 @@ function App() {
           <Route path="/" element={<AppLayout />}>
             <Route index element={<MissionControlPage />} />
             <Route path="prds" element={<PRDList />} />
-            <Route path="prds/new" element={<PRDTemplateSelector />} />
+            <Route path="prds/new" element={<Navigate to="/prds/chat" replace />} />
             <Route path="prds/chat" element={<PRDChatPanel />} />
             <Route path="prds/file" element={<PRDFileEditor />} />
             <Route path="prds/:id" element={<PRDEditor />} />

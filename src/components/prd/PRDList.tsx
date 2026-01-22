@@ -274,11 +274,7 @@ export function PRDList() {
               </Button>
             </>
           )}
-          <Button variant="outline" onClick={() => navigate('/prds/chat')} className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Create with Chat
-          </Button>
-          <Button onClick={() => navigate('/prds/new')} className="gap-2">
+          <Button onClick={() => navigate('/prds/chat')} className="gap-2">
             <Plus className="h-4 w-4" />
             Create PRD
           </Button>
@@ -322,7 +318,7 @@ export function PRDList() {
                 : 'Create your first PRD to get started'}
             </p>
             {!searchQuery && (
-              <Button onClick={() => navigate('/prds/new')} className="mt-4 gap-2">
+              <Button onClick={() => navigate('/prds/chat')} className="mt-4 gap-2">
                 <Plus className="h-4 w-4" />
                 Create PRD
               </Button>

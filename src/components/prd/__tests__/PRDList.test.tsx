@@ -179,38 +179,20 @@ describe('PRDList', () => {
     })
   })
 
-  describe('Create with Chat Button', () => {
-    it('displays Create with Chat button', () => {
-      renderWithRouter()
-      expect(screen.getByRole('button', { name: /create with chat/i })).toBeInTheDocument()
-    })
-
-    it('navigates to chat when clicked', async () => {
-      const user = userEvent.setup()
-      renderWithRouter()
-
-      await user.click(screen.getByRole('button', { name: /create with chat/i }))
-
-      await waitFor(() => {
-        expect(screen.getByText('PRD Chat')).toBeInTheDocument()
-      })
-    })
-  })
-
   describe('Create PRD Button', () => {
     it('displays Create PRD button', () => {
       renderWithRouter()
       expect(screen.getByRole('button', { name: /create prd/i })).toBeInTheDocument()
     })
 
-    it('navigates to create page when clicked', async () => {
+    it('navigates to PRD Chat when clicked', async () => {
       const user = userEvent.setup()
       renderWithRouter()
 
       await user.click(screen.getByRole('button', { name: /create prd/i }))
 
       await waitFor(() => {
-        expect(screen.getByText('Create PRD')).toBeInTheDocument()
+        expect(screen.getByText('PRD Chat')).toBeInTheDocument()
       })
     })
   })
