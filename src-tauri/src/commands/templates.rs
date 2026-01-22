@@ -51,10 +51,9 @@ pub async fn list_templates(
         .into_iter()
         .map(|(name, source)| {
             let description = match source {
-                TemplateSource::Builtin => "Built-in template".to_string(),
-                TemplateSource::Global => "Global template (~/.config/ralph-ui/templates/)".to_string(),
                 TemplateSource::Project => "Project template (.ralph-ui/templates/)".to_string(),
-                TemplateSource::Custom => "Custom template".to_string(),
+                TemplateSource::Global => "Global template (~/.ralph-ui/templates/)".to_string(),
+                TemplateSource::Builtin => "Built-in template".to_string(),
             };
 
             TemplateInfo {
