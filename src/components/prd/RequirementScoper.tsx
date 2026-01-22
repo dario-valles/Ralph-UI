@@ -12,14 +12,18 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select } from '@/components/ui/select'
-import type { RequirementsDoc, Requirement, ScopeSelection, ScopeLevel } from '@/types/planning'
-import { ListChecks, ArrowRight, Filter } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import type { RequirementsDoc, Requirement, ScopeSelection, ScopeLevel, RequirementCategory } from '@/types/planning'
+import { ListChecks, ArrowRight, Filter, Plus, X } from 'lucide-react'
 
 interface RequirementScoperProps {
   /** Requirements document */
   requirements: RequirementsDoc
   /** Callback when scope selections are applied */
   onApplyScope: (selections: ScopeSelection) => Promise<void>
+  /** Callback when a new requirement is added */
+  onAddRequirement?: (category: RequirementCategory, title: string, description: string) => Promise<Requirement>
   /** Callback when ready to proceed */
   onProceed: () => void
   /** Whether the component is in loading state */
@@ -91,6 +95,7 @@ function RequirementRow({
 export function RequirementScoper({
   requirements,
   onApplyScope,
+  onAddRequirement,
   onProceed,
   isLoading = false,
 }: RequirementScoperProps) {
@@ -102,6 +107,13 @@ export function RequirementScoper({
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterScope, setFilterScope] = useState<string>('all')
   const [hasChanges, setHasChanges] = useState(false)
+
+  // Custom requirement form state
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newReqCategory, setNewReqCategory] = useState<RequirementCategory>('core')
+  const [newReqTitle, setNewReqTitle] = useState('')
+  const [newReqDescription, setNewReqDescription] = useState('')
+  const [isAddingReq, setIsAddingReq] = useState(false)
 
   // Group requirements by category
   const groupedRequirements = useMemo(() => {
@@ -215,6 +227,29 @@ export function RequirementScoper({
     await onApplyScope(selection)
     setHasChanges(false)
   }, [localRequirements, onApplyScope])
+
+  const handleAddCustomRequirement = useCallback(async () => {
+    if (!onAddRequirement || !newReqTitle.trim()) return
+
+    setIsAddingReq(true)
+    try {
+      const newReq = await onAddRequirement(newReqCategory, newReqTitle, newReqDescription)
+      // Add to local state
+      setLocalRequirements((prev) => ({
+        ...prev,
+        [newReq.id]: newReq,
+      }))
+      // Reset form
+      setNewReqTitle('')
+      setNewReqDescription('')
+      setShowAddForm(false)
+      setHasChanges(true)
+    } catch (error) {
+      console.error('Failed to add requirement:', error)
+    } finally {
+      setIsAddingReq(false)
+    }
+  }, [onAddRequirement, newReqCategory, newReqTitle, newReqDescription])
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -335,6 +370,87 @@ export function RequirementScoper({
           )}
         </ScrollArea>
       </Card>
+
+      {/* Add Custom Requirement */}
+      {onAddRequirement && (
+        <Card>
+          <CardContent className="pt-6">
+            {!showAddForm ? (
+              <Button
+                variant="outline"
+                onClick={() => setShowAddForm(true)}
+                className="w-full gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Custom Requirement
+              </Button>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">New Requirement</h4>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAddForm(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Category</label>
+                    <Select
+                      value={newReqCategory}
+                      onChange={(e) => setNewReqCategory(e.target.value as RequirementCategory)}
+                      className="w-full"
+                    >
+                      <option value="core">Core Features</option>
+                      <option value="ui">User Interface</option>
+                      <option value="data">Data & Storage</option>
+                      <option value="integration">Integration</option>
+                      <option value="security">Security</option>
+                      <option value="performance">Performance</option>
+                      <option value="other">Other</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Title</label>
+                    <Input
+                      placeholder="e.g., User can export data as CSV"
+                      value={newReqTitle}
+                      onChange={(e) => setNewReqTitle(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Description</label>
+                  <Textarea
+                    placeholder="Detailed description of the requirement..."
+                    value={newReqDescription}
+                    onChange={(e) => setNewReqDescription(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddForm(false)}
+                    disabled={isAddingReq}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddCustomRequirement}
+                    disabled={isAddingReq || !newReqTitle.trim()}
+                  >
+                    {isAddingReq ? 'Adding...' : 'Add Requirement'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       <Card>

@@ -10,14 +10,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Planning file types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlanningFile {
     /// PROJECT.md - Project vision and constraints
     Project,
     /// SUMMARY.md - Synthesized research summary
     Summary,
-    /// REQUIREMENTS.md - Full requirements list
+    /// requirements.json - Structured requirements data
     Requirements,
+    /// REQUIREMENTS.md - Human-readable requirements markdown
+    RequirementsMd,
     /// SCOPED.md - User-selected scope
     Scoped,
     /// ROADMAP.md - Phased execution plan
@@ -26,19 +28,23 @@ pub enum PlanningFile {
     Verification,
     /// state.json - Workflow state
     State,
+    /// Research file by name (e.g., "features.md")
+    Research(String),
 }
 
 impl PlanningFile {
     /// Get the filename for this planning file
-    pub fn filename(&self) -> &'static str {
+    pub fn filename(&self) -> String {
         match self {
-            PlanningFile::Project => "PROJECT.md",
-            PlanningFile::Summary => "SUMMARY.md",
-            PlanningFile::Requirements => "REQUIREMENTS.md",
-            PlanningFile::Scoped => "SCOPED.md",
-            PlanningFile::Roadmap => "ROADMAP.md",
-            PlanningFile::Verification => "VERIFICATION.md",
-            PlanningFile::State => "state.json",
+            PlanningFile::Project => "PROJECT.md".to_string(),
+            PlanningFile::Summary => "SUMMARY.md".to_string(),
+            PlanningFile::Requirements => "requirements.json".to_string(),
+            PlanningFile::RequirementsMd => "REQUIREMENTS.md".to_string(),
+            PlanningFile::Scoped => "SCOPED.md".to_string(),
+            PlanningFile::Roadmap => "ROADMAP.md".to_string(),
+            PlanningFile::Verification => "VERIFICATION.md".to_string(),
+            PlanningFile::State => "state.json".to_string(),
+            PlanningFile::Research(name) => format!("research/{}", name),
         }
     }
 }

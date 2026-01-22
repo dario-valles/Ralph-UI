@@ -2,7 +2,8 @@
  * Verification Results Component for GSD Workflow
  *
  * Displays the verification results showing coverage, gaps,
- * and issues with the planning documents.
+ * and issues with the planning documents. Supports iteration
+ * tracking to show progress in fixing issues.
  */
 
 import { useMemo } from 'react'
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { VerificationResult, VerificationIssue } from '@/types/planning'
+import type { VerificationResult, VerificationIssue, VerificationHistorySummary } from '@/types/planning'
 import {
   CheckCircle2,
   XCircle,
@@ -19,11 +20,21 @@ import {
   ArrowRight,
   RefreshCw,
   Shield,
+  TrendingUp,
+  History,
 } from 'lucide-react'
 
 interface VerificationResultsProps {
   /** Verification result */
   result: VerificationResult
+  /** Current iteration number */
+  iteration?: number
+  /** Issues fixed since last iteration */
+  issuesFixed?: string[]
+  /** New issues since last iteration */
+  newIssues?: string[]
+  /** Summary of verification history */
+  historySummary?: VerificationHistorySummary
   /** Callback to re-run verification */
   onRerun: () => Promise<void>
   /** Callback when ready to proceed */
@@ -87,6 +98,10 @@ function IssueCard({ issue }: IssueCardProps) {
 
 export function VerificationResults({
   result,
+  iteration,
+  issuesFixed,
+  newIssues,
+  historySummary,
   onRerun,
   onProceed,
   isLoading = false,
@@ -118,12 +133,65 @@ export function VerificationResults({
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             <CardTitle>Plan Verification</CardTitle>
+            {iteration && iteration > 1 && (
+              <Badge variant="outline" className="ml-2">
+                <History className="h-3 w-3 mr-1" />
+                Iteration {iteration}
+              </Badge>
+            )}
           </div>
           <CardDescription>
             Checking that all requirements are covered and the roadmap is complete.
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Iteration Progress */}
+      {historySummary && historySummary.totalIterations > 1 && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <div className="flex-1">
+                <div className="flex items-center gap-4 mb-2">
+                  <span className="text-sm font-medium">Progress:</span>
+                  {historySummary.improvementPercentage !== undefined && (
+                    <Badge variant={historySummary.improvementPercentage > 0 ? 'default' : 'secondary'}>
+                      {historySummary.improvementPercentage > 0 ? '+' : ''}
+                      {historySummary.improvementPercentage.toFixed(0)}% improvement
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-6 text-sm text-muted-foreground">
+                  <span>{historySummary.totalIssuesFixed} issues fixed</span>
+                  <span>{historySummary.currentIssues} remaining</span>
+                  <span>{historySummary.totalIterations} iterations</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed/New issues in this iteration */}
+            {(issuesFixed && issuesFixed.length > 0) && (
+              <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span className="text-sm font-medium">Fixed this iteration:</span>
+                  <span className="text-sm">{issuesFixed.length} issue(s)</span>
+                </div>
+              </div>
+            )}
+            {(newIssues && newIssues.length > 0) && (
+              <div className="mt-2">
+                <div className="flex items-center gap-2 text-orange-600">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-sm font-medium">New this iteration:</span>
+                  <span className="text-sm">{newIssues.length} issue(s)</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Overall status */}
       <Card>

@@ -449,7 +449,9 @@ pub fn run() {
             commands::start_research,
             commands::get_research_results,
             commands::synthesize_research_cmd,
+            commands::generate_requirements_from_research,
             commands::scope_requirements,
+            commands::validate_requirements,
             commands::save_requirements,
             commands::load_requirements,
             commands::create_roadmap,
@@ -460,6 +462,9 @@ pub fn run() {
             commands::read_gsd_planning_file,
             commands::list_gsd_sessions,
             commands::delete_gsd_session,
+            commands::add_requirement,
+            commands::get_verification_history,
+            commands::clear_verification_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

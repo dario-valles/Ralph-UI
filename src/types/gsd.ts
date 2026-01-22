@@ -195,6 +195,57 @@ export interface ResearchSynthesis {
 }
 
 /**
+ * Types of quality issues
+ */
+export type QualityIssueType =
+  | 'vague'
+  | 'not_user_centric'
+  | 'not_atomic'
+  | 'no_acceptance_criteria'
+  | 'too_short'
+  | 'banned_word'
+
+/**
+ * A quality issue with a requirement
+ */
+export interface QualityIssue {
+  /** Type of issue */
+  issueType: QualityIssueType
+  /** Description of the issue */
+  message: string
+  /** Severity level (error, warning, info) */
+  severity: string
+}
+
+/**
+ * Quality validation result for a single requirement
+ */
+export interface RequirementQualityResult {
+  /** The requirement ID */
+  id: string
+  /** Whether the requirement passes quality checks */
+  isValid: boolean
+  /** List of quality issues found */
+  issues: QualityIssue[]
+  /** Suggestions for improvement */
+  suggestions: string[]
+}
+
+/**
+ * Result of validating all requirements
+ */
+export interface RequirementsValidationResult {
+  /** Validation results for each requirement */
+  results: RequirementQualityResult[]
+  /** Overall quality score (0-100) */
+  qualityScore: number
+  /** Total number of requirements */
+  totalRequirements: number
+  /** Number of valid requirements */
+  validRequirements: number
+}
+
+/**
  * Configuration for the GSD workflow
  */
 export interface GsdConfig {

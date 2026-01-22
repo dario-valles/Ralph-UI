@@ -202,6 +202,64 @@ export interface VerificationResult {
 }
 
 /**
+ * A single verification iteration
+ */
+export interface VerificationIteration {
+  /** Iteration number (1-indexed) */
+  iteration: number
+  /** When this iteration was performed */
+  timestamp: string
+  /** The verification result for this iteration */
+  result: VerificationResult
+  /** Issue codes that were fixed since the previous iteration */
+  issuesFixed: string[]
+  /** Issue codes that are new since the previous iteration */
+  newIssues: string[]
+}
+
+/**
+ * Summary of verification history
+ */
+export interface VerificationHistorySummary {
+  /** Total number of verification iterations */
+  totalIterations: number
+  /** Total issues found across all iterations */
+  totalIssuesFound: number
+  /** Total issues that were fixed */
+  totalIssuesFixed: number
+  /** Current number of remaining issues */
+  currentIssues: number
+  /** Improvement percentage from first to latest iteration */
+  improvementPercentage?: number
+}
+
+/**
+ * Verification history tracking all iterations
+ */
+export interface VerificationHistory {
+  /** All verification iterations */
+  iterations: VerificationIteration[]
+  /** Current iteration number */
+  currentIteration: number
+}
+
+/**
+ * Result of a verification iteration (from command)
+ */
+export interface VerificationIterationResult {
+  /** The verification result */
+  result: VerificationResult
+  /** Current iteration number */
+  iteration: number
+  /** Issues that were fixed since previous iteration */
+  issuesFixed: string[]
+  /** New issues since previous iteration */
+  newIssues: string[]
+  /** Summary of verification history */
+  summary: VerificationHistorySummary
+}
+
+/**
  * Options for converting to RalphPrd
  */
 export interface ConversionOptions {

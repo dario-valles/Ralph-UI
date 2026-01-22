@@ -1,10 +1,12 @@
 //! Verification module for GSD workflow
 //!
 //! Checks coverage of requirements and detects gaps.
+//! Supports revision iterations to track progress in fixing issues.
 
 use crate::gsd::config::ScopeLevel;
 use crate::gsd::requirements::RequirementsDoc;
 use crate::gsd::roadmap::RoadmapDoc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -64,6 +66,143 @@ pub enum IssueSeverity {
     Medium,
     /// Low - nice to fix
     Low,
+}
+
+/// A single verification iteration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationIteration {
+    /// Iteration number (1-indexed)
+    pub iteration: u32,
+    /// When this iteration was performed
+    pub timestamp: DateTime<Utc>,
+    /// The verification result for this iteration
+    pub result: VerificationResult,
+    /// Issue codes that were fixed since the previous iteration
+    pub issues_fixed: Vec<String>,
+    /// Issue codes that are new since the previous iteration
+    pub new_issues: Vec<String>,
+}
+
+/// Verification history tracking all iterations
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationHistory {
+    /// All verification iterations
+    pub iterations: Vec<VerificationIteration>,
+    /// Current iteration number
+    pub current_iteration: u32,
+}
+
+impl VerificationHistory {
+    /// Create a new empty verification history
+    pub fn new() -> Self {
+        Self {
+            iterations: Vec::new(),
+            current_iteration: 0,
+        }
+    }
+
+    /// Add a new iteration from a verification result
+    pub fn add_iteration(&mut self, result: VerificationResult) -> &VerificationIteration {
+        let previous_issue_codes: HashSet<String> = if let Some(prev) = self.iterations.last() {
+            prev.result
+                .issues
+                .iter()
+                .map(|i| format!("{}:{}", i.code, i.related_requirements.join(",")))
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        let current_issue_codes: HashSet<String> = result
+            .issues
+            .iter()
+            .map(|i| format!("{}:{}", i.code, i.related_requirements.join(",")))
+            .collect();
+
+        // Fixed issues: in previous but not in current
+        let issues_fixed: Vec<String> = previous_issue_codes
+            .difference(&current_issue_codes)
+            .cloned()
+            .collect();
+
+        // New issues: in current but not in previous
+        let new_issues: Vec<String> = current_issue_codes
+            .difference(&previous_issue_codes)
+            .cloned()
+            .collect();
+
+        self.current_iteration += 1;
+
+        let iteration = VerificationIteration {
+            iteration: self.current_iteration,
+            timestamp: Utc::now(),
+            result,
+            issues_fixed,
+            new_issues,
+        };
+
+        self.iterations.push(iteration);
+        self.iterations.last().unwrap()
+    }
+
+    /// Get the latest iteration
+    pub fn latest(&self) -> Option<&VerificationIteration> {
+        self.iterations.last()
+    }
+
+    /// Get improvement percentage from first to latest
+    pub fn improvement_percentage(&self) -> Option<f32> {
+        if self.iterations.len() < 2 {
+            return None;
+        }
+
+        let first = &self.iterations[0];
+        let latest = self.iterations.last()?;
+
+        let first_issues = first.result.issues.len() as f32;
+        let latest_issues = latest.result.issues.len() as f32;
+
+        if first_issues == 0.0 {
+            return Some(0.0);
+        }
+
+        Some(((first_issues - latest_issues) / first_issues) * 100.0)
+    }
+
+    /// Get summary statistics for all iterations
+    pub fn summary(&self) -> VerificationHistorySummary {
+        let total_iterations = self.iterations.len();
+        let total_issues_found = self.iterations.iter().map(|i| i.result.issues.len()).sum();
+        let total_issues_fixed = self.iterations.iter().map(|i| i.issues_fixed.len()).sum();
+        let current_issues = self.latest().map(|i| i.result.issues.len()).unwrap_or(0);
+        let improvement = self.improvement_percentage();
+
+        VerificationHistorySummary {
+            total_iterations,
+            total_issues_found,
+            total_issues_fixed,
+            current_issues,
+            improvement_percentage: improvement,
+        }
+    }
+}
+
+/// Summary of verification history
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationHistorySummary {
+    /// Total number of verification iterations
+    pub total_iterations: usize,
+    /// Total issues found across all iterations
+    pub total_issues_found: usize,
+    /// Total issues that were fixed
+    pub total_issues_fixed: usize,
+    /// Current number of remaining issues
+    pub current_issues: usize,
+    /// Improvement percentage from first to latest iteration
+    pub improvement_percentage: Option<f32>,
 }
 
 /// Verification statistics

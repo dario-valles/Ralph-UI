@@ -2,7 +2,8 @@
  * Questioning Guide Component
  *
  * Displays a checklist of context items to help guide the user
- * through the deep questioning phase.
+ * through the deep questioning phase, with probing questions to
+ * encourage more concrete, specific answers.
  */
 
 import { useState } from 'react'
@@ -12,8 +13,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
-import { CheckCircle2, Circle, X, HelpCircle } from 'lucide-react'
+import { CheckCircle2, Circle, X, HelpCircle, Sparkles, ChevronRight } from 'lucide-react'
 import type { QuestioningContext } from '@/types/gsd'
+import { getRandomProbingQuestion, detectVagueAnswer, type ProbingQuestion } from './prompts'
 
 interface QuestioningGuideProps {
   /** Current questioning context */
@@ -70,6 +72,21 @@ export function QuestioningGuide({
 }: QuestioningGuideProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [showProbing, setShowProbing] = useState<string | null>(null)
+  const [currentProbing, setCurrentProbing] = useState<Record<string, ProbingQuestion>>({})
+
+  // Get a probing question for an area (memoized per area)
+  const getProbingForArea = (key: 'what' | 'why' | 'who' | 'done'): ProbingQuestion => {
+    if (!currentProbing[key]) {
+      setCurrentProbing(prev => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
+      return getRandomProbingQuestion(key)
+    }
+    return currentProbing[key]
+  }
+
+  const refreshProbing = (key: 'what' | 'why' | 'who' | 'done') => {
+    setCurrentProbing(prev => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
+  }
 
   const handleStartEdit = (key: string, currentValue?: string) => {
     setEditingItem(key)
@@ -151,20 +168,101 @@ export function QuestioningGuide({
                       Cancel
                     </Button>
                   </div>
+
+                  {/* Probing question while editing */}
+                  <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                          {getProbingForArea(item.key).question}
+                        </p>
+                        <div className="mt-1 space-y-1">
+                          {getProbingForArea(item.key).examples.slice(0, 2).map((ex, i) => (
+                            <p key={i} className="text-xs text-amber-600/80 dark:text-amber-400/80 italic">
+                              &ldquo;{ex}&rdquo;
+                            </p>
+                          ))}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs mt-1 text-amber-600 hover:text-amber-700"
+                          onClick={() => refreshProbing(item.key)}
+                        >
+                          <ChevronRight className="h-3 w-3 mr-1" />
+                          Different question
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : value ? (
-                <div
-                  className="p-2 bg-muted rounded text-xs cursor-pointer hover:bg-muted/80 transition-colors"
-                  onClick={() => handleStartEdit(item.key, value)}
-                >
-                  {value}
+                <div className="space-y-2">
+                  <div
+                    className="p-2 bg-muted rounded text-xs cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => handleStartEdit(item.key, value)}
+                  >
+                    {value}
+                  </div>
+
+                  {/* Check if the answer might be vague */}
+                  {(() => {
+                    const vague = detectVagueAnswer(value)
+                    if (vague.isVague) {
+                      return (
+                        <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
+                          <Sparkles className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{vague.reason}</span>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
                 </div>
               ) : (
-                <Input
-                  placeholder={item.placeholder}
-                  className="text-xs"
-                  onFocus={() => handleStartEdit(item.key)}
-                />
+                <div className="space-y-2">
+                  <Input
+                    placeholder={item.placeholder}
+                    className="text-xs"
+                    onFocus={() => handleStartEdit(item.key)}
+                  />
+
+                  {/* Show probing prompt button for empty items */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowProbing(showProbing === item.key ? null : item.key)}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Need help thinking about this?
+                  </Button>
+
+                  {showProbing === item.key && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-2">
+                        {getProbingForArea(item.key).question}
+                      </p>
+                      <div className="space-y-1">
+                        {getProbingForArea(item.key).examples.map((ex, i) => (
+                          <p key={i} className="text-xs text-amber-600/80 dark:text-amber-400/80 italic">
+                            &ldquo;{ex}&rdquo;
+                          </p>
+                        ))}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs mt-2 text-amber-600 hover:text-amber-700"
+                        onClick={() => refreshProbing(item.key)}
+                      >
+                        <ChevronRight className="h-3 w-3 mr-1" />
+                        Different question
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )

@@ -666,12 +666,15 @@ import type {
   ResearchResult,
   ResearchSynthesis,
   PlanningSessionInfo,
+  RequirementsValidationResult,
 } from '@/types/gsd'
 
 import type {
   RequirementsDoc,
+  Requirement,
   RoadmapDoc,
-  VerificationResult,
+  VerificationIterationResult,
+  VerificationHistory,
   ScopeSelection,
   ConversionResult,
 } from '@/types/planning'
@@ -739,6 +742,14 @@ export const gsdApi = {
     return await invoke('synthesize_research_cmd', { projectPath, sessionId })
   },
 
+  /** Generate requirements from research output */
+  generateRequirementsFromResearch: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<RequirementsDoc> => {
+    return await invoke('generate_requirements_from_research', { projectPath, sessionId })
+  },
+
   /** Apply scope selections to requirements */
   scopeRequirements: async (
     projectPath: string,
@@ -746,6 +757,25 @@ export const gsdApi = {
     selections: ScopeSelection
   ): Promise<RequirementsDoc> => {
     return await invoke('scope_requirements', { projectPath, sessionId, selections })
+  },
+
+  /** Validate requirements quality */
+  validateRequirements: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<RequirementsValidationResult> => {
+    return await invoke('validate_requirements', { projectPath, sessionId })
+  },
+
+  /** Add a custom requirement to the requirements document */
+  addRequirement: async (
+    projectPath: string,
+    sessionId: string,
+    category: string,
+    title: string,
+    description: string
+  ): Promise<Requirement> => {
+    return await invoke('add_requirement', { projectPath, sessionId, category, title, description })
   },
 
   /** Save requirements document */
@@ -775,9 +805,19 @@ export const gsdApi = {
     return await invoke('load_roadmap', { projectPath, sessionId })
   },
 
-  /** Verify plans for completeness */
-  verifyPlans: async (projectPath: string, sessionId: string): Promise<VerificationResult> => {
+  /** Verify plans for completeness (with iteration tracking) */
+  verifyPlans: async (projectPath: string, sessionId: string): Promise<VerificationIterationResult> => {
     return await invoke('verify_gsd_plans', { projectPath, sessionId })
+  },
+
+  /** Get verification history for a session */
+  getVerificationHistory: async (projectPath: string, sessionId: string): Promise<VerificationHistory | null> => {
+    return await invoke('get_verification_history', { projectPath, sessionId })
+  },
+
+  /** Clear verification history (start fresh) */
+  clearVerificationHistory: async (projectPath: string, sessionId: string): Promise<void> => {
+    return await invoke('clear_verification_history', { projectPath, sessionId })
   },
 
   /** Export GSD plans to Ralph PRD format */

@@ -17,7 +17,7 @@ import { VerificationResults } from './VerificationResults'
 import { useGsdStore } from '@/stores/gsdStore'
 import { gsdApi } from '@/lib/tauri-api'
 import type { GsdPhase, GsdWorkflowState, ResearchSynthesis } from '@/types/gsd'
-import type { RequirementsDoc, RoadmapDoc, VerificationResult } from '@/types/planning'
+import type { RequirementsDoc, RoadmapDoc, VerificationResult, VerificationHistorySummary } from '@/types/planning'
 import { Rocket, FileText, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 
 interface GSDWorkflowProps {
@@ -69,6 +69,12 @@ export function GSDWorkflow({
   const [localRequirements, setLocalRequirements] = useState<RequirementsDoc | null>(null)
   const [localRoadmap, setLocalRoadmap] = useState<RoadmapDoc | null>(null)
   const [localVerification, setLocalVerification] = useState<VerificationResult | null>(null)
+  const [verificationIteration, setVerificationIteration] = useState<{
+    iteration: number
+    issuesFixed: string[]
+    newIssues: string[]
+    summary: VerificationHistorySummary
+  } | null>(null)
   const [exportState, setExportState] = useState<ExportDialogState>({
     isOpen: false,
     prdName: '',
@@ -154,9 +160,23 @@ export function GSDWorkflow({
         setLoading(false)
       }
 
+      // Generate requirements from research when moving to requirements phase
+      if (state.currentPhase === 'research' && nextPhase === 'requirements') {
+        setLoading(true)
+        try {
+          const reqs = await gsdApi.generateRequirementsFromResearch(projectPath, sessionId)
+          setLocalRequirements(reqs)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to generate requirements')
+          setLoading(false)
+          return
+        }
+        setLoading(false)
+      }
+
       await handlePhaseChange(nextPhase)
     }
-  }, [state, projectPath, sessionId, handlePhaseChange, setLoading, setError])
+  }, [state, projectPath, sessionId, handlePhaseChange, setLoading, setError, setLocalRequirements])
 
   const handleBack = useCallback(async () => {
     if (!state) return
@@ -221,6 +241,24 @@ export function GSDWorkflow({
     }
   }, [projectPath, sessionId, setLoading, setError])
 
+  const handleAddRequirement = useCallback(async (
+    category: import('@/types/planning').RequirementCategory,
+    title: string,
+    description: string
+  ) => {
+    if (!projectPath || !sessionId) {
+      throw new Error('Project path and session ID required')
+    }
+
+    const newReq = await gsdApi.addRequirement(projectPath, sessionId, category, title, description)
+    // Update local requirements state
+    setLocalRequirements(prev => prev ? {
+      ...prev,
+      requirements: { ...prev.requirements, [newReq.id]: newReq }
+    } : prev)
+    return newReq
+  }, [projectPath, sessionId])
+
   // Roadmap handlers
   const handleUpdateRoadmap = useCallback(async (updated: RoadmapDoc) => {
     if (!projectPath || !sessionId) return
@@ -248,8 +286,14 @@ export function GSDWorkflow({
 
     setLoading(true)
     try {
-      const result = await gsdApi.verifyPlans(projectPath, sessionId)
-      setLocalVerification(result)
+      const iterResult = await gsdApi.verifyPlans(projectPath, sessionId)
+      setLocalVerification(iterResult.result)
+      setVerificationIteration({
+        iteration: iterResult.iteration,
+        issuesFixed: iterResult.issuesFixed,
+        newIssues: iterResult.newIssues,
+        summary: iterResult.summary,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run verification')
     } finally {
@@ -378,6 +422,7 @@ export function GSDWorkflow({
             <RequirementScoper
               requirements={requirements}
               onApplyScope={handleApplyScope}
+              onAddRequirement={handleAddRequirement}
               onProceed={handleNext}
               isLoading={isLoading}
             />
@@ -424,6 +469,10 @@ export function GSDWorkflow({
           return (
             <VerificationResults
               result={verification}
+              iteration={verificationIteration?.iteration}
+              issuesFixed={verificationIteration?.issuesFixed}
+              newIssues={verificationIteration?.newIssues}
+              historySummary={verificationIteration?.summary}
               onRerun={handleRunVerification}
               onProceed={handleNext}
               isLoading={isLoading}

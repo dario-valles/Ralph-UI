@@ -245,6 +245,307 @@ pub struct ScopeSelection {
     pub out_of_scope: Vec<String>,
 }
 
+/// Generate requirements from research synthesis content
+/// Parses SUMMARY.md or FEATURES.md and extracts features as requirements
+pub fn generate_requirements_from_research(
+    synthesis_content: &str,
+    project_context: &str,
+) -> RequirementsDoc {
+    let mut doc = RequirementsDoc::new();
+
+    // Parse the synthesis content looking for feature patterns
+    // Look for markdown list items that describe features
+    let lines: Vec<&str> = synthesis_content.lines().collect();
+    let mut current_category = RequirementCategory::Core;
+    let mut in_feature_section = false;
+
+    for line in lines {
+        let trimmed = line.trim();
+
+        // Detect category headers
+        if trimmed.starts_with("## ") || trimmed.starts_with("### ") {
+            let header = trimmed.trim_start_matches('#').trim().to_lowercase();
+            if header.contains("authentication") || header.contains("auth") || header.contains("security") {
+                current_category = RequirementCategory::Security;
+                in_feature_section = true;
+            } else if header.contains("user interface") || header.contains("ui") || header.contains("frontend") {
+                current_category = RequirementCategory::Ui;
+                in_feature_section = true;
+            } else if header.contains("api") || header.contains("backend") || header.contains("server") {
+                current_category = RequirementCategory::Integration;
+                in_feature_section = true;
+            } else if header.contains("data") || header.contains("storage") || header.contains("database") {
+                current_category = RequirementCategory::Data;
+                in_feature_section = true;
+            } else if header.contains("performance") || header.contains("optimization") {
+                current_category = RequirementCategory::Performance;
+                in_feature_section = true;
+            } else if header.contains("integration") || header.contains("external") {
+                current_category = RequirementCategory::Integration;
+                in_feature_section = true;
+            } else if header.contains("feature") || header.contains("core") || header.contains("functionality") {
+                current_category = RequirementCategory::Core;
+                in_feature_section = true;
+            } else if header.contains("pitfall") || header.contains("risk") || header.contains("avoid") {
+                in_feature_section = false; // Skip pitfalls section
+            }
+            continue;
+        }
+
+        // Parse list items as potential requirements
+        if in_feature_section && (trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("• ")) {
+            let content = trimmed
+                .trim_start_matches("- ")
+                .trim_start_matches("* ")
+                .trim_start_matches("• ")
+                .trim();
+
+            // Skip empty or very short items
+            if content.len() < 5 {
+                continue;
+            }
+
+            // Skip items that are clearly not features
+            if content.to_lowercase().starts_with("note:")
+                || content.to_lowercase().starts_with("warning:")
+                || content.to_lowercase().starts_with("avoid")
+                || content.to_lowercase().starts_with("don't")
+            {
+                continue;
+            }
+
+            // Extract title and description
+            let (title, description) = if content.contains(':') {
+                let parts: Vec<&str> = content.splitn(2, ':').collect();
+                (parts[0].trim().to_string(), parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default())
+            } else if content.contains(" - ") {
+                let parts: Vec<&str> = content.splitn(2, " - ").collect();
+                (parts[0].trim().to_string(), parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default())
+            } else {
+                // Use the whole content as both title and description
+                let title = if content.len() > 60 {
+                    content[..60].to_string() + "..."
+                } else {
+                    content.to_string()
+                };
+                (title, content.to_string())
+            };
+
+            // Add the requirement (clone current_category since we're in a loop)
+            doc.add_requirement(current_category.clone(), title, description);
+        }
+    }
+
+    // If no requirements were found, create some defaults based on project context
+    if doc.requirements.is_empty() {
+        // Extract key terms from project context
+        let context_lower = project_context.to_lowercase();
+
+        if context_lower.contains("auth") || context_lower.contains("login") || context_lower.contains("user") {
+            doc.add_requirement(
+                RequirementCategory::Security,
+                "User Authentication".to_string(),
+                "Users can create accounts and log in securely".to_string(),
+            );
+        }
+
+        if context_lower.contains("api") || context_lower.contains("backend") {
+            doc.add_requirement(
+                RequirementCategory::Integration,
+                "Core API".to_string(),
+                "RESTful API for data operations".to_string(),
+            );
+        }
+
+        if context_lower.contains("ui") || context_lower.contains("interface") || context_lower.contains("dashboard") {
+            doc.add_requirement(
+                RequirementCategory::Ui,
+                "User Interface".to_string(),
+                "Responsive user interface for primary workflows".to_string(),
+            );
+        }
+
+        // Always add at least one core requirement
+        if doc.requirements.is_empty() {
+            doc.add_requirement(
+                RequirementCategory::Core,
+                "Core Functionality".to_string(),
+                format!("Primary functionality for: {}", project_context),
+            );
+        }
+    }
+
+    doc
+}
+
+/// Quality validation result for a requirement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementQualityResult {
+    /// The requirement ID
+    pub id: String,
+    /// Whether the requirement passes quality checks
+    pub is_valid: bool,
+    /// List of quality issues found
+    pub issues: Vec<QualityIssue>,
+    /// Suggestions for improvement
+    pub suggestions: Vec<String>,
+}
+
+/// A quality issue with a requirement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualityIssue {
+    /// Type of issue
+    pub issue_type: QualityIssueType,
+    /// Description of the issue
+    pub message: String,
+    /// Severity level (error, warning, info)
+    pub severity: String,
+}
+
+/// Types of quality issues
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QualityIssueType {
+    /// Requirement is too vague
+    Vague,
+    /// Requirement is not user-centric
+    NotUserCentric,
+    /// Requirement is not atomic (combines multiple capabilities)
+    NotAtomic,
+    /// Requirement lacks acceptance criteria
+    NoAcceptanceCriteria,
+    /// Requirement is too short to be meaningful
+    TooShort,
+    /// Requirement uses banned words
+    BannedWord,
+}
+
+/// Words that indicate vagueness
+const VAGUE_WORDS: &[&str] = &[
+    "good", "fast", "simple", "easy", "efficient", "better", "nice",
+    "intuitive", "user-friendly", "robust", "scalable", "flexible",
+    "seamless", "smooth", "elegant", "clean", "modern", "powerful",
+];
+
+/// Words that indicate non-atomic requirements
+const COMPOUND_WORDS: &[&str] = &[
+    " and ", " as well as ", " also ", " plus ", " along with ",
+];
+
+/// Validate a single requirement for quality
+pub fn validate_requirement(req: &Requirement) -> RequirementQualityResult {
+    let mut issues = Vec::new();
+    let mut suggestions = Vec::new();
+    let title_lower = req.title.to_lowercase();
+    let desc_lower = req.description.to_lowercase();
+
+    // Check for vague words
+    for word in VAGUE_WORDS {
+        if title_lower.contains(word) || desc_lower.contains(word) {
+            issues.push(QualityIssue {
+                issue_type: QualityIssueType::Vague,
+                message: format!("Contains vague term: '{}'", word),
+                severity: "warning".to_string(),
+            });
+            suggestions.push(format!(
+                "Replace '{}' with specific, measurable criteria",
+                word
+            ));
+        }
+    }
+
+    // Check for compound requirements
+    for compound in COMPOUND_WORDS {
+        if title_lower.contains(compound) || desc_lower.contains(compound) {
+            issues.push(QualityIssue {
+                issue_type: QualityIssueType::NotAtomic,
+                message: "Requirement appears to combine multiple capabilities".to_string(),
+                severity: "warning".to_string(),
+            });
+            suggestions.push("Consider splitting into separate requirements".to_string());
+            break;
+        }
+    }
+
+    // Check if user-centric (should reference user actions)
+    let user_centric_patterns = [
+        "user can", "users can", "user should", "users should",
+        "allow user", "enable user", "let user", "user must",
+        "as a user", "the user", "a user",
+    ];
+    let is_user_centric = user_centric_patterns
+        .iter()
+        .any(|p| desc_lower.contains(p) || title_lower.contains(p));
+
+    if !is_user_centric {
+        issues.push(QualityIssue {
+            issue_type: QualityIssueType::NotUserCentric,
+            message: "Requirement doesn't clearly describe a user action".to_string(),
+            severity: "info".to_string(),
+        });
+        suggestions.push("Rephrase as 'User can...' or 'As a user, I want...'".to_string());
+    }
+
+    // Check title length
+    if req.title.len() < 10 {
+        issues.push(QualityIssue {
+            issue_type: QualityIssueType::TooShort,
+            message: "Title is too brief to be meaningful".to_string(),
+            severity: "warning".to_string(),
+        });
+        suggestions.push("Provide a more descriptive title".to_string());
+    }
+
+    // Check for acceptance criteria
+    if req.acceptance_criteria.is_empty() {
+        issues.push(QualityIssue {
+            issue_type: QualityIssueType::NoAcceptanceCriteria,
+            message: "No acceptance criteria defined".to_string(),
+            severity: "info".to_string(),
+        });
+        suggestions.push("Add testable acceptance criteria".to_string());
+    }
+
+    // Determine if valid (no errors, warnings are acceptable)
+    let is_valid = !issues.iter().any(|i| i.severity == "error");
+
+    RequirementQualityResult {
+        id: req.id.clone(),
+        is_valid,
+        issues,
+        suggestions,
+    }
+}
+
+/// Validate all requirements in a document
+pub fn validate_requirements_doc(doc: &RequirementsDoc) -> Vec<RequirementQualityResult> {
+    doc.requirements
+        .values()
+        .map(validate_requirement)
+        .collect()
+}
+
+/// Get overall quality score for a requirements document (0-100)
+pub fn calculate_quality_score(doc: &RequirementsDoc) -> u32 {
+    if doc.requirements.is_empty() {
+        return 0;
+    }
+
+    let results = validate_requirements_doc(doc);
+    let total = results.len() as f64;
+    let valid = results.iter().filter(|r| r.is_valid).count() as f64;
+    let low_issue_count = results
+        .iter()
+        .filter(|r| r.issues.len() <= 1)
+        .count() as f64;
+
+    // Score based on: 50% valid requirements, 50% low issue count
+    let score = ((valid / total) * 50.0 + (low_issue_count / total) * 50.0) as u32;
+    score.min(100)
+}
+
 impl ScopeSelection {
     /// Apply this selection to a requirements document
     pub fn apply(&self, doc: &mut RequirementsDoc) {

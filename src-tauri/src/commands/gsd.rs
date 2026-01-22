@@ -227,6 +227,46 @@ pub async fn synthesize_research_cmd(
     synthesize_research(path, &session_id)
 }
 
+/// Generate requirements from research output
+#[tauri::command]
+pub async fn generate_requirements_from_research(
+    project_path: String,
+    session_id: String,
+) -> Result<RequirementsDoc, String> {
+    use crate::gsd::requirements::generate_requirements_from_research as gen_reqs;
+
+    let path = Path::new(&project_path);
+
+    // Try to load synthesis first, fall back to individual research files
+    let synthesis_content = read_planning_file(path, &session_id, PlanningFile::Summary)
+        .or_else(|_| read_planning_file(path, &session_id, PlanningFile::Research("features.md".to_string())))
+        .unwrap_or_default();
+
+    // Load project context
+    let project_content = read_planning_file(path, &session_id, PlanningFile::Project)
+        .unwrap_or_default();
+
+    // Generate requirements from research
+    let doc = gen_reqs(&synthesis_content, &project_content);
+
+    // Save the requirements document
+    let req_json = serde_json::to_string_pretty(&doc)
+        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    write_planning_file(path, &session_id, PlanningFile::Requirements, &req_json)?;
+
+    // Also save markdown version
+    let req_md = doc.to_markdown();
+    write_planning_file(path, &session_id, PlanningFile::RequirementsMd, &req_md)?;
+
+    log::info!(
+        "Generated {} requirements from research for session {}",
+        doc.requirements.len(),
+        session_id
+    );
+
+    Ok(doc)
+}
+
 /// Request to scope requirements
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -263,6 +303,46 @@ pub async fn scope_requirements(
     write_planning_file(path, &session_id, PlanningFile::Scoped, &scoped_md)?;
 
     Ok(doc)
+}
+
+/// Validate requirements quality
+#[tauri::command]
+pub async fn validate_requirements(
+    project_path: String,
+    session_id: String,
+) -> Result<RequirementsValidationResult, String> {
+    use crate::gsd::requirements::{
+        calculate_quality_score, validate_requirements_doc, RequirementQualityResult,
+    };
+
+    let path = Path::new(&project_path);
+
+    // Load requirements
+    let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
+    let doc: RequirementsDoc = serde_json::from_str(&req_content)
+        .map_err(|e| format!("Failed to parse requirements: {}", e))?;
+
+    // Validate all requirements
+    let results = validate_requirements_doc(&doc);
+    let quality_score = calculate_quality_score(&doc);
+    let valid_count = results.iter().filter(|r| r.is_valid).count();
+
+    Ok(RequirementsValidationResult {
+        results,
+        quality_score,
+        total_requirements: doc.requirements.len(),
+        valid_requirements: valid_count,
+    })
+}
+
+/// Result of validating all requirements
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementsValidationResult {
+    pub results: Vec<crate::gsd::requirements::RequirementQualityResult>,
+    pub quality_score: u32,
+    pub total_requirements: usize,
+    pub valid_requirements: usize,
 }
 
 /// Save requirements document
@@ -352,12 +432,14 @@ pub async fn load_roadmap(
     }
 }
 
-/// Verify plans for completeness
+/// Verify plans for completeness (with iteration tracking)
 #[tauri::command]
 pub async fn verify_gsd_plans(
     project_path: String,
     session_id: String,
-) -> Result<VerificationResult, String> {
+) -> Result<VerificationIterationResult, String> {
+    use crate::gsd::verification::{VerificationHistory, VerificationIteration};
+
     let path = Path::new(&project_path);
 
     // Load requirements
@@ -374,11 +456,88 @@ pub async fn verify_gsd_plans(
     // Run verification
     let result = verify_plans(&requirements, &roadmap);
 
-    // Save verification result
+    // Load or create verification history
+    let history_file = PlanningFile::Research("verification_history.json".to_string());
+    let mut history = match read_planning_file(path, &session_id, history_file.clone()) {
+        Ok(content) => serde_json::from_str::<VerificationHistory>(&content)
+            .unwrap_or_else(|_| VerificationHistory::new()),
+        Err(_) => VerificationHistory::new(),
+    };
+
+    // Add this iteration to history
+    let iteration = history.add_iteration(result.clone());
+    let iteration_num = iteration.iteration;
+    let issues_fixed = iteration.issues_fixed.clone();
+    let new_issues = iteration.new_issues.clone();
+
+    // Save verification history
+    let history_json = serde_json::to_string_pretty(&history)
+        .map_err(|e| format!("Failed to serialize verification history: {}", e))?;
+    write_planning_file(path, &session_id, history_file, &history_json)?;
+
+    // Save verification result as markdown
     let verification_md = crate::gsd::verification::verification_to_markdown(&result);
     write_planning_file(path, &session_id, PlanningFile::Verification, &verification_md)?;
 
-    Ok(result)
+    Ok(VerificationIterationResult {
+        result,
+        iteration: iteration_num,
+        issues_fixed,
+        new_issues,
+        summary: history.summary(),
+    })
+}
+
+/// Result of a verification iteration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationIterationResult {
+    /// The verification result
+    pub result: VerificationResult,
+    /// Current iteration number
+    pub iteration: u32,
+    /// Issues that were fixed since previous iteration
+    pub issues_fixed: Vec<String>,
+    /// New issues since previous iteration
+    pub new_issues: Vec<String>,
+    /// Summary of verification history
+    pub summary: crate::gsd::verification::VerificationHistorySummary,
+}
+
+/// Get verification history for a session
+#[tauri::command]
+pub async fn get_verification_history(
+    project_path: String,
+    session_id: String,
+) -> Result<Option<crate::gsd::verification::VerificationHistory>, String> {
+    use crate::gsd::verification::VerificationHistory;
+
+    let path = Path::new(&project_path);
+
+    let history_file = PlanningFile::Research("verification_history.json".to_string());
+    match read_planning_file(path, &session_id, history_file) {
+        Ok(content) => {
+            let history: VerificationHistory = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse verification history: {}", e))?;
+            Ok(Some(history))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+/// Clear verification history (for starting fresh)
+#[tauri::command]
+pub async fn clear_verification_history(
+    project_path: String,
+    session_id: String,
+) -> Result<(), String> {
+    let path = Path::new(&project_path);
+    let history_file = PlanningFile::Research("verification_history.json".to_string());
+    let empty_history = crate::gsd::verification::VerificationHistory::new();
+    let content = serde_json::to_string_pretty(&empty_history)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    write_planning_file(path, &session_id, history_file, &content)?;
+    Ok(())
 }
 
 /// Request to export to Ralph PRD
@@ -541,4 +700,65 @@ pub async fn list_gsd_sessions(project_path: String) -> Result<Vec<PlanningSessi
 pub async fn delete_gsd_session(project_path: String, session_id: String) -> Result<(), String> {
     let path = Path::new(&project_path);
     delete_planning_session(path, &session_id)
+}
+
+/// Add a custom requirement to the requirements document
+#[tauri::command]
+pub async fn add_requirement(
+    project_path: String,
+    session_id: String,
+    category: String,
+    title: String,
+    description: String,
+) -> Result<Requirement, String> {
+    use crate::gsd::config::RequirementCategory;
+
+    let path = Path::new(&project_path);
+
+    // Parse category string to enum
+    let category_enum = match category.to_lowercase().as_str() {
+        "core" => RequirementCategory::Core,
+        "ui" => RequirementCategory::Ui,
+        "data" => RequirementCategory::Data,
+        "integration" => RequirementCategory::Integration,
+        "security" => RequirementCategory::Security,
+        "performance" => RequirementCategory::Performance,
+        "testing" => RequirementCategory::Testing,
+        "documentation" => RequirementCategory::Documentation,
+        "other" | _ => RequirementCategory::Other,
+    };
+
+    // Load existing requirements (or create new doc)
+    let mut doc = match read_planning_file(path, &session_id, PlanningFile::Requirements) {
+        Ok(content) => serde_json::from_str::<RequirementsDoc>(&content)
+            .unwrap_or_else(|_| RequirementsDoc::new()),
+        Err(_) => RequirementsDoc::new(),
+    };
+
+    // Add the new requirement
+    let id = doc.add_requirement(category_enum.clone(), title.clone(), description.clone());
+
+    // Get the created requirement to return
+    let requirement = doc
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| "Failed to retrieve created requirement".to_string())?;
+
+    // Save updated requirements document
+    let req_json = serde_json::to_string_pretty(&doc)
+        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    write_planning_file(path, &session_id, PlanningFile::Requirements, &req_json)?;
+
+    // Also save markdown version
+    let req_md = doc.to_markdown();
+    write_planning_file(path, &session_id, PlanningFile::RequirementsMd, &req_md)?;
+
+    log::info!(
+        "Added requirement {} to session {}: {}",
+        id,
+        session_id,
+        title
+    );
+
+    Ok(requirement)
 }
