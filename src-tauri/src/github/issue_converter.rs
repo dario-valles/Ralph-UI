@@ -111,14 +111,33 @@ pub fn issue_to_story(issue: &Issue, options: &IssueImportOptions) -> RalphStory
 fn extract_acceptance_criteria(body: &Option<String>) -> Option<String> {
     let body = body.as_ref()?;
 
-    // Look for explicit acceptance criteria section
-    let ac_patterns = [
-        r"(?i)##\s*acceptance\s*criteria\s*\n([\s\S]*?)(?=\n##|$)",
-        r"(?i)\*\*acceptance\s*criteria:?\*\*\s*\n([\s\S]*?)(?=\n\*\*|$)",
-        r"(?i)acceptance\s*criteria:?\s*\n([\s\S]*?)(?=\n##|\n\*\*|$)",
+    // Look for explicit acceptance criteria section header
+    // Match "## Acceptance Criteria" followed by content until next heading
+    if let Some(start) = body.to_lowercase().find("## acceptance criteria") {
+        // Find the actual position in original string
+        let section_start = start + "## acceptance criteria".len();
+        // Skip any trailing whitespace/colon and newline
+        let content_start = body[section_start..]
+            .find('\n')
+            .map(|n| section_start + n + 1)
+            .unwrap_or(section_start);
+
+        // Find the end - next ## heading or end of string
+        let rest = &body[content_start..];
+        let content_end = rest.find("\n#").unwrap_or(rest.len());
+        let criteria = rest[..content_end].trim();
+
+        if !criteria.is_empty() {
+            return Some(criteria.to_string());
+        }
+    }
+
+    // Look for bold acceptance criteria pattern
+    let bold_patterns = [
+        r"(?i)\*\*acceptance\s+criteria:?\*\*\s*\n([\s\S]*?)(?=\n+\*\*|$)",
     ];
 
-    for pattern in ac_patterns {
+    for pattern in bold_patterns {
         if let Ok(re) = Regex::new(pattern) {
             if let Some(captures) = re.captures(body) {
                 if let Some(content) = captures.get(1) {

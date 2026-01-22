@@ -121,23 +121,6 @@ interface GsdActions {
 }
 
 /**
- * Default empty research status
- */
-const defaultResearchStatus: ResearchStatus = {
-  architecture: { running: false, complete: false },
-  codebase: { running: false, complete: false },
-  bestPractices: { running: false, complete: false },
-  risks: { running: false, complete: false },
-}
-
-/**
- * Default empty questioning context
- */
-const defaultQuestioningContext: QuestioningContext = {
-  notes: [],
-}
-
-/**
  * GSD Store
  */
 export const useGsdStore = create<GsdState & GsdActions>()(

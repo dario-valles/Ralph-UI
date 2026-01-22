@@ -16,9 +16,9 @@ import { RoadmapEditor } from './RoadmapEditor'
 import { VerificationResults } from './VerificationResults'
 import { useGsdStore } from '@/stores/gsdStore'
 import { gsdApi } from '@/lib/tauri-api'
-import type { GsdPhase, GsdWorkflowState, ResearchSynthesis } from '@/types/gsd'
+import type { GsdPhase, ResearchSynthesis } from '@/types/gsd'
 import { getNextPhase, getPreviousPhase } from '@/types/gsd'
-import type { RequirementsDoc, RoadmapDoc, VerificationResult, VerificationHistorySummary } from '@/types/planning'
+import type { RoadmapDoc, VerificationHistorySummary } from '@/types/planning'
 import { Rocket, FileText, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 
 interface GSDWorkflowProps {
