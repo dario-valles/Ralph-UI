@@ -3,9 +3,7 @@
 //! This module handles reading and writing prd.json files.
 //! The PRD file is the source of truth for what tasks need to be done.
 //!
-//! File locations:
-//! - New format: `.ralph-ui/prds/{prd_name}.json`
-//! - Legacy format: `.ralph/prd.json` (for backwards compatibility)
+//! File location: `.ralph-ui/prds/{prd_name}.json`
 
 use super::types::{PrdStatus, RalphPrd, RalphStory};
 use fs2::FileExt;
@@ -14,60 +12,44 @@ use std::path::{Path, PathBuf};
 
 /// PRD file executor for reading/writing PRD JSON files
 ///
-/// Supports two path patterns:
-/// - With prd_name: `.ralph-ui/prds/{prd_name}.json` (new multi-PRD format)
-/// - Without prd_name: `.ralph/prd.json` (legacy single-PRD format)
+/// Files are stored at `.ralph-ui/prds/{prd_name}.json`
 pub struct PrdExecutor {
     /// Base project path
     project_path: PathBuf,
-    /// Optional PRD name for multi-PRD support
-    prd_name: Option<String>,
+    /// PRD name (required)
+    prd_name: String,
 }
 
 impl PrdExecutor {
-    /// Create a new PRD executor with the new path format
+    /// Create a new PRD executor
     ///
     /// # Arguments
     /// * `project_path` - Path to the project root
     /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
-    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+    pub fn new(project_path: &Path, prd_name: &str) -> Self {
         Self {
             project_path: project_path.to_path_buf(),
-            prd_name: Some(prd_name.to_string()),
+            prd_name: prd_name.to_string(),
         }
     }
 
-    /// Create a PRD executor for legacy .ralph/prd.json format
-    ///
-    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
-    /// The `ralph_dir` parameter should be the `.ralph` directory path.
-    pub fn new(ralph_dir: &Path) -> Self {
-        // Extract project path by going up from .ralph directory
-        let project_path = ralph_dir.parent().unwrap_or(ralph_dir).to_path_buf();
-        Self {
-            project_path,
-            prd_name: None,
-        }
+    /// Alias for new() for backwards compatibility during migration
+    #[deprecated(note = "Use new() instead")]
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+        Self::new(project_path, prd_name)
     }
 
     /// Get the path to prd.json
     pub fn prd_path(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(name) => self
-                .project_path
-                .join(".ralph-ui")
-                .join("prds")
-                .join(format!("{}.json", name)),
-            None => self.project_path.join(".ralph").join("prd.json"),
-        }
+        self.project_path
+            .join(".ralph-ui")
+            .join("prds")
+            .join(format!("{}.json", self.prd_name))
     }
 
     /// Get the directory containing the PRD file
     fn prd_dir(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
-            None => self.project_path.join(".ralph"),
-        }
+        self.project_path.join(".ralph-ui").join("prds")
     }
 
     /// Get the path to the lock file for exclusive PRD access
@@ -405,8 +387,7 @@ mod tests {
     #[test]
     fn test_write_and_read_prd() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let executor = PrdExecutor::new(&ralph_dir);
+        let executor = PrdExecutor::new(temp_dir.path(), "test-prd");
 
         let mut prd = RalphPrd::new("Test PRD", "feature/test");
         prd.add_story(RalphStory::new(
@@ -429,8 +410,7 @@ mod tests {
     #[test]
     fn test_mark_story_passing() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let executor = PrdExecutor::new(&ralph_dir);
+        let executor = PrdExecutor::new(temp_dir.path(), "test-prd");
 
         let mut prd = RalphPrd::new("Test PRD", "feature/test");
         prd.add_story(RalphStory::new("1", "Task 1", "Description"));
@@ -450,8 +430,7 @@ mod tests {
     #[test]
     fn test_get_status() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let executor = PrdExecutor::new(&ralph_dir);
+        let executor = PrdExecutor::new(temp_dir.path(), "test-prd");
 
         let mut prd = RalphPrd::new("Test PRD", "feature/test");
         let mut story1 = RalphStory::new("1", "Task 1", "Description");
@@ -472,8 +451,7 @@ mod tests {
     #[test]
     fn test_add_and_remove_story() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let executor = PrdExecutor::new(&ralph_dir);
+        let executor = PrdExecutor::new(temp_dir.path(), "test-prd");
 
         let prd = RalphPrd::new("Test PRD", "feature/test");
         executor.write_prd(&prd).unwrap();

@@ -63,14 +63,14 @@ impl std::str::FromStr for ProgressStatus {
 
 /// Progress file manager
 pub struct ProgressTracker {
-    /// Base directory for progress files (typically .ralph directory)
+    /// Base directory for progress files (typically .ralph-ui directory)
     base_dir: PathBuf,
 }
 
 impl ProgressTracker {
     /// Create a new progress tracker for a project
     pub fn new(project_path: impl AsRef<Path>) -> Self {
-        let base_dir = project_path.as_ref().join(".ralph");
+        let base_dir = project_path.as_ref().join(".ralph-ui");
         Self { base_dir }
     }
 
@@ -321,7 +321,7 @@ mod tests {
     fn test_progress_file_location() {
         let (tracker, temp) = create_test_tracker();
 
-        let expected = temp.path().join(".ralph").join("progress_session-1.txt");
+        let expected = temp.path().join(".ralph-ui").join("progress_session-1.txt");
         let actual = tracker.get_progress_file("session-1");
 
         assert_eq!(actual, expected);

@@ -563,7 +563,7 @@ impl std::fmt::Display for ProgressEntryType {
     }
 }
 
-/// Configuration from .ralph/config.yaml (optional)
+/// Configuration from .ralph-ui/config.yaml (optional)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RalphConfig {
     /// Project settings

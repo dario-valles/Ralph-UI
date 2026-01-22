@@ -1,6 +1,6 @@
 //! Configuration file handling for Ralph Loop
 //!
-//! Reads and writes .ralph/config.yaml for project-specific settings.
+//! Reads and writes .ralph-ui/config.yaml for project-specific settings.
 
 use crate::ralph_loop::types::{LoopConfig, RalphConfig};
 use std::path::Path;
@@ -11,10 +11,10 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-    /// Create a new config manager for a .ralph directory
-    pub fn new(ralph_dir: &Path) -> Self {
+    /// Create a new config manager for a project
+    pub fn new(project_path: &Path) -> Self {
         Self {
-            config_path: ralph_dir.join("config.yaml"),
+            config_path: project_path.join(".ralph-ui").join("config.yaml"),
         }
     }
 
@@ -112,8 +112,7 @@ mod tests {
     #[test]
     fn test_config_read_defaults_when_missing() {
         let temp_dir = TempDir::new().unwrap();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let manager = ConfigManager::new(&ralph_dir);
+        let manager = ConfigManager::new(temp_dir.path());
 
         let config = manager.read().unwrap();
         assert_eq!(config.ralph.max_iterations, 50);
@@ -123,9 +122,9 @@ mod tests {
     #[test]
     fn test_config_write_and_read() {
         let temp_dir = TempDir::new().unwrap();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        std::fs::create_dir_all(&ralph_dir).unwrap();
-        let manager = ConfigManager::new(&ralph_dir);
+        let ralph_ui_dir = temp_dir.path().join(".ralph-ui");
+        std::fs::create_dir_all(&ralph_ui_dir).unwrap();
+        let manager = ConfigManager::new(temp_dir.path());
 
         let mut config = RalphConfig::default();
         config.ralph.max_iterations = 100;
@@ -144,9 +143,9 @@ mod tests {
     #[test]
     fn test_config_update() {
         let temp_dir = TempDir::new().unwrap();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        std::fs::create_dir_all(&ralph_dir).unwrap();
-        let manager = ConfigManager::new(&ralph_dir);
+        let ralph_ui_dir = temp_dir.path().join(".ralph-ui");
+        std::fs::create_dir_all(&ralph_ui_dir).unwrap();
+        let manager = ConfigManager::new(temp_dir.path());
 
         manager.initialize().unwrap();
 

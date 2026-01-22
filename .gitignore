@@ -52,3 +52,5 @@ target
 # Runtime data
 src-tauri/ralph-ui.db
 .ralph-ui/
+.ralph/
+.worktrees/

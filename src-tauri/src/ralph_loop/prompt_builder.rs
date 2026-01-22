@@ -12,95 +12,66 @@
 //! - Explicit rules and boundaries
 //! - Protected files list
 //!
-//! File locations:
-//! - New format: `.ralph-ui/prds/{prd_name}-prompt.md`
-//! - Legacy format: `.ralph/prompt.md` (for backwards compatibility)
+//! File location: `.ralph-ui/prds/{prd_name}-prompt.md`
 
 use super::RalphLoopConfig;
 use std::path::{Path, PathBuf};
 
 /// Prompt builder for Ralph loop iterations
 ///
-/// Supports two path patterns:
-/// - With prd_name: `.ralph-ui/prds/{prd_name}-prompt.md` (new multi-PRD format)
-/// - Without prd_name: `.ralph/prompt.md` (legacy single-PRD format)
+/// Files are stored at `.ralph-ui/prds/{prd_name}-prompt.md`
 pub struct PromptBuilder {
     /// Base project path
     project_path: PathBuf,
-    /// Optional PRD name for multi-PRD support
-    prd_name: Option<String>,
+    /// PRD name (required)
+    prd_name: String,
 }
 
 impl PromptBuilder {
-    /// Create a new prompt builder with the new path format
+    /// Create a new prompt builder
     ///
     /// # Arguments
     /// * `project_path` - Path to the project root
     /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
-    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+    pub fn new(project_path: &Path, prd_name: &str) -> Self {
         Self {
             project_path: project_path.to_path_buf(),
-            prd_name: Some(prd_name.to_string()),
+            prd_name: prd_name.to_string(),
         }
     }
 
-    /// Create a prompt builder for legacy .ralph/prompt.md format
-    ///
-    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
-    /// The `ralph_dir` parameter should be the `.ralph` directory path.
-    pub fn new(ralph_dir: &Path) -> Self {
-        // Extract project path by going up from .ralph directory
-        let project_path = ralph_dir
-            .parent()
-            .unwrap_or(ralph_dir)
-            .to_path_buf();
-        Self {
-            project_path,
-            prd_name: None,
-        }
+    /// Alias for new() for backwards compatibility during migration
+    #[deprecated(note = "Use new() instead")]
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+        Self::new(project_path, prd_name)
     }
 
     /// Get the path to prompt.md
     pub fn prompt_path(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(name) => self.project_path
-                .join(".ralph-ui")
-                .join("prds")
-                .join(format!("{}-prompt.md", name)),
-            None => self.project_path.join(".ralph").join("prompt.md"),
-        }
+        self.project_path
+            .join(".ralph-ui")
+            .join("prds")
+            .join(format!("{}-prompt.md", self.prd_name))
     }
 
     /// Get the directory containing the prompt file
     fn prompt_dir(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
-            None => self.project_path.join(".ralph"),
-        }
+        self.project_path.join(".ralph-ui").join("prds")
     }
 
     /// Get the relative path to the PRD file (for prompt generation)
     fn prd_file_path(&self) -> String {
-        match &self.prd_name {
-            Some(name) => format!(".ralph-ui/prds/{}.json", name),
-            None => ".ralph/prd.json".to_string(),
-        }
+        format!(".ralph-ui/prds/{}.json", self.prd_name)
     }
 
     /// Get the relative path to the progress file (for prompt generation)
     fn progress_file_path(&self) -> String {
-        match &self.prd_name {
-            Some(name) => format!(".ralph-ui/prds/{}-progress.txt", name),
-            None => ".ralph/progress.txt".to_string(),
-        }
+        format!(".ralph-ui/prds/{}-progress.txt", self.prd_name)
     }
 
     /// Get the relative path to the prompt file (for prompt generation)
     fn prompt_file_path(&self) -> String {
-        match &self.prd_name {
-            Some(name) => format!(".ralph-ui/prds/{}-prompt.md", name),
-            None => ".ralph/prompt.md".to_string(),
-        }
+        format!(".ralph-ui/prds/{}-prompt.md", self.prd_name)
     }
 
     /// Generate the static prompt.md file
@@ -351,8 +322,8 @@ Now begin!
 2. Write tests to verify the implementation
 3. Run all tests to ensure nothing is broken
 4. Commit your changes with a clear message
-5. Update `.ralph/prd.json` to set `passes: true` for story "{}"
-6. Add any learnings to `.ralph/progress.txt`
+5. Update the PRD JSON to set `passes: true` for story "{}"
+6. Add any learnings to the progress file
 "#,
             story_id, story_title, acceptance, story_id
         )
@@ -371,8 +342,7 @@ mod tests {
     #[test]
     fn test_generate_prompt() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let builder = PromptBuilder::new(&ralph_dir);
+        let builder = PromptBuilder::new(temp_dir.path(), "test-prd");
 
         let config = RalphLoopConfig {
             run_tests: true,
@@ -396,8 +366,7 @@ mod tests {
     #[test]
     fn test_build_iteration_prompt() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let builder = PromptBuilder::new(&ralph_dir);
+        let builder = PromptBuilder::new(temp_dir.path(), "test-prd");
 
         let config = RalphLoopConfig::default();
         builder.generate_prompt(&config).unwrap();
@@ -410,8 +379,7 @@ mod tests {
     #[test]
     fn test_default_prompt_when_no_file() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let builder = PromptBuilder::new(&ralph_dir);
+        let builder = PromptBuilder::new(temp_dir.path(), "test-prd");
 
         // Don't generate prompt file
         assert!(!builder.has_custom_prompt());
@@ -437,8 +405,7 @@ mod tests {
     #[test]
     fn test_custom_completion_promise() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let builder = PromptBuilder::new(&ralph_dir);
+        let builder = PromptBuilder::new(temp_dir.path(), "test-prd");
 
         let config = RalphLoopConfig {
             completion_promise: Some("[[DONE]]".to_string()),

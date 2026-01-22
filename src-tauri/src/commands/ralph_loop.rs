@@ -85,11 +85,10 @@ pub struct StartRalphLoopRequest {
     pub use_worktree: Option<bool>,
     /// Agent timeout in seconds (default: 1800 = 30 minutes, 0 = no timeout)
     pub agent_timeout_secs: Option<u64>,
-    /// PRD name for multi-PRD support (e.g., "my-feature-a1b2c3d4")
+    /// PRD name (required) - e.g., "my-feature-a1b2c3d4"
     ///
-    /// When set, PRD files are stored in `.ralph-ui/prds/{prd_name}.json`.
-    /// When None, the legacy `.ralph/prd.json` path is used.
-    pub prd_name: Option<String>,
+    /// PRD files are stored at `.ralph-ui/prds/{prd_name}.json`
+    pub prd_name: String,
 }
 
 /// Response from starting a Ralph loop
@@ -139,6 +138,8 @@ pub struct RalphStoryInput {
 pub struct ConvertPrdToRalphRequest {
     /// Database PRD ID
     pub prd_id: String,
+    /// PRD name for file storage (e.g., "my-feature-a1b2c3d4")
+    pub prd_name: String,
     /// Branch name to use
     pub branch: String,
     /// Agent type to use (claude, opencode, cursor, codex)
@@ -183,11 +184,11 @@ pub struct ConvertPrdFileToRalphRequest {
     pub use_worktree: Option<bool>,
 }
 
-/// Initialize a Ralph PRD at .ralph/prd.json
+/// Initialize a Ralph PRD at .ralph-ui/prds/{prd_name}.json
 #[tauri::command]
-pub fn init_ralph_prd(request: InitRalphPrdRequest) -> Result<RalphPrd, String> {
-    let ralph_dir = PathBuf::from(&request.project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn init_ralph_prd(request: InitRalphPrdRequest, prd_name: String) -> Result<RalphPrd, String> {
+    let project_path = PathBuf::from(&request.project_path);
+    let executor = PrdExecutor::new(&project_path, &prd_name);
 
     let mut prd = RalphPrd::new(&request.title, &request.branch);
     prd.description = request.description;
@@ -205,13 +206,14 @@ pub fn init_ralph_prd(request: InitRalphPrdRequest) -> Result<RalphPrd, String> 
     executor.write_prd(&prd)?;
 
     // Also initialize progress.txt
-    let tracker = ProgressTracker::new(&ralph_dir);
+    let tracker = ProgressTracker::new(&project_path, &prd_name);
     tracker.initialize()?;
 
     // Generate prompt.md
-    let prompt_builder = PromptBuilder::new(&ralph_dir);
+    let prompt_builder = PromptBuilder::new(&project_path, &prd_name);
     let config = RalphLoopConfig {
-        project_path: PathBuf::from(&request.project_path),
+        project_path: project_path.clone(),
+        prd_name: prd_name.clone(),
         run_tests: true,
         run_lint: true,
         ..Default::default()
@@ -231,7 +233,7 @@ pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd,
     let project_path_buf = PathBuf::from(&project_path);
     
     // Try to read from main project first
-    let main_executor = PrdExecutor::new_with_name(&project_path_buf, &prd_name);
+    let main_executor = PrdExecutor::new(&project_path_buf, &prd_name);
     let main_prd_path = project_path_buf.join(".ralph-ui").join("prds").join(format!("{}.json", prd_name));
     let main_modified = main_prd_path.metadata()
         .ok()
@@ -264,7 +266,7 @@ pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd,
                                 
                                 if is_newer {
                                     // Try to read the PRD from worktree
-                                    let worktree_executor = PrdExecutor::new_with_name(&worktree_path, &prd_name);
+                                    let worktree_executor = PrdExecutor::new(&worktree_path, &prd_name);
                                     if let Ok(prd) = worktree_executor.read_prd() {
                                         log::debug!(
                                             "[get_ralph_prd] Found newer PRD in worktree {:?}",
@@ -299,7 +301,7 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
     let project_path_buf = PathBuf::from(&project_path);
     
     // Try to read from main project first
-    let main_executor = PrdExecutor::new_with_name(&project_path_buf, &prd_name);
+    let main_executor = PrdExecutor::new(&project_path_buf, &prd_name);
     let main_prd_path = project_path_buf.join(".ralph-ui").join("prds").join(format!("{}.json", prd_name));
     let main_modified = main_prd_path.metadata()
         .ok()
@@ -332,7 +334,7 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
                                 
                                 if is_newer {
                                     // Try to read the PRD from worktree
-                                    let worktree_executor = PrdExecutor::new_with_name(&worktree_path, &prd_name);
+                                    let worktree_executor = PrdExecutor::new(&worktree_path, &prd_name);
                                     if let Ok(prd) = worktree_executor.read_prd() {
                                         log::debug!(
                                             "[get_ralph_prd_status] Found newer PRD in worktree {:?}",
@@ -361,25 +363,22 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
 
 /// Mark a story as passing in the PRD
 #[tauri::command]
-pub fn mark_ralph_story_passing(project_path: String, story_id: String) -> Result<bool, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn mark_ralph_story_passing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
+    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
     executor.mark_story_passing(&story_id)
 }
 
 /// Mark a story as failing in the PRD
 #[tauri::command]
-pub fn mark_ralph_story_failing(project_path: String, story_id: String) -> Result<bool, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn mark_ralph_story_failing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
+    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
     executor.mark_story_failing(&story_id)
 }
 
 /// Add a story to the PRD
 #[tauri::command]
-pub fn add_ralph_story(project_path: String, story: RalphStoryInput) -> Result<(), String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStoryInput) -> Result<(), String> {
+    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
 
     let mut ralph_story = RalphStory::new(&story.id, &story.title, &story.acceptance);
     ralph_story.description = story.description;
@@ -393,57 +392,50 @@ pub fn add_ralph_story(project_path: String, story: RalphStoryInput) -> Result<(
 
 /// Remove a story from the PRD
 #[tauri::command]
-pub fn remove_ralph_story(project_path: String, story_id: String) -> Result<bool, String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+pub fn remove_ralph_story(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
+    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
     executor.remove_story(&story_id)
 }
 
 /// Get progress.txt content
 #[tauri::command]
 pub fn get_ralph_progress(project_path: String, prd_name: String) -> Result<String, String> {
-    let project_path_buf = PathBuf::from(&project_path);
-    let tracker = ProgressTracker::new_with_name(&project_path_buf, &prd_name);
+    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
     tracker.read_raw()
 }
 
 /// Get progress summary
 #[tauri::command]
 pub fn get_ralph_progress_summary(project_path: String, prd_name: String) -> Result<ProgressSummary, String> {
-    let project_path_buf = PathBuf::from(&project_path);
-    let tracker = ProgressTracker::new_with_name(&project_path_buf, &prd_name);
+    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
     tracker.get_summary()
 }
 
 /// Add a note to progress.txt
 #[tauri::command]
-pub fn add_ralph_progress_note(project_path: String, iteration: u32, note: String) -> Result<(), String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let tracker = ProgressTracker::new(&ralph_dir);
+pub fn add_ralph_progress_note(project_path: String, prd_name: String, iteration: u32, note: String) -> Result<(), String> {
+    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
     tracker.add_note(iteration, &note)
 }
 
 /// Clear progress.txt and reinitialize
 #[tauri::command]
-pub fn clear_ralph_progress(project_path: String) -> Result<(), String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let tracker = ProgressTracker::new(&ralph_dir);
+pub fn clear_ralph_progress(project_path: String, prd_name: String) -> Result<(), String> {
+    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
     tracker.clear()
 }
 
 /// Get the prompt.md content
 #[tauri::command]
 pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
-    let project_path_buf = PathBuf::from(&project_path);
-    let builder = PromptBuilder::new_with_name(&project_path_buf, &prd_name);
+    let builder = PromptBuilder::new(&PathBuf::from(&project_path), &prd_name);
     builder.read_prompt()
 }
 
 /// Update the prompt.md content
 #[tauri::command]
-pub fn set_ralph_prompt(project_path: String, content: String) -> Result<(), String> {
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let builder = PromptBuilder::new(&ralph_dir);
+pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
+    let builder = PromptBuilder::new(&PathBuf::from(&project_path), &prd_name);
     builder.write_prompt(&content)
 }
 
@@ -576,15 +568,8 @@ pub async fn start_ralph_loop(
     }
 
     // Read existing PRD and initialize
-    // Use appropriate executor based on prd_name setting
     let project_path = PathBuf::from(&request.project_path);
-    let executor = match &request.prd_name {
-        Some(name) => PrdExecutor::new_with_name(&project_path, name),
-        None => {
-            let ralph_dir = project_path.join(".ralph");
-            PrdExecutor::new(&ralph_dir)
-        }
-    };
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
     let mut prd = executor.read_prd()?;
 
     // Update metadata with current execution ID immediately so frontend can recover
@@ -966,8 +951,8 @@ pub fn convert_prd_to_ralph(
         .project_path
         .ok_or_else(|| "PRD has no project path".to_string())?;
 
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let executor = PrdExecutor::new(&ralph_dir);
+    let project_path_buf = PathBuf::from(&project_path);
+    let executor = PrdExecutor::new(&project_path_buf, &request.prd_name);
 
     // Create Ralph PRD
     let mut ralph_prd = RalphPrd::new(&prd_doc.title, &request.branch);
@@ -998,11 +983,11 @@ pub fn convert_prd_to_ralph(
     executor.write_prd(&ralph_prd)?;
 
     // Initialize progress.txt
-    let tracker = ProgressTracker::new(&ralph_dir);
+    let tracker = ProgressTracker::new(&project_path_buf, &request.prd_name);
     tracker.initialize()?;
 
     // Create and write config.yaml with settings from the dialog
-    let config_manager = ConfigManager::new(&ralph_dir);
+    let config_manager = ConfigManager::new(&project_path_buf);
     let ralph_config = RalphConfig {
         project: ProjectConfig {
             name: Some(prd_doc.title.clone()),
@@ -1021,9 +1006,10 @@ pub fn convert_prd_to_ralph(
     config_manager.write(&ralph_config)?;
 
     // Generate prompt.md with the same config
-    let prompt_builder = PromptBuilder::new(&ralph_dir);
+    let prompt_builder = PromptBuilder::new(&project_path_buf, &request.prd_name);
     let loop_config = RalphLoopConfig {
-        project_path: PathBuf::from(&project_path),
+        project_path: project_path_buf.clone(),
+        prd_name: request.prd_name.clone(),
         run_tests: request.run_tests.unwrap_or(true),
         run_lint: request.run_lint.unwrap_or(true),
         max_iterations: request.max_iterations.unwrap_or(50),
@@ -1161,11 +1147,11 @@ pub fn convert_prd_file_to_ralph(
     }
 
     // Use new multi-PRD path format
-    let executor = PrdExecutor::new_with_name(&project_path, &request.prd_name);
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
     executor.write_prd(&ralph_prd)?;
 
     // Initialize progress
-    let tracker = ProgressTracker::new_with_name(&project_path, &request.prd_name);
+    let tracker = ProgressTracker::new(&project_path, &request.prd_name);
     tracker.initialize()?;
 
     // Create and write config.yaml
@@ -1192,7 +1178,7 @@ pub fn convert_prd_file_to_ralph(
         .map_err(|e| format!("Failed to write config: {}", e))?;
 
     // Generate prompt.md
-    let prompt_builder = PromptBuilder::new_with_name(&project_path, &request.prd_name);
+    let prompt_builder = PromptBuilder::new(&project_path, &request.prd_name);
     let loop_config = RalphLoopConfig {
         project_path: project_path.clone(),
         run_tests: request.run_tests.unwrap_or(true),
@@ -1200,7 +1186,7 @@ pub fn convert_prd_file_to_ralph(
         max_iterations: request.max_iterations.unwrap_or(50),
         max_cost: request.max_cost,
         model: request.model,
-        prd_name: Some(request.prd_name),
+        prd_name: request.prd_name,
         ..Default::default()
     };
     prompt_builder.generate_prompt(&loop_config)?;
@@ -1225,9 +1211,7 @@ pub fn has_ralph_files(project_path: String) -> bool {
         }
     }
 
-    // Also check legacy .ralph/prd.json location
-    let legacy_dir = PathBuf::from(&project_path).join(".ralph");
-    legacy_dir.join("prd.json").exists()
+    false
 }
 
 /// Get all Ralph files for a project
@@ -1266,21 +1250,8 @@ pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
         }
     }
 
-    // Also check legacy .ralph/ directory
-    let legacy_dir = PathBuf::from(&project_path).join(".ralph");
-    let legacy_prd_path = legacy_dir.join("prd.json");
-    if legacy_prd_path.exists() && !has_prd {
-        has_prd = true;
-    }
-    if legacy_dir.join("progress.txt").exists() && !has_progress {
-        has_progress = true;
-    }
-    if legacy_dir.join("prompt.md").exists() && !has_prompt {
-        has_prompt = true;
-    }
-
-    // Config is still in .ralph/ for now
-    let config_path = legacy_dir.join("config.yaml");
+    // Config is at .ralph-ui/config.yaml
+    let config_path = PathBuf::from(&project_path).join(".ralph-ui").join("config.yaml");
 
     Ok(RalphFiles {
         has_prd,
@@ -1320,8 +1291,7 @@ pub struct RalphFiles {
 pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let config_manager = ConfigManager::new(&ralph_dir);
+    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
     config_manager.read()
 }
 
@@ -1330,8 +1300,7 @@ pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
 pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(), String> {
     use crate::ralph_loop::ConfigManager;
 
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let config_manager = ConfigManager::new(&ralph_dir);
+    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
     config_manager.write(&config)
 }
 
@@ -1340,11 +1309,11 @@ pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(),
 pub fn init_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    std::fs::create_dir_all(&ralph_dir)
-        .map_err(|e| format!("Failed to create .ralph directory: {}", e))?;
+    let ralph_ui_dir = PathBuf::from(&project_path).join(".ralph-ui");
+    std::fs::create_dir_all(&ralph_ui_dir)
+        .map_err(|e| format!("Failed to create .ralph-ui directory: {}", e))?;
 
-    let config_manager = ConfigManager::new(&ralph_dir);
+    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
     config_manager.initialize()
 }
 
@@ -1362,8 +1331,7 @@ pub fn update_ralph_config(
 ) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let ralph_dir = PathBuf::from(&project_path).join(".ralph");
-    let config_manager = ConfigManager::new(&ralph_dir);
+    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
 
     config_manager.update(|config| {
         if let Some(v) = max_iterations {

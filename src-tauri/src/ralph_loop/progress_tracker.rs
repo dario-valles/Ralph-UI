@@ -4,9 +4,7 @@
 //! Each fresh agent instance reads this file to catch up on context
 //! from previous iterations.
 //!
-//! File locations:
-//! - New format: `.ralph-ui/prds/{prd_name}-progress.txt`
-//! - Legacy format: `.ralph/progress.txt` (for backwards compatibility)
+//! File location: `.ralph-ui/prds/{prd_name}-progress.txt`
 
 use super::types::{ProgressEntry, ProgressEntryType};
 use std::io::{BufRead, BufReader, Write};
@@ -14,62 +12,44 @@ use std::path::{Path, PathBuf};
 
 /// Progress tracker for managing progress.txt files
 ///
-/// Supports two path patterns:
-/// - With prd_name: `.ralph-ui/prds/{prd_name}-progress.txt` (new multi-PRD format)
-/// - Without prd_name: `.ralph/progress.txt` (legacy single-PRD format)
+/// Files are stored at `.ralph-ui/prds/{prd_name}-progress.txt`
 pub struct ProgressTracker {
     /// Base project path
     project_path: PathBuf,
-    /// Optional PRD name for multi-PRD support
-    prd_name: Option<String>,
+    /// PRD name (required)
+    prd_name: String,
 }
 
 impl ProgressTracker {
-    /// Create a new progress tracker with the new path format
+    /// Create a new progress tracker
     ///
     /// # Arguments
     /// * `project_path` - Path to the project root
     /// * `prd_name` - The PRD filename (without extension), e.g., "my-feature-a1b2c3d4"
-    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+    pub fn new(project_path: &Path, prd_name: &str) -> Self {
         Self {
             project_path: project_path.to_path_buf(),
-            prd_name: Some(prd_name.to_string()),
+            prd_name: prd_name.to_string(),
         }
     }
 
-    /// Create a progress tracker for legacy .ralph/progress.txt format
-    ///
-    /// This is for backwards compatibility with existing PRDs that don't use prd_name.
-    /// The `ralph_dir` parameter should be the `.ralph` directory path.
-    pub fn new(ralph_dir: &Path) -> Self {
-        // Extract project path by going up from .ralph directory
-        let project_path = ralph_dir
-            .parent()
-            .unwrap_or(ralph_dir)
-            .to_path_buf();
-        Self {
-            project_path,
-            prd_name: None,
-        }
+    /// Alias for new() for backwards compatibility during migration
+    #[deprecated(note = "Use new() instead")]
+    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
+        Self::new(project_path, prd_name)
     }
 
     /// Get the path to progress.txt
     pub fn progress_path(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(name) => self.project_path
-                .join(".ralph-ui")
-                .join("prds")
-                .join(format!("{}-progress.txt", name)),
-            None => self.project_path.join(".ralph").join("progress.txt"),
-        }
+        self.project_path
+            .join(".ralph-ui")
+            .join("prds")
+            .join(format!("{}-progress.txt", self.prd_name))
     }
 
     /// Get the directory containing the progress file
     fn progress_dir(&self) -> PathBuf {
-        match &self.prd_name {
-            Some(_) => self.project_path.join(".ralph-ui").join("prds"),
-            None => self.project_path.join(".ralph"),
-        }
+        self.project_path.join(".ralph-ui").join("prds")
     }
 
     /// Check if progress.txt exists
@@ -380,8 +360,7 @@ mod tests {
     #[test]
     fn test_initialize() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let tracker = ProgressTracker::new(&ralph_dir);
+        let tracker = ProgressTracker::new(temp_dir.path(), "test-prd");
 
         tracker.initialize().unwrap();
         assert!(tracker.progress_exists());
@@ -393,8 +372,7 @@ mod tests {
     #[test]
     fn test_append_entries() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let tracker = ProgressTracker::new(&ralph_dir);
+        let tracker = ProgressTracker::new(temp_dir.path(), "test-prd");
 
         tracker.start_iteration(1).unwrap();
         tracker.add_learning(1, "Discovered API pattern").unwrap();
@@ -411,8 +389,7 @@ mod tests {
     #[test]
     fn test_get_learnings() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let tracker = ProgressTracker::new(&ralph_dir);
+        let tracker = ProgressTracker::new(temp_dir.path(), "test-prd");
 
         tracker.start_iteration(1).unwrap();
         tracker.add_learning(1, "Learning 1").unwrap();
@@ -428,8 +405,7 @@ mod tests {
     #[test]
     fn test_get_summary() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let tracker = ProgressTracker::new(&ralph_dir);
+        let tracker = ProgressTracker::new(temp_dir.path(), "test-prd");
 
         tracker.start_iteration(1).unwrap();
         tracker.add_learning(1, "Learning").unwrap();
@@ -447,8 +423,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let temp_dir = setup_test_dir();
-        let ralph_dir = temp_dir.path().join(".ralph");
-        let tracker = ProgressTracker::new(&ralph_dir);
+        let tracker = ProgressTracker::new(temp_dir.path(), "test-prd");
 
         tracker.add_learning(1, "Test").unwrap();
         let entries = tracker.read_entries().unwrap();
