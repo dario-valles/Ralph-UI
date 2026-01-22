@@ -27,6 +27,22 @@ pub struct TemplateContext {
     pub prd_content: Option<String>,
     /// Custom variables
     pub custom: HashMap<String, String>,
+
+    // --- Rich Context Variables (US-011) ---
+    /// Last N entries from progress file
+    pub recent_progress: Option<String>,
+    /// Content from PATTERNS.md or CLAUDE.md
+    pub codebase_patterns: Option<String>,
+    /// Number of completed stories in the PRD
+    pub prd_completed_count: Option<i32>,
+    /// Total story count in the PRD
+    pub prd_total_count: Option<i32>,
+    /// Why this task was selected (dependency order, priority, etc.)
+    pub selection_reason: Option<String>,
+    /// Current date for temporal context (YYYY-MM-DD)
+    pub current_date: String,
+    /// ISO timestamp
+    pub timestamp: String,
 }
 
 /// Task context for templates
@@ -88,7 +104,7 @@ pub struct DependencyContext {
 }
 
 impl TemplateContext {
-    /// Create a new empty context
+    /// Create a new empty context with current timestamp
     pub fn new() -> Self {
         Self {
             task: None,
@@ -97,6 +113,14 @@ impl TemplateContext {
             dependencies: Vec::new(),
             prd_content: None,
             custom: HashMap::new(),
+            // Rich context variables (US-011)
+            recent_progress: None,
+            codebase_patterns: None,
+            prd_completed_count: None,
+            prd_total_count: None,
+            selection_reason: None,
+            current_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
 
@@ -109,6 +133,14 @@ impl TemplateContext {
             dependencies: Vec::new(),
             prd_content: None,
             custom: HashMap::new(),
+            // Rich context variables (US-011)
+            recent_progress: None,
+            codebase_patterns: None,
+            prd_completed_count: None,
+            prd_total_count: None,
+            selection_reason: None,
+            current_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
 
@@ -142,6 +174,33 @@ impl TemplateContext {
         self
     }
 
+    // --- Rich Context Variable Builders (US-011) ---
+
+    /// Add recent progress entries from progress file
+    pub fn with_recent_progress(mut self, progress: &str) -> Self {
+        self.recent_progress = Some(progress.to_string());
+        self
+    }
+
+    /// Add codebase patterns from PATTERNS.md or CLAUDE.md
+    pub fn with_codebase_patterns(mut self, patterns: &str) -> Self {
+        self.codebase_patterns = Some(patterns.to_string());
+        self
+    }
+
+    /// Set PRD completed and total story counts
+    pub fn with_prd_counts(mut self, completed: i32, total: i32) -> Self {
+        self.prd_completed_count = Some(completed);
+        self.prd_total_count = Some(total);
+        self
+    }
+
+    /// Set the selection reason for why this task was chosen
+    pub fn with_selection_reason(mut self, reason: &str) -> Self {
+        self.selection_reason = Some(reason.to_string());
+        self
+    }
+
     /// Convert to Tera context
     pub fn to_tera_context(&self) -> Result<Context> {
         let mut ctx = Context::new();
@@ -164,6 +223,31 @@ impl TemplateContext {
         for (key, value) in &self.custom {
             ctx.insert(key, value);
         }
+
+        // Rich context variables (US-011)
+        if let Some(progress) = &self.recent_progress {
+            ctx.insert("recent_progress", progress);
+        }
+
+        if let Some(patterns) = &self.codebase_patterns {
+            ctx.insert("codebase_patterns", patterns);
+        }
+
+        if let Some(completed) = &self.prd_completed_count {
+            ctx.insert("prd_completed_count", completed);
+        }
+
+        if let Some(total) = &self.prd_total_count {
+            ctx.insert("prd_total_count", total);
+        }
+
+        if let Some(reason) = &self.selection_reason {
+            ctx.insert("selection_reason", reason);
+        }
+
+        // Always include current_date and timestamp
+        ctx.insert("current_date", &self.current_date);
+        ctx.insert("timestamp", &self.timestamp);
 
         Ok(ctx)
     }
@@ -599,5 +683,136 @@ mod tests {
         let resolved = engine.resolve_file_references(prompt, temp_dir.path());
 
         assert!(resolved.contains("\"key\": \"value\""));
+    }
+
+    // Rich Context Variable Tests (US-011)
+
+    #[test]
+    fn test_recent_progress_variable() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new()
+            .with_recent_progress("- [Iter 1] Completed US-001\n- [Iter 2] Completed US-002");
+
+        let result = engine.render_string("Progress:\n{{ recent_progress }}", &ctx).unwrap();
+        assert!(result.contains("Completed US-001"));
+        assert!(result.contains("Completed US-002"));
+    }
+
+    #[test]
+    fn test_codebase_patterns_variable() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new()
+            .with_codebase_patterns("## Patterns\n- Use Zustand for state management\n- Follow CLAUDE.md guidelines");
+
+        let result = engine.render_string("Patterns:\n{{ codebase_patterns }}", &ctx).unwrap();
+        assert!(result.contains("Zustand"));
+        assert!(result.contains("CLAUDE.md"));
+    }
+
+    #[test]
+    fn test_prd_counts_variables() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new()
+            .with_prd_counts(5, 10);
+
+        let result = engine.render_string("Completed: {{ prd_completed_count }}/{{ prd_total_count }}", &ctx).unwrap();
+        assert_eq!(result, "Completed: 5/10");
+    }
+
+    #[test]
+    fn test_selection_reason_variable() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new()
+            .with_selection_reason("Highest priority with satisfied dependencies");
+
+        let result = engine.render_string("Selected because: {{ selection_reason }}", &ctx).unwrap();
+        assert!(result.contains("Highest priority with satisfied dependencies"));
+    }
+
+    #[test]
+    fn test_current_date_variable() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new();
+
+        let result = engine.render_string("Date: {{ current_date }}", &ctx).unwrap();
+        // Should be in YYYY-MM-DD format
+        assert!(result.starts_with("Date: "));
+        assert!(result.contains("-"));
+        // Check it looks like a date (4 digits - 2 digits - 2 digits)
+        let date_part = result.strip_prefix("Date: ").unwrap();
+        assert_eq!(date_part.len(), 10);
+    }
+
+    #[test]
+    fn test_timestamp_variable() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new();
+
+        let result = engine.render_string("Time: {{ timestamp }}", &ctx).unwrap();
+        // Should be in ISO 8601 format
+        assert!(result.contains("Time: "));
+        assert!(result.contains("T")); // ISO format has T separator
+    }
+
+    #[test]
+    fn test_all_rich_variables_combined() {
+        let engine = TemplateEngine::new();
+        let ctx = TemplateContext::new()
+            .with_recent_progress("Previous work completed")
+            .with_codebase_patterns("Use TypeScript strict mode")
+            .with_prd_counts(3, 7)
+            .with_selection_reason("Priority order");
+
+        let template = r#"
+Progress: {{ recent_progress }}
+Patterns: {{ codebase_patterns }}
+Status: {{ prd_completed_count }}/{{ prd_total_count }}
+Reason: {{ selection_reason }}
+Date: {{ current_date }}
+Timestamp: {{ timestamp }}
+"#;
+
+        let result = engine.render_string(template, &ctx).unwrap();
+        assert!(result.contains("Previous work completed"));
+        assert!(result.contains("TypeScript strict mode"));
+        assert!(result.contains("3/7"));
+        assert!(result.contains("Priority order"));
+        // current_date and timestamp are auto-populated
+    }
+
+    #[test]
+    fn test_rich_variables_with_defaults() {
+        let engine = TemplateEngine::new();
+        // Test that missing optional variables can be handled with Tera defaults
+        let ctx = TemplateContext::new(); // No rich variables set
+
+        let template = r#"Progress: {{ recent_progress | default(value="No progress yet") }}"#;
+        let result = engine.render_string(template, &ctx).unwrap();
+        assert_eq!(result, "Progress: No progress yet");
+    }
+
+    #[test]
+    fn test_existing_variables_preserved() {
+        // Verify that existing variables (task, session, etc.) still work
+        let engine = TemplateEngine::new();
+        let task = create_test_task();
+        let ctx = TemplateContext::from_task(&task)
+            .with_acceptance_criteria(vec!["Must be fast".to_string()])
+            .with_prd("PRD content here")
+            .with_prd_counts(1, 5)
+            .with_selection_reason("First priority");
+
+        let template = r#"Task: {{ task.title }}
+Criteria: {{ acceptance_criteria | first }}
+PRD: {{ prd_content }}
+Completed: {{ prd_completed_count }}/{{ prd_total_count }}
+Reason: {{ selection_reason }}"#;
+
+        let result = engine.render_string(template, &ctx).unwrap();
+        assert!(result.contains("Implement feature X"));
+        assert!(result.contains("Must be fast"));
+        assert!(result.contains("PRD content here"));
+        assert!(result.contains("1/5"));
+        assert!(result.contains("First priority"));
     }
 }
