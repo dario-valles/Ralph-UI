@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/stores/toastStore'
-import type { RalphLoopErrorPayload } from '@/types'
+import type { RalphLoopErrorPayload, RalphLoopCompletedPayload } from '@/types'
+import { triggerNotificationSound } from '@/hooks/useNotificationSound'
 
 /**
  * Hook that listens for Ralph Loop error events and shows in-app notifications
@@ -18,11 +19,28 @@ export function useRalphLoopNotifications(): void {
 
     const setupListeners = async () => {
       try {
+        // Listen for Ralph loop completion events (US-004: play sound)
+        const unlistenCompleted = await listen<RalphLoopCompletedPayload>(
+          'ralph:loop_completed',
+          () => {
+            // Play completion sound
+            triggerNotificationSound('completion')
+          }
+        )
+        unlisteners.push(unlistenCompleted)
+
         // Listen for Ralph loop error events
         const unlistenError = await listen<RalphLoopErrorPayload>(
           'ralph:loop_error',
           (event) => {
             const payload = event.payload
+
+            // Play appropriate sound based on error type (US-004)
+            if (payload.errorType === 'max_iterations') {
+              triggerNotificationSound('max_iterations')
+            } else {
+              triggerNotificationSound('error')
+            }
 
             // Handle max_iterations specifically with action buttons
             if (payload.errorType === 'max_iterations') {

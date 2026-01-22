@@ -17,6 +17,9 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  Volume2,
+  VolumeX,
+  Play,
 } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
 import { isTauri } from '@/lib/tauri-check'
@@ -30,6 +33,7 @@ import type {
 } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
+import { type SoundMode, playPreviewSound, resumeAudioContext } from '@/lib/audio'
 
 // UI-only settings that remain in localStorage
 interface UISettings {
@@ -37,6 +41,9 @@ interface UISettings {
   terminalFontSize: number
   showTokenCounts: boolean
   confirmDestructiveActions: boolean
+  // Notification sound settings (US-004)
+  soundMode: SoundMode
+  soundVolume: number // 0-100
 }
 
 const defaultUISettings: UISettings = {
@@ -44,6 +51,8 @@ const defaultUISettings: UISettings = {
   terminalFontSize: 14,
   showTokenCounts: true,
   confirmDestructiveActions: true,
+  soundMode: 'system',
+  soundVolume: 50,
 }
 
 const UI_SETTINGS_KEY = 'ralph-ui-settings'
@@ -287,6 +296,7 @@ export function SettingsPage() {
           <TabsTrigger value="git">Git</TabsTrigger>
           <TabsTrigger value="validation">Validation</TabsTrigger>
           <TabsTrigger value="fallback">Fallback</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="ui">UI Preferences</TabsTrigger>
         </TabsList>
 
@@ -1015,6 +1025,102 @@ export function SettingsPage() {
                   Backend configuration not available. Running in development mode.
                 </p>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notification Settings (US-004) */}
+        <TabsContent value="notifications" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Sounds</CardTitle>
+              <CardDescription>
+                Configure sound notifications for Ralph Loop events
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="soundMode">Sound Mode</Label>
+                  <Select
+                    id="soundMode"
+                    value={uiSettings.soundMode}
+                    onChange={(e) => {
+                      const mode = e.target.value as SoundMode
+                      updateUISettingsLocal({ soundMode: mode })
+                      // Resume audio context on user interaction
+                      resumeAudioContext()
+                    }}
+                  >
+                    <option value="off">Off - No sounds</option>
+                    <option value="system">System - Simple notification tones</option>
+                    <option value="ralph">Ralph - Fun themed sound effects</option>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {uiSettings.soundMode === 'off' && 'Notification sounds are disabled.'}
+                    {uiSettings.soundMode === 'system' &&
+                      'Simple, professional notification tones.'}
+                    {uiSettings.soundMode === 'ralph' &&
+                      'Fun, playful sound sequences inspired by Ralph Wiggum.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="soundVolume" className="flex items-center gap-2">
+                      {uiSettings.soundMode === 'off' ? (
+                        <VolumeX className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Volume2 className="h-4 w-4" />
+                      )}
+                      Volume: {uiSettings.soundVolume}%
+                    </Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={uiSettings.soundMode === 'off'}
+                      onClick={() => {
+                        resumeAudioContext()
+                        playPreviewSound(uiSettings.soundMode, uiSettings.soundVolume)
+                      }}
+                    >
+                      <Play className="h-4 w-4 mr-1" />
+                      Preview
+                    </Button>
+                  </div>
+                  <Slider
+                    id="soundVolume"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[uiSettings.soundVolume]}
+                    onValueChange={([v]) => updateUISettingsLocal({ soundVolume: v })}
+                    disabled={uiSettings.soundMode === 'off'}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4 bg-muted/30">
+                <h4 className="text-sm font-medium mb-2">When sounds play</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>
+                    <span className="font-medium text-green-600 dark:text-green-400">
+                      Completion
+                    </span>{' '}
+                    - When all stories in a Ralph loop pass
+                  </li>
+                  <li>
+                    <span className="font-medium text-destructive">Error</span> - When the
+                    loop encounters an error
+                  </li>
+                  <li>
+                    <span className="font-medium text-yellow-600 dark:text-yellow-400">
+                      Max Iterations
+                    </span>{' '}
+                    - When the iteration limit is reached
+                  </li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
