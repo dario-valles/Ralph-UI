@@ -628,13 +628,15 @@ export function RalphLoopDashboard({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
                     // Open worktree folder in file explorer
-                    import('@tauri-apps/plugin-shell')
-                      .then(({ open }) => {
-                        open(worktreePath)
-                      })
-                      .catch(console.error)
+                    try {
+                      const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
+                      await revealItemInDir(worktreePath)
+                    } catch {
+                      // Ignore if it fails (e.g., in browser dev mode)
+                      console.error('Failed to open folder')
+                    }
                   }}
                 >
                   <FolderOpen className="mr-2 h-4 w-4" />
