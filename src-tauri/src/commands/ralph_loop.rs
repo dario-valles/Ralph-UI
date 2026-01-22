@@ -89,6 +89,8 @@ pub struct StartRalphLoopRequest {
     ///
     /// PRD files are stored at `.ralph-ui/prds/{prd_name}.json`
     pub prd_name: String,
+    /// Template name to use for prompt generation (US-014)
+    pub template_name: Option<String>,
 }
 
 /// Response from starting a Ralph loop
@@ -182,6 +184,8 @@ pub struct ConvertPrdFileToRalphRequest {
     pub run_lint: Option<bool>,
     /// Whether to use a worktree for isolation
     pub use_worktree: Option<bool>,
+    /// Template name to use for prompt generation (US-014)
+    pub template_name: Option<String>,
 }
 
 /// Initialize a Ralph PRD at .ralph-ui/prds/{prd_name}.json
@@ -546,6 +550,7 @@ pub async fn start_ralph_loop(
         fallback_config,
         agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
         prd_name: request.prd_name.clone(),
+        template_name: request.template_name,
     };
 
     // Create orchestrator
@@ -1317,6 +1322,7 @@ pub fn convert_prd_file_to_ralph(
         max_cost: request.max_cost,
         model: request.model,
         prd_name: request.prd_name,
+        template_name: request.template_name,
         ..Default::default()
     };
     prompt_builder.generate_prompt(&loop_config)?;

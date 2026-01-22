@@ -413,6 +413,16 @@ export function SettingsPage() {
     setHasChanges(true)
   }
 
+  // Update templates config locally (US-014)
+  const updateTemplatesConfig = (updates: Partial<import('@/types').RalphTemplateConfig>) => {
+    if (!config) return
+    setConfig({
+      ...config,
+      templates: { ...config.templates, ...updates },
+    })
+    setHasChanges(true)
+  }
+
   // Update UI settings (localStorage only)
   const updateUISettingsLocal = (updates: Partial<UISettings>) => {
     setUISettings((prev) => ({ ...prev, ...updates }))
@@ -1559,6 +1569,55 @@ export function SettingsPage() {
 
         {/* Template Editor (US-012) */}
         <TabsContent value="templates" className="space-y-4">
+          {/* Default Template Setting (US-014) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileCode className="h-5 w-5" />
+                Default Template
+              </CardTitle>
+              <CardDescription>
+                Select the default template for Ralph Loop executions. This can be overridden when
+                starting a new execution.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {config ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="default-template">Default Template</Label>
+                    <Select
+                      id="default-template"
+                      value={config.templates.defaultTemplate || ''}
+                      onChange={(e) =>
+                        updateTemplatesConfig({
+                          defaultTemplate: e.target.value || undefined,
+                        })
+                      }
+                      disabled={templatesLoading}
+                      data-testid="default-template-select"
+                    >
+                      <option value="">Use first available template</option>
+                      {templates.map((t) => (
+                        <option key={`${t.source}-${t.name}`} value={t.name}>
+                          {t.name} ({t.source})
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      The template to use by default when starting new Ralph Loop executions.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Backend configuration not available. Running in development mode.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Template Editor Card */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">

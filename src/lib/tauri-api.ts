@@ -448,6 +448,7 @@ export const ralphLoopApi = {
     runTests?: boolean
     runLint?: boolean
     useWorktree?: boolean
+    templateName?: string // US-014: Template selection in execution
   }): Promise<RalphPrd> => {
     return await invoke('convert_prd_file_to_ralph', { request })
   },
