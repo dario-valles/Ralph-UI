@@ -450,6 +450,7 @@ pub async fn start_ralph_loop(
     agent_manager_state: State<'_, crate::AgentManagerState>,
     db: State<'_, Mutex<Database>>,
     config_state: State<'_, ConfigState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Parse agent type
     let agent_type = match request.agent_type.to_lowercase().as_str() {
@@ -673,6 +674,8 @@ pub async fn start_ralph_loop(
     // Clone for main loop task
     let execution_id_for_loop = execution_id.clone();
     let db_path_for_loop = db_path.clone();
+    let prd_name_for_loop = request.prd_name.clone();
+    let app_handle_for_loop = app_handle.clone();
 
     tauri::async_runtime::spawn(async move {
         log::info!("[RalphLoop] Background task started for {}", execution_id_for_loop);
@@ -707,6 +710,32 @@ pub async fn start_ralph_loop(
                     execution_id_for_loop,
                     metrics.total_iterations,
                     metrics.total_cost
+                );
+
+                // Emit loop completed event for frontend notification handling
+                let payload = crate::events::RalphLoopCompletedPayload {
+                    execution_id: execution_id_for_loop.clone(),
+                    prd_name: prd_name_for_loop.clone(),
+                    total_iterations: metrics.total_iterations,
+                    completed_stories: metrics.stories_completed,
+                    total_stories: metrics.stories_completed + metrics.stories_remaining,
+                    duration_secs: metrics.total_duration_secs,
+                    total_cost: metrics.total_cost,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                };
+
+                // Emit event to frontend
+                if let Err(e) = crate::events::emit_ralph_loop_completed(&app_handle_for_loop, payload) {
+                    log::warn!("[RalphLoop] Failed to emit loop completed event: {}", e);
+                }
+
+                // Send desktop notification
+                send_loop_completion_notification(
+                    &app_handle_for_loop,
+                    &prd_name_for_loop,
+                    metrics.total_iterations,
+                    metrics.stories_completed,
+                    metrics.total_duration_secs,
                 );
             }
             Err(e) => {
@@ -1626,4 +1655,58 @@ pub fn cleanup_ralph_iteration_history(
 
     log::info!("[RalphLoop] Cleaned up {} old iteration records (older than {} days)", count, days);
     Ok(count as u32)
+}
+
+// =============================================================================
+// Desktop Notification Helpers
+// =============================================================================
+
+/// Format duration in a human-readable way
+fn format_duration(secs: f64) -> String {
+    let total_secs = secs as u64;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+
+    if hours > 0 {
+        format!("{}h {}m", hours, minutes)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, seconds)
+    } else {
+        format!("{}s", seconds)
+    }
+}
+
+/// Send a desktop notification when a Ralph loop completes successfully
+fn send_loop_completion_notification(
+    app_handle: &tauri::AppHandle,
+    prd_name: &str,
+    total_iterations: u32,
+    completed_stories: u32,
+    duration_secs: f64,
+) {
+    use tauri_plugin_notification::NotificationExt;
+
+    // Format the notification body
+    let duration_str = format_duration(duration_secs);
+    let body = format!(
+        "{} stories completed in {} iterations\nDuration: {}",
+        completed_stories, total_iterations, duration_str
+    );
+
+    // Send the desktop notification
+    match app_handle
+        .notification()
+        .builder()
+        .title(&format!("Ralph Loop Complete: {}", prd_name))
+        .body(&body)
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[RalphLoop] Desktop notification sent for loop completion: {}", prd_name);
+        }
+        Err(e) => {
+            log::warn!("[RalphLoop] Failed to send desktop notification: {}", e);
+        }
+    }
 }

@@ -57,6 +57,20 @@ export interface RalphIterationCompletedEvent {
 }
 
 /**
+ * Loop completed event payload (when all stories pass)
+ */
+export interface RalphLoopCompletedEvent {
+  executionId: string
+  prdName: string
+  totalIterations: number
+  completedStories: number
+  totalStories: number
+  durationSecs: number
+  totalCost: number
+  timestamp: string
+}
+
+/**
  * Combined progress state
  */
 export interface RalphProgressState {
@@ -66,6 +80,8 @@ export interface RalphProgressState {
   iterationStarted: RalphIterationStartedEvent | null
   /** Last iteration completed event */
   iterationCompleted: RalphIterationCompletedEvent | null
+  /** Last loop completed event (when all stories pass) */
+  loopCompleted: RalphLoopCompletedEvent | null
   /** Whether we're connected to events */
   isConnected: boolean
 }
@@ -84,12 +100,14 @@ export function useProgressStream(
   const [progress, setProgress] = useState<RalphProgressEvent | null>(null)
   const [iterationStarted, setIterationStarted] = useState<RalphIterationStartedEvent | null>(null)
   const [iterationCompleted, setIterationCompleted] = useState<RalphIterationCompletedEvent | null>(null)
+  const [loopCompleted, setLoopCompleted] = useState<RalphLoopCompletedEvent | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
   const reset = useCallback(() => {
     setProgress(null)
     setIterationStarted(null)
     setIterationCompleted(null)
+    setLoopCompleted(null)
   }, [])
 
   useEffect(() => {
@@ -131,6 +149,18 @@ export function useProgressStream(
         )
         unlisteners.push(unlistenCompleted)
 
+        // Listen to loop completed events (when all stories pass)
+        const unlistenLoopCompleted = await listen<RalphLoopCompletedEvent>(
+          'ralph:loop_completed',
+          (event) => {
+            const payload = event.payload
+            if (executionId && payload.executionId !== executionId) return
+            if (prdName && payload.prdName !== prdName) return
+            setLoopCompleted(payload)
+          }
+        )
+        unlisteners.push(unlistenLoopCompleted)
+
         setIsConnected(true)
       } catch (error) {
         console.error('[useProgressStream] Failed to setup listeners:', error)
@@ -150,6 +180,7 @@ export function useProgressStream(
     progress,
     iterationStarted,
     iterationCompleted,
+    loopCompleted,
     isConnected,
     reset,
   }

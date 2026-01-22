@@ -807,6 +807,26 @@ export interface RalphLoopStatusEvent {
   branch?: string
 }
 
+/** Payload for Ralph loop completion events (when all stories pass) */
+export interface RalphLoopCompletedPayload {
+  /** Execution ID */
+  executionId: string
+  /** PRD name (session name) */
+  prdName: string
+  /** Total iterations taken to complete */
+  totalIterations: number
+  /** Total stories completed */
+  completedStories: number
+  /** Total stories in PRD */
+  totalStories: number
+  /** Total duration in seconds */
+  durationSecs: number
+  /** Total cost in dollars */
+  totalCost: number
+  /** Timestamp of completion */
+  timestamp: string
+}
+
 /** Progress entry type */
 export type RalphProgressEntryType =
   | 'iteration_start'

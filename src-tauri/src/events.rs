@@ -26,6 +26,7 @@ pub const EVENT_SUBAGENT_FAILED: &str = "subagent:failed";
 pub const EVENT_RALPH_PROGRESS: &str = "ralph:progress";
 pub const EVENT_RALPH_ITERATION_STARTED: &str = "ralph:iteration_started";
 pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
+pub const EVENT_RALPH_LOOP_COMPLETED: &str = "ralph:loop_completed";
 
 // Tool call events (for collapsible tool call display)
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
@@ -442,6 +443,39 @@ pub fn emit_ralph_iteration_completed(
     app_handle
         .emit(EVENT_RALPH_ITERATION_COMPLETED, payload)
         .with_context("Failed to emit Ralph iteration completed event")
+}
+
+/// Payload for Ralph Loop completion events (when all stories pass)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphLoopCompletedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name (session name)
+    pub prd_name: String,
+    /// Total iterations taken to complete
+    pub total_iterations: u32,
+    /// Total stories completed
+    pub completed_stories: u32,
+    /// Total stories in PRD
+    pub total_stories: u32,
+    /// Total duration in seconds
+    pub duration_secs: f64,
+    /// Total cost in dollars
+    pub total_cost: f64,
+    /// Timestamp of completion
+    pub timestamp: String,
+}
+
+/// Emit a Ralph Loop completion event (when all stories pass)
+/// This triggers a desktop notification on the frontend
+pub fn emit_ralph_loop_completed(
+    app_handle: &tauri::AppHandle,
+    payload: RalphLoopCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_LOOP_COMPLETED, payload)
+        .with_context("Failed to emit Ralph loop completed event")
 }
 
 // ============================================================================
