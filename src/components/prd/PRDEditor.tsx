@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import {
   Save,
   Loader2,
-  Play,
   BarChart3,
   AlertCircle,
   CheckCircle,
@@ -21,7 +20,6 @@ import {
   Eye,
 } from 'lucide-react'
 import { usePRDStore } from '@/stores/prdStore'
-import { PRDExecutionDialog } from './PRDExecutionDialog'
 import { QualityScoreCard } from './QualityScoreCard'
 import { toast } from '@/stores/toastStore'
 import { cn } from '@/lib/utils'
@@ -139,7 +137,6 @@ export function PRDEditor() {
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
-  const [showExecutionDialog, setShowExecutionDialog] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -219,9 +216,7 @@ export function PRDEditor() {
     }
   }
 
-  if (loading && !showExecutionDialog) {
-    // Only show loading spinner if the execution dialog is NOT open
-    // This prevents unmounting the dialog when executePRD sets loading: true
+  if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -295,10 +290,6 @@ export function PRDEditor() {
                 Save
               </>
             )}
-          </Button>
-          <Button onClick={() => setShowExecutionDialog(true)} className="gap-2">
-            <Play className="h-4 w-4" />
-            Execute PRD
           </Button>
         </div>
       </div>
@@ -391,15 +382,6 @@ export function PRDEditor() {
           )}
         </CardContent>
       </Card>
-
-      {/* Execution Dialog */}
-      {showExecutionDialog && (
-        <PRDExecutionDialog
-          prdId={currentPRD.id}
-          open={showExecutionDialog}
-          onOpenChange={setShowExecutionDialog}
-        />
-      )}
     </div>
   )
 }

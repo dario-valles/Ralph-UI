@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Save,
   Loader2,
@@ -15,9 +16,15 @@ import {
   FileText,
   FolderOpen,
   MessageSquare,
+  BookOpen,
+  Clock,
+  Terminal,
 } from 'lucide-react'
 import { prdApi } from '@/lib/tauri-api'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
+import { PRDStoriesTab } from './PRDStoriesTab'
+import { PRDExecutionTab } from './PRDExecutionTab'
+import { PRDHistoryTab } from './PRDHistoryTab'
 import { toast } from '@/stores/toastStore'
 import { cn } from '@/lib/utils'
 import type { PRDFile } from '@/types'
@@ -111,6 +118,7 @@ export function PRDFileEditor() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showExecutionDialog, setShowExecutionDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState('content')
 
   useEffect(() => {
     async function loadFile() {
@@ -183,7 +191,7 @@ export function PRDFileEditor() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl py-8">
+    <div className="container mx-auto max-w-6xl py-8">
       {/* Header */}
       <div className="mb-8 flex items-start justify-between">
         <div className="flex-1">
@@ -221,7 +229,7 @@ export function PRDFileEditor() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate(`/prds/chat?project=${encodeURIComponent(projectPath)}`)}
+            onClick={() => navigate(`/prds/chat?prdId=${encodeURIComponent(prdFile.id)}&project=${encodeURIComponent(projectPath)}`)}
           >
             <MessageSquare className="mr-2 h-4 w-4" />
             Continue in Chat
@@ -243,54 +251,101 @@ export function PRDFileEditor() {
         )}
       </div>
 
-      {/* PRD Content */}
+      {/* Tabs */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">PRD Content</CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                {content.length} characters
-              </Badge>
-              <Button
-                variant={isEditing ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                {isEditing ? (
-                  <>
-                    <Eye className="mr-2 h-4 w-4" />
-                    Preview
-                  </>
-                ) : (
-                  <>
-                    <Edit3 className="mr-2 h-4 w-4" />
-                    Edit
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isEditing ? (
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Write your PRD content in markdown..."
-              rows={25}
-              className="font-mono text-sm min-h-[500px]"
-            />
-          ) : content.trim() ? (
-            <div className="border rounded-md p-4 bg-background min-h-[200px]">
-              <MarkdownContent content={content} />
-            </div>
-          ) : (
-            <div className="border rounded-md p-8 bg-muted/30 text-center">
-              <p className="text-muted-foreground">No content yet. Click "Edit" to start writing your PRD.</p>
-            </div>
-          )}
-        </CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full justify-start border-b rounded-none h-auto p-0">
+            <TabsTrigger
+              value="content"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Content
+            </TabsTrigger>
+            <TabsTrigger
+              value="stories"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
+              <BookOpen className="mr-2 h-4 w-4" />
+              Stories
+            </TabsTrigger>
+            <TabsTrigger
+              value="execution"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
+              <Terminal className="mr-2 h-4 w-4" />
+              Execution
+            </TabsTrigger>
+            <TabsTrigger
+              value="history"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              History
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="content" className="p-0 mt-0">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">PRD Content</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {content.length} characters
+                  </Badge>
+                  <Button
+                    variant={isEditing ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setIsEditing(!isEditing)}
+                  >
+                    {isEditing ? (
+                      <>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="mr-2 h-4 w-4" />
+                        Edit
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Write your PRD content in markdown..."
+                  rows={25}
+                  className="font-mono text-sm min-h-[500px]"
+                />
+              ) : content.trim() ? (
+                <div className="border rounded-md p-4 bg-background min-h-[200px]">
+                  <MarkdownContent content={content} />
+                </div>
+              ) : (
+                <div className="border rounded-md p-8 bg-muted/30 text-center">
+                  <p className="text-muted-foreground">No content yet. Click "Edit" to start writing your PRD.</p>
+                </div>
+              )}
+            </CardContent>
+          </TabsContent>
+
+          <TabsContent value="stories" className="p-0 mt-0">
+            <PRDStoriesTab projectPath={projectPath} prdName={prdName} />
+          </TabsContent>
+
+          <TabsContent value="execution" className="p-0 mt-0">
+            <PRDExecutionTab projectPath={projectPath} prdName={prdName} />
+          </TabsContent>
+
+          <TabsContent value="history" className="p-0 mt-0">
+            <PRDHistoryTab projectPath={projectPath} prdName={prdName} />
+          </TabsContent>
+        </Tabs>
       </Card>
 
       {/* Execution Dialog */}

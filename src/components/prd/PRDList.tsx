@@ -491,13 +491,7 @@ function PRDTableRow({ prd, deleting, onNavigate, onDelete, getQualityBadge }: P
           <Button variant="ghost" size="sm" onClick={() => onNavigate(`/prds/${prd.id}`)}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onNavigate(`/prds/${prd.id}?execute=true`)}
-          >
-            <Play className="h-4 w-4" />
-          </Button>
+          {/* Note: Execute button removed - database PRD execution is deprecated */}
           <Button
             variant="ghost"
             size="sm"

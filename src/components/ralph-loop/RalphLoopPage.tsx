@@ -6,20 +6,23 @@ import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
-import { FolderOpen, AlertCircle, ArrowLeft } from 'lucide-react'
+import { FolderOpen, AlertCircle, ArrowLeft, RefreshCw, GitBranch } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function RalphLoopPage(): React.JSX.Element {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { projects, getActiveProject, setActiveProject, loadProjects } = useProjectStore()
-  const { ralphFiles, checkRalphFiles } = useRalphLoopStore()
+  const { ralphFiles, checkRalphFiles, loading } = useRalphLoopStore()
 
-  // Get project path from URL params or active project
+  // Get project path and PRD name from URL params or active project
   const projectPathParam = searchParams.get('project')
+  const prdNameParam = searchParams.get('prd')
   const activeProject = getActiveProject()
   const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(
     projectPathParam || activeProject?.path || null
   )
+  const [selectedPrdName, setSelectedPrdName] = useState<string | null>(prdNameParam)
 
   // Load projects on mount
   useEffect(() => {
@@ -41,6 +44,17 @@ export function RalphLoopPage(): React.JSX.Element {
       setActiveProject(project.id)
     }
     navigate(`/ralph-loop?project=${encodeURIComponent(path)}`, { replace: true })
+  }
+
+  // Update URL when PRD changes
+  const handlePrdChange = (prdName: string) => {
+    setSelectedPrdName(prdName)
+    if (selectedProjectPath) {
+      navigate(
+        `/ralph-loop?project=${encodeURIComponent(selectedProjectPath)}&prd=${encodeURIComponent(prdName)}`,
+        { replace: true }
+      )
+    }
   }
 
   // No project selected
@@ -71,7 +85,9 @@ export function RalphLoopPage(): React.JSX.Element {
                   value=""
                   onChange={(e) => handleProjectChange(e.target.value)}
                 >
-                  <option value="" disabled>Select a project...</option>
+                  <option value="" disabled>
+                    Select a project...
+                  </option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.path}>
                       {project.name}
@@ -92,7 +108,8 @@ export function RalphLoopPage(): React.JSX.Element {
 
   // Project selected but no Ralph files
   if (ralphFiles && !ralphFiles.hasPrd) {
-    const projectName = projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
+    const projectName =
+      projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
 
     return (
       <div className="container py-6">
@@ -114,8 +131,9 @@ export function RalphLoopPage(): React.JSX.Element {
               <div>
                 <h3 className="text-lg font-semibold">No Ralph PRD Found</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                  This project doesn't have a Ralph PRD yet. Create one by exporting from PRD Chat
-                  or initialize manually at <code className="text-xs bg-muted px-1 py-0.5 rounded">.ralph/prd.json</code>
+                  This project doesn't have a Ralph PRD yet. Create one by using PRD Chat or from
+                  the PRD list. PRDs are stored in{' '}
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">.ralph-ui/prds/</code>
                 </p>
               </div>
               <div className="flex gap-2">
@@ -133,13 +151,83 @@ export function RalphLoopPage(): React.JSX.Element {
     )
   }
 
-  const projectName = projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
+  const projectName =
+    projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
+
+  // If we have PRDs but none selected, show the selection list
+  if (!selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 0) {
+    return (
+      <div className="container py-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Select PRD to Execute</h1>
+              <p className="text-muted-foreground">{projectName}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => checkRalphFiles(selectedProjectPath!)}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+
+        <Card>
+          <CardContent className="p-6">
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-4">
+                {ralphFiles.prdNames.map((name) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => handlePrdChange(name)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <GitBranch className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">{name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {ralphFiles.hasProgress ? 'Has progress history' : 'Ready to start'}
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm">
+                      Select
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // If going back from dashboard, go to list if multiple PRDs exist
+              if (selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1) {
+                setSelectedPrdName(null)
+                navigate(`/ralph-loop?project=${encodeURIComponent(selectedProjectPath!)}`, {
+                  replace: true,
+                })
+              } else {
+                setSelectedProjectPath(null)
+              }
+            }}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
@@ -149,21 +237,49 @@ export function RalphLoopPage(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Project selector */}
-        <Select
-          className="w-[200px]"
-          value={selectedProjectPath || ''}
-          onChange={(e) => handleProjectChange(e.target.value)}
-        >
-          {projects.map((project) => (
-            <option key={project.id} value={project.path}>
-              {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="flex items-center gap-2">
+          {/* PRD selector (if inside dashboard) */}
+          {selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1 && (
+            <Select
+              className="w-[200px]"
+              value={selectedPrdName}
+              onChange={(e) => handlePrdChange(e.target.value)}
+            >
+              {ralphFiles.prdNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          )}
+
+          {/* Project selector */}
+          <Select
+            className="w-[200px]"
+            value={selectedProjectPath || ''}
+            onChange={(e) => handleProjectChange(e.target.value)}
+          >
+            {projects.map((project) => (
+              <option key={project.id} value={project.path}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
 
-      <RalphLoopDashboard projectPath={selectedProjectPath} />
+      {selectedPrdName ? (
+        <RalphLoopDashboard projectPath={selectedProjectPath} prdName={selectedPrdName} />
+      ) : (
+        <Card className="p-8">
+          <div className="text-center text-muted-foreground">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p>
+              No PRD name specified in URL. File-based PRDs require a <code>prd</code> parameter.
+            </p>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
