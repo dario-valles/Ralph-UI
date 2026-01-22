@@ -754,6 +754,16 @@ pub async fn start_ralph_loop(
                             crate::events::RalphLoopErrorType::Unknown
                         };
 
+                        // Include stories info for max_iterations errors
+                        let (stories_remaining, total_stories) = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+                            (
+                                Some(metrics.stories_remaining),
+                                Some(metrics.stories_completed + metrics.stories_remaining),
+                            )
+                        } else {
+                            (None, None)
+                        };
+
                         send_error_notification(
                             &app_handle_for_loop,
                             &execution_id_for_loop,
@@ -761,6 +771,8 @@ pub async fn start_ralph_loop(
                             error_type,
                             reason,
                             *iteration,
+                            stories_remaining,
+                            total_stories,
                         );
                     }
                     RalphLoopExecutionState::Cancelled { iteration } => {
@@ -784,8 +796,9 @@ pub async fn start_ralph_loop(
             Err(e) => {
                 log::error!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
 
-                // Get iteration count from orchestrator metrics
-                let iteration = orchestrator.metrics().total_iterations;
+                // Get metrics from orchestrator
+                let metrics = orchestrator.metrics();
+                let iteration = metrics.total_iterations;
 
                 // Classify the error and send appropriate notification
                 let error_str = e.to_lowercase();
@@ -807,6 +820,16 @@ pub async fn start_ralph_loop(
                     crate::events::RalphLoopErrorType::Unknown
                 };
 
+                // Include stories info for max_iterations errors
+                let (stories_remaining, total_stories) = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+                    (
+                        Some(metrics.stories_remaining),
+                        Some(metrics.stories_completed + metrics.stories_remaining),
+                    )
+                } else {
+                    (None, None)
+                };
+
                 // Send error notification
                 send_error_notification(
                     &app_handle_for_loop,
@@ -815,6 +838,8 @@ pub async fn start_ralph_loop(
                     error_type,
                     &e,
                     iteration,
+                    stories_remaining,
+                    total_stories,
                 );
             }
         }
@@ -1795,6 +1820,8 @@ fn send_error_notification(
     error_type: crate::events::RalphLoopErrorType,
     message: &str,
     iteration: u32,
+    stories_remaining: Option<u32>,
+    total_stories: Option<u32>,
 ) {
     use tauri_plugin_notification::NotificationExt;
 
@@ -1817,11 +1844,25 @@ fn send_error_notification(
         crate::events::RalphLoopErrorType::Unknown => "Error",
     };
 
-    // Format notification body
-    let body = format!(
-        "{}: {}\nIteration: {}",
-        prd_name, truncated_message, iteration
-    );
+    // Format notification body - include stories remaining for max iterations
+    let body = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+        if let (Some(remaining), Some(total)) = (stories_remaining, total_stories) {
+            format!(
+                "{}: {} stories remaining of {}\nIteration: {}",
+                prd_name, remaining, total, iteration
+            )
+        } else {
+            format!(
+                "{}: {}\nIteration: {}",
+                prd_name, truncated_message, iteration
+            )
+        }
+    } else {
+        format!(
+            "{}: {}\nIteration: {}",
+            prd_name, truncated_message, iteration
+        )
+    };
 
     // Emit event for frontend
     let payload = crate::events::RalphLoopErrorPayload {
@@ -1831,6 +1872,8 @@ fn send_error_notification(
         message: truncated_message.clone(),
         iteration,
         timestamp: chrono::Utc::now().to_rfc3339(),
+        stories_remaining,
+        total_stories,
     };
 
     if let Err(e) = crate::events::emit_ralph_loop_error(app_handle, payload) {

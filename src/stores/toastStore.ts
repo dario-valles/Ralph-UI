@@ -4,12 +4,24 @@ import type { RateLimitEvent } from '@/types'
 
 export type ToastVariant = 'default' | 'success' | 'error' | 'warning'
 
+/** Action button for a toast notification */
+export interface ToastAction {
+  /** Display label for the button */
+  label: string
+  /** Callback when button is clicked */
+  onClick: () => void
+  /** Optional variant for the button styling */
+  variant?: 'default' | 'outline' | 'destructive'
+}
+
 export interface Toast {
   id: string
   title: string
   description?: string
   variant: ToastVariant
   duration?: number
+  /** Optional action buttons for the toast */
+  actions?: ToastAction[]
 }
 
 interface ToastStore {
@@ -84,6 +96,22 @@ export const toast = {
   },
   default: (title: string, description?: string) => {
     useToastStore.getState().addToast({ title, description, variant: 'default' })
+  },
+  /** Show a toast with action buttons */
+  withActions: (
+    title: string,
+    description: string | undefined,
+    variant: ToastVariant,
+    actions: ToastAction[],
+    duration?: number
+  ) => {
+    useToastStore.getState().addToast({
+      title,
+      description,
+      variant,
+      actions,
+      duration: duration ?? 0, // No auto-dismiss for toasts with actions
+    })
   },
   /** Show a rate limit warning toast for an agent */
   rateLimitWarning: (event: RateLimitEvent) => {

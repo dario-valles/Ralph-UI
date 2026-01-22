@@ -517,6 +517,12 @@ pub struct RalphLoopErrorPayload {
     pub iteration: u32,
     /// Timestamp of error
     pub timestamp: String,
+    /// Number of stories remaining (for max_iterations error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stories_remaining: Option<u32>,
+    /// Total number of stories (for max_iterations error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_stories: Option<u32>,
 }
 
 /// Emit a Ralph Loop error event

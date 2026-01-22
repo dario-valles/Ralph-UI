@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react'
-import { useToastStore, type Toast as ToastType, type ToastVariant } from '@/stores/toastStore'
+import {
+  useToastStore,
+  type Toast as ToastType,
+  type ToastVariant,
+  type ToastAction,
+} from '@/stores/toastStore'
 import { cn } from '@/lib/utils'
 
 const variantStyles: Record<ToastVariant, string> = {
@@ -22,6 +27,56 @@ const variantTextStyles: Record<ToastVariant, string> = {
   success: 'text-green-800 dark:text-green-200',
   error: 'text-red-800 dark:text-red-200',
   warning: 'text-yellow-800 dark:text-yellow-200',
+}
+
+/** Styles for action buttons based on toast variant */
+const actionButtonStyles: Record<ToastVariant, string> = {
+  default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  success: 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600',
+  error: 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600',
+  warning:
+    'bg-yellow-600 text-white hover:bg-yellow-700 dark:bg-yellow-500 dark:hover:bg-yellow-600',
+}
+
+/** Outline button styles based on toast variant */
+const outlineButtonStyles: Record<ToastVariant, string> = {
+  default: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+  success:
+    'border border-green-300 text-green-700 hover:bg-green-100 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900',
+  error:
+    'border border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900',
+  warning:
+    'border border-yellow-300 text-yellow-700 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-300 dark:hover:bg-yellow-900',
+}
+
+function ActionButton({
+  action,
+  variant,
+  onDismiss,
+}: {
+  action: ToastAction
+  variant: ToastVariant
+  onDismiss: () => void
+}) {
+  const handleClick = () => {
+    action.onClick()
+    onDismiss()
+  }
+
+  const buttonStyle =
+    action.variant === 'outline' ? outlineButtonStyles[variant] : actionButtonStyles[variant]
+
+  return (
+    <button
+      onClick={handleClick}
+      className={cn(
+        'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+        buttonStyle
+      )}
+    >
+      {action.label}
+    </button>
+  )
 }
 
 function ToastItem({ toast }: { toast: ToastType }) {
@@ -50,12 +105,28 @@ function ToastItem({ toast }: { toast: ToastType }) {
       role="alert"
     >
       <div className="flex-shrink-0">{variantIcons[toast.variant]}</div>
-      <div className="flex-1 space-y-1">
-        <p className={cn('text-sm font-medium', variantTextStyles[toast.variant])}>{toast.title}</p>
-        {toast.description && (
-          <p className={cn('text-sm opacity-80', variantTextStyles[toast.variant])}>
-            {toast.description}
+      <div className="flex-1 space-y-2">
+        <div className="space-y-1">
+          <p className={cn('text-sm font-medium', variantTextStyles[toast.variant])}>
+            {toast.title}
           </p>
+          {toast.description && (
+            <p className={cn('text-sm opacity-80', variantTextStyles[toast.variant])}>
+              {toast.description}
+            </p>
+          )}
+        </div>
+        {toast.actions && toast.actions.length > 0 && (
+          <div className="flex gap-2">
+            {toast.actions.map((action, index) => (
+              <ActionButton
+                key={index}
+                action={action}
+                variant={toast.variant}
+                onDismiss={handleClose}
+              />
+            ))}
+          </div>
         )}
       </div>
       <button

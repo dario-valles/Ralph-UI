@@ -852,6 +852,10 @@ export interface RalphLoopErrorPayload {
   iteration: number
   /** Timestamp of error */
   timestamp: string
+  /** Number of stories remaining (for max_iterations error) */
+  storiesRemaining?: number
+  /** Total number of stories (for max_iterations error) */
+  totalStories?: number
 }
 
 /** Progress entry type */
