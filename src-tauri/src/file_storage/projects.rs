@@ -217,6 +217,7 @@ pub fn get_recent_projects(limit: usize) -> FileResult<Vec<ProjectEntry>> {
 }
 
 /// Get recent projects from a specific directory
+#[allow(dead_code)]
 fn get_recent_projects_in(base_dir: &Path, limit: usize) -> FileResult<Vec<ProjectEntry>> {
     let mut projects = get_all_projects_in(base_dir)?;
     projects.truncate(limit);

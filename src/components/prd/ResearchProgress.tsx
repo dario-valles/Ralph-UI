@@ -5,13 +5,22 @@
  * viewing research results as they complete.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ResearchSummary } from './gsd/ResearchSummary'
+import { useGsdStore } from '@/stores/gsdStore'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
+import type { AgentType } from '@/types'
 import {
   Search,
   Loader2,
@@ -20,6 +29,7 @@ import {
   FileText,
   ArrowRight,
   RefreshCw,
+  Bot,
 } from 'lucide-react'
 
 interface ResearchProgressProps {
@@ -30,7 +40,7 @@ interface ResearchProgressProps {
   /** Research synthesis (when complete) */
   synthesis?: ResearchSynthesis | null
   /** Callback to start research */
-  onStartResearch: (context: string) => Promise<void>
+  onStartResearch: (context: string, agentType?: string) => Promise<void>
   /** Callback to synthesize research */
   onSynthesize: () => Promise<void>
   /** Callback when ready to proceed */
@@ -116,6 +126,19 @@ export function ResearchProgress({
   const [selectedResult, setSelectedResult] = useState<ResearchResult | null>(null)
   const [showSummary, setShowSummary] = useState(false)
 
+  // Get agent selection from store
+  const {
+    availableResearchAgents,
+    selectedResearchAgent,
+    setSelectedResearchAgent,
+    loadAvailableAgents,
+  } = useGsdStore()
+
+  // Load available agents on mount
+  useEffect(() => {
+    loadAvailableAgents()
+  }, [loadAvailableAgents])
+
   // Calculate progress
   const agents = [
     { name: 'architecture', displayName: 'Architecture', status: status.architecture },
@@ -133,8 +156,8 @@ export function ResearchProgress({
   const hasStarted = runningCount > 0 || completedCount > 0 || failedCount > 0
 
   const handleStartResearch = useCallback(async () => {
-    await onStartResearch(questioningContext)
-  }, [onStartResearch, questioningContext])
+    await onStartResearch(questioningContext, selectedResearchAgent || undefined)
+  }, [onStartResearch, questioningContext, selectedResearchAgent])
 
   const handleSynthesize = useCallback(async () => {
     await onSynthesize()
@@ -214,7 +237,38 @@ export function ResearchProgress({
 
       {/* Actions */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
+          {/* Agent selector - only show before research starts */}
+          {!hasStarted && (
+            <div className="flex items-center gap-3">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Research Agent:</label>
+              <Select
+                value={selectedResearchAgent || 'claude'}
+                onValueChange={(value) => setSelectedResearchAgent(value as AgentType)}
+                disabled={isLoading || isRunning}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableResearchAgents.length > 0 ? (
+                    availableResearchAgents.map((agent) => (
+                      <SelectItem key={agent} value={agent}>
+                        {agent.charAt(0).toUpperCase() + agent.slice(1)}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="claude">Claude (default)</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {availableResearchAgents.length === 0 && (
+                <span className="text-xs text-muted-foreground">Loading agents...</span>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             {!hasStarted ? (
               <Button onClick={handleStartResearch} disabled={isLoading}>
@@ -224,7 +278,7 @@ export function ResearchProgress({
             ) : isRunning ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Research in progress...
+                Research in progress using {selectedResearchAgent || 'Claude'}...
               </div>
             ) : (
               <div className="flex items-center gap-2">

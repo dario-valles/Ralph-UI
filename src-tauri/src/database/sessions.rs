@@ -182,6 +182,7 @@ pub fn pause_other_sessions_in_project(
 
 /// Find an existing active session for a project.
 /// Used for PRD execution to optionally reuse an existing session.
+#[allow(dead_code)]
 pub fn find_active_session_for_project(
     conn: &Connection,
     project_path: &str,

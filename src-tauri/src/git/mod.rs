@@ -1,6 +1,6 @@
 // Git operations using git2-rs
-
-#![allow(dead_code)] // Git infrastructure (some methods not yet used)
+// Some methods are infrastructure for future features (worktree management, conflict resolution)
+#![allow(dead_code)]
 
 pub mod ai_resolver;
 

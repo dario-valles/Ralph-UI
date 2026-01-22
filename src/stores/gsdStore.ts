@@ -10,6 +10,8 @@ import type {
   GsdConfig,
   PlanningSessionInfo,
 } from '@/types/gsd'
+import { getNextPhase, getPreviousPhase } from '@/types/gsd'
+import { gsdApi } from '@/lib/tauri-api'
 import type {
   RequirementsDoc,
   RoadmapDoc,
@@ -17,6 +19,7 @@ import type {
   ScopeSelection,
   ConversionResult,
 } from '@/types/planning'
+import type { AgentType } from '@/types'
 
 /**
  * GSD Store State
@@ -35,6 +38,8 @@ interface GsdState {
   // Research
   researchResults: ResearchResult[]
   researchSummary: string | null
+  selectedResearchAgent: AgentType | null
+  availableResearchAgents: AgentType[]
 
   // Planning files content
   projectDocContent: string | null
@@ -54,6 +59,7 @@ interface GsdActions {
   // Session management
   startGsdSession: (projectPath: string, chatSessionId: string) => Promise<GsdWorkflowState>
   loadGsdState: (projectPath: string, sessionId: string) => Promise<GsdWorkflowState | null>
+  setWorkflowState: (state: GsdWorkflowState | null) => void
   clearGsdState: () => void
 
   // Phase navigation
@@ -70,10 +76,12 @@ interface GsdActions {
   addContextNote: (note: string) => void
 
   // Research
-  startResearch: (projectPath: string, context: string) => Promise<void>
+  startResearch: (projectPath: string, context: string, agentType?: string) => Promise<void>
   updateResearchStatus: (status: ResearchStatus) => void
   setResearchResults: (results: ResearchResult[]) => void
   setResearchSummary: (summary: string) => void
+  setSelectedResearchAgent: (agent: AgentType | null) => void
+  loadAvailableAgents: () => Promise<void>
 
   // Requirements
   loadRequirements: (projectPath: string, sessionId: string) => Promise<void>
@@ -144,6 +152,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       verificationResult: null,
       researchResults: [],
       researchSummary: null,
+      selectedResearchAgent: null,
+      availableResearchAgents: [],
       projectDocContent: null,
       summaryContent: null,
       config: null,
@@ -151,21 +161,9 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Session management
       startGsdSession: async (projectPath, chatSessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
         set({ isLoading: true, error: null })
         try {
-          // TODO: Call Tauri command start_gsd_session
-          const now = new Date().toISOString()
-          const state: GsdWorkflowState = {
-            sessionId: chatSessionId,
-            currentPhase: 'deep_questioning',
-            questioningContext: defaultQuestioningContext,
-            researchStatus: defaultResearchStatus,
-            decisions: [],
-            startedAt: now,
-            updatedAt: now,
-            isComplete: false,
-          }
+          const state = await gsdApi.startSession(projectPath, chatSessionId)
           set({ workflowState: state, isLoading: false })
           return state
         } catch (error) {
@@ -176,18 +174,20 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       loadGsdState: async (projectPath, sessionId) => {
-        void projectPath // Will be used when Tauri command is implemented
-        void sessionId
         set({ isLoading: true, error: null })
         try {
-          // TODO: Call Tauri command get_gsd_state
-          set({ isLoading: false })
-          return get().workflowState
+          const state = await gsdApi.getState(projectPath, sessionId)
+          set({ workflowState: state, isLoading: false })
+          return state
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to load GSD state'
           set({ error: message, isLoading: false })
           throw error
         }
+      },
+
+      setWorkflowState: (state) => {
+        set({ workflowState: state })
       },
 
       clearGsdState: () => {
@@ -198,6 +198,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           verificationResult: null,
           researchResults: [],
           researchSummary: null,
+          selectedResearchAgent: null,
           projectDocContent: null,
           summaryContent: null,
           error: null,
@@ -209,18 +210,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         const { workflowState } = get()
         if (!workflowState) return null
 
-        const phaseOrder: GsdPhase[] = [
-          'deep_questioning',
-          'project_document',
-          'research',
-          'requirements',
-          'scoping',
-          'roadmap',
-          'verification',
-          'export',
-        ]
-        const currentIndex = phaseOrder.indexOf(workflowState.currentPhase)
-        if (currentIndex >= phaseOrder.length - 1) {
+        const nextPhase = getNextPhase(workflowState.currentPhase)
+        if (!nextPhase) {
           // Mark as complete
           set({
             workflowState: {
@@ -232,7 +223,6 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           return null
         }
 
-        const nextPhase = phaseOrder[currentIndex + 1]
         set({
           workflowState: {
             ...workflowState,
@@ -247,20 +237,9 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         const { workflowState } = get()
         if (!workflowState) return null
 
-        const phaseOrder: GsdPhase[] = [
-          'deep_questioning',
-          'project_document',
-          'research',
-          'requirements',
-          'scoping',
-          'roadmap',
-          'verification',
-          'export',
-        ]
-        const currentIndex = phaseOrder.indexOf(workflowState.currentPhase)
-        if (currentIndex <= 0) return null
+        const prevPhase = getPreviousPhase(workflowState.currentPhase)
+        if (!prevPhase) return null
 
-        const prevPhase = phaseOrder[currentIndex - 1]
         set({
           workflowState: {
             ...workflowState,
@@ -368,6 +347,29 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       setResearchSummary: (summary: string) => {
         set({ researchSummary: summary })
+      },
+
+      setSelectedResearchAgent: (agent: AgentType | null) => {
+        set({ selectedResearchAgent: agent })
+      },
+
+      loadAvailableAgents: async () => {
+        try {
+          const { gsdApi } = await import('@/lib/tauri-api')
+          const agents = await gsdApi.getAvailableAgents()
+          set({ availableResearchAgents: agents })
+          // Auto-select first available agent if none selected
+          if (agents.length > 0 && !get().selectedResearchAgent) {
+            set({ selectedResearchAgent: agents[0] })
+          }
+        } catch (error) {
+          console.error('Failed to load available agents:', error)
+          // Fallback to claude
+          set({ availableResearchAgents: ['claude'] })
+          if (!get().selectedResearchAgent) {
+            set({ selectedResearchAgent: 'claude' })
+          }
+        }
       },
 
       // Requirements

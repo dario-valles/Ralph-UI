@@ -5,7 +5,6 @@
 //! - Execution state snapshots (ralph_execution_state table)
 
 use crate::ralph_loop::{ExecutionStateSnapshot, IterationOutcome, IterationRecord};
-use chrono::Utc;
 use rusqlite::{params, Connection, Result};
 
 // ============================================================================
@@ -317,13 +316,7 @@ pub struct IterationStats {
 
 /// Parse agent type from string representation
 fn parse_agent_type(s: &str) -> crate::models::AgentType {
-    match s.to_lowercase().as_str() {
-        "claude" => crate::models::AgentType::Claude,
-        "opencode" => crate::models::AgentType::Opencode,
-        "cursor" => crate::models::AgentType::Cursor,
-        "codex" => crate::models::AgentType::Codex,
-        _ => crate::models::AgentType::Claude, // Default fallback
-    }
+    s.parse().unwrap_or_default()
 }
 
 #[cfg(test)]

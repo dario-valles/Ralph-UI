@@ -37,6 +37,7 @@ macro_rules! map_err_str {
 ///
 /// Provides a structured error type for mutex lock operations that can be
 /// converted to/from PoisonError and displayed in error messages.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct LockError(String);
 
@@ -58,6 +59,7 @@ impl<T> From<PoisonError<T>> for LockError {
 /// Use this instead of `.lock().unwrap()` or `.lock().expect(...)`.
 ///
 /// Note: Currently not used in the codebase but provided as a reusable utility.
+#[allow(dead_code)]
 pub fn lock_mutex<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, LockError> {
     mutex
         .lock()
@@ -88,6 +90,7 @@ pub fn lock_db<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
 /// Generate a unique ID using timestamp and random string.
 ///
 /// Note: Currently not used in the codebase but provided as a reusable utility.
+#[allow(dead_code)]
 pub fn generate_id() -> String {
     // Generate a unique ID (using timestamp + random string for now)
     let now = Utc::now().timestamp_millis();
@@ -95,6 +98,7 @@ pub fn generate_id() -> String {
 }
 
 /// Generate a random alphanumeric string of specified length.
+#[allow(dead_code)]
 fn rand_string(len: usize) -> String {
     use rand::Rng;
     use std::iter;
@@ -109,6 +113,7 @@ fn rand_string(len: usize) -> String {
 /// Calculate cost based on token count and cost per million tokens.
 ///
 /// Note: Currently not used in the codebase but provided as a reusable utility.
+#[allow(dead_code)]
 pub fn format_cost(tokens: i32, cost_per_million: f64) -> f64 {
     (tokens as f64 / 1_000_000.0) * cost_per_million
 }

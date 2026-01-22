@@ -29,6 +29,8 @@ pub struct UpdatePRDRequest {
     pub content: Option<String>,
 }
 
+/// Configuration for PRD execution (future feature)
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionConfig {
@@ -241,7 +243,8 @@ pub async fn analyze_prd_quality(
     Ok(prd)
 }
 
-/// Execute PRD: Create tasks and launch agents
+/// Execute PRD: Create tasks and launch agents (future feature - not yet wired up)
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn execute_prd(
     prd_id: String,
@@ -298,12 +301,10 @@ pub async fn execute_prd(
     let project_path = prd.project_path.clone().unwrap_or_else(|| ".".to_string());
     let conn = db_guard.get_connection();
 
-    let agent_type = match config.agent_type.as_str() {
-        "claude" => crate::models::AgentType::Claude,
-        "opencode" => crate::models::AgentType::Opencode,
-        "cursor" => crate::models::AgentType::Cursor,
-        _ => crate::models::AgentType::Claude,
-    };
+    let agent_type: crate::models::AgentType = config
+        .agent_type
+        .parse()
+        .unwrap_or_default();
 
     // Check if we should reuse an existing session
     let session_id = if config.reuse_session.unwrap_or(false) {
@@ -425,7 +426,8 @@ pub async fn execute_prd(
 
 // Helper functions
 
-/// Create a new session for PRD execution
+/// Create a new session for PRD execution (future feature)
+#[allow(dead_code)]
 fn create_new_session_for_prd(
     conn: &rusqlite::Connection,
     config: &ExecutionConfig,
@@ -476,6 +478,52 @@ fn format_prd_markdown(prd: &PRDDocument) -> String {
     markdown
 }
 
+// Quality scoring constants
+mod quality_scoring {
+    /// Points awarded per key section found
+    pub const POINTS_PER_SECTION: i32 = 15;
+    /// Maximum points for key sections
+    pub const MAX_SECTION_POINTS: i32 = 60;
+
+    /// Content length thresholds
+    pub const CONTENT_LENGTH_HIGH: usize = 2000;
+    pub const CONTENT_LENGTH_MEDIUM: usize = 1000;
+    pub const CONTENT_LENGTH_LOW: usize = 500;
+
+    /// Points for content length
+    pub const POINTS_CONTENT_HIGH: i32 = 30;
+    pub const POINTS_CONTENT_MEDIUM: i32 = 20;
+    pub const POINTS_CONTENT_LOW: i32 = 10;
+
+    /// Heading count thresholds
+    pub const HEADINGS_HIGH: usize = 5;
+    pub const HEADINGS_MEDIUM: usize = 3;
+
+    /// Points for heading structure
+    pub const POINTS_HEADINGS_HIGH: i32 = 10;
+    pub const POINTS_HEADINGS_MEDIUM: i32 = 5;
+
+    /// Clarity scoring
+    pub const CLARITY_BASE_SCORE: i32 = 80;
+    pub const PENALTY_PER_VAGUE_TERM: i32 = 3;
+    pub const MAX_VAGUE_PENALTY: i32 = 15;
+    pub const POINTS_HAS_LISTS: i32 = 10;
+    pub const POINTS_HAS_CODE_BLOCKS: i32 = 5;
+    pub const PENALTY_SHORT_CONTENT: i32 = 20;
+    pub const SHORT_CONTENT_THRESHOLD: usize = 200;
+
+    /// Actionability scoring
+    pub const POINTS_HAS_TASK_SECTION: i32 = 30;
+    pub const POINTS_PER_LIST_ITEM: i32 = 3;
+    pub const MAX_LIST_ITEM_POINTS: i32 = 30;
+    pub const POINTS_PER_TASK_HEADING: i32 = 5;
+    pub const MAX_TASK_HEADING_POINTS: i32 = 30;
+    pub const POINTS_PER_ACTION_VERB: i32 = 2;
+    pub const MAX_ACTION_VERB_POINTS: i32 = 20;
+}
+
+use quality_scoring::*;
+
 /// Calculate completeness score for markdown PRD
 fn calculate_completeness(content: &str) -> i32 {
     let mut score = 0;
@@ -487,25 +535,25 @@ fn calculate_completeness(content: &str) -> i32 {
         .filter(|s| content_lower.contains(&format!("# {}", s)) || content_lower.contains(&format!("## {}", s)))
         .count();
 
-    score += (found_sections as i32 * 15).min(60);
+    score += (found_sections as i32 * POINTS_PER_SECTION).min(MAX_SECTION_POINTS);
 
     // Check content length
-    if content.len() > 2000 {
-        score += 30;
-    } else if content.len() > 1000 {
-        score += 20;
-    } else if content.len() > 500 {
-        score += 10;
+    if content.len() > CONTENT_LENGTH_HIGH {
+        score += POINTS_CONTENT_HIGH;
+    } else if content.len() > CONTENT_LENGTH_MEDIUM {
+        score += POINTS_CONTENT_MEDIUM;
+    } else if content.len() > CONTENT_LENGTH_LOW {
+        score += POINTS_CONTENT_LOW;
     }
 
     // Bonus for multiple headings (well-structured)
     let heading_count = content.lines()
         .filter(|line| line.starts_with('#'))
         .count();
-    if heading_count >= 5 {
-        score += 10;
-    } else if heading_count >= 3 {
-        score += 5;
+    if heading_count >= HEADINGS_HIGH {
+        score += POINTS_HEADINGS_HIGH;
+    } else if heading_count >= HEADINGS_MEDIUM {
+        score += POINTS_HEADINGS_MEDIUM;
     }
 
     score.min(100)
@@ -513,29 +561,29 @@ fn calculate_completeness(content: &str) -> i32 {
 
 /// Calculate clarity score for markdown PRD
 fn calculate_clarity(content: &str) -> i32 {
-    let mut score = 80;
+    let mut score = CLARITY_BASE_SCORE;
     let content_lower = content.to_lowercase();
 
     // Check for vague terms
     let vague_terms = ["simple", "easy", "fast", "good", "better", "nice", "clean", "somehow", "maybe", "probably"];
     for term in vague_terms {
         let count = content_lower.matches(term).count();
-        score -= (count as i32 * 3).min(15);
+        score -= (count as i32 * PENALTY_PER_VAGUE_TERM).min(MAX_VAGUE_PENALTY);
     }
 
     // Check for lists (indicates structured thinking)
     if content.contains("- ") || content.contains("* ") || content.contains("1. ") {
-        score += 10;
+        score += POINTS_HAS_LISTS;
     }
 
     // Check for code blocks
     if content.contains("```") {
-        score += 5;
+        score += POINTS_HAS_CODE_BLOCKS;
     }
 
     // Penalize very short content
-    if content.len() < 200 {
-        score -= 20;
+    if content.len() < SHORT_CONTENT_THRESHOLD {
+        score -= PENALTY_SHORT_CONTENT;
     }
 
     score.max(0).min(100)
@@ -569,18 +617,18 @@ fn calculate_actionability(content: &str) -> i32 {
     let mut score = 0;
 
     if has_tasks {
-        score += 30;
+        score += POINTS_HAS_TASK_SECTION;
     }
 
-    score += (list_items as i32 * 3).min(30);
-    score += (task_headings as i32 * 5).min(30);
+    score += (list_items as i32 * POINTS_PER_LIST_ITEM).min(MAX_LIST_ITEM_POINTS);
+    score += (task_headings as i32 * POINTS_PER_TASK_HEADING).min(MAX_TASK_HEADING_POINTS);
 
     // Bonus for action verbs
     let action_verbs = ["implement", "create", "build", "add", "update", "fix", "refactor", "design", "test", "deploy"];
     let action_count: usize = action_verbs.iter()
         .map(|v| content_lower.matches(v).count())
         .sum();
-    score += (action_count as i32 * 2).min(20);
+    score += (action_count as i32 * POINTS_PER_ACTION_VERB).min(MAX_ACTION_VERB_POINTS);
 
     score.min(100)
 }
@@ -605,6 +653,27 @@ pub struct PRDFile {
     pub has_ralph_json: bool,
     /// Whether this PRD has a progress file
     pub has_progress: bool,
+}
+
+/// Extract title from markdown content or fallback to filename
+fn extract_markdown_title(content: &str, fallback_name: &str) -> String {
+    content.lines()
+        .find(|line| line.starts_with("# "))
+        .map(|line| line.trim_start_matches("# ").trim().to_string())
+        .unwrap_or_else(|| {
+            // Convert filename to title (e.g., "new-feature-prd" -> "New Feature Prd")
+            let name_part = fallback_name.rsplitn(2, '-').last().unwrap_or(fallback_name);
+            name_part.split('-')
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(first) => first.to_uppercase().chain(chars).collect()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
 }
 
 /// Scan .ralph-ui/prds/ directory for PRD markdown files
@@ -653,23 +722,7 @@ pub async fn scan_prd_files(
             .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
 
         // Extract title from first # heading or use filename
-        let title = content.lines()
-            .find(|line| line.starts_with("# "))
-            .map(|line| line.trim_start_matches("# ").trim().to_string())
-            .unwrap_or_else(|| {
-                // Convert filename to title (e.g., "new-feature-prd-abc123" -> "New Feature PRD")
-                let name_part = filename.rsplitn(2, '-').last().unwrap_or(filename);
-                name_part.split('-')
-                    .map(|word| {
-                        let mut chars = word.chars();
-                        match chars.next() {
-                            None => String::new(),
-                            Some(first) => first.to_uppercase().chain(chars).collect()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            });
+        let title = extract_markdown_title(&content, filename);
 
         // Get file modification time
         let metadata = fs::metadata(&path)
@@ -726,22 +779,7 @@ pub async fn get_prd_file(
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Extract title from first # heading or use filename
-    let title = content.lines()
-        .find(|line| line.starts_with("# "))
-        .map(|line| line.trim_start_matches("# ").trim().to_string())
-        .unwrap_or_else(|| {
-            // Convert filename to title
-            prd_name.split('-')
-                .map(|word| {
-                    let mut chars = word.chars();
-                    match chars.next() {
-                        None => String::new(),
-                        Some(first) => first.to_uppercase().chain(chars).collect()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        });
+    let title = extract_markdown_title(&content, &prd_name);
 
     // Get file modification time
     let metadata = fs::metadata(&file_path)

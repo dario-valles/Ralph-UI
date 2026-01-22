@@ -206,30 +206,32 @@ pub fn run() {
         .manage(plugin_registry_state)
         .manage(ralph_loop_state)
         .setup(move |app| {
+            // Clone app handles for each event forwarder task
+            let rate_limit_handle = app.handle().clone();
+            let completion_handle = app.handle().clone();
+            let prd_file_handle = app.handle().clone();
+            let pty_data_handle = app.handle().clone();
+            let subagent_handle = app.handle().clone();
+
             // Spawn task to forward rate limit events to Tauri frontend events
-            let app_handle = app.handle().clone();
-            let app_handle_clone = app_handle.clone();
-            let app_handle_clone2 = app_handle.clone();
-            let app_handle_clone3 = app_handle.clone();
-            let app_handle_clone4 = app_handle.clone();
             tauri::async_runtime::spawn(async move {
-                forward_rate_limit_events(app_handle, rate_limit_rx).await;
+                forward_rate_limit_events(rate_limit_handle, rate_limit_rx).await;
             });
             // Spawn task to forward agent completion events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
-                forward_completion_events(app_handle_clone, completion_rx).await;
+                forward_completion_events(completion_handle, completion_rx).await;
             });
             // Spawn task to forward PRD file update events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
-                forward_prd_file_events(app_handle_clone2, prd_file_rx).await;
+                forward_prd_file_events(prd_file_handle, prd_file_rx).await;
             });
             // Spawn task to forward PTY data events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
-                forward_pty_data_events(app_handle_clone3, pty_data_rx).await;
+                forward_pty_data_events(pty_data_handle, pty_data_rx).await;
             });
             // Spawn task to forward subagent events to Tauri frontend events
             tauri::async_runtime::spawn(async move {
-                forward_subagent_events(app_handle_clone4, subagent_rx).await;
+                forward_subagent_events(subagent_handle, subagent_rx).await;
             });
             Ok(())
         })

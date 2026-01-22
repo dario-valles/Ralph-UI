@@ -1,4 +1,7 @@
 // Project database operations
+// NOTE: SQLite database is being phased out in favor of file-based storage.
+// All functions in this module are kept for legacy compatibility during migration.
+#![allow(dead_code)]
 
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};

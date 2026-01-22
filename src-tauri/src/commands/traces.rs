@@ -1,14 +1,8 @@
 // Subagent trace Tauri commands
 
-use crate::agents::{
-    StreamingParser, SubagentEvent, SubagentEventType, SubagentTree,
-};
+use crate::agents::{SubagentEvent, SubagentEventType, SubagentTree};
 use crate::AgentManagerState;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::RwLock;
-
-// TraceState struct removed - functionality moved to AgentManager
 
 /// Subagent tree summary for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,11 +15,6 @@ pub struct SubagentTreeSummary {
     pub complete_count: usize,
     pub fail_count: usize,
 }
-
-// TraceState is no longer used, define a placeholder type or remove usage
-// Since other files might import TraceState, we can keep a dummy type or alias if needed,
-// but better to remove it and fix call sites.
-// For now, I'll remove it.
 
 /// Initialize trace parser for an agent
 #[tauri::command]

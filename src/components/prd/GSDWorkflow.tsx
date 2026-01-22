@@ -17,6 +17,7 @@ import { VerificationResults } from './VerificationResults'
 import { useGsdStore } from '@/stores/gsdStore'
 import { gsdApi } from '@/lib/tauri-api'
 import type { GsdPhase, GsdWorkflowState, ResearchSynthesis } from '@/types/gsd'
+import { getNextPhase, getPreviousPhase } from '@/types/gsd'
 import type { RequirementsDoc, RoadmapDoc, VerificationResult, VerificationHistorySummary } from '@/types/planning'
 import { Rocket, FileText, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 
@@ -59,16 +60,18 @@ export function GSDWorkflow({
     setError,
     setLoading,
     setPhase,
+    loadGsdState,
+    startGsdSession,
+    setWorkflowState,
+    setRequirementsDoc,
+    setRoadmapDoc,
+    setVerificationResult,
   } = useGsdStore()
 
-  // Local state
-  const [localWorkflowState, setLocalWorkflowState] = useState<GsdWorkflowState | null>(null)
+  // Local UI state (not persisted)
   const [synthesis, setSynthesis] = useState<ResearchSynthesis | null>(null)
   const [isResearchRunning, setIsResearchRunning] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
-  const [localRequirements, setLocalRequirements] = useState<RequirementsDoc | null>(null)
-  const [localRoadmap, setLocalRoadmap] = useState<RoadmapDoc | null>(null)
-  const [localVerification, setLocalVerification] = useState<VerificationResult | null>(null)
   const [verificationIteration, setVerificationIteration] = useState<{
     iteration: number
     issuesFixed: string[]
@@ -82,37 +85,31 @@ export function GSDWorkflow({
     includeV2: false,
   })
 
-  // Use either store state or local state
-  const state = workflowState || localWorkflowState
-  const requirements = requirementsDoc || localRequirements
-  const roadmap = roadmapDoc || localRoadmap
-  const verification = verificationResult || localVerification
+  // Use store state directly
+  const state = workflowState
+  const requirements = requirementsDoc
+  const roadmap = roadmapDoc
+  const verification = verificationResult
 
   // Initialize or load workflow state
   useEffect(() => {
     const loadOrInitState = async () => {
       if (!projectPath || !sessionId) return
 
-      setLoading(true)
       try {
         // Try to load existing state
-        const existing = await gsdApi.getState(projectPath, sessionId)
-        if (existing) {
-          setLocalWorkflowState(existing)
-        } else {
-          // Start new session
-          const newState = await gsdApi.startSession(projectPath, sessionId)
-          setLocalWorkflowState(newState)
+        const existing = await loadGsdState(projectPath, sessionId)
+        if (!existing) {
+          // Start new session if none exists
+          await startGsdSession(projectPath, sessionId)
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize GSD workflow')
-      } finally {
-        setLoading(false)
       }
     }
 
     loadOrInitState()
-  }, [projectPath, sessionId, setLoading, setError])
+  }, [projectPath, sessionId, loadGsdState, startGsdSession, setError])
 
   // Phase navigation
   const handlePhaseChange = useCallback(async (phase: GsdPhase) => {
@@ -120,8 +117,7 @@ export function GSDWorkflow({
 
     setLoading(true)
     try {
-      const updated = await gsdApi.updatePhase(projectPath, sessionId, phase)
-      setLocalWorkflowState(updated)
+      await gsdApi.updatePhase(projectPath, sessionId, phase)
       setPhase(phase)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update phase')
@@ -133,77 +129,55 @@ export function GSDWorkflow({
   const handleNext = useCallback(async () => {
     if (!state || !projectPath || !sessionId) return
 
-    const phaseOrder: GsdPhase[] = [
-      'deep_questioning',
-      'project_document',
-      'research',
-      'requirements',
-      'scoping',
-      'roadmap',
-      'verification',
-      'export',
-    ]
-    const currentIndex = phaseOrder.indexOf(state.currentPhase)
-    if (currentIndex < phaseOrder.length - 1) {
-      const nextPhase = phaseOrder[currentIndex + 1]
+    const nextPhase = getNextPhase(state.currentPhase)
+    if (!nextPhase) return
 
-      // Generate PROJECT.md when moving from questioning to project document phase
-      if (state.currentPhase === 'deep_questioning' && nextPhase === 'project_document') {
-        setLoading(true)
-        try {
-          await gsdApi.generateProjectDocument(projectPath, sessionId)
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to generate PROJECT.md')
-          setLoading(false)
-          return
-        }
+    // Generate PROJECT.md when moving from questioning to project document phase
+    if (state.currentPhase === 'deep_questioning' && nextPhase === 'project_document') {
+      setLoading(true)
+      try {
+        await gsdApi.generateProjectDocument(projectPath, sessionId)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to generate PROJECT.md')
         setLoading(false)
+        return
       }
-
-      // Generate requirements from research when moving to requirements phase
-      if (state.currentPhase === 'research' && nextPhase === 'requirements') {
-        setLoading(true)
-        try {
-          const reqs = await gsdApi.generateRequirementsFromResearch(projectPath, sessionId)
-          setLocalRequirements(reqs)
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Failed to generate requirements')
-          setLoading(false)
-          return
-        }
-        setLoading(false)
-      }
-
-      await handlePhaseChange(nextPhase)
+      setLoading(false)
     }
-  }, [state, projectPath, sessionId, handlePhaseChange, setLoading, setError, setLocalRequirements])
+
+    // Generate requirements from research when moving to requirements phase
+    if (state.currentPhase === 'research' && nextPhase === 'requirements') {
+      setLoading(true)
+      try {
+        const reqs = await gsdApi.generateRequirementsFromResearch(projectPath, sessionId)
+        setRequirementsDoc(reqs)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to generate requirements')
+        setLoading(false)
+        return
+      }
+      setLoading(false)
+    }
+
+    await handlePhaseChange(nextPhase)
+  }, [state, projectPath, sessionId, handlePhaseChange, setLoading, setError, setRequirementsDoc])
 
   const handleBack = useCallback(async () => {
     if (!state) return
 
-    const phaseOrder: GsdPhase[] = [
-      'deep_questioning',
-      'project_document',
-      'research',
-      'requirements',
-      'scoping',
-      'roadmap',
-      'verification',
-      'export',
-    ]
-    const currentIndex = phaseOrder.indexOf(state.currentPhase)
-    if (currentIndex > 0) {
-      await handlePhaseChange(phaseOrder[currentIndex - 1])
+    const prevPhase = getPreviousPhase(state.currentPhase)
+    if (prevPhase) {
+      await handlePhaseChange(prevPhase)
     }
   }, [state, handlePhaseChange])
 
   // Research handlers
-  const handleStartResearch = useCallback(async (context: string) => {
+  const handleStartResearch = useCallback(async (context: string, agentType?: string) => {
     if (!projectPath || !sessionId) return
 
     setIsResearchRunning(true)
     try {
-      await gsdApi.startResearch(projectPath, sessionId, context)
+      await gsdApi.startResearch(projectPath, sessionId, context, agentType)
       // Research status will be updated via polling or events
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start research')
@@ -233,13 +207,13 @@ export function GSDWorkflow({
     setLoading(true)
     try {
       const updated = await gsdApi.scopeRequirements(projectPath, sessionId, selection)
-      setLocalRequirements(updated)
+      setRequirementsDoc(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply scope')
     } finally {
       setLoading(false)
     }
-  }, [projectPath, sessionId, setLoading, setError])
+  }, [projectPath, sessionId, setLoading, setError, setRequirementsDoc])
 
   const handleAddRequirement = useCallback(async (
     category: import('@/types/planning').RequirementCategory,
@@ -251,13 +225,15 @@ export function GSDWorkflow({
     }
 
     const newReq = await gsdApi.addRequirement(projectPath, sessionId, category, title, description)
-    // Update local requirements state
-    setLocalRequirements(prev => prev ? {
-      ...prev,
-      requirements: { ...prev.requirements, [newReq.id]: newReq }
-    } : prev)
+    // Update requirements state in store
+    if (requirementsDoc) {
+      setRequirementsDoc({
+        ...requirementsDoc,
+        requirements: { ...requirementsDoc.requirements, [newReq.id]: newReq }
+      })
+    }
     return newReq
-  }, [projectPath, sessionId])
+  }, [projectPath, sessionId, requirementsDoc, setRequirementsDoc])
 
   // Roadmap handlers
   const handleUpdateRoadmap = useCallback(async (updated: RoadmapDoc) => {
@@ -272,13 +248,13 @@ export function GSDWorkflow({
         'roadmap',
         JSON.stringify(updated, null, 2)
       )
-      setLocalRoadmap(updated)
+      setRoadmapDoc(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update roadmap')
     } finally {
       setLoading(false)
     }
-  }, [projectPath, sessionId, setLoading, setError])
+  }, [projectPath, sessionId, setLoading, setError, setRoadmapDoc])
 
   // Verification handlers
   const handleRunVerification = useCallback(async () => {
@@ -287,7 +263,7 @@ export function GSDWorkflow({
     setLoading(true)
     try {
       const iterResult = await gsdApi.verifyPlans(projectPath, sessionId)
-      setLocalVerification(iterResult.result)
+      setVerificationResult(iterResult.result)
       setVerificationIteration({
         iteration: iterResult.iteration,
         issuesFixed: iterResult.issuesFixed,
@@ -299,7 +275,7 @@ export function GSDWorkflow({
     } finally {
       setLoading(false)
     }
-  }, [projectPath, sessionId, setLoading, setError])
+  }, [projectPath, sessionId, setLoading, setError, setVerificationResult])
 
   // Export handler
   const handleExport = useCallback(async () => {
@@ -359,10 +335,10 @@ export function GSDWorkflow({
           <DeepQuestioning
             context={state.questioningContext}
             onContextUpdate={async (updates) => {
-              if (!projectPath || !sessionId) return
+              if (!projectPath || !sessionId || !state) return
               const newContext = { ...state.questioningContext, ...updates }
               await gsdApi.updateQuestioningContext(projectPath, sessionId, newContext)
-              setLocalWorkflowState({ ...state, questioningContext: newContext })
+              setWorkflowState({ ...state, questioningContext: newContext })
             }}
             onProceed={handleNext}
             isLoading={isLoading}

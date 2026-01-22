@@ -3,28 +3,33 @@
 //! Tauri commands for the GSD PRD generation workflow.
 
 use crate::gsd::{
-    config::{GsdConfig, ScopeLevel},
+    config::GsdConfig,
     conversion::{convert_to_ralph_prd, ConversionOptions, ConversionResult},
     planning_storage::{
-        delete_planning_session, get_planning_dir, init_planning_session, list_planning_sessions,
+        delete_planning_session, init_planning_session, list_planning_sessions,
         load_workflow_state, read_planning_file, save_workflow_state, write_planning_file,
         PlanningFile, PlanningSessionInfo,
     },
     requirements::{Requirement, RequirementsDoc, ScopeSelection},
-    research::{run_research_agents, synthesize_research, ResearchResult, ResearchSynthesis},
+    research::{get_available_agents, run_research_agents, synthesize_research, ResearchResult, ResearchSynthesis},
     roadmap::{derive_roadmap, RoadmapDoc},
     state::{GsdPhase, GsdWorkflowState, QuestioningContext, ResearchStatus},
     verification::{verify_plans, VerificationResult},
 };
+use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Request to start a GSD session
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartGsdSessionRequest {
-    pub project_path: String,
-    pub chat_session_id: String,
+/// Helper trait for serialization errors
+trait SerializeExt<T> {
+    fn serialize_to_json(&self, context: &str) -> Result<String, String>;
+}
+
+impl<T: Serialize> SerializeExt<T> for T {
+    fn serialize_to_json(&self, context: &str) -> Result<String, String> {
+        serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize {}: {}", context, e))
+    }
 }
 
 /// Start a new GSD workflow session
@@ -132,26 +137,21 @@ pub async fn generate_project_document(
     Ok(content)
 }
 
-/// Request to start research
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartResearchRequest {
-    pub project_path: String,
-    pub session_id: String,
-    pub context: String,
-}
-
 /// Start parallel research agents
 #[tauri::command]
 pub async fn start_research(
     project_path: String,
     session_id: String,
     context: String,
+    agent_type: Option<String>,
 ) -> Result<ResearchStatus, String> {
     let path = Path::new(&project_path);
 
-    // Load config (use defaults for now)
-    let config = GsdConfig::default();
+    // Build config with optional agent type override
+    let mut config = GsdConfig::default();
+    if let Some(agent) = agent_type {
+        config.research_agent_type = agent;
+    }
 
     // Run research agents in parallel
     let (status, results) = run_research_agents(&config, &project_path, &session_id, &context).await;
@@ -198,6 +198,7 @@ pub async fn get_research_results(
                         error: None,
                         output_path: Some(file_path.to_string_lossy().to_string()),
                         duration_secs: 0.0,
+                        cli_agent: "unknown".to_string(), // Loaded from file, agent unknown
                     });
                 }
                 Err(e) => {
@@ -208,6 +209,7 @@ pub async fn get_research_results(
                         error: Some(e.to_string()),
                         output_path: None,
                         duration_secs: 0.0,
+                        cli_agent: "unknown".to_string(),
                     });
                 }
             }
@@ -250,8 +252,7 @@ pub async fn generate_requirements_from_research(
     let doc = gen_reqs(&synthesis_content, &project_content);
 
     // Save the requirements document
-    let req_json = serde_json::to_string_pretty(&doc)
-        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    let req_json = doc.serialize_to_json("requirements")?;
     write_planning_file(path, &session_id, PlanningFile::Requirements, &req_json)?;
 
     // Also save markdown version
@@ -265,15 +266,6 @@ pub async fn generate_requirements_from_research(
     );
 
     Ok(doc)
-}
-
-/// Request to scope requirements
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScopeRequirementsRequest {
-    pub project_path: String,
-    pub session_id: String,
-    pub selections: ScopeSelection,
 }
 
 /// Apply scope selections to requirements
@@ -294,8 +286,7 @@ pub async fn scope_requirements(
     selections.apply(&mut doc);
 
     // Save updated requirements
-    let updated_content = serde_json::to_string_pretty(&doc)
-        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    let updated_content = doc.serialize_to_json("requirements")?;
     write_planning_file(path, &session_id, PlanningFile::Requirements, &updated_content)?;
 
     // Also save a scoped markdown version
@@ -311,9 +302,7 @@ pub async fn validate_requirements(
     project_path: String,
     session_id: String,
 ) -> Result<RequirementsValidationResult, String> {
-    use crate::gsd::requirements::{
-        calculate_quality_score, validate_requirements_doc, RequirementQualityResult,
-    };
+    use crate::gsd::requirements::{calculate_quality_score, validate_requirements_doc};
 
     let path = Path::new(&project_path);
 
@@ -354,8 +343,7 @@ pub async fn save_requirements(
 ) -> Result<(), String> {
     let path = Path::new(&project_path);
 
-    let content = serde_json::to_string_pretty(&requirements)
-        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    let content = requirements.serialize_to_json("requirements")?;
     write_planning_file(path, &session_id, PlanningFile::Requirements, &content)?;
 
     // Also save markdown version
@@ -400,8 +388,7 @@ pub async fn create_roadmap(
     let roadmap = derive_roadmap(&requirements);
 
     // Save roadmap
-    let roadmap_json = serde_json::to_string_pretty(&roadmap)
-        .map_err(|e| format!("Failed to serialize roadmap: {}", e))?;
+    let roadmap_json = roadmap.serialize_to_json("roadmap")?;
     write_planning_file(path, &session_id, PlanningFile::Roadmap, &roadmap_json)?;
 
     // Also save markdown version
@@ -438,7 +425,7 @@ pub async fn verify_gsd_plans(
     project_path: String,
     session_id: String,
 ) -> Result<VerificationIterationResult, String> {
-    use crate::gsd::verification::{VerificationHistory, VerificationIteration};
+    use crate::gsd::verification::VerificationHistory;
 
     let path = Path::new(&project_path);
 
@@ -471,8 +458,7 @@ pub async fn verify_gsd_plans(
     let new_issues = iteration.new_issues.clone();
 
     // Save verification history
-    let history_json = serde_json::to_string_pretty(&history)
-        .map_err(|e| format!("Failed to serialize verification history: {}", e))?;
+    let history_json = history.serialize_to_json("verification history")?;
     write_planning_file(path, &session_id, history_file, &history_json)?;
 
     // Save verification result as markdown
@@ -534,21 +520,9 @@ pub async fn clear_verification_history(
     let path = Path::new(&project_path);
     let history_file = PlanningFile::Research("verification_history.json".to_string());
     let empty_history = crate::gsd::verification::VerificationHistory::new();
-    let content = serde_json::to_string_pretty(&empty_history)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    let content = empty_history.serialize_to_json("verification history")?;
     write_planning_file(path, &session_id, history_file, &content)?;
     Ok(())
-}
-
-/// Request to export to Ralph PRD
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportToRalphRequest {
-    pub project_path: String,
-    pub session_id: String,
-    pub prd_name: String,
-    pub branch: String,
-    pub include_v2: Option<bool>,
 }
 
 /// Export GSD plans to Ralph PRD format
@@ -611,8 +585,7 @@ pub async fn export_gsd_to_ralph(
     );
 
     // Save the PRD using ralph_loop functions
-    let prd_json = serde_json::to_string_pretty(&result.prd)
-        .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
+    let prd_json = result.prd.serialize_to_json("PRD")?;
 
     // Save to .ralph-ui/prds/{prd_name}.json
     let prds_dir = crate::file_storage::get_ralph_ui_dir(path).join("prds");
@@ -745,8 +718,7 @@ pub async fn add_requirement(
         .ok_or_else(|| "Failed to retrieve created requirement".to_string())?;
 
     // Save updated requirements document
-    let req_json = serde_json::to_string_pretty(&doc)
-        .map_err(|e| format!("Failed to serialize requirements: {}", e))?;
+    let req_json = doc.serialize_to_json("requirements")?;
     write_planning_file(path, &session_id, PlanningFile::Requirements, &req_json)?;
 
     // Also save markdown version
@@ -761,4 +733,12 @@ pub async fn add_requirement(
     );
 
     Ok(requirement)
+}
+
+/// Get list of available CLI agents for GSD research
+///
+/// Returns only agents that are installed and available on the system.
+#[tauri::command]
+pub fn get_available_research_agents() -> Vec<AgentType> {
+    get_available_agents()
 }

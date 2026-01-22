@@ -178,6 +178,8 @@ export interface ResearchResult {
   outputPath?: string
   /** Duration in seconds */
   durationSecs: number
+  /** Which CLI agent was used */
+  cliAgent: string
 }
 
 /**

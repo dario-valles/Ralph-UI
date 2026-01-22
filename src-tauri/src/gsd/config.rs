@@ -2,6 +2,7 @@
 //!
 //! Configuration options for the GSD PRD generation workflow.
 
+use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for the GSD workflow
@@ -46,6 +47,20 @@ impl Default for GsdConfig {
             custom_prompts: None,
         }
     }
+}
+
+impl GsdConfig {
+    /// Parse the research_agent_type string into an AgentType
+    pub fn get_agent_type(&self) -> AgentType {
+        self.research_agent_type
+            .parse()
+            .unwrap_or_default()
+    }
+}
+
+/// Get all available agent types as strings
+pub fn all_agent_type_strings() -> Vec<&'static str> {
+    AgentType::all().iter().map(|t| t.as_str()).collect()
 }
 
 /// Custom prompts for research agents
