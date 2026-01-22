@@ -1079,57 +1079,8 @@ pub fn convert_prd_file_to_ralph(
             ralph_prd.add_story(story);
         }
     } else {
-        // Parse markdown to extract tasks
-        let mut stories = Vec::new();
-        
-        // Pass 1: Look for explicit US/Task patterns (e.g., "### US-1: Title")
-        // This is robust against section headers being mistaken for tasks
-        for line in content.lines() {
-            if line.contains("### US-") || line.contains("### T-") {
-                // Extract ID and Title
-                // Example: "1. ### US-SP-1: Create StreamingParser Struct"
-                // Example: "### US-1: Title"
-                if let Some(start_idx) = line.find("### ") {
-                    let text = &line[start_idx + 4..]; // Skip "### "
-                    // Split by colon to separate ID and Title
-                    if let Some((id_part, title_part)) = text.split_once(':') {
-                        let id = id_part.trim();
-                        let title = title_part.trim();
-                        stories.push(RalphStory::new(id, title, title));
-                    } else {
-                        // Fallback: use whole text as title, try to extract ID
-                        let parts: Vec<&str> = text.split_whitespace().collect();
-                        if !parts.is_empty() {
-                            let id = parts[0];
-                            let title = text;
-                            stories.push(RalphStory::new(id, title, title));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Pass 2: Fallback to headers if no explicit stories found
-        if stories.is_empty() {
-            let mut task_index = 0;
-            for line in content.lines() {
-                if line.starts_with("## ") || line.starts_with("### ") {
-                    let task_title = line.trim_start_matches('#').trim();
-                    // Skip common section headers
-                    if !["overview", "requirements", "tasks", "summary", "description", "background", "phase", "feature", "metrics", "notes", "questions", "table", "dependency", "migration"]
-                        .iter()
-                        .any(|s| task_title.to_lowercase().starts_with(s))
-                    {
-                        stories.push(RalphStory::new(
-                            &format!("task-{}", task_index + 1),
-                            task_title,
-                            task_title,
-                        ));
-                        task_index += 1;
-                    }
-                }
-            }
-        }
+        // Parse markdown to extract tasks with acceptance criteria
+        let stories = parse_markdown_stories_with_acceptance(&content);
 
         for story in stories {
             ralph_prd.add_story(story);
@@ -1626,4 +1577,230 @@ pub fn cleanup_ralph_iteration_history(
 
     log::info!("[RalphLoop] Cleaned up {} old iteration records (older than {} days)", count, days);
     Ok(count as u32)
+}
+
+// ============================================================================
+// Helper Functions for Markdown Parsing
+// ============================================================================
+
+/// Parse markdown content to extract user stories with their acceptance criteria.
+///
+/// This function handles two markdown formats:
+/// 1. User Story format with "#### US-XXX: Title" headers followed by "**Acceptance Criteria**:" sections
+/// 2. Generic headers as fallback
+///
+/// Returns a vector of RalphStory objects with proper acceptance criteria extracted.
+fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<RalphStory> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut stories = Vec::new();
+
+    // First pass: Look for explicit US patterns with acceptance criteria
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+
+        // Look for user story headers: "#### US-XXX: Title" or "### US-XXX: Title"
+        if line.contains("#### US-") || line.contains("### US-") ||
+            line.contains("#### T-") || line.contains("### T-") {
+
+            // Extract ID and Title
+            let header_marker = if line.contains("#### ") { "#### " } else { "### " };
+            if let Some(start_idx) = line.find(header_marker) {
+                let text = &line[start_idx + header_marker.len()..];
+
+                let (id, title) = if let Some((id_part, title_part)) = text.split_once(':') {
+                    (id_part.trim().to_string(), title_part.trim().to_string())
+                } else {
+                    // Fallback: first word is ID, rest is title
+                    let parts: Vec<&str> = text.split_whitespace().collect();
+                    if !parts.is_empty() {
+                        (parts[0].to_string(), text.to_string())
+                    } else {
+                        i += 1;
+                        continue;
+                    }
+                };
+
+                // Now look for "**Acceptance Criteria**:" or "Acceptance Criteria:" section
+                let mut acceptance_lines = Vec::new();
+                let mut j = i + 1;
+                let mut found_acceptance_section = false;
+
+                while j < lines.len() {
+                    let current_line = lines[j];
+
+                    // Stop at next user story header
+                    if current_line.contains("#### US-") || current_line.contains("### US-") ||
+                       current_line.contains("#### T-") || current_line.contains("### T-") ||
+                       current_line.starts_with("## ") {
+                        break;
+                    }
+
+                    // Check for acceptance criteria section header
+                    let lower = current_line.to_lowercase();
+                    if lower.contains("acceptance criteria") {
+                        found_acceptance_section = true;
+                        j += 1;
+                        continue;
+                    }
+
+                    // If we're in the acceptance section, collect bullet points
+                    if found_acceptance_section {
+                        let trimmed = current_line.trim();
+
+                        // Stop at next section header within the story
+                        if trimmed.starts_with("**") && !trimmed.starts_with("**Acceptance") {
+                            break;
+                        }
+
+                        // Collect bullet points (lines starting with - or *)
+                        if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+                            // Remove the bullet and checkbox markers like "[ ]"
+                            let criterion = trimmed
+                                .trim_start_matches("- ")
+                                .trim_start_matches("* ")
+                                .trim_start_matches("[ ] ")
+                                .trim_start_matches("[x] ")
+                                .trim_start_matches("[X] ")
+                                .trim();
+                            if !criterion.is_empty() {
+                                acceptance_lines.push(criterion.to_string());
+                            }
+                        }
+                    }
+
+                    j += 1;
+                }
+
+                // Create the acceptance criteria string
+                let acceptance = if acceptance_lines.is_empty() {
+                    // No acceptance criteria found - use a placeholder that's better than just the title
+                    format!("Implement: {}", title)
+                } else {
+                    acceptance_lines.iter()
+                        .map(|s| format!("- {}", s))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
+                stories.push(RalphStory::new(&id, &title, &acceptance));
+                i = j;
+                continue;
+            }
+        }
+
+        i += 1;
+    }
+
+    // Second pass: Fallback to generic headers if no explicit stories found
+    if stories.is_empty() {
+        let mut task_index = 0;
+        let skip_headers = [
+            "overview", "requirements", "tasks", "summary", "description",
+            "background", "phase", "feature", "metrics", "notes", "questions",
+            "table", "dependency", "migration", "technical", "architecture",
+            "files", "implementation", "open", "success", "deferred"
+        ];
+
+        for line in lines.iter() {
+            if line.starts_with("## ") || line.starts_with("### ") {
+                let task_title = line.trim_start_matches('#').trim();
+                let lower_title = task_title.to_lowercase();
+
+                // Skip common section headers
+                if !skip_headers.iter().any(|s| lower_title.starts_with(s)) {
+                    stories.push(RalphStory::new(
+                        &format!("task-{}", task_index + 1),
+                        task_title,
+                        &format!("Implement: {}", task_title),
+                    ));
+                    task_index += 1;
+                }
+            }
+        }
+    }
+
+    // Deduplicate stories by ID (keep only the first occurrence of each ID)
+    let mut seen_ids = std::collections::HashSet::new();
+    stories.retain(|story| seen_ids.insert(story.id.clone()));
+
+    stories
+}
+
+// ============================================================================
+// Acceptance Criteria Regeneration
+// ============================================================================
+
+/// Request to regenerate acceptance criteria for an existing Ralph PRD
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegenerateAcceptanceRequest {
+    /// Project path
+    pub project_path: String,
+    /// PRD name (without .json extension)
+    pub prd_name: String,
+}
+
+/// Regenerate acceptance criteria for stories in a Ralph PRD.
+///
+/// This reads the PRD markdown file and re-extracts acceptance criteria for each story,
+/// updating the PRD JSON while preserving pass/fail status.
+#[tauri::command]
+pub fn regenerate_ralph_prd_acceptance(
+    request: RegenerateAcceptanceRequest,
+) -> Result<RalphPrd, String> {
+    use std::fs;
+
+    let project_path = PathBuf::from(&request.project_path);
+    let prds_dir = project_path.join(".ralph-ui").join("prds");
+
+    // Read the existing PRD JSON
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
+    let mut prd = executor.read_prd()?;
+
+    // Read the markdown file for content
+    let md_path = prds_dir.join(format!("{}.md", request.prd_name));
+    let content = if md_path.exists() {
+        fs::read_to_string(&md_path)
+            .map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
+    } else {
+        // No markdown file - use PRD description as context
+        prd.description.clone().unwrap_or_default()
+    };
+
+    // Parse the markdown to extract stories with acceptance criteria
+    let parsed_stories = parse_markdown_stories_with_acceptance(&content);
+
+    // Create a map of parsed stories by ID for quick lookup
+    let parsed_map: std::collections::HashMap<String, &RalphStory> = parsed_stories
+        .iter()
+        .map(|s| (s.id.clone(), s))
+        .collect();
+
+    // Update each story's acceptance criteria while preserving pass/fail status
+    for story in prd.stories.iter_mut() {
+        if let Some(parsed) = parsed_map.get(&story.id) {
+            // Only update if the parsed acceptance is different and better
+            let current_is_just_title = story.acceptance == story.title ||
+                                        story.acceptance.is_empty();
+            let parsed_is_better = !parsed.acceptance.is_empty() &&
+                                   parsed.acceptance != parsed.title &&
+                                   !parsed.acceptance.starts_with("Implement:");
+
+            if current_is_just_title || parsed_is_better {
+                story.acceptance = parsed.acceptance.clone();
+            }
+        }
+    }
+
+    // Write the updated PRD back
+    executor.write_prd(&prd)?;
+
+    log::info!(
+        "[RalphLoop] Regenerated acceptance criteria for PRD '{}' ({} stories)",
+        request.prd_name,
+        prd.stories.len()
+    );
+
+    Ok(prd)
 }

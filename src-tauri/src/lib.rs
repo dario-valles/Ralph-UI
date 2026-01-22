@@ -456,6 +456,7 @@ pub fn run() {
             commands::delete_ralph_iteration_history,
             commands::get_ralph_loop_snapshot,
             commands::cleanup_ralph_iteration_history,
+            commands::regenerate_ralph_prd_acceptance,
             // GSD workflow commands
             commands::start_gsd_session,
             commands::get_gsd_state,

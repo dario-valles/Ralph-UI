@@ -549,6 +549,20 @@ export const ralphLoopApi = {
   cleanupIterationHistory: async (daysToKeep?: number): Promise<number> => {
     return await invoke('cleanup_ralph_iteration_history', { daysToKeep })
   },
+
+  /** Regenerate acceptance criteria for stories in a Ralph PRD.
+   * This re-parses the PRD markdown file and extracts proper acceptance criteria,
+   * updating the PRD JSON while preserving pass/fail status.
+   * @returns Updated RalphPrd with regenerated acceptance criteria
+   */
+  regenerateAcceptanceCriteria: async (
+    projectPath: string,
+    prdName: string
+  ): Promise<RalphPrd> => {
+    return await invoke('regenerate_ralph_prd_acceptance', {
+      request: { projectPath, prdName },
+    })
+  },
 }
 
 // Import GSD types

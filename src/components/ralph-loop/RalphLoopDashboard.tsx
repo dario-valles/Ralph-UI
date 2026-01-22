@@ -37,6 +37,8 @@ import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryVi
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
+import { ralphLoopApi } from '@/lib/tauri-api'
+import { Wand2 } from 'lucide-react'
 
 interface RalphLoopDashboardProps {
   projectPath: string
@@ -82,6 +84,7 @@ export function RalphLoopDashboard({
 
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   // Local state for config overrides - consolidated into single object
   interface ConfigOverrides {
@@ -302,6 +305,20 @@ export function RalphLoopDashboard({
       await markStoryFailing(story.id)
     } else {
       await markStoryPassing(story.id)
+    }
+  }
+
+  const handleRegenerateAcceptance = async () => {
+    if (!prd) return
+    setRegenerating(true)
+    try {
+      await ralphLoopApi.regenerateAcceptanceCriteria(projectPath, prdName)
+      // Reload the PRD to show updated acceptance criteria
+      await loadPrd(projectPath, prdName)
+    } catch (err) {
+      console.error('Failed to regenerate acceptance criteria:', err)
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -697,7 +714,30 @@ export function RalphLoopDashboard({
           </TabsList>
 
           <TabsContent value="stories" className="p-0 mt-0">
-            <ScrollArea className="h-[400px]">
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+              <span className="text-sm text-muted-foreground">
+                {prd.stories.filter(s => s.acceptance === s.title || !s.acceptance).length > 0 && (
+                  <span className="text-amber-600">
+                    Some stories have incomplete acceptance criteria
+                  </span>
+                )}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerateAcceptance}
+                disabled={regenerating || isRunning}
+                title="Re-parse PRD markdown to extract acceptance criteria"
+              >
+                {regenerating ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="mr-2 h-4 w-4" />
+                )}
+                Regenerate Acceptance
+              </Button>
+            </div>
+            <ScrollArea className="h-[360px]">
               <div className="p-4 space-y-2">
                 {prd.stories.map((story) => (
                   <StoryCard

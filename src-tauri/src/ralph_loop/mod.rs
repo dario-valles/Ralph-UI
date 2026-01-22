@@ -1163,6 +1163,17 @@ impl RalphLoopOrchestrator {
         let git_manager = GitManager::new(&self.config.project_path)
             .map_err(|e| format!("Failed to open git repository: {}", e))?;
 
+        // Prune orphaned worktrees (where physical directory was deleted but .git/worktrees entry remains)
+        match git_manager.prune_orphaned_worktrees() {
+            Ok(count) if count > 0 => {
+                log::info!("[RalphLoop] Pruned {} orphaned worktree(s)", count);
+            }
+            Err(e) => {
+                log::warn!("[RalphLoop] Failed to prune orphaned worktrees: {}", e);
+            }
+            _ => {}
+        }
+
         // Check if worktree already exists and is valid
         let worktree_exists = worktree_path.exists() && worktree_path.join(".git").exists();
 
@@ -1254,25 +1265,6 @@ impl RalphLoopOrchestrator {
 
         // Store the execution branch (different from the base PRD branch)
         self.config.branch = Some(execution_branch);
-
-        Ok(())
-    }
-
-    /// Recursively copy a directory
-    fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-        std::fs::create_dir_all(dst)?;
-
-        for entry in std::fs::read_dir(src)? {
-            let entry = entry?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
-
-            if src_path.is_dir() {
-                Self::copy_dir_recursive(&src_path, &dst_path)?;
-            } else {
-                std::fs::copy(&src_path, &dst_path)?;
-            }
-        }
 
         Ok(())
     }

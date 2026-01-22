@@ -287,6 +287,36 @@ impl GitManager {
         Err(GitError::from_str(&format!("Worktree not found: {}", path)))
     }
 
+    /// Prune orphaned worktrees (where the physical directory no longer exists)
+    /// This cleans up stale entries in .git/worktrees/
+    pub fn prune_orphaned_worktrees(&self) -> Result<u32, GitError> {
+        let worktrees = self.repo.worktrees()?;
+        let mut pruned_count = 0;
+
+        for name in worktrees.iter() {
+            if let Some(name_str) = name {
+                if let Ok(worktree) = self.repo.find_worktree(name_str) {
+                    let worktree_path = worktree.path();
+                    // Check if the physical worktree directory exists
+                    if !worktree_path.exists() {
+                        log::info!(
+                            "[Git] Pruning orphaned worktree '{}' (path {:?} no longer exists)",
+                            name_str,
+                            worktree_path
+                        );
+                        if let Err(e) = worktree.prune(None) {
+                            log::warn!("[Git] Failed to prune worktree '{}': {}", name_str, e);
+                        } else {
+                            pruned_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(pruned_count)
+    }
+
     /// Get git status
     pub fn get_status(&self) -> Result<Vec<FileStatus>, GitError> {
         let mut opts = StatusOptions::new();

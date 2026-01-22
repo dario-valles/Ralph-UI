@@ -378,9 +378,12 @@ impl RalphPrd {
         }
     }
 
-    /// Add a story to the PRD
+    /// Add a story to the PRD (skips if story with same ID already exists)
     pub fn add_story(&mut self, story: RalphStory) {
-        self.stories.push(story);
+        // Check if story with same ID already exists
+        if !self.stories.iter().any(|s| s.id == story.id) {
+            self.stories.push(story);
+        }
     }
 
     /// Get all stories that haven't passed yet
