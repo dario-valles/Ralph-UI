@@ -29,12 +29,10 @@ import {
   ChevronDown,
   FolderOpen,
   GitBranch,
-  Wrench,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import type { CommitInfo } from '@/lib/git-api'
-import { AgentTerminalInstance } from '@/components/terminal/AgentTerminalInstance'
-import { ToolCallPanel } from '@/components/terminal/ToolCallPanel'
+import { UnifiedTerminalView } from '@/components/terminal/UnifiedTerminalView'
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -84,7 +82,6 @@ export function RalphLoopDashboard({
 
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
-  const [terminalView, setTerminalView] = useState<'terminal' | 'tools'>('tools')
 
   // Local state for config overrides - consolidated into single object
   interface ConfigOverrides {
@@ -724,43 +721,12 @@ export function RalphLoopDashboard({
 
           <TabsContent value="terminal" className="p-0 mt-0">
             {currentAgentId && activeExecutionId ? (
-              <div className="h-[400px] flex flex-col">
-                {/* Sub-toggle between Terminal and Tool Calls */}
-                <div className="flex items-center gap-1 px-2 py-1.5 border-b border-zinc-800 bg-zinc-900/50">
-                  <Button
-                    variant={terminalView === 'tools' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setTerminalView('tools')}
-                    className="h-7 text-xs"
-                  >
-                    <Wrench className="h-3.5 w-3.5 mr-1.5" />
-                    Tool Calls
-                  </Button>
-                  <Button
-                    variant={terminalView === 'terminal' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setTerminalView('terminal')}
-                    className="h-7 text-xs"
-                  >
-                    <Terminal className="h-3.5 w-3.5 mr-1.5" />
-                    Raw Terminal
-                  </Button>
-                </div>
-
-                {/* View content - both views stay mounted but hidden to preserve state */}
-                <div className="flex-1 min-h-0 relative">
-                  <div className={terminalView === 'tools' ? 'h-full' : 'hidden'}>
-                    <ToolCallPanel agentId={currentAgentId} className="h-full" />
-                  </div>
-                  <div className={terminalView === 'terminal' ? 'h-full' : 'hidden'}>
-                    <AgentTerminalInstance
-                      key={`ralph-loop-${activeExecutionId}`}
-                      terminalId={`ralph-loop-${activeExecutionId}`}
-                      agentId={currentAgentId}
-                      isActive={activeTab === 'terminal' && terminalView === 'terminal'}
-                    />
-                  </div>
-                </div>
+              <div className="h-[400px]">
+                <UnifiedTerminalView
+                  key={`unified-${activeExecutionId}`}
+                  agentId={currentAgentId}
+                  className="h-full"
+                />
               </div>
             ) : (
               <div className="h-[400px] bg-zinc-950 flex items-center justify-center">
