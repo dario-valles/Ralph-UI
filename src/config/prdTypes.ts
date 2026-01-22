@@ -1,11 +1,19 @@
 import type { PRDTypeValue } from '@/types'
 
+export type WorkflowMode = 'guided' | 'gsd'
+
 export interface PRDTypeConfig {
   value: PRDTypeValue
   label: string
   description: string
   icon: string
   color: string
+  /** Which workflow modes this type supports */
+  supportedModes: WorkflowMode[]
+  /** Whether this type is recommended for GSD mode */
+  gsdRecommended?: boolean
+  /** Warning message to show when this type is used in GSD mode */
+  gsdWarning?: string
 }
 
 /**
@@ -20,6 +28,7 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Build something new from scratch',
     icon: 'Sparkles',
     color: 'text-blue-500',
+    supportedModes: ['guided', 'gsd'],
   },
   {
     value: 'full_new_app',
@@ -27,6 +36,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Design and plan an entirely new application',
     icon: 'Rocket',
     color: 'text-amber-500',
+    supportedModes: ['guided', 'gsd'],
+    gsdRecommended: true,
   },
   {
     value: 'bug_fix',
@@ -34,6 +45,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Fix an existing problem or issue',
     icon: 'Bug',
     color: 'text-red-500',
+    supportedModes: ['guided'],
+    gsdWarning: 'Full workflow is overkill for bug fixes. Use Guided Interview instead.',
   },
   {
     value: 'refactoring',
@@ -41,6 +54,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Improve code without changing behavior',
     icon: 'RefreshCw',
     color: 'text-green-500',
+    supportedModes: ['guided'],
+    gsdWarning: 'Full workflow is overkill for refactoring. Use Guided Interview instead.',
   },
   {
     value: 'api_integration',
@@ -48,6 +63,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Integrate with external APIs or services',
     icon: 'Link',
     color: 'text-purple-500',
+    supportedModes: ['guided'],
+    gsdWarning: 'API integrations benefit from focused guidance. Use Guided Interview instead.',
   },
   {
     value: 'general',
@@ -55,6 +72,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     description: 'Other product requirements',
     icon: 'FileText',
     color: 'text-gray-500',
+    supportedModes: ['guided'],
+    gsdWarning: 'General requirements are too vague for GSD workflow. Use Guided Interview instead.',
   },
 ]
 
@@ -84,4 +103,19 @@ export function getAllPRDTypeValues(): PRDTypeValue[] {
  */
 export function isValidPRDType(value: string): value is PRDTypeValue {
   return PRD_TYPES.some((t) => t.value === value)
+}
+
+/**
+ * Get PRD types filtered by workflow mode
+ */
+export function getPRDTypesForMode(mode: WorkflowMode): PRDTypeConfig[] {
+  return PRD_TYPES.filter((t) => t.supportedModes.includes(mode))
+}
+
+/**
+ * Check if a PRD type supports a given workflow mode
+ */
+export function typeSupportsMode(value: PRDTypeValue, mode: WorkflowMode): boolean {
+  const config = getPRDTypeConfig(value)
+  return config?.supportedModes.includes(mode) ?? false
 }
