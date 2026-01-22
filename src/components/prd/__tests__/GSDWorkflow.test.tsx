@@ -65,6 +65,24 @@ vi.mock('@/stores/gsdStore', () => ({
   }),
 }))
 
+// Mock the PRD chat store
+vi.mock('@/stores/prdChatStore', () => ({
+  usePRDChatStore: () => ({
+    currentSession: null,
+    messages: [],
+    streaming: false,
+    startSession: vi.fn(),
+    sendMessage: vi.fn(),
+  }),
+}))
+
+// Mock the project store
+vi.mock('@/stores/projectStore', () => ({
+  useProjectStore: () => ({
+    activeProject: { path: '/test/path' },
+  }),
+}))
+
 describe('GSDStepper', () => {
   it('renders all 8 phases', () => {
     render(
@@ -177,7 +195,8 @@ describe('DeepQuestioning', () => {
       />
     )
 
-    expect(screen.getByText(/What would you like to build/)).toBeInTheDocument()
+    // New chat-based interface shows a different welcome message
+    expect(screen.getByText(/Tell me about what you want to build/)).toBeInTheDocument()
   })
 
   it('shows context badges', () => {
@@ -229,26 +248,18 @@ describe('DeepQuestioning', () => {
     expect(proceedButton).not.toBeDisabled()
   })
 
-  it('calls onContextUpdate when adding context', async () => {
-    const onContextUpdate = vi.fn()
-
+  it('has chat input for describing project', () => {
     render(
       <DeepQuestioning
         context={defaultContext}
-        onContextUpdate={onContextUpdate}
+        onContextUpdate={() => {}}
         onProceed={() => {}}
       />
     )
 
-    const textarea = screen.getByPlaceholderText(/Describe your idea/)
-    fireEvent.change(textarea, { target: { value: 'Test idea' } })
-
-    const addButton = screen.getByText('Add Context')
-    fireEvent.click(addButton)
-
-    expect(onContextUpdate).toHaveBeenCalledWith({
-      notes: ['Test idea'],
-    })
+    // New chat-based interface uses ChatInput
+    const chatInput = screen.getByPlaceholderText(/Describe your project idea/)
+    expect(chatInput).toBeInTheDocument()
   })
 })
 

@@ -1,18 +1,24 @@
 /**
  * Deep Questioning Component for GSD Workflow
  *
- * Provides the questioning interface for the first phase of GSD,
- * helping users articulate what they want to build through guided questions.
+ * Provides a chat-based interface for the first phase of GSD,
+ * helping users articulate what they want to build through
+ * natural conversation. AI extracts context automatically.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { ChatInput } from './ChatInput'
+import { ChatMessageItem } from './ChatMessageItem'
 import { QuestioningGuide } from './gsd/QuestioningGuide'
+import { usePRDChatStore } from '@/stores/prdChatStore'
+import { useProjectStore } from '@/stores/projectStore'
 import type { QuestioningContext } from '@/types/gsd'
-import { MessageSquare, ArrowRight, Lightbulb } from 'lucide-react'
+import type { ChatMessage } from '@/types'
+import { MessageSquare, ArrowRight, Bot, ChevronRight, ChevronLeft } from 'lucide-react'
 
 interface DeepQuestioningProps {
   /** Current questioning context */
@@ -23,24 +29,75 @@ interface DeepQuestioningProps {
   onProceed: () => void
   /** Whether the component is in loading state */
   isLoading?: boolean
+  /** GSD session ID */
+  sessionId?: string
 }
 
-/** Initial prompt to get the user thinking */
-const INITIAL_PROMPT = `What would you like to build? Tell me about your idea in as much detail as you can.
+/** System message to initialize the conversation */
+const SYSTEM_WELCOME: ChatMessage = {
+  id: 'system-welcome',
+  sessionId: '',
+  role: 'assistant',
+  content: `Hi! I'm here to help you clarify your project idea. Tell me about what you want to build - describe it in your own words, and I'll help you think through the details.
 
-Consider:
-- What problem are you solving?
-- Who is this for?
-- What would success look like?`
+**Some things to consider:**
+- What problem are you trying to solve?
+- Who would use this?
+- What would success look like?
+
+Just start typing and we'll figure it out together.`,
+  createdAt: new Date().toISOString(),
+}
 
 export function DeepQuestioning({
   context,
   onContextUpdate,
   onProceed,
   isLoading = false,
+  sessionId,
 }: DeepQuestioningProps) {
-  const [userInput, setUserInput] = useState('')
   const [showGuide, setShowGuide] = useState(true)
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>([SYSTEM_WELCOME])
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Get project context
+  const { activeProject } = useProjectStore()
+  const projectPath = activeProject?.path
+
+  // Get chat store for sending messages
+  const {
+    currentSession,
+    messages: storeMessages,
+    streaming,
+    startSession,
+    sendMessage,
+  } = usePRDChatStore()
+
+  // Initialize GSD chat session on mount
+  useEffect(() => {
+    if (projectPath && sessionId && !currentSession) {
+      startSession({
+        agentType: 'claude',
+        projectPath,
+        gsdMode: true,
+      })
+    }
+  }, [projectPath, sessionId, currentSession, startSession])
+
+  // Derive messages from store - use useMemo for stable reference
+  const displayMessages = useMemo(() => {
+    if (storeMessages.length > 0) {
+      return [SYSTEM_WELCOME, ...storeMessages]
+    }
+    return localMessages
+  }, [storeMessages, localMessages])
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [displayMessages])
 
   // Check if enough context has been gathered
   const hasWhat = Boolean(context.what?.trim())
@@ -50,118 +107,153 @@ export function DeepQuestioning({
   const contextItemsCount = [hasWhat, hasWhy, hasWho, hasDone].filter(Boolean).length
   const isReadyToProceed = contextItemsCount >= 3
 
-  const handleSubmitInput = useCallback(() => {
-    if (!userInput.trim()) return
+  // Handle sending a message
+  const handleSendMessage = useCallback(async (content: string) => {
+    if (!content.trim()) return
 
-    // Add the input as a note
-    onContextUpdate({
-      notes: [...(context.notes || []), userInput.trim()],
-    })
+    // Add optimistic user message
+    const userMessage: ChatMessage = {
+      id: `local-${Date.now()}`,
+      sessionId: sessionId || '',
+      role: 'user',
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+    }
+    setLocalMessages(prev => [...prev, userMessage])
 
-    setUserInput('')
-  }, [userInput, context.notes, onContextUpdate])
+    try {
+      // Send through the chat system if connected
+      if (currentSession) {
+        await sendMessage(content.trim())
+      } else {
+        // Fallback: just add the message locally and use it as a note
+        onContextUpdate({
+          notes: [...(context.notes || []), content.trim()],
+        })
+
+        // Add a simulated assistant response
+        const assistantMessage: ChatMessage = {
+          id: `local-response-${Date.now()}`,
+          sessionId: sessionId || '',
+          role: 'assistant',
+          content: `Thanks for sharing! I've added that to your project context.
+
+Based on what you've told me so far, could you tell me more about:
+${!hasWhat ? '\n- **What** specifically are you building?' : ''}
+${!hasWhy ? '\n- **Why** does this need to exist? What problem does it solve?' : ''}
+${!hasWho ? '\n- **Who** will use this?' : ''}
+${!hasDone ? '\n- **What does "done" look like?** How will you know it\'s complete?' : ''}
+
+Feel free to elaborate on any of these, or continue describing your idea.`,
+          createdAt: new Date().toISOString(),
+        }
+        setLocalMessages(prev => [...prev, assistantMessage])
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error)
+    }
+  }, [currentSession, sendMessage, sessionId, context.notes, onContextUpdate, hasWhat, hasWhy, hasWho, hasDone])
 
   const handleProceed = useCallback(() => {
     onProceed()
   }, [onProceed])
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 h-full">
       {/* Header */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" />
             <CardTitle>Deep Questioning</CardTitle>
           </div>
           <CardDescription>
-            Let&apos;s understand what you want to build. The more context you provide,
-            the better we can plan your project.
+            Describe your idea naturally. I&apos;ll help you clarify the key aspects
+            and extract the essential context for planning.
           </CardDescription>
         </CardHeader>
       </Card>
 
       {/* Main content area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Input area */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          {/* Initial prompt card */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
-                <Lightbulb className="h-5 w-5 text-yellow-500 mt-0.5 shrink-0" />
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
-                  {INITIAL_PROMPT}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* User input area */}
-          <Card>
-            <CardContent className="pt-6">
-              <Textarea
-                placeholder="Describe your idea here..."
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                className="min-h-[150px] resize-y"
-                disabled={isLoading}
-              />
-              <div className="flex justify-end mt-4">
-                <Button onClick={handleSubmitInput} disabled={!userInput.trim() || isLoading}>
-                  Add Context
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notes/context history */}
-          {context.notes && context.notes.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Context Gathered</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-2">
-                  {context.notes.map((note, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-muted rounded-lg text-sm"
-                    >
-                      {note}
-                    </div>
-                  ))}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+        {/* Chat area - takes 2/3 on large screens */}
+        <div className={`flex flex-col ${showGuide ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+          <Card className="flex-1 flex flex-col min-h-0">
+            <CardHeader className="py-3 px-4 border-b flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Project Discovery Chat</span>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                {!showGuide && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowGuide(true)}
+                    className="gap-1"
+                  >
+                    Show Context
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+
+            {/* Messages area */}
+            <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+              <div className="p-4 space-y-4">
+                {displayMessages.map((message) => (
+                  <ChatMessageItem key={message.id} message={message} />
+                ))}
+                {streaming && (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                    <div className="animate-pulse flex gap-1">
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span>Thinking...</span>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Chat input */}
+            <div className="p-4 border-t flex-shrink-0">
+              <ChatInput
+                onSend={handleSendMessage}
+                disabled={isLoading || streaming}
+                placeholder="Describe your project idea..."
+              />
+            </div>
+          </Card>
         </div>
 
-        {/* Guide sidebar */}
-        <div className="lg:col-span-1">
-          {showGuide && (
-            <QuestioningGuide
-              context={context}
-              onContextItemUpdate={(key, value) => onContextUpdate({ [key]: value })}
-              onClose={() => setShowGuide(false)}
-            />
-          )}
-
-          {!showGuide && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setShowGuide(true)}
-            >
-              Show Guide
-            </Button>
-          )}
-        </div>
+        {/* Guide sidebar - 1/3 on large screens */}
+        {showGuide && (
+          <div className="lg:col-span-1 flex flex-col">
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute -left-3 top-4 z-10 h-8 w-8 p-0 rounded-full bg-background border shadow-sm"
+                onClick={() => setShowGuide(false)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <QuestioningGuide
+                context={context}
+                onContextItemUpdate={(key, value) => onContextUpdate({ [key]: value })}
+                onClose={() => setShowGuide(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Progress and proceed */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">Context items:</span>
@@ -185,7 +277,7 @@ export function DeepQuestioning({
 
           {!isReadyToProceed && (
             <p className="text-sm text-muted-foreground mt-2">
-              Please provide at least 3 context items before proceeding.
+              Fill in at least 3 context items in the sidebar, or keep chatting to discover more details.
             </p>
           )}
         </CardContent>

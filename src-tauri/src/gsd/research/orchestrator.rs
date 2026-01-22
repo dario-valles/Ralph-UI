@@ -1,7 +1,7 @@
 //! Research orchestrator for parallel agent coordination
 //!
 //! Spawns multiple research agents in parallel using tokio::join! and
-//! collects their results for synthesis.
+//! collects their results for synthesis. Emits progress events via Tauri.
 
 use crate::agents::providers::get_provider;
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
@@ -12,8 +12,40 @@ use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
+
+/// Event payload for research output streaming
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResearchOutputEvent {
+    /// Session ID
+    pub session_id: String,
+    /// Which research agent type this is from
+    pub agent_type: String,
+    /// Output chunk content
+    pub chunk: String,
+    /// Whether this is the final chunk
+    pub is_complete: bool,
+}
+
+/// Event payload for research status updates
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResearchStatusEvent {
+    /// Session ID
+    pub session_id: String,
+    /// Which research agent type this is from
+    pub agent_type: String,
+    /// Current status
+    pub status: String,
+    /// Error message if any
+    pub error: Option<String>,
+}
 
 /// Result of a single research agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +87,7 @@ pub struct ResearchOrchestrator {
     config: GsdConfig,
     project_path: String,
     session_id: String,
+    app_handle: Option<AppHandle>,
 }
 
 impl ResearchOrchestrator {
@@ -64,6 +97,52 @@ impl ResearchOrchestrator {
             config,
             project_path,
             session_id,
+            app_handle: None,
+        }
+    }
+
+    /// Create a new research orchestrator with app handle for event emission
+    pub fn with_app_handle(
+        config: GsdConfig,
+        project_path: String,
+        session_id: String,
+        app_handle: AppHandle,
+    ) -> Self {
+        Self {
+            config,
+            project_path,
+            session_id,
+            app_handle: Some(app_handle),
+        }
+    }
+
+    /// Emit a research output event
+    fn emit_output(&self, agent_type: &str, chunk: &str, is_complete: bool) {
+        if let Some(ref app_handle) = self.app_handle {
+            let event = ResearchOutputEvent {
+                session_id: self.session_id.clone(),
+                agent_type: agent_type.to_string(),
+                chunk: chunk.to_string(),
+                is_complete,
+            };
+            if let Err(e) = app_handle.emit("gsd:research_output", event) {
+                log::warn!("Failed to emit research output event: {}", e);
+            }
+        }
+    }
+
+    /// Emit a research status event
+    fn emit_status(&self, agent_type: &str, status: &str, error: Option<String>) {
+        if let Some(ref app_handle) = self.app_handle {
+            let event = ResearchStatusEvent {
+                session_id: self.session_id.clone(),
+                agent_type: agent_type.to_string(),
+                status: status.to_string(),
+                error,
+            };
+            if let Err(e) = app_handle.emit("gsd:research_status", event) {
+                log::warn!("Failed to emit research status event: {}", e);
+            }
         }
     }
 
@@ -76,13 +155,19 @@ impl ResearchOrchestrator {
         let start = std::time::Instant::now();
         let project_path = Path::new(&self.project_path);
         let cli_agent = self.config.research_agent_type.clone();
+        let agent_type_str = format!("{:?}", research_type).to_lowercase();
+
+        // Emit starting status
+        self.emit_status(&agent_type_str, "running", None);
 
         // Generate the prompt for this agent type
         let prompt =
             super::prompts::ResearchPrompts::get_prompt(research_type, context, project_path);
 
         // Run the configured CLI agent with the research prompt
-        let content = self.execute_research(research_type, &prompt).await;
+        let content = self
+            .execute_research_with_streaming(research_type, &prompt)
+            .await;
 
         let duration_secs = start.elapsed().as_secs_f64();
 
@@ -96,42 +181,81 @@ impl ResearchOrchestrator {
                     filename,
                     &research_content,
                 ) {
-                    Ok(path) => ResearchResult {
-                        research_type: format!("{:?}", research_type).to_lowercase(),
-                        success: true,
-                        content: Some(research_content),
-                        error: None,
-                        output_path: Some(path.to_string_lossy().to_string()),
-                        duration_secs,
-                        cli_agent,
-                    },
-                    Err(e) => ResearchResult {
-                        research_type: format!("{:?}", research_type).to_lowercase(),
-                        success: false,
-                        content: None,
-                        error: Some(format!("Failed to write research file: {}", e)),
-                        output_path: None,
-                        duration_secs,
-                        cli_agent,
-                    },
+                    Ok(path) => {
+                        // Emit completion status
+                        self.emit_status(&agent_type_str, "complete", None);
+                        self.emit_output(&agent_type_str, "", true);
+                        ResearchResult {
+                            research_type: agent_type_str,
+                            success: true,
+                            content: Some(research_content),
+                            error: None,
+                            output_path: Some(path.to_string_lossy().to_string()),
+                            duration_secs,
+                            cli_agent,
+                        }
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to write research file: {}", e);
+                        self.emit_status(&agent_type_str, "error", Some(error_msg.clone()));
+                        ResearchResult {
+                            research_type: agent_type_str,
+                            success: false,
+                            content: None,
+                            error: Some(error_msg),
+                            output_path: None,
+                            duration_secs,
+                            cli_agent,
+                        }
+                    }
                 }
             }
-            Err(e) => ResearchResult {
-                research_type: format!("{:?}", research_type).to_lowercase(),
-                success: false,
-                content: None,
-                error: Some(e),
-                output_path: None,
-                duration_secs,
-                cli_agent,
-            },
+            Err(e) => {
+                self.emit_status(&agent_type_str, "error", Some(e.clone()));
+                ResearchResult {
+                    research_type: agent_type_str,
+                    success: false,
+                    content: None,
+                    error: Some(e),
+                    output_path: None,
+                    duration_secs,
+                    cli_agent,
+                }
+            }
         }
     }
 
-    /// Run the configured CLI agent with the given prompt
-    async fn run_agent(&self, prompt: &str) -> Result<String, String> {
+    /// Run the research using the configured agent with streaming output
+    async fn execute_research_with_streaming(
+        &self,
+        research_type: ResearchAgentType,
+        prompt: &str,
+    ) -> Result<String, String> {
+        // Try to run the actual agent with streaming
+        match self.run_agent_streaming(research_type, prompt).await {
+            Ok(content) => Ok(content),
+            Err(e) => {
+                log::warn!(
+                    "[ResearchOrchestrator] Failed to run {:?} agent for {:?}: {}. Using placeholder.",
+                    self.config.get_agent_type(),
+                    research_type,
+                    e
+                );
+                // Fall back to placeholder content
+                Ok(self.get_placeholder_content(research_type))
+            }
+        }
+    }
+
+    /// Run the configured CLI agent with streaming output
+    async fn run_agent_streaming(
+        &self,
+        research_type: ResearchAgentType,
+        prompt: &str,
+    ) -> Result<String, String> {
         let agent_type = self.config.get_agent_type();
         let provider = get_provider(&agent_type);
+        let agent_type_str = format!("{:?}", research_type).to_lowercase();
 
         // Check if the agent is available
         if !provider.is_available() {
@@ -142,7 +266,7 @@ impl ResearchOrchestrator {
         }
 
         log::info!(
-            "[ResearchOrchestrator] Running {:?} agent in {}",
+            "[ResearchOrchestrator] Running {:?} agent with streaming in {}",
             agent_type,
             self.project_path
         );
@@ -171,55 +295,73 @@ impl ResearchOrchestrator {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // Spawn and wait for completion
-        let output = cmd
-            .output()
-            .await
+        // Spawn the process
+        let mut child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to spawn {:?}: {}", agent_type, e))?;
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            if stdout.trim().is_empty() {
-                // If stdout is empty, check stderr for any useful output
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                if !stderr.trim().is_empty() {
-                    log::warn!("[ResearchOrchestrator] {:?} stderr: {}", agent_type, stderr);
+        // Take stdout for streaming
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
+
+        // Collect output while streaming
+        let output_buffer = Arc::new(Mutex::new(String::new()));
+        let output_clone = output_buffer.clone();
+
+        // Stream stdout
+        let stdout_reader = BufReader::new(stdout);
+        let mut lines = stdout_reader.lines();
+
+        // Process lines as they come in
+        while let Ok(Some(line)) = lines.next_line().await {
+            // Emit the line as an event
+            self.emit_output(&agent_type_str, &line, false);
+
+            // Append to buffer
+            let mut buffer = output_clone.lock().await;
+            buffer.push_str(&line);
+            buffer.push('\n');
+        }
+
+        // Wait for process to complete
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| format!("Failed to wait for {:?}: {}", agent_type, e))?;
+
+        // Collect any stderr
+        let stderr_reader = BufReader::new(stderr);
+        let mut stderr_lines = stderr_reader.lines();
+        let mut stderr_output = String::new();
+        while let Ok(Some(line)) = stderr_lines.next_line().await {
+            stderr_output.push_str(&line);
+            stderr_output.push('\n');
+        }
+
+        // Get final output
+        let output = output_buffer.lock().await;
+
+        if status.success() {
+            if output.trim().is_empty() {
+                if !stderr_output.trim().is_empty() {
+                    log::warn!(
+                        "[ResearchOrchestrator] {:?} stderr: {}",
+                        agent_type,
+                        stderr_output
+                    );
                 }
                 Err(format!("{:?} returned empty output", agent_type))
             } else {
-                Ok(stdout)
+                Ok(output.clone())
             }
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let code = output.status.code().unwrap_or(-1);
+            let code = status.code().unwrap_or(-1);
             Err(format!(
                 "{:?} exited with code {}: {}",
                 agent_type,
                 code,
-                stderr.lines().take(5).collect::<Vec<_>>().join("\n")
+                stderr_output.lines().take(5).collect::<Vec<_>>().join("\n")
             ))
-        }
-    }
-
-    /// Run the research using the configured agent or fall back to placeholder
-    async fn execute_research(
-        &self,
-        research_type: ResearchAgentType,
-        prompt: &str,
-    ) -> Result<String, String> {
-        // Try to run the actual agent
-        match self.run_agent(prompt).await {
-            Ok(content) => Ok(content),
-            Err(e) => {
-                log::warn!(
-                    "[ResearchOrchestrator] Failed to run {:?} agent for {:?}: {}. Using placeholder.",
-                    self.config.get_agent_type(),
-                    research_type,
-                    e
-                );
-                // Fall back to placeholder content
-                Ok(self.get_placeholder_content(research_type))
-            }
         }
     }
 
@@ -262,11 +404,31 @@ pub async fn run_research_agents(
     session_id: &str,
     context: &str,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
-    let orchestrator = ResearchOrchestrator::new(
-        config.clone(),
-        project_path.to_string(),
-        session_id.to_string(),
-    );
+    run_research_agents_with_handle(config, project_path, session_id, context, None).await
+}
+
+/// Run all research agents in parallel with optional app handle for event emission
+pub async fn run_research_agents_with_handle(
+    config: &GsdConfig,
+    project_path: &str,
+    session_id: &str,
+    context: &str,
+    app_handle: Option<AppHandle>,
+) -> (ResearchStatus, Vec<ResearchResult>) {
+    let orchestrator = if let Some(handle) = app_handle {
+        ResearchOrchestrator::with_app_handle(
+            config.clone(),
+            project_path.to_string(),
+            session_id.to_string(),
+            handle,
+        )
+    } else {
+        ResearchOrchestrator::new(
+            config.clone(),
+            project_path.to_string(),
+            session_id.to_string(),
+        )
+    };
 
     let timeout_duration = Duration::from_secs(config.research_timeout_secs);
     let cli_agent = config.research_agent_type.clone();

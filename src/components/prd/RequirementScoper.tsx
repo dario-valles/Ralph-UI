@@ -2,10 +2,11 @@
  * Requirement Scoper Component for GSD Workflow
  *
  * Allows users to categorize and scope requirements into V1, V2,
- * or out-of-scope categories.
+ * or out-of-scope categories. Supports both list view and Kanban
+ * column view with drag-and-drop.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, DragEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,8 +15,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { RequirementsDoc, Requirement, ScopeSelection, ScopeLevel, RequirementCategory } from '@/types/planning'
-import { ListChecks, ArrowRight, Filter, Plus, X } from 'lucide-react'
+import { ListChecks, ArrowRight, Filter, Plus, X, LayoutGrid, List } from 'lucide-react'
 
 interface RequirementScoperProps {
   /** Requirements document */
@@ -92,6 +94,133 @@ function RequirementRow({
   )
 }
 
+/** Draggable requirement card for Kanban view */
+interface DraggableRequirementCardProps {
+  requirement: Requirement
+}
+
+function DraggableRequirementCard({ requirement }: DraggableRequirementCardProps) {
+  const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.setData('reqId', requirement.id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.currentTarget.classList.add('opacity-50', 'scale-95')
+  }
+
+  const handleDragEnd = (e: DragEvent<HTMLDivElement>) => {
+    e.currentTarget.classList.remove('opacity-50', 'scale-95')
+  }
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      className="p-3 bg-card border rounded-lg cursor-grab active:cursor-grabbing hover:border-primary/50 transition-all"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Badge variant="outline" className="font-mono text-xs">
+          {requirement.id}
+        </Badge>
+        {requirement.category && (
+          <Badge variant="secondary" className="text-xs">
+            {getCategoryDisplayName(requirement.category)}
+          </Badge>
+        )}
+      </div>
+      <p className="text-sm font-medium line-clamp-2">{requirement.title}</p>
+      {requirement.description && (
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+          {requirement.description}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Scope column configuration */
+interface ScopeColumnConfig {
+  scope: ScopeLevel
+  title: string
+  color: string
+  bgColor: string
+}
+
+const SCOPE_COLUMNS: ScopeColumnConfig[] = [
+  { scope: 'unscoped', title: 'Unscoped', color: 'text-yellow-600', bgColor: 'bg-yellow-500/10' },
+  { scope: 'v1', title: 'V1 - Must Have', color: 'text-green-600', bgColor: 'bg-green-500/10' },
+  { scope: 'v2', title: 'V2 - Nice to Have', color: 'text-blue-600', bgColor: 'bg-blue-500/10' },
+  { scope: 'out_of_scope', title: 'Out of Scope', color: 'text-gray-500', bgColor: 'bg-gray-500/10' },
+]
+
+/** Scope column for Kanban view */
+interface ScopeColumnProps {
+  config: ScopeColumnConfig
+  requirements: Requirement[]
+  onDrop: (reqId: string, scope: ScopeLevel) => void
+}
+
+function ScopeColumn({ config, requirements, onDrop }: ScopeColumnProps) {
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    // Only set false if we're leaving the column entirely
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOver(false)
+    }
+  }
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const reqId = e.dataTransfer.getData('reqId')
+    if (reqId) {
+      onDrop(reqId, config.scope)
+    }
+  }
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex flex-col rounded-lg border-2 transition-colors ${
+        isDragOver ? 'border-primary bg-primary/5' : 'border-transparent'
+      }`}
+    >
+      <div className={`px-3 py-2 rounded-t-lg ${config.bgColor}`}>
+        <div className="flex items-center justify-between">
+          <h3 className={`text-sm font-semibold ${config.color}`}>{config.title}</h3>
+          <Badge variant="outline" className="text-xs">
+            {requirements.length}
+          </Badge>
+        </div>
+      </div>
+      <ScrollArea className="flex-1 min-h-[300px] max-h-[500px]">
+        <div className="p-2 space-y-2">
+          {requirements.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+              Drop requirements here
+            </div>
+          ) : (
+            requirements.map((req) => (
+              <DraggableRequirementCard key={req.id} requirement={req} />
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  )
+}
+
 export function RequirementScoper({
   requirements,
   onApplyScope,
@@ -107,6 +236,7 @@ export function RequirementScoper({
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterScope, setFilterScope] = useState<string>('all')
   const [hasChanges, setHasChanges] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'columns'>('columns')
 
   // Custom requirement form state
   const [showAddForm, setShowAddForm] = useState(false)
@@ -161,6 +291,17 @@ export function RequirementScoper({
       v2: reqs.filter((r) => r.scope === 'v2').length,
       outOfScope: reqs.filter((r) => r.scope === 'out_of_scope').length,
       unscoped: reqs.filter((r) => !r.scope || r.scope === 'unscoped').length,
+    }
+  }, [localRequirements])
+
+  // Group requirements by scope for Kanban view
+  const requirementsByScope = useMemo(() => {
+    const reqs = Object.values(localRequirements)
+    return {
+      unscoped: reqs.filter((r) => !r.scope || r.scope === 'unscoped').sort((a, b) => a.id.localeCompare(b.id)),
+      v1: reqs.filter((r) => r.scope === 'v1').sort((a, b) => a.id.localeCompare(b.id)),
+      v2: reqs.filter((r) => r.scope === 'v2').sort((a, b) => a.id.localeCompare(b.id)),
+      out_of_scope: reqs.filter((r) => r.scope === 'out_of_scope').sort((a, b) => a.id.localeCompare(b.id)),
     }
   }, [localRequirements])
 
@@ -291,85 +432,128 @@ export function RequirementScoper({
         </Card>
       </div>
 
-      {/* Filters and bulk actions */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-[150px]"
-              >
-                <option value="all">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {getCategoryDisplayName(cat)}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                value={filterScope}
-                onChange={(e) => setFilterScope(e.target.value)}
-                className="w-[120px]"
-              >
-                <option value="all">All Scopes</option>
-                <option value="v1">V1</option>
-                <option value="v2">V2</option>
-                <option value="out_of_scope">Out of Scope</option>
-                <option value="unscoped">Unscoped</option>
-              </Select>
-            </div>
+      {/* View mode tabs and filters */}
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'columns')}>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* View mode toggle */}
+              <TabsList className="h-9">
+                <TabsTrigger value="columns" className="gap-1.5">
+                  <LayoutGrid className="h-4 w-4" />
+                  Kanban
+                </TabsTrigger>
+                <TabsTrigger value="list" className="gap-1.5">
+                  <List className="h-4 w-4" />
+                  List
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="flex items-center gap-2 ml-auto">
-              <Button variant="ghost" size="sm" onClick={handleSelectAll}>
-                Select All
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleSelectNone}>
-                Select None
-              </Button>
-              {selectedIds.size > 0 && (
-                <>
-                  <span className="text-sm text-muted-foreground">
-                    {selectedIds.size} selected:
-                  </span>
-                  <Button size="sm" variant="default" onClick={() => handleBulkScope('v1')}>
-                    V1
+              {/* Filters - only show in list view */}
+              {viewMode === 'list' && (
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <Select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="w-[150px]"
+                  >
+                    <option value="all">All Categories</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {getCategoryDisplayName(cat)}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
+                    value={filterScope}
+                    onChange={(e) => setFilterScope(e.target.value)}
+                    className="w-[120px]"
+                  >
+                    <option value="all">All Scopes</option>
+                    <option value="v1">V1</option>
+                    <option value="v2">V2</option>
+                    <option value="out_of_scope">Out of Scope</option>
+                    <option value="unscoped">Unscoped</option>
+                  </Select>
+                </div>
+              )}
+
+              {/* Bulk actions - only show in list view */}
+              {viewMode === 'list' && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button variant="ghost" size="sm" onClick={handleSelectAll}>
+                    Select All
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => handleBulkScope('v2')}>
-                    V2
+                  <Button variant="ghost" size="sm" onClick={handleSelectNone}>
+                    Select None
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleBulkScope('out_of_scope')}>
-                    Out
-                  </Button>
-                </>
+                  {selectedIds.size > 0 && (
+                    <>
+                      <span className="text-sm text-muted-foreground">
+                        {selectedIds.size} selected:
+                      </span>
+                      <Button size="sm" variant="default" onClick={() => handleBulkScope('v1')}>
+                        V1
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => handleBulkScope('v2')}>
+                        V2
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleBulkScope('out_of_scope')}>
+                        Out
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Kanban view hint */}
+              {viewMode === 'columns' && (
+                <p className="text-sm text-muted-foreground ml-auto">
+                  Drag requirements between columns to change scope
+                </p>
               )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Requirements list */}
-      <Card>
-        <ScrollArea className="h-[400px]">
-          {filteredRequirements.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No requirements match the current filters.
-            </div>
-          ) : (
-            filteredRequirements.map((req) => (
-              <RequirementRow
-                key={req.id}
-                requirement={req}
-                onScopeChange={handleScopeChange}
-                isSelected={selectedIds.has(req.id)}
-                onSelectChange={handleSelectChange}
+        {/* Kanban Column View */}
+        <TabsContent value="columns" className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {SCOPE_COLUMNS.map((col) => (
+              <ScopeColumn
+                key={col.scope}
+                config={col}
+                requirements={requirementsByScope[col.scope] || []}
+                onDrop={handleScopeChange}
               />
-            ))
-          )}
-        </ScrollArea>
-      </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* List View */}
+        <TabsContent value="list" className="mt-4">
+          <Card>
+            <ScrollArea className="h-[400px]">
+              {filteredRequirements.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  No requirements match the current filters.
+                </div>
+              ) : (
+                filteredRequirements.map((req) => (
+                  <RequirementRow
+                    key={req.id}
+                    requirement={req}
+                    onScopeChange={handleScopeChange}
+                    isSelected={selectedIds.has(req.id)}
+                    onSelectChange={handleSelectChange}
+                  />
+                ))
+              )}
+            </ScrollArea>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Add Custom Requirement */}
       {onAddRequirement && (

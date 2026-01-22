@@ -2,10 +2,11 @@
  * Research Progress Component for GSD Workflow
  *
  * Displays the status of parallel research agents and allows
- * viewing research results as they complete.
+ * viewing research results as they complete. Supports real-time
+ * streaming output from each agent.
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,8 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { ResearchSummary } from './gsd/ResearchSummary'
 import { useGsdStore } from '@/stores/gsdStore'
+import { listen } from '@tauri-apps/api/event'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
 import type { AgentType } from '@/types'
 import {
@@ -30,7 +37,26 @@ import {
   ArrowRight,
   RefreshCw,
   Bot,
+  ChevronDown,
+  ChevronRight,
+  Terminal,
 } from 'lucide-react'
+
+/** Event payload for research output streaming */
+interface ResearchOutputEvent {
+  sessionId: string
+  agentType: string
+  chunk: string
+  isComplete: boolean
+}
+
+/** Event payload for research status updates */
+interface ResearchStatusEvent {
+  sessionId: string
+  agentType: string
+  status: string
+  error?: string
+}
 
 interface ResearchProgressProps {
   /** Current research status */
@@ -53,6 +79,17 @@ interface ResearchProgressProps {
   questioningContext?: string
   /** Whether the component is in loading state */
   isLoading?: boolean
+  /** GSD session ID for filtering events */
+  sessionId?: string
+}
+
+/** Agent key mapping for events */
+const AGENT_KEY_MAP: Record<string, string> = {
+  architecture: 'architecture',
+  codebase: 'codebase',
+  bestpractices: 'bestPractices',
+  best_practices: 'bestPractices',
+  risks: 'risks',
 }
 
 interface AgentStatusCardProps {
@@ -64,10 +101,39 @@ interface AgentStatusCardProps {
     outputPath?: string | null
   }
   result?: ResearchResult
+  streamingOutput?: string
   onViewResult?: (result: ResearchResult) => void
 }
 
-function AgentStatusCard({ displayName, status, result, onViewResult }: AgentStatusCardProps) {
+function AgentStatusCard({
+  displayName,
+  status,
+  result,
+  streamingOutput,
+  onViewResult,
+}: AgentStatusCardProps) {
+  // Auto-open when running and has output
+  const shouldAutoOpen = status.running && Boolean(streamingOutput)
+  const [manuallyToggled, setManuallyToggled] = useState(false)
+  const [isManualOpen, setIsManualOpen] = useState(false)
+
+  // Compute effective open state
+  const isOpen = manuallyToggled ? isManualOpen : shouldAutoOpen
+
+  const handleOpenChange = (open: boolean) => {
+    setManuallyToggled(true)
+    setIsManualOpen(open)
+  }
+
+  const outputRef = useRef<HTMLPreElement>(null)
+
+  // Auto-scroll to bottom when new output arrives
+  useEffect(() => {
+    if (outputRef.current && isOpen) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    }
+  }, [streamingOutput, isOpen])
+
   const getStatusIcon = () => {
     if (status.running) {
       return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -88,25 +154,59 @@ function AgentStatusCard({ displayName, status, result, onViewResult }: AgentSta
     return 'Pending'
   }
 
+  const hasOutput = Boolean(streamingOutput?.trim())
+
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {getStatusIcon()}
-          <div>
-            <p className="font-medium text-sm">{displayName}</p>
-            <p className="text-xs text-muted-foreground">{getStatusText()}</p>
+    <Card className="overflow-hidden">
+      <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
+        <div className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {getStatusIcon()}
+              <div>
+                <p className="font-medium text-sm">{displayName}</p>
+                <p className="text-xs text-muted-foreground">{getStatusText()}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {status.complete && result && onViewResult && (
+                <Button variant="ghost" size="sm" onClick={() => onViewResult(result)}>
+                  <FileText className="h-4 w-4" />
+                </Button>
+              )}
+              {(status.running || hasOutput) && (
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    <Terminal className="h-4 w-4" />
+                    {isOpen ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+              )}
+            </div>
           </div>
+          {status.error && (
+            <p className="text-xs text-red-500 mt-2">{status.error}</p>
+          )}
         </div>
-        {status.complete && result && onViewResult && (
-          <Button variant="ghost" size="sm" onClick={() => onViewResult(result)}>
-            <FileText className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-      {status.error && (
-        <p className="text-xs text-red-500 mt-2">{status.error}</p>
-      )}
+
+        <CollapsibleContent>
+          <div className="border-t bg-black/95 p-2">
+            <pre
+              ref={outputRef}
+              className="text-xs font-mono text-green-400 max-h-48 overflow-auto whitespace-pre-wrap"
+            >
+              {streamingOutput || (status.running ? 'Starting...' : 'No output')}
+              {status.running && (
+                <span className="animate-pulse">_</span>
+              )}
+            </pre>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   )
 }
@@ -122,9 +222,11 @@ export function ResearchProgress({
   isSynthesizing = false,
   questioningContext = '',
   isLoading = false,
+  sessionId,
 }: ResearchProgressProps) {
   const [selectedResult, setSelectedResult] = useState<ResearchResult | null>(null)
   const [showSummary, setShowSummary] = useState(false)
+  const [agentOutputs, setAgentOutputs] = useState<Record<string, string>>({})
 
   // Get agent selection from store
   const {
@@ -138,6 +240,49 @@ export function ResearchProgress({
   useEffect(() => {
     loadAvailableAgents()
   }, [loadAvailableAgents])
+
+  // Listen for research output events
+  useEffect(() => {
+    if (!sessionId) return
+
+    let unlistenOutput: (() => void) | undefined
+    let unlistenStatus: (() => void) | undefined
+
+    const setupListeners = async () => {
+      try {
+        // Listen for streaming output chunks
+        unlistenOutput = await listen<ResearchOutputEvent>('gsd:research_output', (event) => {
+          if (event.payload.sessionId !== sessionId) return
+
+          const agentKey = AGENT_KEY_MAP[event.payload.agentType.toLowerCase()] || event.payload.agentType
+          if (!event.payload.isComplete && event.payload.chunk) {
+            setAgentOutputs((prev) => ({
+              ...prev,
+              [agentKey]: (prev[agentKey] || '') + event.payload.chunk + '\n',
+            }))
+          }
+        })
+
+        // Listen for status updates
+        unlistenStatus = await listen<ResearchStatusEvent>('gsd:research_status', (event) => {
+          if (event.payload.sessionId !== sessionId) return
+          // Status updates are handled by parent component through polling
+          // but we log them for debugging
+          console.log(`[Research] ${event.payload.agentType}: ${event.payload.status}`)
+        })
+      } catch (err) {
+        console.warn('Failed to set up research event listeners:', err)
+      }
+    }
+
+    setupListeners()
+
+    return () => {
+      if (unlistenOutput) unlistenOutput()
+      if (unlistenStatus) unlistenStatus()
+    }
+  }, [sessionId])
+
 
   // Calculate progress
   const agents = [
@@ -156,6 +301,8 @@ export function ResearchProgress({
   const hasStarted = runningCount > 0 || completedCount > 0 || failedCount > 0
 
   const handleStartResearch = useCallback(async () => {
+    // Clear previous outputs before starting new research
+    setAgentOutputs({})
     await onStartResearch(questioningContext, selectedResearchAgent || undefined)
   }, [onStartResearch, questioningContext, selectedResearchAgent])
 
@@ -230,6 +377,7 @@ export function ResearchProgress({
             displayName={agent.displayName}
             status={agent.status}
             result={getResultForAgent(agent.name)}
+            streamingOutput={agentOutputs[agent.name]}
             onViewResult={setSelectedResult}
           />
         ))}

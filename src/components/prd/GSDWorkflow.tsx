@@ -342,6 +342,7 @@ export function GSDWorkflow({
             }}
             onProceed={handleNext}
             isLoading={isLoading}
+            sessionId={sessionId}
           />
         )
 
@@ -388,6 +389,7 @@ export function GSDWorkflow({
             isSynthesizing={isSynthesizing}
             questioningContext={JSON.stringify(state.questioningContext)}
             isLoading={isLoading}
+            sessionId={sessionId}
           />
         )
 

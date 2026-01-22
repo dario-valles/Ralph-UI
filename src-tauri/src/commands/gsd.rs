@@ -11,7 +11,10 @@ use crate::gsd::{
         PlanningFile, PlanningSessionInfo,
     },
     requirements::{Requirement, RequirementsDoc, ScopeSelection},
-    research::{get_available_agents, run_research_agents, synthesize_research, ResearchResult, ResearchSynthesis},
+    research::{
+        get_available_agents, run_research_agents_with_handle, synthesize_research, ResearchResult,
+        ResearchSynthesis,
+    },
     roadmap::{derive_roadmap, RoadmapDoc},
     state::{GsdPhase, GsdWorkflowState, QuestioningContext, ResearchStatus},
     verification::{verify_plans, VerificationResult},
@@ -19,6 +22,7 @@ use crate::gsd::{
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tauri::AppHandle;
 
 /// Helper trait for serialization errors
 trait SerializeExt<T> {
@@ -137,9 +141,10 @@ pub async fn generate_project_document(
     Ok(content)
 }
 
-/// Start parallel research agents
+/// Start parallel research agents with streaming output
 #[tauri::command]
 pub async fn start_research(
+    app_handle: AppHandle,
     project_path: String,
     session_id: String,
     context: String,
@@ -153,8 +158,15 @@ pub async fn start_research(
         config.research_agent_type = agent;
     }
 
-    // Run research agents in parallel
-    let (status, results) = run_research_agents(&config, &project_path, &session_id, &context).await;
+    // Run research agents in parallel with app handle for event emission
+    let (status, results) = run_research_agents_with_handle(
+        &config,
+        &project_path,
+        &session_id,
+        &context,
+        Some(app_handle),
+    )
+    .await;
 
     // Update workflow state with research status
     if let Ok(mut state) = load_workflow_state(path, &session_id) {
