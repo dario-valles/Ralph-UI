@@ -19,12 +19,14 @@ import {
   FileText,
   Rocket,
   LucideIcon,
+  Github,
 } from 'lucide-react'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
+import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 
-type WorkflowMode = 'guided' | 'gsd'
+type WorkflowMode = 'guided' | 'gsd' | 'github'
 
 interface WorkflowOption {
   id: WorkflowMode
@@ -58,6 +60,17 @@ const WORKFLOW_OPTIONS: WorkflowOption[] = [
       'Research agents',
       'Requirements scoping',
       'Roadmap generation',
+    ],
+  },
+  {
+    id: 'github',
+    label: 'Import from GitHub',
+    description: 'Convert GitHub issues into a PRD with stories',
+    icon: <Github className="h-6 w-6" />,
+    features: [
+      'Pull issues from any repo',
+      'Filter by labels/milestone',
+      'Auto-extract acceptance criteria',
     ],
   },
 ]
@@ -133,6 +146,7 @@ export function PRDTypeSelector({
   const [selectedType, setSelectedType] = useState<PRDTypeValue | null>(null)
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
   const [showProjectPicker, setShowProjectPicker] = useState(!defaultProjectPath)
+  const [showGitHubImport, setShowGitHubImport] = useState(false)
 
   // Derive project name from path
   const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
@@ -142,6 +156,9 @@ export function PRDTypeSelector({
     if (mode === 'guided') {
       // For guided mode, go to type selection step
       setStep('type')
+    } else if (mode === 'github') {
+      // For GitHub mode, show the import dialog
+      setShowGitHubImport(true)
     }
   }
 
@@ -285,6 +302,20 @@ export function PRDTypeSelector({
             </div>
           )}
         </CardContent>
+
+        {/* GitHub Import Dialog */}
+        <ImportGitHubIssuesDialog
+          open={showGitHubImport}
+          onOpenChange={setShowGitHubImport}
+          projectPath={projectPath}
+          onSuccess={(result) => {
+            setShowGitHubImport(false)
+            // Navigate to the imported PRD if any issues were imported
+            if (result.importedCount > 0) {
+              onSelect('general', false, projectPath || undefined, false)
+            }
+          }}
+        />
       </Card>
     )
   }

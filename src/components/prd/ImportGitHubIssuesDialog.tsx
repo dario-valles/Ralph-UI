@@ -28,7 +28,8 @@ import {
 
 interface ImportGitHubIssuesDialogProps {
   projectPath: string
-  prdName: string
+  /** PRD name - if not provided, user can enter it in the dialog */
+  prdName?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (result: IssueImportResult) => void
@@ -36,7 +37,7 @@ interface ImportGitHubIssuesDialogProps {
 
 export function ImportGitHubIssuesDialog({
   projectPath,
-  prdName,
+  prdName: initialPrdName,
   open,
   onOpenChange,
   onSuccess,
@@ -45,6 +46,7 @@ export function ImportGitHubIssuesDialog({
   const [token, setToken] = useState('')
   const [owner, setOwner] = useState('')
   const [repo, setRepo] = useState('')
+  const [prdName, setPrdName] = useState(initialPrdName || '')
   const [labelFilter, setLabelFilter] = useState('')
   const [includeBody, setIncludeBody] = useState(true)
   const [useLabelsAsTags, setUseLabelsAsTags] = useState(true)
@@ -203,6 +205,19 @@ export function ImportGitHubIssuesDialog({
                   onChange={(e) => setLabelFilter(e.target.value)}
                   placeholder="bug, enhancement (comma-separated)"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="prdName">PRD Name</Label>
+                <Input
+                  id="prdName"
+                  value={prdName}
+                  onChange={(e) => setPrdName(e.target.value)}
+                  placeholder="my-feature-prd"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Name for the PRD document that will be created
+                </p>
               </div>
 
               <div className="flex items-center space-x-2">
