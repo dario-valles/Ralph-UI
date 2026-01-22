@@ -712,34 +712,110 @@ pub async fn start_ralph_loop(
                     metrics.total_cost
                 );
 
-                // Emit loop completed event for frontend notification handling
-                let payload = crate::events::RalphLoopCompletedPayload {
-                    execution_id: execution_id_for_loop.clone(),
-                    prd_name: prd_name_for_loop.clone(),
-                    total_iterations: metrics.total_iterations,
-                    completed_stories: metrics.stories_completed,
-                    total_stories: metrics.stories_completed + metrics.stories_remaining,
-                    duration_secs: metrics.total_duration_secs,
-                    total_cost: metrics.total_cost,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                };
+                // Check orchestrator state to determine if this was a success or a "soft" failure
+                let final_state = orchestrator.state().clone();
 
-                // Emit event to frontend
-                if let Err(e) = crate::events::emit_ralph_loop_completed(&app_handle_for_loop, payload) {
-                    log::warn!("[RalphLoop] Failed to emit loop completed event: {}", e);
+                match &final_state {
+                    RalphLoopExecutionState::Completed { .. } => {
+                        // True success - all stories passed
+                        // Emit loop completed event for frontend notification handling
+                        let payload = crate::events::RalphLoopCompletedPayload {
+                            execution_id: execution_id_for_loop.clone(),
+                            prd_name: prd_name_for_loop.clone(),
+                            total_iterations: metrics.total_iterations,
+                            completed_stories: metrics.stories_completed,
+                            total_stories: metrics.stories_completed + metrics.stories_remaining,
+                            duration_secs: metrics.total_duration_secs,
+                            total_cost: metrics.total_cost,
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                        };
+
+                        // Emit event to frontend
+                        if let Err(e) = crate::events::emit_ralph_loop_completed(&app_handle_for_loop, payload) {
+                            log::warn!("[RalphLoop] Failed to emit loop completed event: {}", e);
+                        }
+
+                        // Send desktop notification
+                        send_loop_completion_notification(
+                            &app_handle_for_loop,
+                            &prd_name_for_loop,
+                            metrics.total_iterations,
+                            metrics.stories_completed,
+                            metrics.total_duration_secs,
+                        );
+                    }
+                    RalphLoopExecutionState::Failed { iteration, reason } => {
+                        // Loop ended due to a failure condition (max iterations, max cost, etc.)
+                        let error_type = if reason.contains("Max iterations") {
+                            crate::events::RalphLoopErrorType::MaxIterations
+                        } else if reason.contains("Max cost") {
+                            crate::events::RalphLoopErrorType::MaxCost
+                        } else {
+                            crate::events::RalphLoopErrorType::Unknown
+                        };
+
+                        send_error_notification(
+                            &app_handle_for_loop,
+                            &execution_id_for_loop,
+                            &prd_name_for_loop,
+                            error_type,
+                            reason,
+                            *iteration,
+                        );
+                    }
+                    RalphLoopExecutionState::Cancelled { iteration } => {
+                        // Loop was cancelled by user - no notification needed
+                        log::info!(
+                            "[RalphLoop] Loop {} was cancelled at iteration {}",
+                            execution_id_for_loop,
+                            iteration
+                        );
+                    }
+                    _ => {
+                        // Unexpected state - send completion notification anyway
+                        log::warn!(
+                            "[RalphLoop] Loop {} ended with unexpected state: {:?}",
+                            execution_id_for_loop,
+                            final_state
+                        );
+                    }
                 }
-
-                // Send desktop notification
-                send_loop_completion_notification(
-                    &app_handle_for_loop,
-                    &prd_name_for_loop,
-                    metrics.total_iterations,
-                    metrics.stories_completed,
-                    metrics.total_duration_secs,
-                );
             }
             Err(e) => {
                 log::error!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
+
+                // Get iteration count from orchestrator metrics
+                let iteration = orchestrator.metrics().total_iterations;
+
+                // Classify the error and send appropriate notification
+                let error_str = e.to_lowercase();
+                let error_type = if error_str.contains("rate limit") || error_str.contains("429") || error_str.contains("too many requests") {
+                    crate::events::RalphLoopErrorType::RateLimit
+                } else if error_str.contains("max iterations") {
+                    crate::events::RalphLoopErrorType::MaxIterations
+                } else if error_str.contains("max cost") {
+                    crate::events::RalphLoopErrorType::MaxCost
+                } else if error_str.contains("timeout") || error_str.contains("timed out") {
+                    crate::events::RalphLoopErrorType::Timeout
+                } else if error_str.contains("parse") || error_str.contains("json") || error_str.contains("deserialize") {
+                    crate::events::RalphLoopErrorType::ParseError
+                } else if error_str.contains("conflict") || error_str.contains("merge") {
+                    crate::events::RalphLoopErrorType::GitConflict
+                } else if error_str.contains("agent") || error_str.contains("exit") || error_str.contains("spawn") || error_str.contains("crash") {
+                    crate::events::RalphLoopErrorType::AgentCrash
+                } else {
+                    crate::events::RalphLoopErrorType::Unknown
+                };
+
+                // Send error notification
+                send_error_notification(
+                    &app_handle_for_loop,
+                    &execution_id_for_loop,
+                    &prd_name_for_loop,
+                    error_type,
+                    &e,
+                    iteration,
+                );
             }
         }
     });
@@ -1707,6 +1783,73 @@ fn send_loop_completion_notification(
         }
         Err(e) => {
             log::warn!("[RalphLoop] Failed to send desktop notification: {}", e);
+        }
+    }
+}
+
+/// Send a desktop notification when a Ralph loop encounters an error
+fn send_error_notification(
+    app_handle: &tauri::AppHandle,
+    execution_id: &str,
+    prd_name: &str,
+    error_type: crate::events::RalphLoopErrorType,
+    message: &str,
+    iteration: u32,
+) {
+    use tauri_plugin_notification::NotificationExt;
+
+    // Truncate message to 200 chars for notification display
+    let truncated_message = if message.len() > 200 {
+        format!("{}...", &message[..197])
+    } else {
+        message.to_string()
+    };
+
+    // Get error type label for title
+    let error_label = match error_type {
+        crate::events::RalphLoopErrorType::AgentCrash => "Agent Crash",
+        crate::events::RalphLoopErrorType::ParseError => "Parse Error",
+        crate::events::RalphLoopErrorType::GitConflict => "Git Conflict",
+        crate::events::RalphLoopErrorType::RateLimit => "Rate Limit",
+        crate::events::RalphLoopErrorType::MaxIterations => "Max Iterations",
+        crate::events::RalphLoopErrorType::MaxCost => "Max Cost",
+        crate::events::RalphLoopErrorType::Timeout => "Timeout",
+        crate::events::RalphLoopErrorType::Unknown => "Error",
+    };
+
+    // Format notification body
+    let body = format!(
+        "{}: {}\nIteration: {}",
+        prd_name, truncated_message, iteration
+    );
+
+    // Emit event for frontend
+    let payload = crate::events::RalphLoopErrorPayload {
+        execution_id: execution_id.to_string(),
+        prd_name: prd_name.to_string(),
+        error_type: error_type.clone(),
+        message: truncated_message.clone(),
+        iteration,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    if let Err(e) = crate::events::emit_ralph_loop_error(app_handle, payload) {
+        log::warn!("[RalphLoop] Failed to emit error event: {}", e);
+    }
+
+    // Send the desktop notification
+    match app_handle
+        .notification()
+        .builder()
+        .title(&format!("Ralph Loop {}: {}", error_label, prd_name))
+        .body(&body)
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[RalphLoop] Error notification sent: {} - {}", error_label, prd_name);
+        }
+        Err(e) => {
+            log::warn!("[RalphLoop] Failed to send error notification: {}", e);
         }
     }
 }

@@ -27,6 +27,7 @@ pub const EVENT_RALPH_PROGRESS: &str = "ralph:progress";
 pub const EVENT_RALPH_ITERATION_STARTED: &str = "ralph:iteration_started";
 pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
 pub const EVENT_RALPH_LOOP_COMPLETED: &str = "ralph:loop_completed";
+pub const EVENT_RALPH_LOOP_ERROR: &str = "ralph:loop_error";
 
 // Tool call events (for collapsible tool call display)
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
@@ -476,6 +477,57 @@ pub fn emit_ralph_loop_completed(
     app_handle
         .emit(EVENT_RALPH_LOOP_COMPLETED, payload)
         .with_context("Failed to emit Ralph loop completed event")
+}
+
+/// Type of error that occurred in the Ralph Loop
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RalphLoopErrorType {
+    /// Agent crashed or exited with non-zero code
+    AgentCrash,
+    /// Failed to parse PRD or other files
+    ParseError,
+    /// Git merge conflict detected
+    GitConflict,
+    /// Rate limit hit
+    RateLimit,
+    /// Maximum iterations reached
+    MaxIterations,
+    /// Maximum cost exceeded
+    MaxCost,
+    /// Agent timed out
+    Timeout,
+    /// Generic/unknown error
+    Unknown,
+}
+
+/// Payload for Ralph Loop error events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphLoopErrorPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name (session name)
+    pub prd_name: String,
+    /// Type of error
+    pub error_type: RalphLoopErrorType,
+    /// Error message (truncated to 200 chars for notification)
+    pub message: String,
+    /// Current iteration when error occurred
+    pub iteration: u32,
+    /// Timestamp of error
+    pub timestamp: String,
+}
+
+/// Emit a Ralph Loop error event
+/// This triggers a desktop error notification
+pub fn emit_ralph_loop_error(
+    app_handle: &tauri::AppHandle,
+    payload: RalphLoopErrorPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_LOOP_ERROR, payload)
+        .with_context("Failed to emit Ralph loop error event")
 }
 
 // ============================================================================

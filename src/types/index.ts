@@ -827,6 +827,33 @@ export interface RalphLoopCompletedPayload {
   timestamp: string
 }
 
+/** Type of error that occurred in the Ralph Loop */
+export type RalphLoopErrorType =
+  | 'agent_crash'
+  | 'parse_error'
+  | 'git_conflict'
+  | 'rate_limit'
+  | 'max_iterations'
+  | 'max_cost'
+  | 'timeout'
+  | 'unknown'
+
+/** Payload for Ralph loop error events */
+export interface RalphLoopErrorPayload {
+  /** Execution ID */
+  executionId: string
+  /** PRD name (session name) */
+  prdName: string
+  /** Type of error */
+  errorType: RalphLoopErrorType
+  /** Error message (truncated to 200 chars for notification) */
+  message: string
+  /** Current iteration when error occurred */
+  iteration: number
+  /** Timestamp of error */
+  timestamp: string
+}
+
 /** Progress entry type */
 export type RalphProgressEntryType =
   | 'iteration_start'
