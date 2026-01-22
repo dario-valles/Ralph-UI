@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
-use crate::models::AgentType;
-use super::models::{ModelInfo, get_fallback_models};
+use super::models::{get_fallback_models, ModelInfo};
 use super::providers::get_provider;
+use crate::models::AgentType;
 
 /// Default cache TTL (5 minutes)
 const DEFAULT_TTL_SECS: u64 = 300;
@@ -78,10 +78,13 @@ impl ModelCache {
     /// Store models in cache
     fn store_cached(&self, agent_type: AgentType, models: Vec<ModelInfo>) {
         if let Ok(mut cache) = self.cache.write() {
-            cache.insert(agent_type, CachedModels {
-                models,
-                fetched_at: Instant::now(),
-            });
+            cache.insert(
+                agent_type,
+                CachedModels {
+                    models,
+                    fetched_at: Instant::now(),
+                },
+            );
         }
     }
 

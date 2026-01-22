@@ -6,15 +6,12 @@ use crate::models::{Agent, AgentStatus, LogEntry};
 use crate::utils::{lock_db, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use sysinfo::{System, Pid};
+use sysinfo::{Pid, System};
 use tauri::State;
 
 /// Create a new agent
 #[tauri::command]
-pub fn create_agent(
-    db: State<Mutex<Database>>,
-    agent: Agent,
-) -> Result<(), String> {
+pub fn create_agent(db: State<Mutex<Database>>, agent: Agent) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.create_agent(&agent)
         .with_context("Failed to create agent")
@@ -22,13 +19,9 @@ pub fn create_agent(
 
 /// Get an agent by ID
 #[tauri::command]
-pub fn get_agent(
-    db: State<Mutex<Database>>,
-    agent_id: String,
-) -> Result<Option<Agent>, String> {
+pub fn get_agent(db: State<Mutex<Database>>, agent_id: String) -> Result<Option<Agent>, String> {
     let db = lock_db(&db)?;
-    db.get_agent(&agent_id)
-        .with_context("Failed to get agent")
+    db.get_agent(&agent_id).with_context("Failed to get agent")
 }
 
 /// Get all agents for a session
@@ -66,9 +59,7 @@ pub fn get_active_agents(
 
 /// Get ALL active agents across all sessions (for Mission Control dashboard)
 #[tauri::command]
-pub fn get_all_active_agents(
-    db: State<Mutex<Database>>,
-) -> Result<Vec<Agent>, String> {
+pub fn get_all_active_agents(db: State<Mutex<Database>>) -> Result<Vec<Agent>, String> {
     let db = lock_db(&db)?;
     db.get_all_active_agents()
         .with_context("Failed to get all active agents")
@@ -141,10 +132,7 @@ pub fn update_agent_process_id(
 
 /// Delete an agent
 #[tauri::command]
-pub fn delete_agent(
-    db: State<Mutex<Database>>,
-    agent_id: String,
-) -> Result<(), String> {
+pub fn delete_agent(db: State<Mutex<Database>>, agent_id: String) -> Result<(), String> {
     let db = lock_db(&db)?;
     db.delete_agent(&agent_id)
         .with_context("Failed to delete agent")
@@ -196,7 +184,8 @@ pub fn cleanup_stale_agents(
     let db = lock_db(&db)?;
 
     // Get all active agents
-    let active_agents = db.get_all_active_agents()
+    let active_agents = db
+        .get_all_active_agents()
         .with_context("Failed to get active agents")?;
 
     if active_agents.is_empty() {
@@ -204,7 +193,10 @@ pub fn cleanup_stale_agents(
         return Ok(vec![]);
     }
 
-    log::info!("[Agents] Found {} active agents to check", active_agents.len());
+    log::info!(
+        "[Agents] Found {} active agents to check",
+        active_agents.len()
+    );
 
     // Initialize sysinfo to check processes
     let mut system = System::new();
@@ -217,13 +209,19 @@ pub fn cleanup_stale_agents(
             Some(pid) => {
                 // Check if process is still running
                 let process = system.process(Pid::from_u32(pid));
-                let is_alive = process.map(|p| {
-                    !matches!(p.status(), sysinfo::ProcessStatus::Zombie)
-                        && p.status() != sysinfo::ProcessStatus::Dead
-                }).unwrap_or(false);
+                let is_alive = process
+                    .map(|p| {
+                        !matches!(p.status(), sysinfo::ProcessStatus::Zombie)
+                            && p.status() != sysinfo::ProcessStatus::Dead
+                    })
+                    .unwrap_or(false);
 
                 if !is_alive {
-                    log::info!("[Agents] Agent {} (PID {}) process is not running", agent.id, pid);
+                    log::info!(
+                        "[Agents] Agent {} (PID {}) process is not running",
+                        agent.id,
+                        pid
+                    );
                     true
                 } else {
                     log::debug!("[Agents] Agent {} (PID {}) is still running", agent.id, pid);
@@ -277,9 +275,9 @@ pub fn cleanup_stale_agents(
 // Agent PTY Commands - for interactive terminal support
 // ============================================================================
 
-use crate::AgentManagerState;
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
 use crate::models::AgentType;
+use crate::AgentManagerState;
 
 /// Check if an agent has an associated PTY
 #[tauri::command]
@@ -287,7 +285,9 @@ pub fn agent_has_pty(
     agent_manager: State<AgentManagerState>,
     agent_id: String,
 ) -> Result<bool, String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.has_pty(&agent_id))
 }
@@ -298,7 +298,9 @@ pub fn get_agent_pty_id(
     agent_manager: State<AgentManagerState>,
     agent_id: String,
 ) -> Result<Option<String>, String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.get_pty_id(&agent_id))
 }
@@ -309,7 +311,9 @@ pub fn get_agent_pty_history(
     agent_manager: State<AgentManagerState>,
     agent_id: String,
 ) -> Result<Vec<u8>, String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.get_pty_history(&agent_id))
 }
@@ -322,7 +326,9 @@ pub fn register_agent_pty(
     agent_id: String,
     pty_id: String,
 ) -> Result<(), String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.register_pty(&agent_id, &pty_id);
     Ok(())
@@ -335,7 +341,9 @@ pub fn unregister_agent_pty(
     agent_manager: State<AgentManagerState>,
     agent_id: String,
 ) -> Result<(), String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.unregister_pty(&agent_id);
     Ok(())
@@ -349,7 +357,9 @@ pub fn process_agent_pty_data(
     agent_id: String,
     data: Vec<u8>,
 ) -> Result<(), String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.process_pty_data(&agent_id, &data);
     Ok(())
@@ -362,7 +372,9 @@ pub fn notify_agent_pty_exit(
     agent_id: String,
     exit_code: i32,
 ) -> Result<(), String> {
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.notify_pty_exit(&agent_id, exit_code);
     Ok(())
@@ -388,6 +400,7 @@ pub fn get_agent_command_line(
     max_iterations: i32,
     prompt: Option<String>,
     model: Option<String>,
+    plugin_config: Option<std::collections::HashMap<String, serde_json::Value>>,
 ) -> Result<AgentCommandLine, String> {
     // Parse agent type string to enum
     let agent_type_enum = match agent_type.to_lowercase().as_str() {
@@ -409,12 +422,16 @@ pub fn get_agent_command_line(
         prompt,
         model,
         spawn_mode: AgentSpawnMode::Pty,
+        plugin_config,
     };
 
-    let manager = agent_manager.manager.lock()
+    let manager = agent_manager
+        .manager
+        .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
 
-    let (program, args, cwd) = manager.build_agent_command_line(&config)
+    let (program, args, cwd) = manager
+        .build_agent_command_line(&config)
         .map_err(|e| e.to_string())?;
 
     Ok(AgentCommandLine { program, args, cwd })
@@ -424,7 +441,9 @@ pub fn get_agent_command_line(
 mod tests {
     use super::*;
     use crate::database::Database;
-    use crate::models::{AgentType, SessionConfig, SessionStatus, Session, Task, TaskStatus, LogLevel};
+    use crate::models::{
+        AgentType, LogLevel, Session, SessionConfig, SessionStatus, Task, TaskStatus,
+    };
     use chrono::Utc;
     use std::sync::Mutex;
     use uuid::Uuid;

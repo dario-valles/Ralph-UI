@@ -1,5 +1,6 @@
 // Agent Plugin Trait Definition
 
+use crate::agents::config::PluginConfigSchema;
 use crate::agents::manager::AgentSpawnConfig;
 use crate::agents::models::ModelInfo;
 use crate::models::AgentType;
@@ -21,6 +22,12 @@ pub trait AgentPlugin: Send + Sync {
 
     /// Discover available models for this agent
     fn discover_models(&self) -> Result<Vec<ModelInfo>>;
+
+    /// Get the configuration schema for this agent plugin
+    /// This allows the frontend to generate a settings form
+    fn config_schema(&self) -> PluginConfigSchema {
+        PluginConfigSchema::default()
+    }
 
     /// Build the command to spawn the agent process
     fn build_command(&self, config: &AgentSpawnConfig) -> Result<Command>;

@@ -89,8 +89,8 @@ impl AgentFallbackManager {
 
     /// Calculate exponential backoff: base_ms * multiplier^attempt
     pub fn calculate_backoff(&self, attempt: u32) -> u64 {
-        let backoff = self.config.base_backoff_ms
-            * (self.config.backoff_multiplier as u64).pow(attempt);
+        let backoff =
+            self.config.base_backoff_ms * (self.config.backoff_multiplier as u64).pow(attempt);
         backoff.min(self.config.max_backoff_ms)
     }
 
@@ -271,7 +271,7 @@ mod tests {
 
         // base_ms * 3^attempt
         // Default base is 5000ms
-        assert_eq!(manager.calculate_backoff(0), 5000);  // 5000 * 3^0 = 5000
+        assert_eq!(manager.calculate_backoff(0), 5000); // 5000 * 3^0 = 5000
         assert_eq!(manager.calculate_backoff(1), 15000); // 5000 * 3^1 = 15000
         assert_eq!(manager.calculate_backoff(2), 45000); // 5000 * 3^2 = 45000
     }

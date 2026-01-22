@@ -121,7 +121,7 @@ impl Default for SubagentTree {
 }
 
 /// Subagent trace parser
-pub struct SubagentTraceParser {
+pub struct StreamingParser {
     /// Counter for generating subagent IDs
     subagent_counter: u32,
     /// Current depth stack (for tracking nested subagents)
@@ -137,30 +137,24 @@ static PROGRESS_PATTERN: OnceLock<Regex> = OnceLock::new();
 static FAILED_PATTERN: OnceLock<Regex> = OnceLock::new();
 
 fn get_spawn_pattern() -> &'static Regex {
-    SPAWN_PATTERN.get_or_init(|| {
-        Regex::new(r"(?m)^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]*Task:?\s*(.+)$").unwrap()
-    })
+    SPAWN_PATTERN.get_or_init(|| Regex::new(r"(?m)^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]*Task:?\s*(.+)$").unwrap())
 }
 
 fn get_complete_pattern() -> &'static Regex {
-    COMPLETE_PATTERN.get_or_init(|| {
-        Regex::new(r"(?m)^[\s✓✔☑]*\s*Task\s+(completed|done|finished)").unwrap()
-    })
+    COMPLETE_PATTERN
+        .get_or_init(|| Regex::new(r"(?m)^[\s✓✔☑]*\s*Task\s+(completed|done|finished)").unwrap())
 }
 
 fn get_progress_pattern() -> &'static Regex {
-    PROGRESS_PATTERN.get_or_init(|| {
-        Regex::new(r"(?m)^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+\s*(.+)$").unwrap()
-    })
+    PROGRESS_PATTERN.get_or_init(|| Regex::new(r"(?m)^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+\s*(.+)$").unwrap())
 }
 
 fn get_failed_pattern() -> &'static Regex {
-    FAILED_PATTERN.get_or_init(|| {
-        Regex::new(r"(?m)^[\s✗✘×]*\s*Task\s+(failed|error|aborted)").unwrap()
-    })
+    FAILED_PATTERN
+        .get_or_init(|| Regex::new(r"(?m)^[\s✗✘×]*\s*Task\s+(failed|error|aborted)").unwrap())
 }
 
-impl SubagentTraceParser {
+impl StreamingParser {
     /// Create a new parser for a parent agent
     pub fn new(parent_agent_id: &str) -> Self {
         Self {
@@ -288,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_detects_task_spawn_in_output() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         let event = parser.parse_line("⠋ Task: Search for files");
         assert!(event.is_some());
@@ -300,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_extracts_subagent_description() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         let event = parser.parse_line("Task: Implement feature X").unwrap();
         assert_eq!(event.description, "Implement feature X");
@@ -314,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_tracks_parent_child_relationships() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
         let mut tree = SubagentTree::new();
 
         let event1 = parser.parse_line("Task: Parent task").unwrap();
@@ -326,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_detects_subagent_completion() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         // First spawn a task
         parser.parse_line("Task: Do something");
@@ -341,7 +335,7 @@ mod tests {
 
     #[test]
     fn test_handles_nested_subagents() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         // Spawn first task
         let event1 = parser.parse_line("Task: Outer task").unwrap();
@@ -362,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_ignores_non_subagent_output() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         assert!(parser.parse_line("Regular log message").is_none());
         assert!(parser.parse_line("Building project...").is_none());
@@ -400,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_parse_output() {
-        let mut parser = SubagentTraceParser::new("agent-1");
+        let mut parser = StreamingParser::new("agent-1");
 
         let output = r#"
 ⠋ Task: Search for files

@@ -6,9 +6,10 @@
 use crate::agents::ansi_stripper::RingBuffer;
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
+use crate::agents::{StreamingParser, SubagentEvent, SubagentTree};
 use crate::models::{AgentType, LogEntry, LogLevel};
 use crate::utils::lock_mutex_recover;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
@@ -60,7 +61,10 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
         "system" => {
             let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
             if subtype == "init" {
-                let model = json.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let model = json
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 format!("\x1b[36m[System] Initialized with model: {}\x1b[0m", model)
             } else {
                 format!("\x1b[36m[System] {}\x1b[0m", subtype)
@@ -74,8 +78,10 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
                         .filter_map(|item| {
                             if item.get("type").and_then(|t| t.as_str()) == Some("text") {
                                 item.get("text").and_then(|t| t.as_str()).map(String::from)
-                            } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                                let tool_name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+                            } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                            {
+                                let tool_name =
+                                    item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
                                 Some(format!("\x1b[33m[Using tool: {}]\x1b[0m", tool_name))
                             } else {
                                 None
@@ -94,14 +100,22 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
                 if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
                     for item in content {
                         if item.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-                            let tool_id = item.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
-                            let content_str = item.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                            let tool_id = item
+                                .get("tool_use_id")
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("");
+                            let content_str =
+                                item.get("content").and_then(|c| c.as_str()).unwrap_or("");
                             let truncated = if content_str.len() > 200 {
                                 format!("{}...", &content_str[..200])
                             } else {
                                 content_str.to_string()
                             };
-                            return format!("\x1b[90m[Tool result {}]: {}\x1b[0m", &tool_id[..8.min(tool_id.len())], truncated);
+                            return format!(
+                                "\x1b[90m[Tool result {}]: {}\x1b[0m",
+                                &tool_id[..8.min(tool_id.len())],
+                                truncated
+                            );
                         }
                     }
                 }
@@ -110,8 +124,14 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
         }
         "result" => {
             let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
-            let duration = json.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0);
-            let cost = json.get("total_cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let duration = json
+                .get("duration_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cost = json
+                .get("total_cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             format!(
                 "\x1b[32m[Complete] {} - Duration: {}ms, Cost: ${:.4}\x1b[0m",
                 subtype, duration, cost
@@ -123,7 +143,10 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
 
 /// Parse OpenCode JSON format
 fn parse_opencode_json(json: &serde_json::Value) -> String {
-    let role = json.get("role").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let role = json
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
     // Extract content - can be string or array
     let content = if let Some(content_str) = json.get("content").and_then(|v| v.as_str()) {
@@ -199,6 +222,12 @@ pub struct AgentManager {
     pty_data_tx: Option<mpsc::UnboundedSender<AgentPtyDataEvent>>,
     /// Event sender for PTY exit events
     pty_exit_tx: Option<mpsc::UnboundedSender<AgentPtyExitEvent>>,
+    /// Event sender for subagent events
+    subagent_tx: Option<mpsc::UnboundedSender<SubagentEvent>>,
+    /// Trace parsers per agent
+    parsers: Arc<Mutex<HashMap<String, StreamingParser>>>,
+    /// Subagent trees per agent
+    subagent_trees: Arc<Mutex<HashMap<String, SubagentTree>>>,
     /// Cancellation tokens for monitor threads (triggered when process is taken/stopped)
     monitor_cancellation: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
@@ -254,6 +283,8 @@ pub struct AgentSpawnConfig {
     pub model: Option<String>,
     /// Spawn mode - PTY (interactive) or Piped (separate streams)
     pub spawn_mode: AgentSpawnMode,
+    /// Configuration for plugins (key-value pairs)
+    pub plugin_config: Option<HashMap<String, serde_json::Value>>,
 }
 
 impl AgentManager {
@@ -269,6 +300,9 @@ impl AgentManager {
             pty_history: Arc::new(Mutex::new(HashMap::new())),
             pty_data_tx: None,
             pty_exit_tx: None,
+            subagent_tx: None,
+            parsers: Arc::new(Mutex::new(HashMap::new())),
+            subagent_trees: Arc::new(Mutex::new(HashMap::new())),
             monitor_cancellation: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -310,6 +344,68 @@ impl AgentManager {
         self.pty_exit_tx = Some(tx);
     }
 
+    /// Set the subagent event sender for streaming subagent updates
+    pub fn set_subagent_sender(&mut self, tx: mpsc::UnboundedSender<SubagentEvent>) {
+        self.subagent_tx = Some(tx);
+    }
+
+    /// Initialize trace parser for an agent
+    pub fn init_trace_parser(&self, agent_id: &str) {
+        {
+            let mut parsers = lock_mutex_recover(&self.parsers);
+            parsers.insert(agent_id.to_string(), StreamingParser::new(agent_id));
+        }
+        {
+            let mut trees = lock_mutex_recover(&self.subagent_trees);
+            trees.insert(agent_id.to_string(), SubagentTree::new());
+        }
+    }
+
+    /// Get subagent tree for an agent
+    pub fn get_subagent_tree(&self, agent_id: &str) -> Option<SubagentTree> {
+        let trees = lock_mutex_recover(&self.subagent_trees);
+        trees.get(agent_id).cloned()
+    }
+
+    /// Clear trace data for an agent
+    pub fn clear_trace_data(&self, agent_id: &str) {
+        {
+            let mut parsers = lock_mutex_recover(&self.parsers);
+            parsers.remove(agent_id);
+        }
+        {
+            let mut trees = lock_mutex_recover(&self.subagent_trees);
+            trees.remove(agent_id);
+        }
+    }
+
+    /// Parse text output for an agent (helper for manual parsing)
+    pub fn parse_text_output(&self, agent_id: &str, text: &str) -> Vec<SubagentEvent> {
+        let mut parsers = lock_mutex_recover(&self.parsers);
+        let mut trees = lock_mutex_recover(&self.subagent_trees);
+
+        // Auto-initialize if missing
+        if !parsers.contains_key(agent_id) {
+            parsers.insert(agent_id.to_string(), StreamingParser::new(agent_id));
+            trees.insert(agent_id.to_string(), SubagentTree::new());
+        }
+
+        if let Some(parser) = parsers.get_mut(agent_id) {
+            let events = parser.parse_output(text);
+            if !events.is_empty() {
+                let tree = trees
+                    .entry(agent_id.to_string())
+                    .or_insert_with(SubagentTree::new);
+                for event in &events {
+                    tree.add_event(event.clone());
+                }
+            }
+            events
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Check if an agent has an associated PTY
     pub fn has_pty(&self, agent_id: &str) -> bool {
         let pty_ids = lock_mutex_recover(&self.pty_ids);
@@ -325,7 +421,8 @@ impl AgentManager {
     /// Get the PTY history (raw output) for an agent
     pub fn get_pty_history(&self, agent_id: &str) -> Vec<u8> {
         let pty_history = lock_mutex_recover(&self.pty_history);
-        pty_history.get(agent_id)
+        pty_history
+            .get(agent_id)
             .map(|buf| buf.get_data())
             .unwrap_or_default()
     }
@@ -354,7 +451,14 @@ impl AgentManager {
             // Create a 1MB ring buffer for history
             pty_history.insert(agent_id.to_string(), RingBuffer::new(1024 * 1024));
         }
-        log::info!("[AgentManager] Registered PTY {} for agent {}", pty_id, agent_id);
+        // Initialize trace parser
+        self.init_trace_parser(agent_id);
+
+        log::info!(
+            "[AgentManager] Registered PTY {} for agent {}",
+            pty_id,
+            agent_id
+        );
     }
 
     /// Unregister a PTY association for an agent
@@ -367,7 +471,11 @@ impl AgentManager {
         // Keep history for a while after exit (don't clear immediately)
         // The history can be cleared explicitly via clear_pty_data
         if let Some(id) = pty_id {
-            log::info!("[AgentManager] Unregistered PTY {} for agent {}", id, agent_id);
+            log::info!(
+                "[AgentManager] Unregistered PTY {} for agent {}",
+                id,
+                agent_id
+            );
         }
     }
 
@@ -388,9 +496,44 @@ impl AgentManager {
         // Strip ANSI codes for clean log parsing
         let clean_text = crate::agents::ansi_stripper::strip_ansi(&text);
 
+        // Parse for subagent events
+        {
+            let mut parsers = lock_mutex_recover(&self.parsers);
+            let mut trees = lock_mutex_recover(&self.subagent_trees);
+
+            // Auto-initialize if missing
+            if !parsers.contains_key(agent_id) {
+                parsers.insert(agent_id.to_string(), StreamingParser::new(agent_id));
+                trees.insert(agent_id.to_string(), SubagentTree::new());
+            }
+
+            if let Some(parser) = parsers.get_mut(agent_id) {
+                let events = parser.parse_output(&clean_text);
+                if !events.is_empty() {
+                    let tree = trees
+                        .entry(agent_id.to_string())
+                        .or_insert_with(SubagentTree::new);
+
+                    for event in events {
+                        tree.add_event(event.clone());
+
+                        // Emit event
+                        if let Some(tx) = &self.subagent_tx {
+                            let _ = tx.send(event);
+                        }
+                    }
+                }
+            }
+        }
+
         // Process each line for logs and rate limit detection
         for line in clean_text.lines() {
             if line.trim().is_empty() {
+                continue;
+            }
+
+            // Filter out noisy server logs
+            if line.contains("path=/tui/show-toast") || line.contains("type=tui.toast.show") {
                 continue;
             }
 
@@ -433,17 +576,44 @@ impl AgentManager {
 
         // Emit PTY data event for terminal streaming
         if let Some(tx) = &self.pty_data_tx {
-            let event = AgentPtyDataEvent {
-                agent_id: agent_id.to_string(),
-                data: data.to_vec(),
+            // Filter out noisy server logs from the terminal output
+            // These appear when the agent uses tools that have verbose logging (e.g. ralph-tui)
+            // Pattern: "path=/tui/show-toast" or "type=tui.toast.show"
+            let should_filter =
+                text.contains("path=/tui/show-toast") || text.contains("type=tui.toast.show");
+
+            let data_to_send = if should_filter {
+                let mut filtered = Vec::new();
+                // split_inclusive preserves the newline characters so we don't break the stream
+                for line in text.split_inclusive('\n') {
+                    if !line.contains("path=/tui/show-toast")
+                        && !line.contains("type=tui.toast.show")
+                    {
+                        filtered.extend_from_slice(line.as_bytes());
+                    }
+                }
+                filtered
+            } else {
+                data.to_vec()
             };
-            let _ = tx.send(event);
+
+            if !data_to_send.is_empty() {
+                let event = AgentPtyDataEvent {
+                    agent_id: agent_id.to_string(),
+                    data: data_to_send,
+                };
+                let _ = tx.send(event);
+            }
         }
     }
 
     /// Notify that an agent's PTY has exited
     pub fn notify_pty_exit(&self, agent_id: &str, exit_code: i32) {
-        log::info!("[AgentManager] PTY exit for agent {} with code {}", agent_id, exit_code);
+        log::info!(
+            "[AgentManager] PTY exit for agent {} with code {}",
+            agent_id,
+            exit_code
+        );
 
         // Emit exit event
         if let Some(tx) = &self.pty_exit_tx {
@@ -457,51 +627,69 @@ impl AgentManager {
         // Add exit log entry
         self.emit_log(
             agent_id,
-            if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
+            if exit_code == 0 {
+                LogLevel::Info
+            } else {
+                LogLevel::Error
+            },
             format!("Agent exited with code {}", exit_code),
         );
     }
 
     /// Build command line arguments for an agent (for PTY spawning on frontend)
     /// Returns (program, args, cwd)
-    pub fn build_agent_command_line(&self, config: &AgentSpawnConfig) -> Result<(String, Vec<String>, String)> {
+    pub fn build_agent_command_line(
+        &self,
+        config: &AgentSpawnConfig,
+    ) -> Result<(String, Vec<String>, String)> {
         let cmd = self.build_command(config)?;
         let program = cmd.get_program().to_string_lossy().to_string();
-        let args: Vec<String> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
         let cwd = config.worktree_path.clone();
         Ok((program, args, cwd))
     }
 
     /// Spawn a new agent process
-    pub fn spawn_agent(
-        &mut self,
-        agent_id: &str,
-        config: AgentSpawnConfig,
-    ) -> Result<u32> {
-        log::info!("[AgentManager] spawn_agent called for agent_id: {}, task_id: {}", agent_id, config.task_id);
+    pub fn spawn_agent(&mut self, agent_id: &str, config: AgentSpawnConfig) -> Result<u32> {
+        log::info!(
+            "[AgentManager] spawn_agent called for agent_id: {}, task_id: {}",
+            agent_id,
+            config.task_id
+        );
         log::info!("[AgentManager] Config: {:?}", config);
 
         let mut command = self.build_command(&config)?;
 
         // Log the command being executed
         let program = command.get_program().to_string_lossy().to_string();
-        let args: Vec<String> = command.get_args().map(|s| s.to_string_lossy().to_string()).collect();
+        let args: Vec<String> = command
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
         log::info!("[AgentManager] Executing command: {} {:?}", program, args);
 
         let mut child = match command
-            .stdin(Stdio::null())  // Prevent stdin issues causing early exit
+            .stdin(Stdio::null()) // Prevent stdin issues causing early exit
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn() {
-                Ok(c) => {
-                    log::info!("[AgentManager] Process spawned successfully");
-                    c
-                }
-                Err(e) => {
-                    log::error!("[AgentManager] Failed to spawn process: {}", e);
-                    return Err(anyhow!("Failed to spawn agent process '{}': {}", program, e));
-                }
-            };
+            .spawn()
+        {
+            Ok(c) => {
+                log::info!("[AgentManager] Process spawned successfully");
+                c
+            }
+            Err(e) => {
+                log::error!("[AgentManager] Failed to spawn process: {}", e);
+                return Err(anyhow!(
+                    "Failed to spawn agent process '{}': {}",
+                    program,
+                    e
+                ));
+            }
+        };
 
         let pid = child.id();
         log::info!("[AgentManager] Process PID: {}", pid);
@@ -514,23 +702,36 @@ impl AgentManager {
         {
             let mut processes = lock_mutex_recover(&self.processes);
             processes.insert(agent_id.to_string(), child);
-            log::info!("[AgentManager] Process stored. Total running: {}", processes.len());
+            log::info!(
+                "[AgentManager] Process stored. Total running: {}",
+                processes.len()
+            );
         }
 
         // For PTY mode, register a pseudo-PTY so the Terminal can connect
         // We use the agent_id as the pty_id and store output in pty_history
         let is_pty_mode = config.spawn_mode == AgentSpawnMode::Pty;
         if is_pty_mode {
-            log::info!("[AgentManager] PTY mode: registering pseudo-PTY for agent {}", agent_id);
-            log::debug!("[AgentManager] pty_data_tx is_some: {}", self.pty_data_tx.is_some());
+            log::info!(
+                "[AgentManager] PTY mode: registering pseudo-PTY for agent {}",
+                agent_id
+            );
+            log::debug!(
+                "[AgentManager] pty_data_tx is_some: {}",
+                self.pty_data_tx.is_some()
+            );
             self.register_pty(agent_id, agent_id);
         }
 
         // Emit log
-        self.emit_log(agent_id, LogLevel::Info, format!(
-            "Agent spawned with PID {} for task {} in {}",
-            pid, config.task_id, config.worktree_path
-        ));
+        self.emit_log(
+            agent_id,
+            LogLevel::Info,
+            format!(
+                "Agent spawned with PID {} for task {} in {}",
+                pid, config.task_id, config.worktree_path
+            ),
+        );
 
         // Give the process a moment to start (helps detect immediate failures)
         log::debug!("[AgentManager] Waiting 100ms for process to start...");
@@ -544,7 +745,11 @@ impl AgentManager {
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         let exit_code = status.code().unwrap_or(-1);
-                        log::error!("[AgentManager] Process {} exited immediately with code {}", pid, exit_code);
+                        log::error!(
+                            "[AgentManager] Process {} exited immediately with code {}",
+                            pid,
+                            exit_code
+                        );
                         Some(exit_code)
                     }
                     Ok(None) => {
@@ -578,10 +783,15 @@ impl AgentManager {
 
             if !stderr_content.is_empty() {
                 log::error!("[AgentManager] Process stderr: {}", stderr_content);
-                self.emit_log(agent_id, LogLevel::Error, format!(
-                    "Process exited with code {}. Error: {}",
-                    exit_code, stderr_content.trim()
-                ));
+                self.emit_log(
+                    agent_id,
+                    LogLevel::Error,
+                    format!(
+                        "Process exited with code {}. Error: {}",
+                        exit_code,
+                        stderr_content.trim()
+                    ),
+                );
             } else {
                 self.emit_log(agent_id, LogLevel::Error, format!(
                     "Process exited immediately with code {}. This usually means the CLI command failed. Check if claude CLI works: claude --version",
@@ -595,13 +805,27 @@ impl AgentManager {
         // Spawn background thread to read stdout
         if let Some(stdout) = stdout {
             let log_tx = self.log_tx.clone();
+            let subagent_tx = self.subagent_tx.clone();
             let agent_logs = self.agent_logs.clone();
-            let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
-            let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
+            let parsers = self.parsers.clone();
+            let subagent_trees = self.subagent_trees.clone();
+            let pty_history = if is_pty_mode {
+                Some(self.pty_history.clone())
+            } else {
+                None
+            };
+            let pty_data_tx = if is_pty_mode {
+                self.pty_data_tx.clone()
+            } else {
+                None
+            };
             let agent_id_clone = agent_id.to_string();
             log::debug!("[AgentManager] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}", agent_id, pty_data_tx.is_some());
             thread::spawn(move || {
-                log::debug!("[AgentManager] Stdout reader thread started for agent {}", agent_id_clone);
+                log::debug!(
+                    "[AgentManager] Stdout reader thread started for agent {}",
+                    agent_id_clone
+                );
                 let reader = BufReader::new(stdout);
                 for line in reader.lines() {
                     match line {
@@ -628,8 +852,44 @@ impl AgentManager {
                                 if let Some(ref tx) = pty_data_tx {
                                     let _ = tx.send(AgentPtyDataEvent {
                                         agent_id: agent_id_clone.clone(),
-                                        data: text_with_newline.into_bytes(),
+                                        data: text_with_newline.as_bytes().to_vec(),
                                     });
+                                }
+
+                                // Parse for subagent events (in PTY mode, we parse the display text)
+                                {
+                                    let mut parsers_guard = lock_mutex_recover(&parsers);
+                                    let mut trees_guard = lock_mutex_recover(&subagent_trees);
+
+                                    // Auto-initialize if missing
+                                    if !parsers_guard.contains_key(&agent_id_clone) {
+                                        parsers_guard.insert(
+                                            agent_id_clone.clone(),
+                                            StreamingParser::new(&agent_id_clone),
+                                        );
+                                        trees_guard
+                                            .insert(agent_id_clone.clone(), SubagentTree::new());
+                                    }
+
+                                    if let Some(parser) = parsers_guard.get_mut(&agent_id_clone) {
+                                        // display_text is already stripped of ANSI codes by parse_agent_json_output if it came from JSON
+                                        // but we should make sure we're parsing clean text
+                                        let events = parser.parse_output(&display_text);
+                                        if !events.is_empty() {
+                                            let tree = trees_guard
+                                                .entry(agent_id_clone.clone())
+                                                .or_insert_with(SubagentTree::new);
+
+                                            for event in events {
+                                                tree.add_event(event.clone());
+
+                                                // Emit event
+                                                if let Some(tx) = &subagent_tx {
+                                                    let _ = tx.send(event);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -671,14 +931,28 @@ impl AgentManager {
             let log_tx = self.log_tx.clone();
             let rate_limit_tx = self.rate_limit_tx.clone();
             let agent_logs = self.agent_logs.clone();
-            let pty_history = if is_pty_mode { Some(self.pty_history.clone()) } else { None };
-            let pty_data_tx = if is_pty_mode { self.pty_data_tx.clone() } else { None };
+            let pty_history = if is_pty_mode {
+                Some(self.pty_history.clone())
+            } else {
+                None
+            };
+            let pty_data_tx = if is_pty_mode {
+                self.pty_data_tx.clone()
+            } else {
+                None
+            };
             // Create a new detector for the thread (uses static patterns internally)
             let rate_limit_detector = RateLimitDetector::new();
             let agent_id_clone = agent_id.to_string();
-            log::debug!("[AgentManager] Spawning stderr reader thread for agent {}", agent_id);
+            log::debug!(
+                "[AgentManager] Spawning stderr reader thread for agent {}",
+                agent_id
+            );
             thread::spawn(move || {
-                log::debug!("[AgentManager] Stderr reader thread started for agent {}", agent_id_clone);
+                log::debug!(
+                    "[AgentManager] Stderr reader thread started for agent {}",
+                    agent_id_clone
+                );
                 let reader = BufReader::new(stderr);
                 for line in reader.lines() {
                     match line {
@@ -706,7 +980,11 @@ impl AgentManager {
 
                             // Check for rate limits
                             if let Some(info) = rate_limit_detector.detect_in_stderr(&line) {
-                                log::warn!("[Agent {}] Rate limit detected: {:?}", agent_id_clone, info);
+                                log::warn!(
+                                    "[Agent {}] Rate limit detected: {:?}",
+                                    agent_id_clone,
+                                    info
+                                );
                                 if let Some(tx) = &rate_limit_tx {
                                     let event = RateLimitEvent {
                                         agent_id: agent_id_clone.clone(),
@@ -800,7 +1078,8 @@ impl AgentManager {
 
                                     log::info!(
                                         "[AgentManager] Process for agent {} exited with code {:?}",
-                                        agent_id_clone, exit_code
+                                        agent_id_clone,
+                                        exit_code
                                     );
 
                                     // Remove from processes map
@@ -816,7 +1095,10 @@ impl AgentManager {
                                             error: if success {
                                                 None
                                             } else {
-                                                Some(format!("Process exited with code {:?}", exit_code))
+                                                Some(format!(
+                                                    "Process exited with code {:?}",
+                                                    exit_code
+                                                ))
                                             },
                                         };
                                         let _ = tx.send(event);
@@ -825,8 +1107,15 @@ impl AgentManager {
                                     // Log the exit
                                     let log_entry = LogEntry {
                                         timestamp: Utc::now(),
-                                        level: if success { LogLevel::Info } else { LogLevel::Error },
-                                        message: format!("Agent process exited with code {:?}", exit_code),
+                                        level: if success {
+                                            LogLevel::Info
+                                        } else {
+                                            LogLevel::Error
+                                        },
+                                        message: format!(
+                                            "Agent process exited with code {:?}",
+                                            exit_code
+                                        ),
                                     };
                                     {
                                         let mut logs = lock_mutex_recover(&agent_logs);
@@ -875,7 +1164,10 @@ impl AgentManager {
                     let mut tokens = lock_mutex_recover(&monitor_cancellation);
                     tokens.remove(&agent_id_clone);
                 }
-                log::debug!("[AgentManager] Process monitor for agent {} finished", agent_id_clone);
+                log::debug!(
+                    "[AgentManager] Process monitor for agent {} finished",
+                    agent_id_clone
+                );
             });
         }
 
@@ -887,8 +1179,11 @@ impl AgentManager {
         match config.agent_type {
             AgentType::Claude => {
                 // Resolve Claude CLI path using path resolver
-                let claude_path = CliPathResolver::resolve_claude()
-                    .ok_or_else(|| anyhow!("Claude CLI not found. Install: npm install -g @anthropic-ai/claude-code"))?;
+                let claude_path = CliPathResolver::resolve_claude().ok_or_else(|| {
+                    anyhow!(
+                        "Claude CLI not found. Install: npm install -g @anthropic-ai/claude-code"
+                    )
+                })?;
 
                 log::info!("[AgentManager] Claude path: {:?}", claude_path);
 
@@ -897,10 +1192,16 @@ impl AgentManager {
                 // Set working directory - check if it exists first
                 let worktree = Path::new(&config.worktree_path);
                 if worktree.exists() {
-                    log::info!("[AgentManager] Using worktree path: {}", config.worktree_path);
+                    log::info!(
+                        "[AgentManager] Using worktree path: {}",
+                        config.worktree_path
+                    );
                     cmd.current_dir(&config.worktree_path);
                 } else {
-                    log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
+                    log::warn!(
+                        "[AgentManager] Worktree path doesn't exist: {}, using current directory",
+                        config.worktree_path
+                    );
                 }
 
                 // Validate prompt is non-empty
@@ -946,8 +1247,9 @@ impl AgentManager {
             }
             AgentType::Opencode => {
                 // Resolve OpenCode path using path resolver
-                let opencode_path = CliPathResolver::resolve_opencode()
-                    .ok_or_else(|| anyhow!("OpenCode not found. Install from https://opencode.ai"))?;
+                let opencode_path = CliPathResolver::resolve_opencode().ok_or_else(|| {
+                    anyhow!("OpenCode not found. Install from https://opencode.ai")
+                })?;
 
                 log::info!("[AgentManager] OpenCode path: {:?}", opencode_path);
 
@@ -964,21 +1266,34 @@ impl AgentManager {
                     if !config_path.exists() {
                         let config_content = r#"{"$schema": "https://opencode.ai/config.json", "permission": "allow"}"#;
                         if let Err(e) = std::fs::write(&config_path, config_content) {
-                            log::warn!("[AgentManager] Failed to create opencode.json for permissions: {}", e);
+                            log::warn!(
+                                "[AgentManager] Failed to create opencode.json for permissions: {}",
+                                e
+                            );
                         } else {
-                            log::info!("[AgentManager] Created opencode.json with permission: allow");
+                            log::info!(
+                                "[AgentManager] Created opencode.json with permission: allow"
+                            );
                         }
                     } else {
-                        log::info!("[AgentManager] opencode.json already exists, using existing config");
+                        log::info!(
+                            "[AgentManager] opencode.json already exists, using existing config"
+                        );
                     }
                 }
 
                 // Set working directory
                 if worktree.exists() {
-                    log::info!("[AgentManager] Using worktree path: {}", config.worktree_path);
+                    log::info!(
+                        "[AgentManager] Using worktree path: {}",
+                        config.worktree_path
+                    );
                     cmd.current_dir(&config.worktree_path);
                 } else {
-                    log::warn!("[AgentManager] Worktree path doesn't exist: {}, using current directory", config.worktree_path);
+                    log::warn!(
+                        "[AgentManager] Worktree path doesn't exist: {}, using current directory",
+                        config.worktree_path
+                    );
                 }
 
                 // Use the 'run' subcommand for non-interactive execution
@@ -1012,8 +1327,9 @@ impl AgentManager {
             }
             AgentType::Cursor => {
                 // Resolve Cursor agent path
-                let cursor_path = CliPathResolver::resolve_cursor()
-                    .ok_or_else(|| anyhow!("Cursor agent not found. Ensure Cursor is installed."))?;
+                let cursor_path = CliPathResolver::resolve_cursor().ok_or_else(|| {
+                    anyhow!("Cursor agent not found. Ensure Cursor is installed.")
+                })?;
 
                 log::info!("[AgentManager] Cursor path: {:?}", cursor_path);
 
@@ -1184,7 +1500,8 @@ impl AgentManager {
         let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
-            child.kill()
+            child
+                .kill()
                 .map_err(|e| anyhow!("Failed to kill agent process: {}", e))?;
 
             self.emit_log(agent_id, LogLevel::Info, "Agent stopped".to_string());
@@ -1222,7 +1539,11 @@ impl AgentManager {
         for agent_id in agent_ids {
             if let Some(mut child) = processes.remove(&agent_id) {
                 let _ = child.kill(); // Best effort
-                self.emit_log(&agent_id, LogLevel::Info, "Agent stopped (shutdown)".to_string());
+                self.emit_log(
+                    &agent_id,
+                    LogLevel::Info,
+                    "Agent stopped (shutdown)".to_string(),
+                );
             }
         }
 
@@ -1242,15 +1563,20 @@ impl AgentManager {
         let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
-            let status = child.wait()
+            let status = child
+                .wait()
                 .map_err(|e| anyhow!("Failed to wait for agent: {}", e))?;
 
             let exit_code = status.code().unwrap_or(-1);
 
             self.emit_log(
                 agent_id,
-                if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
-                format!("Agent exited with code {}", exit_code)
+                if exit_code == 0 {
+                    LogLevel::Info
+                } else {
+                    LogLevel::Error
+                },
+                format!("Agent exited with code {}", exit_code),
             );
 
             Ok(exit_code)
@@ -1298,7 +1624,10 @@ impl AgentManager {
             let tokens = lock_mutex_recover(&self.monitor_cancellation);
             if let Some(cancelled) = tokens.get(agent_id) {
                 cancelled.store(true, Ordering::Relaxed);
-                log::debug!("[AgentManager] Cancelled monitor thread for agent {}", agent_id);
+                log::debug!(
+                    "[AgentManager] Cancelled monitor thread for agent {}",
+                    agent_id
+                );
             }
         }
 
@@ -1317,8 +1646,12 @@ impl AgentManager {
     pub fn emit_agent_exit(&self, agent_id: &str, exit_code: i32) {
         self.emit_log(
             agent_id,
-            if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
-            format!("Agent exited with code {}", exit_code)
+            if exit_code == 0 {
+                LogLevel::Info
+            } else {
+                LogLevel::Error
+            },
+            format!("Agent exited with code {}", exit_code),
         );
     }
 
@@ -1365,7 +1698,8 @@ impl AgentManager {
         }
 
         // Also emit as a warning log
-        let retry_msg = info.retry_after_ms
+        let retry_msg = info
+            .retry_after_ms
             .map(|ms| format!(", retry after {}ms", ms))
             .unwrap_or_default();
 
@@ -1374,7 +1708,8 @@ impl AgentManager {
             LogLevel::Warn,
             format!(
                 "Rate limit detected: {:?}{}",
-                info.limit_type.unwrap_or(crate::agents::rate_limiter::RateLimitType::RateLimit),
+                info.limit_type
+                    .unwrap_or(crate::agents::rate_limiter::RateLimitType::RateLimit),
                 retry_msg
             ),
         );
@@ -1410,15 +1745,20 @@ impl AgentManager {
                 }
             }
 
-            let status = child.wait()
+            let status = child
+                .wait()
                 .map_err(|e| anyhow!("Failed to wait for agent: {}", e))?;
 
             let exit_code = status.code().unwrap_or(-1);
 
             self.emit_log(
                 agent_id,
-                if exit_code == 0 { LogLevel::Info } else { LogLevel::Error },
-                format!("Agent exited with code {}", exit_code)
+                if exit_code == 0 {
+                    LogLevel::Info
+                } else {
+                    LogLevel::Error
+                },
+                format!("Agent exited with code {}", exit_code),
             );
 
             Ok((exit_code, rate_limit_info))
@@ -1429,7 +1769,11 @@ impl AgentManager {
 
     /// Process a chunk of stderr output for an agent
     /// Useful for streaming stderr monitoring
-    pub fn process_stderr_chunk(&self, agent_id: &str, stderr_chunk: &str) -> Option<RateLimitInfo> {
+    pub fn process_stderr_chunk(
+        &self,
+        agent_id: &str,
+        stderr_chunk: &str,
+    ) -> Option<RateLimitInfo> {
         if let Some(info) = self.rate_limit_detector.detect_in_stderr(stderr_chunk) {
             self.emit_rate_limit(agent_id, info.clone());
             Some(info)
@@ -1467,6 +1811,7 @@ mod tests {
             prompt: Some("Fix bug".to_string()),
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if claude is not installed, which is expected
@@ -1489,6 +1834,7 @@ mod tests {
             prompt: Some("Implement feature".to_string()),
             model: Some("anthropic/claude-sonnet-4-5".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if opencode is not installed, which is expected
@@ -1511,6 +1857,7 @@ mod tests {
             prompt: Some("Refactor code".to_string()),
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if cursor-agent is not installed, which is expected
@@ -1533,6 +1880,7 @@ mod tests {
             prompt: Some("Add unit tests".to_string()),
             model: Some("gpt-4o".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if codex is not installed, which is expected
@@ -1555,6 +1903,7 @@ mod tests {
             prompt: Some("Implement feature".to_string()),
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if qwen is not installed, which is expected
@@ -1577,6 +1926,7 @@ mod tests {
             prompt: Some("Fix bug".to_string()),
             model: Some("droid-model".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
         };
 
         // This test may fail if droid is not installed, which is expected

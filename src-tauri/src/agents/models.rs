@@ -1,7 +1,7 @@
 // Model discovery types and fallback models
 
-use serde::{Deserialize, Serialize};
 use crate::models::AgentType;
+use serde::{Deserialize, Serialize};
 
 /// Information about an available model
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +61,10 @@ pub fn format_model_name(model_id: &str) -> String {
 pub fn infer_provider(model_id: &str) -> String {
     if model_id.starts_with("claude") {
         "anthropic".to_string()
-    } else if model_id.starts_with("gpt") || model_id.starts_with("o1") || model_id.starts_with("text-") {
+    } else if model_id.starts_with("gpt")
+        || model_id.starts_with("o1")
+        || model_id.starts_with("text-")
+    {
         "openai".to_string()
     } else if model_id.starts_with("gemini") {
         "google".to_string()
@@ -74,8 +77,18 @@ pub fn infer_provider(model_id: &str) -> String {
 pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
     match agent_type {
         AgentType::Opencode => vec![
-            ModelInfo::new("anthropic/claude-sonnet-4-5", "Claude Sonnet 4.5", "anthropic", true),
-            ModelInfo::new("anthropic/claude-opus-4-5", "Claude Opus 4.5", "anthropic", false),
+            ModelInfo::new(
+                "anthropic/claude-sonnet-4-5",
+                "Claude Sonnet 4.5",
+                "anthropic",
+                true,
+            ),
+            ModelInfo::new(
+                "anthropic/claude-opus-4-5",
+                "Claude Opus 4.5",
+                "anthropic",
+                false,
+            ),
             ModelInfo::new("openai/gpt-4o", "GPT-4o", "openai", false),
             ModelInfo::new("openai/o1", "OpenAI o1", "openai", false),
         ],

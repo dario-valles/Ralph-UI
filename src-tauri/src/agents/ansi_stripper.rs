@@ -11,14 +11,14 @@ use std::sync::LazyLock;
 /// - Simple escape sequences: \x1b[, \x1bD, etc.
 static ANSI_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"\x1b\[[0-9;]*[a-zA-Z]",       // CSI sequences (e.g., \x1b[0m, \x1b[1;32m)
-        r"|\x1b\][^\x07]*\x07",          // OSC sequences terminated by BEL
-        r"|\x1b\][^\x1b]*\x1b\\",        // OSC sequences terminated by ST
-        r"|\x1b[PX^_][^\x1b]*\x1b\\",    // DCS, SOS, PM, APC sequences
-        r"|\x1b[@-Z\\-_]",               // Fe escape sequences
-        r"|\x1b.",                       // Other escape sequences
-        r"|\x0d",                        // Carriage return
-        r"|\x07",                        // BEL character
+        r"\x1b\[[0-9;]*[a-zA-Z]",     // CSI sequences (e.g., \x1b[0m, \x1b[1;32m)
+        r"|\x1b\][^\x07]*\x07",       // OSC sequences terminated by BEL
+        r"|\x1b\][^\x1b]*\x1b\\",     // OSC sequences terminated by ST
+        r"|\x1b[PX^_][^\x1b]*\x1b\\", // DCS, SOS, PM, APC sequences
+        r"|\x1b[@-Z\\-_]",            // Fe escape sequences
+        r"|\x1b.",                    // Other escape sequences
+        r"|\x0d",                     // Carriage return
+        r"|\x07",                     // BEL character
     ))
     .expect("Invalid ANSI regex pattern")
 });
@@ -185,7 +185,10 @@ mod tests {
     fn test_strip_basic_color_codes() {
         assert_eq!(strip_ansi("\x1b[32mGreen\x1b[0m"), "Green");
         assert_eq!(strip_ansi("\x1b[1;31mBold Red\x1b[0m"), "Bold Red");
-        assert_eq!(strip_ansi("\x1b[38;5;196mCustom Color\x1b[0m"), "Custom Color");
+        assert_eq!(
+            strip_ansi("\x1b[38;5;196mCustom Color\x1b[0m"),
+            "Custom Color"
+        );
     }
 
     #[test]
@@ -224,7 +227,10 @@ mod tests {
     #[test]
     fn test_strip_mixed_content() {
         let input = "Error: \x1b[31mrate limit exceeded\x1b[0m, retry after 30s";
-        assert_eq!(strip_ansi(input), "Error: rate limit exceeded, retry after 30s");
+        assert_eq!(
+            strip_ansi(input),
+            "Error: rate limit exceeded, retry after 30s"
+        );
     }
 
     // =========================================================================

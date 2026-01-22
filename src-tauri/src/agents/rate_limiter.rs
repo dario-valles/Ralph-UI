@@ -147,9 +147,7 @@ fn get_patterns() -> &'static Vec<CompiledPattern> {
 static RETRY_AFTER_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn get_retry_after_regex() -> &'static Regex {
-    RETRY_AFTER_REGEX.get_or_init(|| {
-        Regex::new(r"(?i)retry[_\-\s]?after[:\s]*(\d+)").unwrap()
-    })
+    RETRY_AFTER_REGEX.get_or_init(|| Regex::new(r"(?i)retry[_\-\s]?after[:\s]*(\d+)").unwrap())
 }
 
 impl RateLimitDetector {
@@ -192,9 +190,9 @@ impl RateLimitDetector {
     fn extract_retry_after(&self, output: &str) -> Option<u64> {
         let regex = get_retry_after_regex();
 
-        regex.captures(output).and_then(|caps| {
-            caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok())
-        })
+        regex
+            .captures(output)
+            .and_then(|caps| caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok()))
     }
 
     /// Check if output indicates a rate limit (convenience method)
@@ -323,8 +321,10 @@ mod tests {
         assert!(result.is_some());
         let info = result.unwrap();
         // Should match OpenAI rate limit (tokens per minute pattern)
-        assert!(info.limit_type == Some(RateLimitType::OpenAiRateLimit)
-            || info.limit_type == Some(RateLimitType::RateLimit));
+        assert!(
+            info.limit_type == Some(RateLimitType::OpenAiRateLimit)
+                || info.limit_type == Some(RateLimitType::RateLimit)
+        );
     }
 
     #[test]
@@ -360,7 +360,9 @@ mod tests {
 
         // Session IDs that happen to contain "429" should NOT trigger rate limit detection
         assert!(!detector.is_rate_limited("ses_429f18024ffeVo6UO6EAo2tIHG"));
-        assert!(!detector.is_rate_limited("Created session with id: ses_429f18024ffeVo6UO6EAo2tIHG"));
+        assert!(
+            !detector.is_rate_limited("Created session with id: ses_429f18024ffeVo6UO6EAo2tIHG")
+        );
         assert!(!detector.is_rate_limited("agent-429abc-def"));
         assert!(!detector.is_rate_limited("task_id_429_hash"));
 
@@ -375,13 +377,19 @@ mod tests {
         let detector = RateLimitDetector::new();
 
         // Test various retry-after formats (combined with rate limit keywords)
-        let info1 = detector.detect_in_stderr("rate limited, retry-after: 60").unwrap();
+        let info1 = detector
+            .detect_in_stderr("rate limited, retry-after: 60")
+            .unwrap();
         assert_eq!(info1.retry_after_ms, Some(60));
 
-        let info2 = detector.detect_in_stderr("Rate limited. Retry_After: 120").unwrap();
+        let info2 = detector
+            .detect_in_stderr("Rate limited. Retry_After: 120")
+            .unwrap();
         assert_eq!(info2.retry_after_ms, Some(120));
 
-        let info3 = detector.detect_in_stderr("rate limit hit, retry after 45 seconds").unwrap();
+        let info3 = detector
+            .detect_in_stderr("rate limit hit, retry after 45 seconds")
+            .unwrap();
         assert_eq!(info3.retry_after_ms, Some(45));
     }
 }
