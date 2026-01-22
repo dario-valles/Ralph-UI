@@ -38,6 +38,9 @@ import {
   FolderOpen,
   Globe,
   Package,
+  Eye,
+  EyeOff,
+  Info,
 } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
 import { templateApi } from '@/lib/tauri-api'
@@ -124,6 +127,13 @@ export function SettingsPage() {
   const [newTemplateScope, setNewTemplateScope] = useState<'project' | 'global'>('project')
   const [templateSaving, setTemplateSaving] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
+
+  // Template preview state (US-013)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewResult, setPreviewResult] = useState<import('@/types').TemplatePreviewResult | null>(
+    null
+  )
 
   // Get active project for project-scoped templates
   const { getActiveProject } = useProjectStore()
@@ -316,6 +326,27 @@ export function SettingsPage() {
       setTemplateContent('')
     }
     setIsEditingTemplate(false)
+    setIsPreviewOpen(false)
+    setPreviewResult(null)
+  }
+
+  // Preview template (US-013)
+  const handlePreviewTemplate = async () => {
+    if (!isTauri || !templateContent.trim()) return
+
+    setPreviewLoading(true)
+    setTemplateError(null)
+
+    try {
+      const result = await templateApi.preview(templateContent, activeProject?.path)
+      setPreviewResult(result)
+      setIsPreviewOpen(true)
+    } catch (err) {
+      console.error('Failed to preview template:', err)
+      setTemplateError(err instanceof Error ? err.message : 'Failed to preview template')
+    } finally {
+      setPreviewLoading(false)
+    }
   }
 
   // Get source icon for template
@@ -1679,9 +1710,75 @@ export function SettingsPage() {
                           </div>
                         </div>
 
+                        {/* Preview panel for new template (US-013) */}
+                        {isPreviewOpen && previewResult && (
+                          <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                            {!previewResult.success && previewResult.error && (
+                              <div className="p-2 rounded border border-destructive bg-destructive/10">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                                  <div>
+                                    <p className="text-sm font-medium text-destructive">Syntax Error</p>
+                                    <p className="text-xs text-destructive/80 font-mono mt-1">
+                                      {previewResult.error}
+                                    </p>
+                                    {previewResult.errorLine && (
+                                      <p className="text-xs text-destructive/70 mt-1">
+                                        Line {previewResult.errorLine}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-1 text-xs">
+                              <span className="text-muted-foreground">Used:</span>
+                              {previewResult.variablesUsed.map((v) => (
+                                <Badge
+                                  key={v}
+                                  variant="default"
+                                  className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-100"
+                                >
+                                  {v}
+                                </Badge>
+                              ))}
+                              <span className="text-muted-foreground ml-2">Unused:</span>
+                              {previewResult.variablesUnused.slice(0, 3).map((v) => (
+                                <Badge key={v} variant="outline" className="text-xs opacity-60">
+                                  {v}
+                                </Badge>
+                              ))}
+                              {previewResult.variablesUnused.length > 3 && (
+                                <span className="text-xs text-muted-foreground">
+                                  +{previewResult.variablesUnused.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                            {previewResult.success && previewResult.output && (
+                              <ScrollArea className="h-[120px] border rounded p-2 bg-background">
+                                <pre className="font-mono text-xs whitespace-pre-wrap">
+                                  {previewResult.output}
+                                </pre>
+                              </ScrollArea>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" onClick={handleCancelEdit}>
                             Cancel
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handlePreviewTemplate}
+                            disabled={previewLoading || !templateContent.trim()}
+                          >
+                            {previewLoading ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Eye className="h-4 w-4 mr-2" />
+                            )}
+                            Preview
                           </Button>
                           <Button
                             onClick={handleSaveTemplate}
@@ -1750,6 +1847,21 @@ export function SettingsPage() {
                             </>
                           )}
                           <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePreviewTemplate}
+                            disabled={previewLoading || !templateContent.trim()}
+                          >
+                            {previewLoading ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : isPreviewOpen ? (
+                              <EyeOff className="h-3 w-3 mr-1" />
+                            ) : (
+                              <Eye className="h-3 w-3 mr-1" />
+                            )}
+                            {isPreviewOpen ? 'Hide' : 'Preview'}
+                          </Button>
+                          <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
@@ -1767,6 +1879,113 @@ export function SettingsPage() {
                         {templateContentLoading ? (
                           <div className="flex items-center justify-center h-[300px]">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : isPreviewOpen && previewResult ? (
+                          /* Template Preview Panel (US-013) */
+                          <div className="space-y-4">
+                            {/* Error display with line number */}
+                            {!previewResult.success && previewResult.error && (
+                              <div className="p-3 rounded-md border border-destructive bg-destructive/10">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                                  <div>
+                                    <p className="text-sm font-medium text-destructive">Syntax Error</p>
+                                    <p className="text-sm text-destructive/80 font-mono mt-1">
+                                      {previewResult.error}
+                                    </p>
+                                    {previewResult.errorLine && (
+                                      <p className="text-xs text-destructive/70 mt-1">
+                                        Error on line {previewResult.errorLine}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Variable highlighting */}
+                            <div className="flex flex-wrap gap-2 items-center text-xs">
+                              <span className="text-muted-foreground font-medium">Variables:</span>
+                              {previewResult.variablesUsed.map((v) => (
+                                <Badge
+                                  key={v}
+                                  variant="default"
+                                  className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900"
+                                >
+                                  {v}
+                                </Badge>
+                              ))}
+                              {previewResult.variablesUnused.map((v) => (
+                                <Badge
+                                  key={v}
+                                  variant="outline"
+                                  className="text-muted-foreground opacity-60"
+                                >
+                                  {v}
+                                </Badge>
+                              ))}
+                            </div>
+
+                            {/* Rendered output */}
+                            {previewResult.success && previewResult.output && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <h5 className="text-sm font-medium">Rendered Output</h5>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (previewResult.output) {
+                                        navigator.clipboard.writeText(previewResult.output)
+                                        setSavedMessage('Rendered output copied')
+                                        setTimeout(() => setSavedMessage(null), 2000)
+                                      }
+                                    }}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <ScrollArea className="h-[200px] border rounded-md p-3 bg-muted/30">
+                                  <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+                                    {previewResult.output}
+                                  </pre>
+                                </ScrollArea>
+                              </div>
+                            )}
+
+                            {/* Sample context info */}
+                            <details className="text-xs">
+                              <summary className="cursor-pointer text-muted-foreground hover:text-foreground flex items-center gap-1">
+                                <Info className="h-3 w-3" />
+                                Sample context used for preview
+                              </summary>
+                              <div className="mt-2 p-2 border rounded-md bg-muted/20 space-y-1">
+                                <p>
+                                  <strong>Task:</strong> {previewResult.sampleContext.taskTitle}
+                                </p>
+                                <p>
+                                  <strong>PRD Progress:</strong>{' '}
+                                  {previewResult.sampleContext.prdCompletedCount}/
+                                  {previewResult.sampleContext.prdTotalCount} stories
+                                </p>
+                                <p>
+                                  <strong>Date:</strong> {previewResult.sampleContext.currentDate}
+                                </p>
+                              </div>
+                            </details>
+
+                            {/* Close preview button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setIsPreviewOpen(false)
+                                setPreviewResult(null)
+                              }}
+                            >
+                              <EyeOff className="h-3 w-3 mr-1" />
+                              Close Preview
+                            </Button>
                           </div>
                         ) : isEditingTemplate ? (
                           <div className="space-y-2">

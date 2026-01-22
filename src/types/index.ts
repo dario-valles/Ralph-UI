@@ -385,6 +385,32 @@ export interface RenderRequest {
   customVars?: Record<string, string>
 }
 
+// Template Preview Types (US-013)
+export interface TemplatePreviewResult {
+  success: boolean
+  output: string | null
+  error: string | null
+  errorLine: number | null
+  variablesUsed: string[]
+  variablesUnused: string[]
+  sampleContext: SampleContext
+}
+
+export interface SampleContext {
+  taskTitle: string
+  taskDescription: string
+  acceptanceCriteria: string[]
+  dependencies: string[]
+  prdContent: string
+  recentProgress: string
+  codebasePatterns: string
+  prdCompletedCount: number
+  prdTotalCount: number
+  selectionReason: string
+  currentDate: string
+  timestamp: string
+}
+
 // ============================================================================
 // Recovery Types
 // ============================================================================

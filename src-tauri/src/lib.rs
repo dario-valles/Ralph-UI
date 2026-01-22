@@ -362,6 +362,7 @@ pub fn run() {
             commands::get_template_content,
             commands::save_template,
             commands::delete_template,
+            commands::preview_template,
             // Recovery commands
             commands::check_stale_sessions,
             commands::recover_stale_session,

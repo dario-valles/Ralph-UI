@@ -761,10 +761,10 @@ export const gsdApi = {
   },
 }
 
-// Import TemplateInfo type
-import type { TemplateInfo } from '@/types'
+// Import TemplateInfo and TemplatePreviewResult types
+import type { TemplateInfo, TemplatePreviewResult } from '@/types'
 
-// Template Editor API (US-012)
+// Template Editor API (US-012, US-013)
 export const templateApi = {
   /** List all available templates (project, global, builtin) */
   list: async (projectPath?: string): Promise<TemplateInfo[]> => {
@@ -798,5 +798,10 @@ export const templateApi = {
   /** List builtin template names */
   listBuiltin: async (): Promise<string[]> => {
     return await invoke('list_builtin_templates')
+  },
+
+  /** Preview a template with sample context (US-013) */
+  preview: async (content: string, projectPath?: string): Promise<TemplatePreviewResult> => {
+    return await invoke('preview_template', { content, projectPath })
   },
 }
