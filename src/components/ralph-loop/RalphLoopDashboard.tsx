@@ -59,7 +59,7 @@ import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { ralphLoopApi } from '@/lib/tauri-api'
-import { Wand2, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 interface RalphLoopDashboardProps {
   projectPath: string
@@ -105,7 +105,6 @@ export function RalphLoopDashboard({
 
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
   const [regeneratingStories, setRegeneratingStories] = useState(false)
 
   // Worktree action states
@@ -435,20 +434,6 @@ export function RalphLoopDashboard({
       await markStoryFailing(story.id)
     } else {
       await markStoryPassing(story.id)
-    }
-  }
-
-  const handleRegenerateAcceptance = async () => {
-    if (!prd) return
-    setRegenerating(true)
-    try {
-      await ralphLoopApi.regenerateAcceptanceCriteria(projectPath, prdName)
-      // Reload the PRD to show updated acceptance criteria
-      await loadPrd(projectPath, prdName)
-    } catch (err) {
-      console.error('Failed to regenerate acceptance criteria:', err)
-    } finally {
-      setRegenerating(false)
     }
   }
 
@@ -1048,22 +1033,8 @@ export function RalphLoopDashboard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRegenerateAcceptance}
-                disabled={regenerating || regeneratingStories || isRunning}
-                title="Re-parse PRD markdown to extract acceptance criteria"
-              >
-                {regenerating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Wand2 className="mr-2 h-4 w-4" />
-                )}
-                Regenerate Acceptance
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={handleRegenerateStories}
-                disabled={regenerating || regeneratingStories || isRunning}
+                disabled={regeneratingStories || isRunning}
                 title="Use AI to extract properly formatted user stories from PRD"
               >
                 {regeneratingStories ? (
