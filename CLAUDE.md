@@ -13,6 +13,11 @@ Ralph UI is a Tauri desktop application for orchestrating autonomous AI coding a
 bun run tauri dev              # Start full dev environment (Vite + Rust backend)
 bun run dev                    # Frontend only (Vite dev server on port 1420)
 
+# Server Mode (Browser Access)
+bun run server                 # Run HTTP/WebSocket server (release build)
+bun run server:dev             # Run server in dev mode (faster builds)
+bun run server:build           # Build server binary only
+
 # Testing
 bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test", not "bun test"
 bun run test:run               # Run tests once
@@ -28,6 +33,112 @@ bun run format                 # Prettier format
 # Building
 bun run tauri build            # Production bundle
 ```
+
+## Server Mode (Browser Access)
+
+Ralph UI can run as an HTTP/WebSocket server for browser-based access, enabling use from any device on the network without installing the desktop app. The frontend works identically in both Tauri desktop and browser modes.
+
+### Quick Start (Browser Mode)
+
+```bash
+# Terminal 1: Start the backend server
+bun run server
+
+# Terminal 2: Start the frontend dev server
+bun run dev
+
+# Open http://localhost:1420 in browser
+# Enter the auth token displayed by the server
+```
+
+### Running the Server
+
+```bash
+# Start server with default settings (port 3420, bind 0.0.0.0)
+bun run server
+
+# Development mode (faster builds, debug symbols)
+bun run server:dev
+
+# Custom port/bind address
+cd src-tauri && cargo run --features server --release -- --server --port 8080 --bind 127.0.0.1
+```
+
+The server displays a startup banner with:
+- Server URL (e.g., `http://0.0.0.0:3420`)
+- Auth token (32-char hex string, generated on each startup)
+
+### Browser Connection
+
+When accessing the frontend from a browser (not Tauri), a connection dialog appears automatically. Enter:
+1. **Server URL**: `http://localhost:3420` (or your server address)
+2. **Auth Token**: Copy from server startup output
+
+The connection is stored in localStorage and persists across page reloads.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/invoke` | POST | Command proxy - routes to Tauri commands |
+| `/ws/events` | GET | WebSocket for real-time events |
+| `/health` | GET | Health check |
+| `/` | GET | Connection instructions page |
+
+### Authentication
+
+All requests require Bearer token authentication:
+```bash
+curl -X POST http://localhost:3420/api/invoke \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "get_sessions", "args": {"projectPath": "/path/to/project"}}'
+```
+
+WebSocket connections pass token as query parameter: `/ws/events?token=YOUR_TOKEN`
+
+### Frontend Browser Mode Architecture
+
+The frontend uses a unified API layer that works in both Tauri and browser modes:
+
+```typescript
+// src/lib/invoke.ts - Automatically routes to Tauri IPC or HTTP
+import { invoke } from '@/lib/invoke'
+await invoke('get_sessions', { projectPath: '/path' })
+
+// src/lib/events-client.ts - Automatically uses Tauri events or WebSocket
+import { subscribeEvent } from '@/lib/events-client'
+const unlisten = await subscribeEvent('ralph:progress', handler)
+```
+
+Key browser mode files:
+- `src/lib/invoke.ts` - HTTP fallback for `invoke()` calls
+- `src/lib/events-client.ts` - WebSocket client for real-time events
+- `src/components/ServerConnectionDialog.tsx` - Connection UI
+- `src/hooks/useServerConnection.ts` - Connection state management
+
+### Server Architecture
+
+```
+src-tauri/src/server/
+├── mod.rs      # Server setup, router, CORS
+├── auth.rs     # Bearer token middleware (tower::Layer)
+├── proxy.rs    # Command routing (~60+ commands)
+├── events.rs   # WebSocket broadcaster
+└── state.rs    # Shared application state
+```
+
+The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint routes HTTP requests directly to existing Tauri command functions, requiring zero changes to existing commands.
+
+### Graceful Degradation
+
+| Feature | Desktop (Tauri) | Browser | Notes |
+|---------|-----------------|---------|-------|
+| All UI features | ✓ | ✓ | Full parity |
+| Real-time events | ✓ | ✓ | WebSocket in browser |
+| Native file dialogs | ✓ | ✗ | Use project path input |
+| PTY terminal input | ✓ | ✗ | Output streaming only |
+| Desktop notifications | ✓ | ✓ | Web Notifications API |
 
 ## Architecture
 

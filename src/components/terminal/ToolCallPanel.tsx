@@ -2,7 +2,7 @@
 // Shows structured, expandable view of tool calls with input/output
 
 import { useState, useEffect, useRef } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
@@ -247,16 +247,16 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
 
     const setup = async () => {
       // Listen for tool call started events
-      unlistenStart = await listen<ToolCallStartedPayload>('tool:started', (event) => {
-        if (event.payload.agentId === agentId) {
-          addToolCall(event.payload)
+      unlistenStart = await subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+        if (payload.agentId === agentId) {
+          addToolCall(payload)
         }
       })
 
       // Listen for tool call completed events
-      unlistenComplete = await listen<ToolCallCompletedPayload>('tool:completed', (event) => {
-        if (event.payload.agentId === agentId) {
-          completeToolCall(event.payload)
+      unlistenComplete = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+        if (payload.agentId === agentId) {
+          completeToolCall(payload)
         }
       })
     }

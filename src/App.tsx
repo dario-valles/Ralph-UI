@@ -9,6 +9,8 @@ import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { RalphLoopPage } from './components/ralph-loop'
 import { ToastContainer } from './components/ui/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ServerConnectionDialog } from './components/ServerConnectionDialog'
+import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/tauri-api'
 import { useRalphLoopNotifications } from './hooks/useRalphLoopNotifications'
@@ -22,10 +24,14 @@ function GlobalNotificationListener(): null {
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects)
   const projects = useProjectStore((state) => state.projects)
+  const { isConnected, showDialog, handleConnected } = useServerConnection()
 
   useEffect(() => {
-    loadProjects()
-  }, [loadProjects])
+    // Only load projects when connected
+    if (isConnected) {
+      loadProjects()
+    }
+  }, [loadProjects, isConnected])
 
   // Cleanup stale Ralph Loop executions on app startup
   // This handles crash recovery - marks interrupted iterations properly
@@ -65,6 +71,9 @@ function App() {
   }, [projects])
   return (
     <ErrorBoundary>
+      {/* Show connection dialog in browser mode when not connected */}
+      {showDialog && <ServerConnectionDialog onConnected={handleConnected} />}
+
       <BrowserRouter>
         <GlobalNotificationListener />
         <Routes>

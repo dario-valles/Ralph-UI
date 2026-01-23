@@ -2,7 +2,7 @@
 // Consolidates prd:file_updated and prd:chat_chunk event handling
 
 import { useEffect, useState, useCallback } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 
 interface PRDFileUpdatedPayload {
   sessionId: string
@@ -57,10 +57,10 @@ export function usePRDChatEvents({
 
     const setupListener = async () => {
       try {
-        unlisten = await listen<PRDFileUpdatedPayload>('prd:file_updated', (event) => {
+        unlisten = await subscribeEvent<PRDFileUpdatedPayload>('prd:file_updated', (payload) => {
           // Only update if the event is for the current session
-          if (event.payload.sessionId === sessionId) {
-            onPlanUpdated(event.payload.content, event.payload.path)
+          if (payload.sessionId === sessionId) {
+            onPlanUpdated(payload.content, payload.path)
           }
         })
       } catch (err) {
@@ -85,10 +85,10 @@ export function usePRDChatEvents({
 
     const setupListener = async () => {
       try {
-        unlisten = await listen<PRDChatChunkPayload>('prd:chat_chunk', (event) => {
+        unlisten = await subscribeEvent<PRDChatChunkPayload>('prd:chat_chunk', (payload) => {
           // Only update if the event is for the current session
-          if (event.payload.sessionId === sessionId) {
-            setStreamingContent((prev) => prev + event.payload.content + '\n')
+          if (payload.sessionId === sessionId) {
+            setStreamingContent((prev) => prev + payload.content + '\n')
           }
         })
       } catch (err) {

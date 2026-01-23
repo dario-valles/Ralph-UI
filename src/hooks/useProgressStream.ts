@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listen, UnlistenFn } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 
 /**
  * Phase of the Ralph Loop execution
@@ -144,13 +144,12 @@ export function useProgressStream(
   }, [])
 
   useEffect(() => {
-    const unlisteners: UnlistenFn[] = []
+    const unlisteners: (() => void)[] = []
 
     const setupListeners = async () => {
       try {
         // Listen to progress events
-        const unlistenProgress = await listen<RalphProgressEvent>('ralph:progress', (event) => {
-          const payload = event.payload
+        const unlistenProgress = await subscribeEvent<RalphProgressEvent>('ralph:progress', (payload) => {
           // Filter by execution ID or PRD name if specified
           if (executionId && payload.executionId !== executionId) return
           if (prdName && payload.prdName !== prdName) return
@@ -159,10 +158,9 @@ export function useProgressStream(
         unlisteners.push(unlistenProgress)
 
         // Listen to iteration started events
-        const unlistenStarted = await listen<RalphIterationStartedEvent>(
+        const unlistenStarted = await subscribeEvent<RalphIterationStartedEvent>(
           'ralph:iteration_started',
-          (event) => {
-            const payload = event.payload
+          (payload) => {
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setIterationStarted(payload)
@@ -171,10 +169,9 @@ export function useProgressStream(
         unlisteners.push(unlistenStarted)
 
         // Listen to iteration completed events
-        const unlistenCompleted = await listen<RalphIterationCompletedEvent>(
+        const unlistenCompleted = await subscribeEvent<RalphIterationCompletedEvent>(
           'ralph:iteration_completed',
-          (event) => {
-            const payload = event.payload
+          (payload) => {
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setIterationCompleted(payload)
@@ -183,10 +180,9 @@ export function useProgressStream(
         unlisteners.push(unlistenCompleted)
 
         // Listen to loop completed events (when all stories pass)
-        const unlistenLoopCompleted = await listen<RalphLoopCompletedEvent>(
+        const unlistenLoopCompleted = await subscribeEvent<RalphLoopCompletedEvent>(
           'ralph:loop_completed',
-          (event) => {
-            const payload = event.payload
+          (payload) => {
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setLoopCompleted(payload)
@@ -195,10 +191,9 @@ export function useProgressStream(
         unlisteners.push(unlistenLoopCompleted)
 
         // Listen to loop error events
-        const unlistenLoopError = await listen<RalphLoopErrorEvent>(
+        const unlistenLoopError = await subscribeEvent<RalphLoopErrorEvent>(
           'ralph:loop_error',
-          (event) => {
-            const payload = event.payload
+          (payload) => {
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setLoopError(payload)

@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/collapsible'
 import { ResearchSummary } from './gsd/ResearchSummary'
 import { useGsdStore } from '@/stores/gsdStore'
-import { listen } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
 import type { AgentType } from '@/types'
 import {
@@ -251,24 +251,24 @@ export function ResearchProgress({
     const setupListeners = async () => {
       try {
         // Listen for streaming output chunks
-        unlistenOutput = await listen<ResearchOutputEvent>('gsd:research_output', (event) => {
-          if (event.payload.sessionId !== sessionId) return
+        unlistenOutput = await subscribeEvent<ResearchOutputEvent>('gsd:research_output', (payload) => {
+          if (payload.sessionId !== sessionId) return
 
-          const agentKey = AGENT_KEY_MAP[event.payload.agentType.toLowerCase()] || event.payload.agentType
-          if (!event.payload.isComplete && event.payload.chunk) {
+          const agentKey = AGENT_KEY_MAP[payload.agentType.toLowerCase()] || payload.agentType
+          if (!payload.isComplete && payload.chunk) {
             setAgentOutputs((prev) => ({
               ...prev,
-              [agentKey]: (prev[agentKey] || '') + event.payload.chunk + '\n',
+              [agentKey]: (prev[agentKey] || '') + payload.chunk + '\n',
             }))
           }
         })
 
         // Listen for status updates
-        unlistenStatus = await listen<ResearchStatusEvent>('gsd:research_status', (event) => {
-          if (event.payload.sessionId !== sessionId) return
+        unlistenStatus = await subscribeEvent<ResearchStatusEvent>('gsd:research_status', (payload) => {
+          if (payload.sessionId !== sessionId) return
           // Status updates are handled by parent component through polling
           // but we log them for debugging
-          console.log(`[Research] ${event.payload.agentType}: ${event.payload.status}`)
+          console.log(`[Research] ${payload.agentType}: ${payload.status}`)
         })
       } catch (err) {
         console.warn('Failed to set up research event listeners:', err)

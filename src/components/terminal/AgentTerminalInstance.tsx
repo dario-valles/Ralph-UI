@@ -6,7 +6,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { listen } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 import {
   getAgentPtyId,
   getAgentPtyHistory,
@@ -124,17 +124,17 @@ export function AgentTerminalInstance({ terminalId, agentId, isActive }: AgentTe
       }
 
       // Listen for PTY data events
-      unlisten = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
-        if (event.payload.agentId === targetAgentId) {
-          const data = new Uint8Array(event.payload.data)
+      unlisten = await subscribeEvent<{ agentId: string; data: number[] }>('agent-pty-data', (payload) => {
+        if (payload.agentId === targetAgentId) {
+          const data = new Uint8Array(payload.data)
           terminal.write(decodeTerminalData(data))
         }
       })
 
       // Listen for PTY exit events
-      unlistenExit = await listen<{ agentId: string; exitCode: number }>('agent-pty-exit', (event) => {
-        if (event.payload.agentId === targetAgentId) {
-          terminal.write(`\r\n\x1b[90mAgent process exited with code ${event.payload.exitCode}\x1b[0m\r\n`)
+      unlistenExit = await subscribeEvent<{ agentId: string; exitCode: number }>('agent-pty-exit', (payload) => {
+        if (payload.agentId === targetAgentId) {
+          terminal.write(`\r\n\x1b[90mAgent process exited with code ${payload.exitCode}\x1b[0m\r\n`)
           updateAgentTerminalStatus(targetAgentId, 'exited')
         }
       })

@@ -2,7 +2,7 @@
 // Tool calls appear as collapsible sections inline within the terminal output
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { subscribeEvent } from '@/lib/events-client'
 import Ansi from 'ansi-to-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -412,25 +412,25 @@ export function UnifiedTerminalView({
       }
 
       // Listen for PTY data events
-      unlistenPty = await listen<{ agentId: string; data: number[] }>('agent-pty-data', (event) => {
-        if (event.payload.agentId === agentId) {
-          const data = new Uint8Array(event.payload.data)
+      unlistenPty = await subscribeEvent<{ agentId: string; data: number[] }>('agent-pty-data', (payload) => {
+        if (payload.agentId === agentId) {
+          const data = new Uint8Array(payload.data)
           const decoded = decodeTerminalData(data)
           addTextToStream(decoded)
         }
       })
 
       // Listen for tool call started events
-      unlistenToolStart = await listen<ToolCallStartedPayload>('tool:started', (event) => {
-        if (event.payload.agentId === agentId) {
-          handleToolStart(event.payload)
+      unlistenToolStart = await subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+        if (payload.agentId === agentId) {
+          handleToolStart(payload)
         }
       })
 
       // Listen for tool call completed events
-      unlistenToolComplete = await listen<ToolCallCompletedPayload>('tool:completed', (event) => {
-        if (event.payload.agentId === agentId) {
-          handleToolComplete(event.payload)
+      unlistenToolComplete = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+        if (payload.agentId === agentId) {
+          handleToolComplete(payload)
         }
       })
 

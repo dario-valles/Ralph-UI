@@ -1,5 +1,5 @@
 // Module declarations
-mod commands;
+pub mod commands;
 mod models;
 mod git;
 mod github;
@@ -16,6 +16,10 @@ pub mod ralph_loop;
 pub mod file_storage;
 pub mod plugins;
 pub mod gsd;
+
+// Server module (only compiled with "server" feature)
+#[cfg(feature = "server")]
+pub mod server;
 
 // Re-export models for use in commands
 pub use models::*;

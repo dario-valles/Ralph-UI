@@ -6,8 +6,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { listen, UnlistenFn } from '@tauri-apps/api/event'
-import { isTauri } from '@/lib/tauri-check'
+import { subscribeEvent } from '@/lib/events-client'
 
 // Event constants (must match backend)
 const EVENT_SUBAGENT_SPAWNED = 'subagent:spawned'
@@ -151,17 +150,16 @@ export function useSubagentEvents({
 
   // Set up event listeners
   useEffect(() => {
-    if (!isTauri || !agentId) {
+    if (!agentId) {
       return
     }
 
     const setupListeners = async () => {
-      const unlisteners: UnlistenFn[] = []
+      const unlisteners: (() => void)[] = []
 
       // Listen for spawned events
       unlisteners.push(
-        await listen<SubagentSpawnedPayload>(EVENT_SUBAGENT_SPAWNED, (event) => {
-          const payload = event.payload
+        await subscribeEvent<SubagentSpawnedPayload>(EVENT_SUBAGENT_SPAWNED, (payload) => {
           // Only track subagents for our agent
           if (payload.parentAgentId !== agentId) return
 
@@ -180,8 +178,7 @@ export function useSubagentEvents({
 
       // Listen for progress events
       unlisteners.push(
-        await listen<SubagentProgressPayload>(EVENT_SUBAGENT_PROGRESS, (event) => {
-          const payload = event.payload
+        await subscribeEvent<SubagentProgressPayload>(EVENT_SUBAGENT_PROGRESS, (payload) => {
           if (payload.parentAgentId !== agentId) return
 
           // Progress events update the description
@@ -193,8 +190,7 @@ export function useSubagentEvents({
 
       // Listen for completed events
       unlisteners.push(
-        await listen<SubagentCompletedPayload>(EVENT_SUBAGENT_COMPLETED, (event) => {
-          const payload = event.payload
+        await subscribeEvent<SubagentCompletedPayload>(EVENT_SUBAGENT_COMPLETED, (payload) => {
           if (payload.parentAgentId !== agentId) return
 
           updateSubagent(payload.subagentId, {
@@ -208,8 +204,7 @@ export function useSubagentEvents({
 
       // Listen for failed events
       unlisteners.push(
-        await listen<SubagentFailedPayload>(EVENT_SUBAGENT_FAILED, (event) => {
-          const payload = event.payload
+        await subscribeEvent<SubagentFailedPayload>(EVENT_SUBAGENT_FAILED, (payload) => {
           if (payload.parentAgentId !== agentId) return
 
           updateSubagent(payload.subagentId, {
