@@ -8,6 +8,7 @@
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Assignment strategy for multi-agent scenarios (US-4.2)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,13 +62,33 @@ impl Default for ConflictResolution {
     }
 }
 
-/// Execution mode for Ralph loop (US-5.2)
+/// Selection strategy for competitive execution (US-5.3)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompetitiveSelectionStrategy {
+    /// Use the first completed solution
+    FirstComplete,
+    /// Use the solution with best code coverage
+    BestCoverage,
+    /// Use the solution with minimal code changes
+    MinimalCode,
+    /// Wait for human review and selection
+    HumanReview,
+}
+
+impl Default for CompetitiveSelectionStrategy {
+    fn default() -> Self {
+        Self::FirstComplete
+    }
+}
+
+/// Execution mode for Ralph loop (US-5.2, US-5.3)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     /// Single agent execution (default)
     SingleAgent,
-    /// Hierarchical team execution with primary and assistants
+    /// Hierarchical team execution with primary and assistants (US-5.2)
     Hierarchical {
         /// Agent type/model tier for primary agent (e.g., "claude-opus-4-5")
         primary_model: String,
@@ -75,6 +96,15 @@ pub enum ExecutionMode {
         assistant_models: Vec<String>,
         /// Whether primary agent reviews completed work before merge
         requires_primary_review: bool,
+    },
+    /// Competitive execution with multiple parallel attempts (US-5.3)
+    Competitive {
+        /// Number of parallel attempts (2-4)
+        parallel_attempts: u32,
+        /// Strategy for selecting the winning solution
+        selection_strategy: CompetitiveSelectionStrategy,
+        /// Timeout in seconds for forcing selection (0 = unlimited)
+        selection_timeout_secs: u64,
     },
 }
 
@@ -514,6 +544,144 @@ impl std::fmt::Display for ExecutionStatus {
     }
 }
 
+/// A single competitive attempt (one of potentially multiple parallel attempts)
+///
+/// Used in competitive execution mode to track metrics and results for each attempt
+/// so the system can score and select the best one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompetitiveAttempt {
+    /// Unique attempt ID
+    pub id: String,
+
+    /// Attempt number (1-based)
+    pub attempt_number: u32,
+
+    /// Agent type used for this attempt
+    pub agent_type: AgentType,
+
+    /// Model used for this attempt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Worktree path for this isolated attempt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_path: Option<String>,
+
+    /// Stories completed by this attempt
+    pub stories_completed: u32,
+
+    /// Stories remaining after this attempt
+    pub stories_remaining: u32,
+
+    /// Total duration in seconds
+    pub duration_secs: f64,
+
+    /// Total cost incurred
+    #[serde(default)]
+    pub cost: f64,
+
+    /// Total lines of code changed (for MinimalCode scoring)
+    #[serde(default)]
+    pub lines_changed: u32,
+
+    /// Code coverage percentage (for BestCoverage scoring)
+    #[serde(default)]
+    pub coverage_percent: f64,
+
+    /// Whether this was selected as the winner
+    #[serde(default)]
+    pub selected: bool,
+
+    /// Reason for selection (e.g. "First Complete", "Best Coverage")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection_reason: Option<String>,
+
+    /// When this attempt started
+    pub started_at: String,
+
+    /// When this attempt completed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+
+    /// Error message if this attempt failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+impl CompetitiveAttempt {
+    /// Create a new competitive attempt
+    pub fn new(
+        attempt_number: u32,
+        agent_type: AgentType,
+        model: Option<String>,
+    ) -> Self {
+        Self {
+            id: format!("attempt-{}-{}", attempt_number, Uuid::new_v4()),
+            attempt_number,
+            agent_type,
+            model,
+            worktree_path: None,
+            stories_completed: 0,
+            stories_remaining: 0,
+            duration_secs: 0.0,
+            cost: 0.0,
+            lines_changed: 0,
+            coverage_percent: 0.0,
+            selected: false,
+            selection_reason: None,
+            started_at: chrono::Utc::now().to_rfc3339(),
+            completed_at: None,
+            error_message: None,
+        }
+    }
+
+    /// Mark this attempt as completed
+    pub fn mark_completed(&mut self, stories_completed: u32, stories_remaining: u32) {
+        self.stories_completed = stories_completed;
+        self.stories_remaining = stories_remaining;
+        self.completed_at = Some(chrono::Utc::now().to_rfc3339());
+    }
+
+    /// Mark this attempt as failed
+    pub fn mark_failed(&mut self, error: impl Into<String>) {
+        self.error_message = Some(error.into());
+        self.completed_at = Some(chrono::Utc::now().to_rfc3339());
+    }
+
+    /// Mark this attempt as the selected winner
+    pub fn mark_selected(&mut self, reason: impl Into<String>) {
+        self.selected = true;
+        self.selection_reason = Some(reason.into());
+    }
+
+    /// Calculate score for selection based on strategy
+    pub fn calculate_score(&self, strategy: CompetitiveSelectionStrategy) -> f64 {
+        match strategy {
+            CompetitiveSelectionStrategy::FirstComplete => {
+                // Earlier completion = lower score = better
+                // Use negative timestamp so earlier attempts score lower
+                -chrono::DateTime::parse_from_rfc3339(&self.started_at)
+                    .unwrap_or_default()
+                    .timestamp() as f64
+            }
+            CompetitiveSelectionStrategy::BestCoverage => {
+                // Higher coverage = higher score
+                self.coverage_percent
+            }
+            CompetitiveSelectionStrategy::MinimalCode => {
+                // Lower lines changed = lower score = better
+                // Use negative so fewer changes score better
+                -(self.lines_changed as f64)
+            }
+            CompetitiveSelectionStrategy::HumanReview => {
+                // No automatic scoring - human decides
+                0.0
+            }
+        }
+    }
+}
+
 /// A single PRD execution with embedded iteration history
 ///
 /// This replaces the database tables:
@@ -572,6 +740,14 @@ pub struct PrdExecution {
     /// Iteration history embedded in the execution
     #[serde(default)]
     pub iterations: Vec<IterationRecord>,
+
+    /// Competitive attempts for US-5.3 (if using competitive execution mode)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub competitive_attempts: Vec<CompetitiveAttempt>,
+
+    /// Selected attempt ID for competitive mode (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_attempt_id: Option<String>,
 }
 
 impl PrdExecution {
@@ -592,6 +768,8 @@ impl PrdExecution {
             stories_remaining: 0,
             error_message: None,
             iterations: Vec::new(),
+            competitive_attempts: Vec::new(),
+            selected_attempt_id: None,
         }
     }
 
@@ -644,6 +822,52 @@ impl PrdExecution {
         }
 
         stats
+    }
+
+    /// Add a competitive attempt to this execution
+    pub fn add_competitive_attempt(&mut self, attempt: CompetitiveAttempt) {
+        self.competitive_attempts.push(attempt);
+    }
+
+    /// Get the selected attempt, if any
+    pub fn get_selected_attempt(&self) -> Option<&CompetitiveAttempt> {
+        self.selected_attempt_id.as_ref().and_then(|id| {
+            self.competitive_attempts.iter().find(|a| a.id == *id)
+        })
+    }
+
+    /// Select a winning attempt by ID
+    pub fn select_competitive_attempt(&mut self, attempt_id: impl Into<String>, reason: impl Into<String>) -> Result<(), String> {
+        let attempt_id = attempt_id.into();
+
+        // Find and mark the selected attempt
+        if let Some(attempt) = self.competitive_attempts.iter_mut().find(|a| a.id == attempt_id) {
+            attempt.mark_selected(reason);
+            self.selected_attempt_id = Some(attempt_id);
+            Ok(())
+        } else {
+            Err(format!("Attempt {} not found", attempt_id))
+        }
+    }
+
+    /// Get all completed attempts (sorted by completion time)
+    pub fn get_completed_attempts(&self) -> Vec<&CompetitiveAttempt> {
+        let mut attempts: Vec<_> = self.competitive_attempts
+            .iter()
+            .filter(|a| a.completed_at.is_some())
+            .collect();
+        attempts.sort_by(|a, b| {
+            a.completed_at.cmp(&b.completed_at)
+        });
+        attempts
+    }
+
+    /// Get all failed attempts
+    pub fn get_failed_attempts(&self) -> Vec<&CompetitiveAttempt> {
+        self.competitive_attempts
+            .iter()
+            .filter(|a| a.error_message.is_some())
+            .collect()
     }
 }
 

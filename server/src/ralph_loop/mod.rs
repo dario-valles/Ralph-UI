@@ -10,6 +10,7 @@
 
 mod assignments_manager;
 mod brief_builder;
+mod competitive_manager;
 mod completion;
 mod config;
 pub mod fallback_orchestrator;
@@ -24,6 +25,7 @@ mod types;
 
 pub use assignments_manager::*;
 pub use brief_builder::*;
+pub use competitive_manager::{CompetitiveExecutionManager};
 pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};

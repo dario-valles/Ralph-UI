@@ -675,6 +675,44 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        // US-5.3: Competitive Execution
+        "get_ralph_competitive_attempts" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_competitive_attempts(
+                project_path,
+                prd_name,
+                execution_id
+            ))
+        }
+
+        "select_ralph_competitive_attempt" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            let attempt_id: String = get_arg(&args, "attemptId")?;
+            let reason: String = get_arg(&args, "reason")?;
+            route_unit!(commands::ralph_loop::select_ralph_competitive_attempt(
+                project_path,
+                prd_name,
+                execution_id,
+                attempt_id,
+                reason
+            ))
+        }
+
+        "get_ralph_selected_competitive_attempt" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_selected_competitive_attempt(
+                project_path,
+                prd_name,
+                execution_id
+            ))
+        }
+
         // US-3.3: Manual Learning Entry
         "get_ralph_learnings" => {
             let project_path: String = get_arg(&args, "projectPath")?;
