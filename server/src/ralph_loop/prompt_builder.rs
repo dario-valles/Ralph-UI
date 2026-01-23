@@ -142,52 +142,58 @@ If you discover additional work that needs to be done beyond the current stories
 
 ## Your Task
 
-1. **Read the PRD file** at `{prd_path}`
+1. **Read the BRIEF.md file** at `.ralph-ui/briefs/{prd_name}/BRIEF.md`
+   - This contains a summary of completed stories (SKIP THESE)
+   - Shows the current story you should work on
+   - Includes accumulated learnings from previous iterations
+
+2. **Read the PRD file** at `{prd_path}`
    - This contains the list of stories/tasks with their pass/fail status
    - Each story has: id, title, acceptance criteria, and a `passes` boolean
 
-2. **Read the progress file** at `{progress_path}`
+3. **Read the progress file** at `{progress_path}`
    - This contains learnings from previous iterations
    - Use these learnings to avoid repeating mistakes
    - Add your own learnings for future iterations
 
-3. **Check existing codebase patterns**
+4. **Check existing codebase patterns**
    - Look at how similar features are implemented
    - Follow existing conventions and patterns
    - Don't reinvent the wheel
 
-4. **Pick the highest priority story where `passes: false`**
-   - Stories are ordered by priority (lower number = higher priority)
-   - Respect dependencies - don't start a story if its dependencies haven't passed
-   - **Focus ONLY on this story**
+5. **Work on the story identified in BRIEF.md**
+   - The brief clearly identifies which story to work on
+   - **Skip completed stories** - they are already done
+   - **Focus ONLY on the current story**
 
-5. **Implement the story**
+6. **Implement the story**
    - Write clean, tested code
    - Follow the acceptance criteria exactly
    - Run tests to verify your implementation
 
-6. **Verify your implementation**
+7. **Verify your implementation**
 {verification_steps}
 
-7. **Update {progress_path} with learnings**
+8. **Update {progress_path} with learnings**
    - What patterns did you discover?
    - What gotchas should future iterations know about?
    - Keep it concise but useful
 
-8. **Commit your changes**
+9. **Commit your changes**
    - Use a clear commit message referencing the story
    - Example: "feat(story-1): Add user authentication"
 
-9. **Update the PRD JSON**
-   - Set `passes: true` for the completed story
-   - Be honest - only mark as passing if it truly meets acceptance criteria
+10. **Update the PRD JSON**
+    - Set `passes: true` for the completed story
+    - Be honest - only mark as passing if it truly meets acceptance criteria
 
-10. **Signal completion**
+11. **Signal completion**
     - If ALL stories now pass, output: `{completion_promise}`
     - This signals the Ralph loop to stop
 
 ## File Locations
 
+- **BRIEF**: `.ralph-ui/briefs/{prd_name}/BRIEF.md` (START HERE - shows completed/current stories)
 - PRD: `{prd_path}`
 - Progress: `{progress_path}`
 - This prompt: `{prompt_path}`
@@ -204,7 +210,8 @@ Focus ONLY on one story. Make minimal changes. Be honest about completion.
             completion_promise = completion_promise,
             prd_path = prd_path,
             progress_path = progress_path,
-            prompt_path = prompt_path
+            prompt_path = prompt_path,
+            prd_name = self.prd_name
         );
 
         std::fs::write(self.prompt_path(), prompt)

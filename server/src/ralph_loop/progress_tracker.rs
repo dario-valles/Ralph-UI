@@ -260,6 +260,24 @@ impl ProgressTracker {
             .collect())
     }
 
+    /// Read learnings as a formatted string for inclusion in BRIEF.md
+    ///
+    /// Returns learnings formatted as bullet points for easy agent consumption.
+    /// This is used by the BriefBuilder to include accumulated context.
+    pub fn read_learnings(&self) -> Result<String, String> {
+        let learnings = self.get_learnings()?;
+
+        if learnings.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut output = String::new();
+        for entry in learnings {
+            output.push_str(&format!("- [Iter {}] {}\n", entry.iteration, entry.content));
+        }
+        Ok(output)
+    }
+
     /// Get summary statistics
     pub fn get_summary(&self) -> Result<ProgressSummary, String> {
         let entries = self.read_entries()?;

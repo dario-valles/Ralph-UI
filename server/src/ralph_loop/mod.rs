@@ -8,6 +8,7 @@
 //!
 //! Key insight from Theo: "The Ralph loop controls Claude Code, not Claude Code controlling the Ralph loop"
 
+mod brief_builder;
 mod completion;
 mod config;
 pub mod fallback_orchestrator;
@@ -17,6 +18,7 @@ mod prompt_builder;
 pub mod retry;
 mod types;
 
+pub use brief_builder::*;
 pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
@@ -239,6 +241,8 @@ pub struct RalphLoopOrchestrator {
     progress_tracker: ProgressTracker,
     /// Prompt builder for generating iteration prompts
     prompt_builder: PromptBuilder,
+    /// Brief builder for generating BRIEF.md (US-1.1: Resume After Rate Limit)
+    brief_builder: BriefBuilder,
     /// Completion detector
     completion_detector: CompletionDetector,
     /// Cumulative metrics
@@ -282,11 +286,13 @@ impl RalphLoopOrchestrator {
         let prd_executor = PrdExecutor::new(&config.project_path, &config.prd_name);
         let progress_tracker = ProgressTracker::new(&config.project_path, &config.prd_name);
         let prompt_builder = PromptBuilder::new(&config.project_path, &config.prd_name);
+        let brief_builder = BriefBuilder::new(&config.project_path, &config.prd_name);
 
         Self {
             prd_executor,
             progress_tracker,
             prompt_builder,
+            brief_builder,
             completion_detector: CompletionDetector::new(&completion_promise),
             config,
             execution_id,
@@ -404,6 +410,9 @@ impl RalphLoopOrchestrator {
         // Generate initial prompt file
         self.prompt_builder.generate_prompt(&self.config)?;
 
+        // Generate initial BRIEF.md (US-1.1: Resume After Rate Limit)
+        self.brief_builder.generate_brief(prd, None, Some(1))?;
+
         self.state = RalphLoopState::Idle;
         self.emit_status();
 
@@ -520,9 +529,18 @@ impl RalphLoopOrchestrator {
                 }
             };
             let prd_status = self.prd_executor.get_status(&prd);
-            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}", 
+            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}",
                 prd_status.passed, prd_status.total, prd_status.progress_percent as u32,
                 prd_status.all_pass, prd_status.incomplete_story_ids);
+
+            // Generate BRIEF.md for this iteration (US-1.1: Resume After Rate Limit)
+            // This enables agents to read completed stories and skip them on resume
+            let learnings = self.progress_tracker.read_learnings().ok();
+            if let Err(e) = self.brief_builder.generate_brief(&prd, learnings.as_deref(), Some(iteration)) {
+                log::warn!("[RalphLoop] Failed to generate BRIEF.md: {}", e);
+            } else {
+                log::debug!("[RalphLoop] Generated BRIEF.md for iteration {}", iteration);
+            }
 
             // Check if all stories pass
             if prd_status.all_pass {
@@ -1266,6 +1284,7 @@ impl RalphLoopOrchestrator {
         self.prd_executor = PrdExecutor::new(&worktree_path, &self.config.prd_name);
         self.progress_tracker = ProgressTracker::new(&worktree_path, &self.config.prd_name);
         self.prompt_builder = PromptBuilder::new(&worktree_path, &self.config.prd_name);
+        self.brief_builder = BriefBuilder::new(&worktree_path, &self.config.prd_name);
 
         // Store the execution branch (different from the base PRD branch)
         self.config.branch = Some(execution_branch);
