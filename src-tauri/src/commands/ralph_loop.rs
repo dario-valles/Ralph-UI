@@ -563,6 +563,7 @@ pub async fn start_ralph_loop(
     let fallback_config = user_config.as_ref().and_then(|config| {
         if config.fallback.enabled {
             // Use fallback_chain from config if available, otherwise build from legacy fallback_agent
+            #[allow(deprecated)]
             let fallback_chain = config.fallback.fallback_chain
                 .clone()
                 .map(|chain| {
@@ -578,17 +579,23 @@ pub async fn start_ralph_loop(
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_else(|| {
-                    // Legacy behavior: build chain from primary + fallback_agent
+                    // Legacy behavior: build chain from primary + deprecated fallback_agent field
                     let mut chain = vec![agent_type.clone()];
+                    #[allow(deprecated)]
                     if let Some(ref fallback_str) = config.fallback.fallback_agent {
-                        let fallback_agent = match fallback_str.to_lowercase().as_str() {
+                        log::warn!(
+                            "[start_ralph_loop] DEPRECATED: Config uses 'fallback_agent' field. \
+                             Migrating to 'fallback_chain'. Please update your config to use \
+                             'fallback_chain' instead."
+                        );
+                        let legacy_fallback = match fallback_str.to_lowercase().as_str() {
                             "claude" => Some(AgentType::Claude),
                             "opencode" => Some(AgentType::Opencode),
                             "cursor" => Some(AgentType::Cursor),
                             "codex" => Some(AgentType::Codex),
                             _ => None,
                         };
-                        if let Some(agent) = fallback_agent {
+                        if let Some(agent) = legacy_fallback {
                             if agent != agent_type {
                                 chain.push(agent);
                             }

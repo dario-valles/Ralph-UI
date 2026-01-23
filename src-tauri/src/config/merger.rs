@@ -59,12 +59,15 @@ pub struct PartialFallbackSettings {
     pub enabled: Option<bool>,
     pub base_backoff_ms: Option<u64>,
     pub max_backoff_ms: Option<u64>,
-    pub fallback_agent: Option<String>,
     pub fallback_model: Option<String>,
     pub error_strategy: Option<ErrorStrategyConfig>,
     pub fallback_chain: Option<Vec<String>>,
     pub test_primary_recovery: Option<bool>,
     pub recovery_test_interval: Option<u32>,
+    /// DEPRECATED: Use fallback_chain instead. Kept for backward compatibility.
+    #[serde(default, skip_serializing)]
+    #[deprecated(note = "Use fallback_chain instead")]
+    pub fallback_agent: Option<String>,
 }
 
 /// Configuration merger
@@ -207,17 +210,19 @@ impl ConfigMerger {
         }
     }
 
+    #[allow(deprecated)]
     fn merge_fallback(&self, base: &FallbackSettings, over: &FallbackSettings) -> FallbackSettings {
         FallbackSettings {
             enabled: over.enabled,
             base_backoff_ms: over.base_backoff_ms,
             max_backoff_ms: over.max_backoff_ms,
-            fallback_agent: over.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
             fallback_model: over.fallback_model.clone().or_else(|| base.fallback_model.clone()),
             error_strategy: over.error_strategy.clone().or_else(|| base.error_strategy.clone()),
             fallback_chain: over.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
             test_primary_recovery: over.test_primary_recovery.or(base.test_primary_recovery),
             recovery_test_interval: over.recovery_test_interval.or(base.recovery_test_interval),
+            // Deprecated field: prefer fallback_chain, but preserve for backward compat
+            fallback_agent: over.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
         }
     }
 
@@ -271,6 +276,7 @@ impl ConfigMerger {
         }
     }
 
+    #[allow(deprecated)]
     fn merge_partial_fallback(
         &self,
         base: &FallbackSettings,
@@ -280,12 +286,13 @@ impl ConfigMerger {
             enabled: partial.enabled.unwrap_or(base.enabled),
             base_backoff_ms: partial.base_backoff_ms.unwrap_or(base.base_backoff_ms),
             max_backoff_ms: partial.max_backoff_ms.unwrap_or(base.max_backoff_ms),
-            fallback_agent: partial.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
             fallback_model: partial.fallback_model.clone().or_else(|| base.fallback_model.clone()),
             error_strategy: partial.error_strategy.clone().or_else(|| base.error_strategy.clone()),
             fallback_chain: partial.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
             test_primary_recovery: partial.test_primary_recovery.or(base.test_primary_recovery),
             recovery_test_interval: partial.recovery_test_interval.or(base.recovery_test_interval),
+            // Deprecated field: prefer fallback_chain, but preserve for backward compat
+            fallback_agent: partial.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
         }
     }
 }

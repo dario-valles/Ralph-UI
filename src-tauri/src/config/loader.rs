@@ -175,16 +175,13 @@ pub struct FallbackSettings {
     /// Maximum backoff in milliseconds
     #[serde(rename = "maxBackoffMs", alias = "max_backoff_ms", default = "default_max_backoff")]
     pub max_backoff_ms: u64,
-    /// Fallback agent type
-    #[serde(rename = "fallbackAgent", alias = "fallback_agent", default)]
-    pub fallback_agent: Option<String>,
     /// Fallback model to use (e.g., "claude-sonnet-4-5")
     #[serde(rename = "fallbackModel", alias = "fallback_model", default)]
     pub fallback_model: Option<String>,
     /// Error handling strategy (retry, skip, abort)
     #[serde(rename = "errorStrategy", alias = "error_strategy", default)]
     pub error_strategy: Option<ErrorStrategyConfig>,
-    /// Ordered list of fallback agents (advanced mode)
+    /// Ordered list of fallback agents (replaces deprecated fallback_agent)
     #[serde(rename = "fallbackChain", alias = "fallback_chain", default)]
     pub fallback_chain: Option<Vec<String>>,
     /// Whether to test if primary agent has recovered
@@ -193,23 +190,29 @@ pub struct FallbackSettings {
     /// Test primary recovery every N iterations
     #[serde(rename = "recoveryTestInterval", alias = "recovery_test_interval", default)]
     pub recovery_test_interval: Option<u32>,
+    /// DEPRECATED: Use fallback_chain instead. Kept for backward compatibility.
+    /// This field is read from old configs but not written to new ones.
+    #[serde(rename = "fallbackAgent", alias = "fallback_agent", default, skip_serializing)]
+    #[deprecated(note = "Use fallback_chain instead")]
+    pub fallback_agent: Option<String>,
 }
 
 fn default_backoff() -> u64 { 5000 }
 fn default_max_backoff() -> u64 { 300000 }
 
 impl Default for FallbackSettings {
+    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             enabled: default_true(),
             base_backoff_ms: default_backoff(),
             max_backoff_ms: default_max_backoff(),
-            fallback_agent: None,
             fallback_model: None,
             error_strategy: None,
             fallback_chain: None,
             test_primary_recovery: None,
             recovery_test_interval: None,
+            fallback_agent: None,
         }
     }
 }
@@ -277,7 +280,8 @@ impl ConfigLoader {
         Ok(Some(config))
     }
 
-    /// Validate config values
+    /// Validate config values and warn about deprecated fields
+    #[allow(deprecated)]
     fn validate_config(&self, config: &RalphConfig) -> Result<()> {
         if config.execution.max_parallel <= 0 {
             return Err(anyhow!("max_parallel must be greater than 0"));
@@ -289,6 +293,15 @@ impl ConfigLoader {
 
         if config.execution.max_retries < 0 {
             return Err(anyhow!("max_retries cannot be negative"));
+        }
+
+        // Warn about deprecated fallback_agent field
+        if config.fallback.fallback_agent.is_some() {
+            log::warn!(
+                "[ConfigLoader] DEPRECATED: 'fallback_agent' field is deprecated. \
+                 Use 'fallback_chain' instead. The value will be automatically migrated \
+                 at runtime, but please update your config file."
+            );
         }
 
         Ok(())

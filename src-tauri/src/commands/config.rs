@@ -216,9 +216,7 @@ pub async fn update_fallback_config(
     enabled: Option<bool>,
     base_backoff_ms: Option<u64>,
     max_backoff_ms: Option<u64>,
-    fallback_agent: Option<String>,
     fallback_model: Option<String>,
-    // New parameters for advanced fallback settings
     error_strategy: Option<serde_json::Value>,
     fallback_chain: Option<Vec<String>>,
     test_primary_recovery: Option<bool>,
@@ -237,13 +235,9 @@ pub async fn update_fallback_config(
     if let Some(v) = max_backoff_ms {
         config.fallback.max_backoff_ms = v;
     }
-    if fallback_agent.is_some() {
-        config.fallback.fallback_agent = fallback_agent;
-    }
     if fallback_model.is_some() {
         config.fallback.fallback_model = fallback_model;
     }
-    // Update new fields
     if let Some(v) = error_strategy {
         config.fallback.error_strategy = serde_json::from_value(v).ok();
     }
