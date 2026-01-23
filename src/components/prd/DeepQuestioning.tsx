@@ -17,7 +17,7 @@ import { QuestioningGuide } from './gsd/QuestioningGuide'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import type { QuestioningContext } from '@/types/gsd'
-import type { ChatMessage } from '@/types'
+import type { ChatMessage, ChatAttachment } from '@/types'
 import { MessageSquare, ArrowRight, Bot, ChevronRight, ChevronLeft } from 'lucide-react'
 
 interface DeepQuestioningProps {
@@ -108,8 +108,8 @@ export function DeepQuestioning({
   const isReadyToProceed = contextItemsCount >= 3
 
   // Handle sending a message
-  const handleSendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return
+  const handleSendMessage = useCallback(async (content: string, attachments?: ChatAttachment[]) => {
+    if (!content.trim() && (!attachments || attachments.length === 0)) return
 
     // Add optimistic user message
     const userMessage: ChatMessage = {
@@ -118,13 +118,14 @@ export function DeepQuestioning({
       role: 'user',
       content: content.trim(),
       createdAt: new Date().toISOString(),
+      attachments,
     }
     setLocalMessages(prev => [...prev, userMessage])
 
     try {
       // Send through the chat system if connected
       if (currentSession) {
-        await sendMessage(content.trim())
+        await sendMessage(content.trim(), attachments)
       } else {
         // Fallback: just add the message locally and use it as a note
         onContextUpdate({

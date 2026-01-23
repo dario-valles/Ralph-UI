@@ -43,7 +43,7 @@ import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
 import { prdChatApi, prdApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, ChatSession, AgentType, PRDFile } from '@/types'
+import type { PRDTypeValue, ChatSession, AgentType, PRDFile, ChatAttachment } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { ModelSelector } from '@/components/shared/ModelSelector'
@@ -303,10 +303,10 @@ export function PRDChatPanel() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, attachments?: ChatAttachment[]) => {
     startStreaming(content)
     try {
-      await sendMessage(content)
+      await sendMessage(content, attachments)
     } finally {
       stopStreaming()
     }

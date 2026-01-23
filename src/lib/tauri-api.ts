@@ -5,6 +5,7 @@ import type {
   PRDFile,
   ChatSession,
   ChatMessage,
+  ChatAttachment,
   SendMessageResponse,
   QualityAssessment,
   GuidedQuestion,
@@ -63,10 +64,11 @@ export const prdChatApi = {
   sendMessage: async (
     sessionId: string,
     content: string,
-    projectPath: string
+    projectPath: string,
+    attachments?: ChatAttachment[]
   ): Promise<SendMessageResponse> => {
     return await invoke('send_prd_chat_message', {
-      request: { sessionId, content, projectPath },
+      request: { sessionId, content, projectPath, attachments },
     })
   },
 

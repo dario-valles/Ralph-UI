@@ -552,6 +552,41 @@ export interface FallbackConfig {
 
 export type ChatMessageRole = 'user' | 'assistant' | 'system'
 
+// ============================================================================
+// Chat Attachment Types
+// ============================================================================
+
+/** Supported MIME types for chat attachments */
+export type AttachmentMimeType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+
+/** An image attachment in a chat message */
+export interface ChatAttachment {
+  /** Unique identifier for the attachment */
+  id: string
+  /** MIME type of the attachment */
+  mimeType: AttachmentMimeType
+  /** Base64-encoded data (without data URL prefix) */
+  data: string
+  /** Original filename (optional) */
+  filename?: string
+  /** Size in bytes */
+  size: number
+  /** Image width in pixels (optional) */
+  width?: number
+  /** Image height in pixels (optional) */
+  height?: number
+}
+
+/** Validation constants for attachments */
+export const ATTACHMENT_LIMITS = {
+  /** Maximum file size per attachment (10 MB) */
+  MAX_SIZE: 10 * 1024 * 1024,
+  /** Maximum number of attachments per message */
+  MAX_COUNT: 5,
+  /** Supported MIME types */
+  SUPPORTED_TYPES: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const,
+} as const
+
 export interface ChatMessage {
   id: string
   sessionId: string
@@ -559,6 +594,8 @@ export interface ChatMessage {
   content: string
   createdAt: string
   metadata?: Record<string, unknown>
+  /** Optional image attachments for this message */
+  attachments?: ChatAttachment[]
 }
 
 export type PRDTypeValue =

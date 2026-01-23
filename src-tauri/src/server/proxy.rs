@@ -1359,13 +1359,17 @@ async fn send_prd_chat_message_server(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Store user message
+    // Validate request (including attachment constraints)
+    request.validate()?;
+
+    // Store user message with any attachments
     let user_message = ChatMessage {
         id: Uuid::new_v4().to_string(),
         session_id: request.session_id.clone(),
         role: MessageRole::User,
         content: request.content.clone(),
         created_at: now.clone(),
+        attachments: request.attachments.clone(),
     };
 
     chat_ops::create_chat_message(project_path_obj, &user_message)
@@ -1404,6 +1408,7 @@ async fn send_prd_chat_message_server(
         role: MessageRole::Assistant,
         content: response_content.clone(),
         created_at: response_now.clone(),
+        attachments: None,
     };
 
     chat_ops::create_chat_message(project_path_obj, &assistant_message)

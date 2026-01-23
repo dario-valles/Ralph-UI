@@ -1,6 +1,6 @@
 // PRD Chat request/response types
 
-use crate::models::ChatMessage;
+use crate::models::{attachment_limits, ChatAttachment, ChatMessage};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -32,6 +32,39 @@ pub struct SendMessageRequest {
     pub content: String,
     /// Project path for file-based storage (required)
     pub project_path: String,
+    /// Optional image attachments
+    #[serde(default)]
+    pub attachments: Option<Vec<ChatAttachment>>,
+}
+
+impl SendMessageRequest {
+    /// Validate the request, including attachment constraints
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(attachments) = &self.attachments {
+            // Check max attachments count
+            if attachments.len() > attachment_limits::MAX_ATTACHMENTS_PER_MESSAGE {
+                return Err(format!(
+                    "Too many attachments: {} (max {})",
+                    attachments.len(),
+                    attachment_limits::MAX_ATTACHMENTS_PER_MESSAGE
+                ));
+            }
+
+            // Check each attachment size
+            for (i, attachment) in attachments.iter().enumerate() {
+                if attachment.size > attachment_limits::MAX_ATTACHMENT_SIZE {
+                    return Err(format!(
+                        "Attachment {} is too large: {} bytes (max {} bytes)",
+                        i + 1,
+                        attachment.size,
+                        attachment_limits::MAX_ATTACHMENT_SIZE
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // ============================================================================

@@ -5,6 +5,7 @@ import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   ChatSession,
   ChatMessage,
+  ChatAttachment,
   QualityAssessment,
   GuidedQuestion,
   ExtractedPRDContent,
@@ -40,7 +41,7 @@ interface PRDChatStore extends AsyncState {
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
   updateSessionAgent: (agentType: string) => Promise<void>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>
   loadHistory: (sessionId: string) => Promise<void>
   loadSessions: (projectPath?: string) => Promise<void>
   setCurrentSession: (session: ChatSession | null) => void
@@ -128,7 +129,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   },
 
   // Send a message and receive a response
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, attachments?: ChatAttachment[]) => {
     const { currentSession } = get()
     if (!currentSession) {
       throw new Error('No active session')
@@ -144,6 +145,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
+      attachments,
     }
 
     // Add optimistic message and set streaming state
@@ -155,7 +157,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     }))
 
     try {
-      const response = await prdChatApi.sendMessage(currentSession.id, content, currentSession.projectPath)
+      const response = await prdChatApi.sendMessage(currentSession.id, content, currentSession.projectPath, attachments)
 
       // Replace optimistic message with actual messages and update session message count
       set((state) => {

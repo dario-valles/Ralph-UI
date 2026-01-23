@@ -237,6 +237,7 @@ mod tests {
             role: MessageRole::User,
             content: "Hello".to_string(),
             created_at: Utc::now().to_rfc3339(),
+            attachments: None,
         };
 
         create_chat_message(temp_dir.path(), &message).unwrap();

@@ -175,7 +175,7 @@ describe('prdChatStore', () => {
       store.currentSession = mockSession
       await store.sendMessage('Help me create a PRD for a todo app')
 
-      expect(prdChatApi.sendMessage).toHaveBeenCalledWith('session-1', 'Help me create a PRD for a todo app', '/test/project')
+      expect(prdChatApi.sendMessage).toHaveBeenCalledWith('session-1', 'Help me create a PRD for a todo app', '/test/project', undefined)
       expect(usePRDChatStore.getState().messages).toContainEqual(mockUserMessage)
       expect(usePRDChatStore.getState().messages).toContainEqual(mockAssistantMessage)
     })

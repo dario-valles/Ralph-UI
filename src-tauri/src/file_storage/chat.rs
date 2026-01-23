@@ -4,7 +4,7 @@
 
 use super::index::{update_index_entry, ChatIndexEntry};
 use super::{atomic_write, ensure_dir, get_ralph_ui_dir, read_json, FileResult};
-use crate::models::{ChatMessage, ChatSession, MessageRole};
+use crate::models::{ChatAttachment, ChatMessage, ChatSession, MessageRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -67,6 +67,9 @@ pub struct ChatMessageEntry {
     pub role: String,
     pub content: String,
     pub created_at: DateTime<Utc>,
+    /// Optional attachments (images) for this message
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<ChatAttachment>>,
 }
 
 impl From<&ChatMessage> for ChatMessageEntry {
@@ -78,6 +81,7 @@ impl From<&ChatMessage> for ChatMessageEntry {
             created_at: DateTime::parse_from_rfc3339(&msg.created_at)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
+            attachments: msg.attachments.clone(),
         }
     }
 }
@@ -90,6 +94,7 @@ impl From<&ChatMessageEntry> for ChatMessage {
             role: entry.role.parse().unwrap_or(MessageRole::User),
             content: entry.content.clone(),
             created_at: entry.created_at.to_rfc3339(),
+            attachments: entry.attachments.clone(),
         }
     }
 }
@@ -345,12 +350,14 @@ mod tests {
                     role: "user".to_string(),
                     content: "Hello".to_string(),
                     created_at: Utc::now(),
+                    attachments: None,
                 },
                 ChatMessageEntry {
                     id: "msg-2".to_string(),
                     role: "assistant".to_string(),
                     content: "Hi there!".to_string(),
                     created_at: Utc::now(),
+                    attachments: None,
                 },
             ],
             pending_operation_started_at: None,
@@ -433,6 +440,7 @@ mod tests {
             role: MessageRole::User,
             content: "New message".to_string(),
             created_at: Utc::now().to_rfc3339(),
+            attachments: None,
         };
 
         add_message_to_chat(temp_dir.path(), "chat-123", &message).unwrap();

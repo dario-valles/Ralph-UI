@@ -106,6 +106,7 @@ pub async fn start_prd_chat_session(
             role: MessageRole::Assistant,
             content: welcome_message,
             created_at: now,
+            attachments: None,
         };
 
         chat_ops::create_chat_message(project_path_obj, &assistant_message)
@@ -172,6 +173,9 @@ pub async fn send_prd_chat_message(
     app_handle: tauri::AppHandle,
     request: SendMessageRequest,
 ) -> Result<SendMessageResponse, String> {
+    // Validate request (including attachment constraints)
+    request.validate()?;
+
     // Get project_path from request (required for file storage)
     let project_path_obj = as_path(&request.project_path);
 
@@ -181,13 +185,14 @@ pub async fn send_prd_chat_message(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Store user message
+    // Store user message with any attachments
     let user_message = ChatMessage {
         id: Uuid::new_v4().to_string(),
         session_id: request.session_id.clone(),
         role: MessageRole::User,
         content: request.content.clone(),
         created_at: now.clone(),
+        attachments: request.attachments.clone(),
     };
 
     chat_ops::create_chat_message(project_path_obj, &user_message)
@@ -244,6 +249,7 @@ pub async fn send_prd_chat_message(
         role: MessageRole::Assistant,
         content: response_content.clone(),
         created_at: response_now.clone(),
+        attachments: None,
     };
 
     chat_ops::create_chat_message(project_path_obj, &assistant_message)
@@ -2069,8 +2075,17 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
         This file should contain:\n\
         - Current understanding of requirements\n\
         - Key decisions and rationale\n\
-        - Draft user stories (using format: `### US-XXX: Title`)\n\
+        - User stories with acceptance criteria\n\
         - Open questions to resolve\n\n\
+        **IMPORTANT: User Story Format**\n\
+        When writing user stories, ALWAYS use markdown headers (not bold text):\n\n\
+        ```markdown\n\
+        #### US-1.1: Story Title\n\n\
+        **Acceptance Criteria:**\n\
+        - Criterion 1\n\
+        - Criterion 2\n\
+        ```\n\n\
+        Never use `**US-1.1:**` bold format. Always use `#### US-X.X:` headers.\n\n\
         UPDATE THIS FILE NOW with any new insights from this exchange.\n\
         Write the file content using your file writing capabilities.\n\n\
         === END PLAN FILE INSTRUCTION ===\n\n"
@@ -2174,6 +2189,7 @@ mod tests {
                 role: MessageRole::User,
                 content: "I want to build a todo app".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "2".to_string(),
@@ -2181,6 +2197,7 @@ mod tests {
                 role: MessageRole::Assistant,
                 content: "Great! Let me help you define the requirements.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
             },
         ];
 
@@ -2267,6 +2284,7 @@ mod tests {
             role: MessageRole::Assistant,
             content: "Hello, world!".to_string(),
             created_at: "2026-01-17T00:00:00Z".to_string(),
+            attachments: None,
         };
 
         let serialized = serde_json::to_string(&message).unwrap();
@@ -2302,6 +2320,7 @@ mod tests {
                 role: MessageRole::User,
                 content: "I want to build a todo app that must support multiple lists and must allow task prioritization".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "2".to_string(),
@@ -2309,6 +2328,7 @@ mod tests {
                 role: MessageRole::Assistant,
                 content: "I'll help you create a comprehensive PRD for your todo app. Here's the overview: The todo application will support multiple task lists with prioritization features.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
             },
         ];
 
@@ -2329,6 +2349,7 @@ mod tests {
                 role: MessageRole::User,
                 content: "I want to build a todo app. As a user, I want to create tasks so that I can track my work.".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "2".to_string(),
@@ -2336,6 +2357,7 @@ mod tests {
                 role: MessageRole::Assistant,
                 content: "The app must support task creation. The system shall allow task prioritization. We should implement a clean UI.".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "3".to_string(),
@@ -2343,6 +2365,7 @@ mod tests {
                 role: MessageRole::User,
                 content: "The acceptance criteria: verify that tasks can be created, ensure tasks appear in list".to_string(),
                 created_at: "2026-01-17T00:02:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "4".to_string(),
@@ -2350,6 +2373,7 @@ mod tests {
                 role: MessageRole::Assistant,
                 content: "Tasks to implement: 1. Create task model 2. Build task list component 3. Add task creation form. Success metric: increase task completion by 20%".to_string(),
                 created_at: "2026-01-17T00:03:00Z".to_string(),
+                attachments: None,
             },
         ];
 
@@ -2459,6 +2483,7 @@ mod tests {
                 role: MessageRole::User,
                 content: "I need a user authentication system. As a user, I want to log in so that I can access my data.".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
             },
             ChatMessage {
                 id: "2".to_string(),
@@ -2466,6 +2491,7 @@ mod tests {
                 role: MessageRole::Assistant,
                 content: "Summary: You want to build a secure authentication system.\n\nThe system must support OAuth2. Users should be able to reset passwords.\n\nTasks:\n1. Implement login endpoint\n2. Create session management\n3. Add password reset flow".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
             },
         ];
 

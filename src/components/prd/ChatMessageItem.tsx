@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import type { ChatMessage } from '@/types'
 import { cn } from '@/lib/utils'
+import { AttachmentList } from './AttachmentPreview'
 
 interface ChatMessageItemProps {
   message: ChatMessage
@@ -11,6 +12,7 @@ interface ChatMessageItemProps {
 export function ChatMessageItem({ message }: ChatMessageItemProps) {
   const isUser = message.role === 'user'
   const timestamp = new Date(message.createdAt)
+  const hasAttachments = message.attachments && message.attachments.length > 0
 
   return (
     <div
@@ -41,7 +43,12 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
           </span>
         </div>
         {isUser ? (
-          <p className="text-sm leading-relaxed">{message.content}</p>
+          <div className="space-y-2">
+            {message.content && (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+            )}
+            {hasAttachments && <AttachmentList attachments={message.attachments!} />}
+          </div>
         ) : (
           <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown

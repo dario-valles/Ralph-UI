@@ -4,8 +4,8 @@ pub mod prd_chat;
 pub mod state_machine;
 
 pub use prd_chat::{
-    ChatMessage, ChatSession, ExtractedPRDContent, GuidedQuestion, MessageRole,
-    PRDType, QualityAssessment, QuestionType,
+    attachment_limits, AttachmentMimeType, ChatAttachment, ChatMessage, ChatSession,
+    ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
 };
 
 use chrono::{DateTime, Utc};

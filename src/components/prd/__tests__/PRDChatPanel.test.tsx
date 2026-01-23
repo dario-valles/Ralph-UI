@@ -381,7 +381,7 @@ describe('PRDChatPanel', () => {
       const sendButton = screen.getByRole('button', { name: /send/i })
       await user.click(sendButton)
 
-      expect(mockSendMessage).toHaveBeenCalledWith('Create a PRD for my project')
+      expect(mockSendMessage).toHaveBeenCalledWith('Create a PRD for my project', undefined)
     })
 
     it('clears input after sending message', async () => {
@@ -404,7 +404,7 @@ describe('PRDChatPanel', () => {
       const input = screen.getByPlaceholderText(/Type your message/i)
       await user.type(input, 'Test message{enter}')
 
-      expect(mockSendMessage).toHaveBeenCalledWith('Test message')
+      expect(mockSendMessage).toHaveBeenCalledWith('Test message', undefined)
     })
 
     it('does not send empty messages', async () => {
@@ -827,7 +827,7 @@ describe('PRDChatPanel', () => {
       await user.type(input, 'Test')
       await user.keyboard('{Enter}')
 
-      expect(mockSendMessage).toHaveBeenCalledWith('Test')
+      expect(mockSendMessage).toHaveBeenCalledWith('Test', undefined)
     })
   })
 

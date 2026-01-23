@@ -3,6 +3,98 @@
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
+// Attachment Types
+// ============================================================================
+
+/// Supported MIME types for chat attachments
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttachmentMimeType {
+    #[serde(rename = "image/png")]
+    ImagePng,
+    #[serde(rename = "image/jpeg")]
+    ImageJpeg,
+    #[serde(rename = "image/gif")]
+    ImageGif,
+    #[serde(rename = "image/webp")]
+    ImageWebp,
+}
+
+impl AttachmentMimeType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AttachmentMimeType::ImagePng => "image/png",
+            AttachmentMimeType::ImageJpeg => "image/jpeg",
+            AttachmentMimeType::ImageGif => "image/gif",
+            AttachmentMimeType::ImageWebp => "image/webp",
+        }
+    }
+
+    /// Get file extension for this MIME type
+    pub fn extension(&self) -> &'static str {
+        match self {
+            AttachmentMimeType::ImagePng => "png",
+            AttachmentMimeType::ImageJpeg => "jpg",
+            AttachmentMimeType::ImageGif => "gif",
+            AttachmentMimeType::ImageWebp => "webp",
+        }
+    }
+}
+
+impl std::fmt::Display for AttachmentMimeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for AttachmentMimeType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "image/png" => Ok(AttachmentMimeType::ImagePng),
+            "image/jpeg" | "image/jpg" => Ok(AttachmentMimeType::ImageJpeg),
+            "image/gif" => Ok(AttachmentMimeType::ImageGif),
+            "image/webp" => Ok(AttachmentMimeType::ImageWebp),
+            _ => Err(format!(
+                "Invalid attachment MIME type: '{}'. Expected 'image/png', 'image/jpeg', 'image/gif', or 'image/webp'",
+                s
+            )),
+        }
+    }
+}
+
+/// An attachment (image) in a chat message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatAttachment {
+    /// Unique identifier for the attachment
+    pub id: String,
+    /// MIME type of the attachment
+    pub mime_type: AttachmentMimeType,
+    /// Base64-encoded data (without data URL prefix)
+    pub data: String,
+    /// Original filename (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    /// Size in bytes
+    pub size: u64,
+    /// Image width in pixels (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    /// Image height in pixels (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+}
+
+/// Validation constants for attachments
+pub mod attachment_limits {
+    /// Maximum file size per attachment (10 MB)
+    pub const MAX_ATTACHMENT_SIZE: u64 = 10 * 1024 * 1024;
+    /// Maximum number of attachments per message
+    pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 5;
+}
+
+// ============================================================================
 // Message Role Enum
 // ============================================================================
 
@@ -96,6 +188,9 @@ pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
     pub created_at: String,
+    /// Optional attachments (images) for this message
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<ChatAttachment>>,
 }
 
 // ============================================================================
