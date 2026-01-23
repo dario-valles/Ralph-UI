@@ -521,6 +521,13 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
                 .with_manager(&repo_path, |mgr| mgr.delete_branch(&branch_name)))
         }
 
+        "git_list_worktrees" => {
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.list_worktrees()))
+        }
+
         // =====================================================================
         // Config Commands (use state.config_state)
         // =====================================================================
