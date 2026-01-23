@@ -1,10 +1,10 @@
 # Ralph UI
 
-**A modern cross-platform application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. Runs as a native desktop app or in your browser via server mode.**
+**A modern application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. Access via browser from any device on your network.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://v2.tauri.app/)
-[![React](https://img.shields.io/badge/React-18+-61DAFB.svg)](https://reactjs.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org/)
+[![React](https://img.shields.io/badge/React-19+-61DAFB.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg)](https://www.typescriptlang.org/)
 
 ---
@@ -15,7 +15,7 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 
 ### Key Features
 
-- **Desktop & Browser Access** - Run as a native app or access via browser from any device
+- **Browser Access** - Access from any device on your network via HTTP/WebSocket
 - **Mission Control** - Bird's-eye view of all projects and active agents
 - **Multi-Project Support** - Manage multiple projects with VS Code-style project switching
 - **Multi-Agent Orchestration** - Run multiple AI agents in parallel with complete isolation
@@ -37,10 +37,11 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 - xterm.js for terminal emulation
 
 **Backend:**
-- Rust with Tauri 2.0
+- Rust with Axum HTTP/WebSocket server
 - File-based JSON storage in `.ralph-ui/`
 - git2-rs for git operations
 - tokio for async I/O
+- portable-pty for terminal emulation
 
 **Development:**
 - Bun for fast package management
@@ -55,7 +56,6 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 
 - **Rust:** 1.75+ (install from [rustup.rs](https://rustup.rs))
 - **Bun:** 1.2+ (recommended) or Node.js 18+
-- **Tauri CLI:** `cargo install tauri-cli`
 
 ### Installation
 
@@ -67,14 +67,22 @@ cd Ralph-UI
 # Install dependencies
 bun install
 
-# Run in development mode
-bun run tauri dev
+# Start the backend server (Terminal 1)
+bun run server:dev
+
+# Start the frontend dev server (Terminal 2)
+bun run dev
+
+# Open http://localhost:1420 in your browser
+# Enter the auth token displayed by the server
 
 # Run tests
-bun run test
+bun run test           # Frontend tests
+bun run cargo:test     # Backend tests
 
 # Build for production
-bun run tauri build
+bun run cargo:build    # Backend binary
+bun run build          # Frontend assets
 ```
 
 See [QUICK_START.md](./QUICK_START.md) for detailed setup instructions.
@@ -133,41 +141,25 @@ Signal handlers (SIGINT, SIGTERM, SIGHUP) ensure clean shutdown:
 - Cleans up worktrees
 - Preserves committed branches
 
-### Server Mode (Browser Access)
+### Server Commands
 
-Ralph UI can run as an HTTP/WebSocket server, enabling browser-based access from any device on your network - no desktop app installation required. The frontend works identically in both Tauri desktop and browser modes.
-
-**Quick Start:**
-```bash
-# Terminal 1: Start the backend server
-bun run server
-
-# Terminal 2: Start the frontend dev server
-bun run dev
-
-# Open http://localhost:1420 in your browser
-# Enter the auth token displayed by the server
-```
-
-**Server Commands:**
 ```bash
 bun run server           # Production server (port 3420)
 bun run server:dev       # Development mode (faster builds)
 bun run server:dev:token # Dev mode with fixed token (persists across restarts)
 ```
 
-**Feature Parity:**
+### Feature Availability
 
-| Feature | Desktop | Browser |
-|---------|---------|---------|
-| All UI features | ✓ | ✓ |
-| Real-time events | ✓ | ✓ (WebSocket) |
-| Live terminal output | ✓ | ✓ (WebSocket PTY) |
-| File watching | ✓ | ✓ |
-| Native file dialogs | ✓ | ✗ (uses folder browser) |
-| PTY terminal input | ✓ | ✗ (output only) |
+| Feature | Status |
+|---------|--------|
+| All UI features | ✓ |
+| Real-time events (WebSocket) | ✓ |
+| Live terminal output (WebSocket PTY) | ✓ |
+| File watching | ✓ |
+| Directory browser | ✓ |
 
-See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation including authentication, endpoints, and architecture.
+See [CLAUDE.md](./CLAUDE.md) for detailed server documentation including authentication, endpoints, and architecture.
 
 ---
 
@@ -175,7 +167,7 @@ See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation including au
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     Ralph UI (Tauri)                    │
+│                     Ralph UI                            │
 ├─────────────────────────────────────────────────────────┤
 │  Frontend (React + TypeScript)                          │
 │  - Mission Control with multi-project overview          │
@@ -184,16 +176,45 @@ See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation including au
 │  - PRD creation with AI chat interface                  │
 │  - Git timeline and PR management                       │
 ├─────────────────────────────────────────────────────────┤
-│  Backend (Rust)                                         │
+│  Backend (Rust + Axum)                                  │
+│  - HTTP/WebSocket server                                │
 │  - Task engine (PRD parsing, state tracking)            │
 │  - Git manager (worktrees, branches, commits)           │
-│  - Agent manager (spawn, monitor, kill)                 │
+│  - Agent manager (spawn, monitor, kill, PTY)            │
 │  - File storage (.ralph-ui/ JSON files)                 │
 ├─────────────────────────────────────────────────────────┤
 │  External Integrations                                  │
 │  - Claude Code CLI, OpenCode CLI                        │
 │  - GitHub API (Issues, PRs)                             │
 └─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Deployment
+
+### Docker
+
+```dockerfile
+FROM rust:latest AS builder
+WORKDIR /app
+COPY server .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/ralph-ui /usr/local/bin/
+EXPOSE 3420
+CMD ["ralph-ui", "--bind", "0.0.0.0"]
+```
+
+### Binary
+
+```bash
+# Build release binary (14MB)
+bun run cargo:build
+
+# Run directly
+./server/target/release/ralph-ui --port 3420 --bind 0.0.0.0
 ```
 
 ---
@@ -226,8 +247,8 @@ We welcome contributions! This project is in active development.
 
 | Metric | Target |
 |--------|--------|
-| App Bundle Size | < 15 MB |
-| Startup Time | < 1s (cold), < 0.3s (warm) |
+| Binary Size | ~14 MB |
+| Startup Time | < 1s |
 | Memory Usage | < 100 MB idle, < 300 MB with 5 agents |
 | UI Responsiveness | < 100ms for all interactions |
 
@@ -244,10 +265,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Geoffrey Huntley** for pioneering the Ralph Wiggum Loop technique
 - **Anthropic** for Claude Code and official Ralph Wiggum plugin
 - **ralph-tui team** for inspiration and architectural patterns
-- **Tauri team** for the incredible cross-platform framework
 
 ---
 
-**Built with Tauri 2.0, React, and Rust**
+**Built with Rust, Axum, React, and TypeScript**
 
 *Making autonomous AI development accessible, transparent, and delightful.*

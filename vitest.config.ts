@@ -25,7 +25,7 @@ export default defineConfig({
         '**/*.test.ts',
         '**/*.spec.tsx',
         '**/*.test.tsx',
-        'src-tauri/',
+        'server/',
         'e2e/',
         '*.config.ts',
         '*.config.js',

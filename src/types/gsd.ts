@@ -1,5 +1,5 @@
 // GSD (Get Stuff Done) workflow types
-// These types must match the Rust structs in src-tauri/src/gsd/
+// These types must match the Rust structs in server/src/gsd/
 
 /**
  * Phases in the GSD workflow

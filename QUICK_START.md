@@ -19,12 +19,7 @@ Get Ralph UI running on your machine in under 10 minutes.
    curl -fsSL https://bun.sh/install | bash
    ```
 
-3. **Tauri CLI**
-   ```bash
-   cargo install tauri-cli
-   ```
-
-4. **Platform Dependencies**
+3. **Platform Dependencies**
 
    **macOS:**
    ```bash
@@ -34,13 +29,11 @@ Get Ralph UI running on your machine in under 10 minutes.
    **Linux (Ubuntu/Debian):**
    ```bash
    sudo apt update
-   sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
-     libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+   sudo apt install build-essential curl wget file libssl-dev pkg-config
    ```
 
    **Windows:**
    - Install [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-   - WebView2 (pre-installed on Windows 11)
 
 ---
 
@@ -62,48 +55,44 @@ bun install
 ### Development Mode
 
 ```bash
-bun run tauri dev
-```
+# Terminal 1: Start the backend server
+bun run server:dev
 
-This starts:
-- Vite dev server with hot reload for frontend changes
-- Tauri app with the Rust backend
+# Terminal 2: Start the frontend dev server
+bun run dev
+
+# Open http://localhost:1420 in your browser
+# Enter the auth token displayed by the server
+```
 
 **First run:** Rust compilation takes 2-5 minutes. Subsequent runs are fast (~10s).
 
 ### Production Build
 
 ```bash
-bun run tauri build
+# Build backend binary
+bun run cargo:build
+
+# Build frontend assets
+bun run build
+
+# Run the server
+./server/target/release/ralph-ui --port 3420 --bind 0.0.0.0
 ```
 
-Output locations:
-- **macOS:** `src-tauri/target/release/bundle/dmg/`
-- **Windows:** `src-tauri/target/release/bundle/msi/`
-- **Linux:** `src-tauri/target/release/bundle/deb/` or `.appimage`
+Output: Single binary at `server/target/release/ralph-ui` (~14MB)
 
-### Server Mode (Browser Access)
-
-Run Ralph UI as a server and access it from any browser on your network:
+### Server Variants
 
 ```bash
-# Terminal 1: Start the backend server
-bun run server
-
-# Terminal 2: Start the frontend dev server
-bun run dev
-
-# Open http://localhost:1420 in your browser
+bun run server           # Production server (port 3420)
+bun run server:dev       # Development mode (faster builds)
+bun run server:dev:token # Dev mode with fixed token (no re-entry after restart)
 ```
 
 The server displays an auth token on startup - enter it in the browser connection dialog.
 
-**Server variants:**
-- `bun run server` - Production server (port 3420)
-- `bun run server:dev` - Development mode (faster builds)
-- `bun run server:dev:token` - Dev mode with fixed token (no re-entry after restart)
-
-See [CLAUDE.md](./CLAUDE.md) for full server mode documentation.
+See [CLAUDE.md](./CLAUDE.md) for full server documentation.
 
 ---
 
@@ -115,7 +104,7 @@ See [CLAUDE.md](./CLAUDE.md) for full server mode documentation.
 bun run test
 ```
 
-Runs unit tests across all stores and components.
+Runs unit tests across all stores and components (345+ tests).
 
 ### E2E Tests (Claude Code Skill)
 
@@ -131,11 +120,10 @@ Markdown-based E2E tests executed via Claude Code skill with browser automation.
 ### Backend Tests (Rust)
 
 ```bash
-cd src-tauri
-cargo test
+bun run cargo:test
 ```
 
-Runs 650+ backend tests covering:
+Runs 670+ backend tests covering:
 - File storage operations
 - Git operations
 - Agent management
@@ -156,11 +144,11 @@ Ralph-UI/
 │   │   ├── prd/            # PRD management and GSD workflow
 │   │   └── git/            # Git operations
 │   ├── stores/             # Zustand state management
-│   ├── lib/                # Utilities and Tauri API
+│   ├── lib/                # Utilities and API wrappers
 │   └── types/              # TypeScript types
-├── src-tauri/              # Backend (Rust + Tauri)
+├── server/              # Backend (Rust + Axum)
 │   ├── src/
-│   │   ├── commands/       # Tauri IPC commands
+│   │   ├── commands/       # Business logic handlers
 │   │   ├── file_storage/   # JSON file storage
 │   │   ├── git/            # Git operations (git2-rs)
 │   │   ├── agents/         # Agent process management
@@ -180,19 +168,19 @@ Ralph-UI/
 
 1. Edit files in `src/`
 2. Changes auto-reload via Vite HMR
-3. Run `bun test` to verify
+3. Run `bun run test` to verify
 
 ### Making Backend Changes
 
-1. Edit files in `src-tauri/src/`
-2. Restart `bun run tauri dev` (Ctrl+C and re-run)
-3. Run `cargo test` in `src-tauri/` to verify
+1. Edit files in `server/src/`
+2. Restart server (Ctrl+C and re-run `bun run server:dev`)
+3. Run `bun run cargo:test` to verify
 
-### Adding a New Tauri Command
+### Adding a New Backend Command
 
-1. Define command in `src-tauri/src/commands/`
-2. Register in `src-tauri/src/main.rs`
-3. Add TypeScript wrapper in `src/lib/tauri-api.ts`
+1. Define function in `server/src/commands/`
+2. Add route in `server/src/server/proxy.rs`
+3. Add TypeScript wrapper in `src/lib/invoke.ts` or API file
 4. Use via `invoke('command_name', { params })`
 
 ---
@@ -212,10 +200,10 @@ sudo apt install mold
 lsof -ti:1420 | xargs kill -9
 ```
 
-### WebKit not found (Linux)
+### Port 3420 already in use
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev
+bun run server:kill
 ```
 
 ---
@@ -224,13 +212,15 @@ sudo apt install libwebkit2gtk-4.1-dev
 
 | Command | Description |
 |---------|-------------|
-| `bun run tauri dev` | Start development server |
-| `bun run tauri build` | Build for production |
-| `bun run test` | Run unit tests |
+| `bun run server:dev` | Start backend server (dev mode) |
+| `bun run dev` | Start frontend dev server |
+| `bun run server` | Start backend server (production) |
+| `bun run cargo:build` | Build production binary |
+| `bun run test` | Run frontend unit tests |
+| `bun run cargo:test` | Run backend unit tests |
 | `/e2e` | Run E2E tests (Claude Code skill) |
 | `bun run lint` | Run ESLint |
 | `bun run format` | Format with Prettier |
-| `bun run server` | Start HTTP/WebSocket server |
 
 ---
 

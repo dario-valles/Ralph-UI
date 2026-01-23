@@ -35,17 +35,17 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`, `.ralph-ui`, and `.worktrees`
+      // 3. tell Vite to ignore watching `server`, `.ralph-ui`, and `.worktrees`
       // Use both globs and absolute paths for maximum reliability
       ignored: [
-        '**/src-tauri/**',
+        '**/server/**',
         '**/.ralph/**',
         '**/.ralph-ui/**',
         '**/.worktrees/**',
         '**/.git/**',
         '**/ralph-ui.db/**',
         '**/ralph-ui.db-journal/**',
-        path.resolve(__dirname, 'src-tauri'),
+        path.resolve(__dirname, 'server'),
         path.resolve(__dirname, '.ralph'),
         path.resolve(__dirname, '.ralph-ui'),
         path.resolve(__dirname, '.worktrees'),
