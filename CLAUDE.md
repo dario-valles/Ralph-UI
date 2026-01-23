@@ -60,13 +60,19 @@ bun run server
 # Development mode (faster builds, debug symbols)
 bun run server:dev
 
-# Custom port/bind address
-cd src-tauri && cargo run --features server --release -- --server --port 8080 --bind 127.0.0.1
+# Development with fixed token (no need to re-enter after restart)
+bun run server:dev:token
+
+# Custom port/bind/token
+cd src-tauri && cargo run --features server -- --server --port 8080 --bind 127.0.0.1 --token my-secret-token
+
+# Or use environment variable
+RALPH_SERVER_TOKEN=my-secret-token bun run server:dev
 ```
 
 The server displays a startup banner with:
 - Server URL (e.g., `http://0.0.0.0:3420`)
-- Auth token (32-char hex string, generated on each startup)
+- Auth token (32-char hex string, or your custom token)
 
 ### Browser Connection
 

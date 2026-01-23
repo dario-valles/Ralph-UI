@@ -97,7 +97,7 @@ tokio-tungstenite = { version = "0.24", optional = true }
 futures-util = { version = "0.3", optional = true }
 
 # CLI argument parsing
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # Signal handling for graceful shutdown
 [target.'cfg(unix)'.dependencies]

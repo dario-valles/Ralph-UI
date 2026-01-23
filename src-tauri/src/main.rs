@@ -19,6 +19,11 @@ struct Cli {
     /// Address to bind the server to (only used with --server)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
+
+    /// Fixed auth token for server mode (or set RALPH_SERVER_TOKEN env var)
+    /// If not provided, a random token is generated on each startup
+    #[arg(long, env = "RALPH_SERVER_TOKEN")]
+    token: Option<String>,
 }
 
 fn main() {
@@ -27,7 +32,7 @@ fn main() {
     if cli.server {
         #[cfg(feature = "server")]
         {
-            run_server_mode(cli.port, &cli.bind);
+            run_server_mode(cli.port, &cli.bind, cli.token);
         }
 
         #[cfg(not(feature = "server"))]
@@ -43,7 +48,7 @@ fn main() {
 }
 
 #[cfg(feature = "server")]
-fn run_server_mode(port: u16, bind: &str) {
+fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
     use ralph_ui_lib::agents::AgentManager;
     use ralph_ui_lib::server::{self, generate_auth_token, ServerAppState};
     use std::sync::Arc;
@@ -102,8 +107,8 @@ fn run_server_mode(port: u16, bind: &str) {
         // Initialize Ralph loop state
         let ralph_loop_state = ralph_ui_lib::commands::ralph_loop::RalphLoopManagerState::new();
 
-        // Generate auth token
-        let auth_token = generate_auth_token();
+        // Use provided token or generate a random one
+        let auth_token = token.unwrap_or_else(generate_auth_token);
 
         // Create server state
         let state = ServerAppState::new(
