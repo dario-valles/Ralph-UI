@@ -25,6 +25,42 @@ impl Default for AssignmentStrategy {
     }
 }
 
+/// Merge strategy for collaborative mode (US-5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeStrategy {
+    /// Never merge automatically - manual merge only
+    Never,
+    /// Merge only when all stories are complete
+    OnSuccess,
+    /// Merge at regular intervals (configured via merge_interval)
+    Periodic,
+    /// Always attempt merge at the end, regardless of outcome
+    Always,
+}
+
+impl Default for MergeStrategy {
+    fn default() -> Self {
+        Self::Never
+    }
+}
+
+/// Conflict resolution strategy for merged conflicts (US-5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictResolution {
+    /// Stop all agents if a merge conflict is detected
+    StopOnConflict,
+    /// Continue agents even if a merge conflict is detected
+    ContinueOnConflict,
+}
+
+impl Default for ConflictResolution {
+    fn default() -> Self {
+        Self::StopOnConflict
+    }
+}
+
 /// Generate a consistent PRD filename from title and ID
 ///
 /// Format: `{sanitized-title}-{8-char-id}`
@@ -185,6 +221,22 @@ pub struct PrdExecutionConfig {
     /// Create PRs as drafts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub draft_prs: Option<bool>,
+
+    /// Merge strategy for collaborative mode (US-5.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_strategy: Option<String>,
+
+    /// Merge interval in iterations (US-5.1) - merge every N iterations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_interval: Option<u32>,
+
+    /// Conflict resolution strategy (US-5.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_resolution: Option<String>,
+
+    /// Target branch for merges (US-5.1) - defaults to main
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_target_branch: Option<String>,
 }
 
 impl Default for PrdExecutionConfig {
@@ -201,6 +253,10 @@ impl Default for PrdExecutionConfig {
             template_name: None,
             auto_create_prs: None,
             draft_prs: None,
+            merge_strategy: None,
+            merge_interval: None,
+            conflict_resolution: None,
+            merge_target_branch: None,
         }
     }
 }
@@ -248,6 +304,10 @@ impl PrdExecutionConfig {
             || self.template_name.is_some()
             || self.auto_create_prs.is_some()
             || self.draft_prs.is_some()
+            || self.merge_strategy.is_some()
+            || self.merge_interval.is_some()
+            || self.conflict_resolution.is_some()
+            || self.merge_target_branch.is_some()
     }
 }
 
@@ -1676,6 +1736,10 @@ mod tests {
             template_name: Some("default".to_string()),
             auto_create_prs: Some(true),
             draft_prs: Some(false),
+            merge_strategy: None,
+            merge_interval: None,
+            conflict_resolution: None,
+            merge_target_branch: None,
         });
 
         let json = serde_json::to_string_pretty(&prd).unwrap();

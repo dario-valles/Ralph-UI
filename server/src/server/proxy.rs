@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 // Re-export types needed for proxy commands
 use crate::commands::ralph_loop::RalphStoryInput;
-use crate::ralph_loop::{ExecutionSnapshot, RalphConfig};
+use crate::ralph_loop::{ConflictResolution, ExecutionSnapshot, MergeStrategy, RalphConfig};
 
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
@@ -2016,6 +2016,10 @@ async fn start_ralph_loop_server(
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        merge_strategy: MergeStrategy::default(),
+        merge_interval: 0,
+        conflict_resolution: ConflictResolution::default(),
+        merge_target_branch: "main".to_string(),
     };
 
     // Create orchestrator

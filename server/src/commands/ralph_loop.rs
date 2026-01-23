@@ -5,11 +5,11 @@
 use crate::commands::ConfigState;
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    AssignmentsFile, AssignmentsManager, ErrorStrategy, ExecutionSnapshot, FallbackChainConfig,
-    FileInUse, LearningEntry, LearningType, LearningsFile, LearningsManager, PrdExecutor,
-    PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig,
-    RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
-    RalphStory, RetryConfig, SnapshotStore,
+    AssignmentsFile, AssignmentsManager, ConflictResolution, ErrorStrategy, ExecutionSnapshot,
+    FallbackChainConfig, FileInUse, LearningEntry, LearningType, LearningsFile, LearningsManager,
+    MergeStrategy, PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder,
+    RalphConfig, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
+    RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory, RetryConfig, SnapshotStore,
 };
 use crate::utils::{as_path, prds_dir, ralph_ui_dir, to_path_buf};
 use serde::{Deserialize, Serialize};
@@ -844,6 +844,10 @@ pub async fn start_ralph_loop(
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        merge_strategy: MergeStrategy::default(),
+        merge_interval: 0,
+        conflict_resolution: ConflictResolution::default(),
+        merge_target_branch: "main".to_string(),
     };
 
     // Create orchestrator

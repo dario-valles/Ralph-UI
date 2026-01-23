@@ -31,6 +31,10 @@ pub const EVENT_RALPH_LOOP_ERROR: &str = "ralph:loop_error";
 pub const EVENT_ASSIGNMENT_CHANGED: &str = "assignment:changed";
 pub const EVENT_FILE_CONFLICT_DETECTED: &str = "assignment:file_conflict";
 
+// Merge events (US-5.1: Collaborative Mode with Merges)
+pub const EVENT_MERGE_ATTEMPTED: &str = "merge:attempted";
+pub const EVENT_MERGE_CONFLICT_DETECTED: &str = "merge:conflict_detected";
+
 // Tool call events (for collapsible tool call display)
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
 pub const EVENT_TOOL_CALL_COMPLETED: &str = "tool:completed";
@@ -429,6 +433,54 @@ pub struct AgentFileUse {
     pub agent_type: String,
     /// Story being worked on
     pub story_id: String,
+}
+
+// ============================================================================
+// Merge Events (US-5.1: Collaborative Mode with Merges)
+// ============================================================================
+
+/// Payload for merge attempted events
+/// Sent when the system attempts to merge an execution branch
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeAttemptedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Source branch (execution branch)
+    pub source_branch: String,
+    /// Target branch (merge target)
+    pub target_branch: String,
+    /// Whether merge was successful
+    pub success: bool,
+    /// Number of conflicting files (0 if success)
+    pub conflict_count: usize,
+    /// Message describing the result
+    pub message: String,
+    /// Timestamp
+    pub timestamp: String,
+}
+
+/// Payload for merge conflict detected events
+/// Sent when merge conflicts are found
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeConflictDetectedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Files that have conflicts
+    pub conflicting_files: Vec<String>,
+    /// Iteration number when conflict detected
+    pub iteration: u32,
+    /// Merge strategy configured
+    pub merge_strategy: String,
+    /// Conflict resolution strategy (stop or continue)
+    pub resolution_strategy: String,
+    /// Timestamp
+    pub timestamp: String,
 }
 
 // ============================================================================
