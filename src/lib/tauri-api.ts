@@ -478,13 +478,16 @@ export const ralphLoopApi = {
   },
 
   /** Check for stale executions (crash recovery) */
-  checkStaleExecutions: async (thresholdSecs?: number): Promise<ExecutionStateSnapshot[]> => {
-    return await invoke('check_stale_ralph_executions', { thresholdSecs })
+  checkStaleExecutions: async (
+    projectPath: string,
+    thresholdSecs?: number
+  ): Promise<ExecutionStateSnapshot[]> => {
+    return await invoke('check_stale_ralph_executions', { projectPath, thresholdSecs })
   },
 
   /** Recover stale iterations (mark as interrupted) */
-  recoverStaleIterations: async (executionId: string): Promise<number> => {
-    return await invoke('recover_stale_ralph_iterations', { executionId })
+  recoverStaleIterations: async (projectPath: string, executionId: string): Promise<number> => {
+    return await invoke('recover_stale_ralph_iterations', { projectPath, executionId })
   },
 
   /** Delete iteration history for an execution */
@@ -503,8 +506,8 @@ export const ralphLoopApi = {
    * Deletes iterations older than the specified number of days (default: 30)
    * @returns Number of records deleted
    */
-  cleanupIterationHistory: async (daysToKeep?: number): Promise<number> => {
-    return await invoke('cleanup_ralph_iteration_history', { daysToKeep })
+  cleanupIterationHistory: async (projectPath: string, daysToKeep?: number): Promise<number> => {
+    return await invoke('cleanup_ralph_iteration_history', { projectPath, daysToKeep })
   },
 
   /** Regenerate acceptance criteria for stories in a Ralph PRD.

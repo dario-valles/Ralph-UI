@@ -216,7 +216,7 @@ export function PRDList() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => navigate('/prd/chat')} className="gap-2">
+          <Button onClick={() => navigate('/prds/chat')} className="gap-2">
             <Plus className="h-4 w-4" />
             New PRD Chat
           </Button>
@@ -248,7 +248,7 @@ export function PRDList() {
                 : 'Create your first PRD using the AI-assisted chat interface.'}
             </p>
             {!searchQuery && (
-              <Button onClick={() => navigate('/prd/chat')}>
+              <Button onClick={() => navigate('/prds/chat')}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create PRD
               </Button>
