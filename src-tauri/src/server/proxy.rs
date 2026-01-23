@@ -824,6 +824,14 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        "regenerate_ralph_prd_stories" => {
+            let request: commands::ralph_loop::RegenerateStoriesRequest =
+                get_arg(&args, "request")?;
+            // Use server-compatible version with EventBroadcaster for streaming
+            let response = regenerate_ralph_prd_stories_server(request, &state.broadcaster).await?;
+            serde_json::to_value(response).map_err(|e| e.to_string())
+        }
+
         // Ralph Loop execution commands (not available in browser mode)
         "start_ralph_loop" | "stop_ralph_loop" => {
             Err("Ralph loop execution is not supported in browser mode. Use the desktop app.".to_string())
@@ -1488,6 +1496,181 @@ fn build_server_chat_prompt(
 }
 
 // Note: generate_session_title has been moved to the shared agent_executor module.
+
+// =============================================================================
+// Server-specific Story Regeneration Implementation
+// =============================================================================
+
+/// Server-compatible version of regenerate_ralph_prd_stories that uses EventBroadcaster
+/// instead of Tauri's app_handle for streaming events.
+async fn regenerate_ralph_prd_stories_server(
+    request: crate::commands::ralph_loop::RegenerateStoriesRequest,
+    broadcaster: &Arc<EventBroadcaster>,
+) -> Result<crate::ralph_loop::RalphPrd, String> {
+    use crate::commands::prd_chat::agent_executor::{execute_chat_agent, BroadcastEmitter};
+    use crate::models::AgentType;
+    use crate::ralph_loop::{PrdExecutor, RalphStory};
+    use std::fs;
+
+    let project_path = std::path::PathBuf::from(&request.project_path);
+    let prds_dir = project_path.join(".ralph-ui").join("prds");
+
+    // Read the existing PRD JSON
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
+    let mut prd = executor.read_prd()?;
+
+    // Read the markdown file
+    let md_path = prds_dir.join(format!("{}.md", request.prd_name));
+    let content = if md_path.exists() {
+        fs::read_to_string(&md_path)
+            .map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
+    } else {
+        return Err(
+            "No PRD markdown file found. Cannot regenerate stories without source content."
+                .to_string(),
+        );
+    };
+
+    // Parse agent type
+    let agent_type: AgentType = request
+        .agent_type
+        .parse()
+        .map_err(|_| format!("Invalid agent type: {}", request.agent_type))?;
+
+    // Build prompt for AI extraction
+    let prompt = build_story_extraction_prompt(&content);
+
+    // Execute AI agent to extract stories using BroadcastEmitter
+    let emitter = BroadcastEmitter::new(broadcaster.clone());
+    let session_id = format!("story-regen-{}", uuid::Uuid::new_v4());
+
+    let response = execute_chat_agent(
+        &emitter,
+        &session_id,
+        agent_type,
+        &prompt,
+        Some(&request.project_path),
+    )
+    .await?;
+
+    // Parse the AI response to extract stories
+    let extracted_stories = parse_ai_story_response(&response)?;
+
+    if extracted_stories.is_empty() {
+        return Err(
+            "AI did not extract any valid user stories. The PRD may need manual formatting."
+                .to_string(),
+        );
+    }
+
+    // Replace stories in the PRD, preserving any pass/fail status for matching IDs
+    let old_status: std::collections::HashMap<String, bool> = prd
+        .stories
+        .iter()
+        .map(|s| (s.id.clone(), s.passes))
+        .collect();
+
+    prd.stories = extracted_stories
+        .into_iter()
+        .map(|es| {
+            let passes = old_status.get(&es.id).copied().unwrap_or(false);
+            let acceptance = if es.acceptance_criteria.is_empty() {
+                format!("Implement: {}", es.title)
+            } else {
+                es.acceptance_criteria
+                    .iter()
+                    .map(|c| format!("- {}", c))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            let mut story = RalphStory::new(&es.id, &es.title, &acceptance);
+            story.passes = passes;
+            story
+        })
+        .collect();
+
+    // Write the updated PRD
+    executor.write_prd(&prd)?;
+
+    log::info!(
+        "[RalphLoop] Regenerated {} stories using AI for PRD '{}' (server mode)",
+        prd.stories.len(),
+        request.prd_name
+    );
+
+    Ok(prd)
+}
+
+/// Build prompt for AI to extract user stories from PRD content
+fn build_story_extraction_prompt(prd_content: &str) -> String {
+    format!(
+        r#"Analyze this PRD document and extract all user stories in a structured format.
+
+## PRD Content:
+{}
+
+## Instructions:
+1. Identify all user stories, features, or tasks that should be implemented
+2. Assign each a unique ID in the format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
+3. Extract or create clear acceptance criteria for each story
+
+## Output Format:
+Return ONLY a JSON array with no additional text. Each story should have:
+- "id": string (US-X.X format)
+- "title": string (brief, actionable title)
+- "acceptance_criteria": array of strings
+
+Example:
+```json
+[
+  {{
+    "id": "US-1.1",
+    "title": "User Login",
+    "acceptance_criteria": [
+      "User can enter email and password",
+      "Form validates inputs before submission",
+      "Shows error message on invalid credentials"
+    ]
+  }},
+  {{
+    "id": "US-1.2",
+    "title": "User Registration",
+    "acceptance_criteria": [
+      "User can create account with email",
+      "Password must meet security requirements"
+    ]
+  }}
+]
+```
+
+Extract the stories now and return ONLY the JSON array:"#,
+        prd_content
+    )
+}
+
+/// Parse AI response to extract stories
+fn parse_ai_story_response(
+    response: &str,
+) -> Result<Vec<crate::commands::ralph_loop::ExtractedStory>, String> {
+    // Try to find JSON array in the response
+    let json_start = response.find('[');
+    let json_end = response.rfind(']');
+
+    match (json_start, json_end) {
+        (Some(start), Some(end)) if start < end => {
+            let json_str = &response[start..=end];
+            serde_json::from_str::<Vec<crate::commands::ralph_loop::ExtractedStory>>(json_str)
+                .map_err(|e| format!("Failed to parse AI response as JSON: {}", e))
+        }
+        _ => {
+            // Try parsing the whole response as JSON
+            serde_json::from_str::<Vec<crate::commands::ralph_loop::ExtractedStory>>(
+                response.trim(),
+            )
+            .map_err(|e| format!("No valid JSON array found in AI response: {}", e))
+        }
+    }
+}
 
 // =============================================================================
 // Tests
