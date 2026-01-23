@@ -27,6 +27,10 @@ pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
 pub const EVENT_RALPH_LOOP_COMPLETED: &str = "ralph:loop_completed";
 pub const EVENT_RALPH_LOOP_ERROR: &str = "ralph:loop_error";
 
+// Multi-agent assignment events (US-2.2: Avoid File Conflicts)
+pub const EVENT_ASSIGNMENT_CHANGED: &str = "assignment:changed";
+pub const EVENT_FILE_CONFLICT_DETECTED: &str = "assignment:file_conflict";
+
 // Tool call events (for collapsible tool call display)
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
 pub const EVENT_TOOL_CALL_COMPLETED: &str = "tool:completed";
@@ -349,6 +353,82 @@ pub struct RalphLoopErrorPayload {
     /// Total number of stories (for max_iterations error)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_stories: Option<u32>,
+}
+
+// ============================================================================
+// Multi-Agent Assignment Events (US-2.2: Avoid File Conflicts)
+// ============================================================================
+
+/// Type of assignment change
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AssignmentChangeType {
+    /// New assignment created
+    Created,
+    /// Assignment completed
+    Completed,
+    /// Assignment failed
+    Failed,
+    /// Assignment released
+    Released,
+    /// Estimated files updated
+    FilesUpdated,
+}
+
+/// Payload for assignment changed events
+/// Sent when any agent's assignment changes, allowing real-time conflict zone updates
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignmentChangedPayload {
+    /// Type of change
+    pub change_type: AssignmentChangeType,
+    /// Agent ID that owns this assignment
+    pub agent_id: String,
+    /// Agent type (claude, opencode, etc.)
+    pub agent_type: String,
+    /// Story ID being worked on
+    pub story_id: String,
+    /// PRD name
+    pub prd_name: String,
+    /// Estimated files this assignment may modify
+    pub estimated_files: Vec<String>,
+    /// Timestamp of the change
+    pub timestamp: String,
+}
+
+/// Payload for file conflict detection events
+/// Sent when potential file conflicts are detected between agents
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileConflictDetectedPayload {
+    /// Files with potential conflicts
+    pub conflicting_files: Vec<FileConflictInfo>,
+    /// PRD name
+    pub prd_name: String,
+    /// Timestamp
+    pub timestamp: String,
+}
+
+/// Information about a single file conflict
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileConflictInfo {
+    /// Path to the conflicting file
+    pub path: String,
+    /// Agents that are trying to modify this file
+    pub agents: Vec<AgentFileUse>,
+}
+
+/// Information about an agent using a file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentFileUse {
+    /// Agent ID
+    pub agent_id: String,
+    /// Agent type
+    pub agent_type: String,
+    /// Story being worked on
+    pub story_id: String,
 }
 
 // ============================================================================

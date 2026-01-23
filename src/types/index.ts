@@ -1070,6 +1070,82 @@ export interface RalphWorktreeInfo {
 }
 
 // ============================================================================
+// Multi-Agent Assignment Types (US-2.2: Avoid File Conflicts)
+// ============================================================================
+
+/** Assignment status for multi-agent coordination */
+export type AssignmentStatus = 'active' | 'completed' | 'failed' | 'released'
+
+/** An assignment of a story to an agent */
+export interface Assignment {
+  agentId: string
+  agentType: AgentType
+  storyId: string
+  status: AssignmentStatus
+  estimatedFiles: string[]
+  iterationStart?: number
+  iterationEnd?: number
+  errorMessage?: string
+  assignedAt: string
+  updatedAt?: string
+}
+
+/** A file currently in use by an agent */
+export interface FileInUse {
+  path: string
+  agentId: string
+  agentType: AgentType
+  storyId: string
+}
+
+/** A potential file conflict between agents */
+export interface FileConflict {
+  path: string
+  conflictingAgentId: string
+  conflictingAgentType: AgentType
+  conflictingStoryId: string
+}
+
+/** Type of assignment change event */
+export type AssignmentChangeType =
+  | 'created'
+  | 'completed'
+  | 'failed'
+  | 'released'
+  | 'files_updated'
+
+/** Payload for assignment changed events */
+export interface AssignmentChangedPayload {
+  changeType: AssignmentChangeType
+  agentId: string
+  agentType: string
+  storyId: string
+  prdName: string
+  estimatedFiles: string[]
+  timestamp: string
+}
+
+/** Payload for file conflict detection events */
+export interface FileConflictDetectedPayload {
+  conflictingFiles: FileConflictInfo[]
+  prdName: string
+  timestamp: string
+}
+
+/** Information about a single file conflict */
+export interface FileConflictInfo {
+  path: string
+  agents: AgentFileUse[]
+}
+
+/** Information about an agent using a file */
+export interface AgentFileUse {
+  agentId: string
+  agentType: string
+  storyId: string
+}
+
+// ============================================================================
 // GSD (Get Stuff Done) Types - Re-export from dedicated files
 // ============================================================================
 

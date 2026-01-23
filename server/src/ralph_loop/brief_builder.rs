@@ -4,6 +4,7 @@
 //! - What work has been completed (stories marked as passing)
 //! - What work is in progress (stories being worked on by other agents)
 //! - What work is pending (remaining stories not yet assigned)
+//! - Which files to avoid (files being modified by other agents) (US-2.2)
 //! - Accumulated learnings from previous iterations
 //!
 //! This enables agents to resume after rate limits, crashes, or context switches
@@ -16,9 +17,15 @@
 //! - Handoffs between different agent types (Claude, OpenCode, Cursor, Codex) work seamlessly
 //! - Accumulated learnings from all previous agents are included
 //!
+//! ## US-2.2: Avoid File Conflicts
+//!
+//! The brief includes a "Files to Avoid" section that lists files currently being
+//! modified by other agents. This helps prevent merge conflicts when multiple
+//! agents work on the same PRD in parallel.
+//!
 //! File location: `.ralph-ui/briefs/{prd_name}/BRIEF.md`
 
-use super::assignments_manager::{AssignmentsManager, AssignmentStatus};
+use super::assignments_manager::{AssignmentsManager, AssignmentStatus, FileInUse};
 use super::learnings_manager::LearningsManager;
 use super::types::{RalphPrd, RalphStory};
 use std::path::{Path, PathBuf};
@@ -156,12 +163,17 @@ impl BriefBuilder {
         // Get active assignments from other agents
         let active_assignments = assignments_manager.get_active_assignments().ok();
 
-        let brief = self.build_brief_content_with_assignments(
+        // US-2.2: Get files in use by other agents
+        let files_in_use = current_agent_id
+            .and_then(|id| assignments_manager.get_files_in_use_by_others(id).ok());
+
+        let brief = self.build_brief_content_with_full_context(
             prd,
             learnings_ref,
             iteration,
             active_assignments.as_ref(),
             current_agent_id,
+            files_in_use.as_ref(),
         );
 
         std::fs::write(self.brief_path(), brief)
@@ -177,27 +189,29 @@ impl BriefBuilder {
         learnings: Option<&str>,
         iteration: Option<u32>,
     ) -> String {
-        // Delegate to the new method without assignments
-        self.build_brief_content_with_assignments(prd, learnings, iteration, None, None)
+        // Delegate to the new method without assignments or files
+        self.build_brief_content_with_full_context(prd, learnings, iteration, None, None, None)
     }
 
-    /// Build the brief content with full context handoff support (US-1.3)
+    /// Build the brief content with full context handoff support (US-1.3) and file conflicts (US-2.2)
     ///
     /// This method builds a comprehensive brief that includes:
     /// - Completed work (stories that have passed)
     /// - In-progress work (stories being worked on by other agents)
+    /// - Files to avoid (files being modified by other agents) - US-2.2
     /// - Current story (the story this agent should work on)
     /// - Pending work (stories waiting to be assigned)
     /// - Accumulated learnings from all previous agents
     ///
     /// The format is agent-agnostic (standard markdown) for seamless handoffs.
-    pub fn build_brief_content_with_assignments(
+    pub fn build_brief_content_with_full_context(
         &self,
         prd: &RalphPrd,
         learnings: Option<&str>,
         iteration: Option<u32>,
         active_assignments: Option<&Vec<super::assignments_manager::Assignment>>,
         current_agent_id: Option<&str>,
+        files_in_use: Option<&Vec<FileInUse>>,
     ) -> String {
         let mut brief = String::new();
 
@@ -267,6 +281,37 @@ impl BriefBuilder {
                     ));
                 }
                 brief.push_str("\n");
+            }
+        }
+
+        // US-2.2: Files to avoid (files being modified by other agents)
+        if let Some(files) = files_in_use {
+            if !files.is_empty() {
+                brief.push_str("## Files to Avoid (AVOID MODIFYING)\n\n");
+                brief.push_str("These files are currently being modified by other agents. **Avoid modifying these files** to prevent merge conflicts:\n\n");
+
+                // Group files by agent/story for clarity
+                let mut files_by_story: std::collections::HashMap<&str, Vec<&FileInUse>> = std::collections::HashMap::new();
+                for file in files {
+                    files_by_story
+                        .entry(file.story_id.as_str())
+                        .or_default()
+                        .push(file);
+                }
+
+                for (story_id, story_files) in files_by_story {
+                    // Get agent info from first file (they're all the same for this story)
+                    if let Some(first_file) = story_files.first() {
+                        brief.push_str(&format!(
+                            "**{}** (being worked on by {} agent `{}`):\n",
+                            story_id, first_file.agent_type, first_file.agent_id
+                        ));
+                        for file in story_files {
+                            brief.push_str(&format!("- `{}`\n", file.path));
+                        }
+                        brief.push_str("\n");
+                    }
+                }
             }
         }
 
@@ -368,12 +413,35 @@ impl BriefBuilder {
         brief.push_str("1. **Focus on the Current Story above** - implement only this story\n");
         brief.push_str("2. **Skip Completed Stories** - they are already done\n");
         brief.push_str("3. **Avoid In-Progress Work** - other agents are working on those\n");
-        brief.push_str("4. **Meet all Acceptance Criteria** before marking as complete\n");
-        brief.push_str("5. **Add learnings** to `.ralph-ui/prds/{prd_name}-progress.txt` for future iterations\n");
-        brief.push_str("6. **Update PRD JSON** - set `passes: true` for the story when complete\n");
-        brief.push_str("7. **Commit your changes** with a clear message referencing the story ID\n");
+        brief.push_str("4. **Avoid Files Listed Above** - other agents are modifying those (US-2.2)\n");
+        brief.push_str("5. **Meet all Acceptance Criteria** before marking as complete\n");
+        brief.push_str("6. **Add learnings** to `.ralph-ui/prds/{prd_name}-progress.txt` for future iterations\n");
+        brief.push_str("7. **Update PRD JSON** - set `passes: true` for the story when complete\n");
+        brief.push_str("8. **Commit your changes** with a clear message referencing the story ID\n");
 
         brief
+    }
+
+    /// Build the brief content with assignments (US-1.3)
+    ///
+    /// Delegates to `build_brief_content_with_full_context` without file conflict info.
+    pub fn build_brief_content_with_assignments(
+        &self,
+        prd: &RalphPrd,
+        learnings: Option<&str>,
+        iteration: Option<u32>,
+        active_assignments: Option<&Vec<super::assignments_manager::Assignment>>,
+        current_agent_id: Option<&str>,
+    ) -> String {
+        // Delegate to full context method without file info
+        self.build_brief_content_with_full_context(
+            prd,
+            learnings,
+            iteration,
+            active_assignments,
+            current_agent_id,
+            None, // No files in use info
+        )
     }
 
     /// Read the current brief
@@ -826,5 +894,114 @@ mod tests {
             // US-1 should NOT be in the in-progress section
             // It might be in current story section instead
         }
+    }
+
+    // =========================================================================
+    // US-2.2: Avoid File Conflicts Tests
+    // =========================================================================
+
+    #[test]
+    fn test_brief_includes_files_to_avoid() {
+        // US-2.2: Brief includes "avoid these files" section
+        use crate::ralph_loop::assignments_manager::AssignmentsManager;
+        use crate::models::AgentType;
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        let mut story1 = RalphStory::new("US-1", "Story One", "- Test");
+        story1.passes = false;
+        let mut story2 = RalphStory::new("US-2", "Story Two", "- Test");
+        story2.passes = false;
+        prd.add_story(story1);
+        prd.add_story(story2);
+
+        // Create assignments with file estimates
+        let assignments_manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        assignments_manager.initialize("exec-123").unwrap();
+
+        // Another agent is working on US-1 with these files
+        assignments_manager
+            .assign_story_with_files(
+                "other-agent",
+                AgentType::Opencode,
+                "US-1",
+                vec![
+                    "src/components/Button.tsx".to_string(),
+                    "src/stores/uiStore.ts".to_string(),
+                ],
+            )
+            .unwrap();
+
+        // Generate brief with full context for current-agent
+        builder.generate_brief_with_full_context(
+            &prd,
+            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
+            &assignments_manager,
+            Some(1),
+            Some("current-agent"),
+        ).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Check "Files to Avoid" section exists
+        assert!(brief.contains("Files to Avoid"));
+        assert!(brief.contains("AVOID MODIFYING"));
+
+        // Check that files are listed
+        assert!(brief.contains("src/components/Button.tsx"));
+        assert!(brief.contains("src/stores/uiStore.ts"));
+
+        // Check that story/agent info is included
+        assert!(brief.contains("US-1"));
+        assert!(brief.contains("other-agent") || brief.contains("opencode"));
+    }
+
+    #[test]
+    fn test_brief_no_files_to_avoid_when_empty() {
+        // US-2.2: No "Files to Avoid" section when no files are in use
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        // Generate brief without any file conflicts
+        builder.generate_brief(&prd, None, None).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Should NOT contain files section when no files are in use
+        assert!(!brief.contains("Files to Avoid"));
+    }
+
+    #[test]
+    fn test_brief_instructions_mention_avoid_files() {
+        // US-2.2: Instructions mention avoiding files
+        use crate::ralph_loop::assignments_manager::AssignmentsManager;
+        use crate::models::AgentType;
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        let mut story = RalphStory::new("US-1", "Story", "- Test");
+        story.passes = false;
+        prd.add_story(story);
+
+        let assignments_manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        assignments_manager.initialize("exec-123").unwrap();
+
+        builder.generate_brief_with_full_context(
+            &prd,
+            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
+            &assignments_manager,
+            Some(1),
+            Some("current-agent"),
+        ).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Instructions should mention avoiding files (US-2.2)
+        assert!(brief.contains("Avoid Files Listed Above"));
     }
 }
