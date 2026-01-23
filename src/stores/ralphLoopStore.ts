@@ -91,16 +91,6 @@ interface RalphLoopStore extends AsyncState {
 
   // Actions - Utilities
   checkRalphFiles: (projectPath: string) => Promise<RalphFiles | undefined>
-  convertPrdToRalph: (request: {
-    prdId: string
-    branch: string
-    agentType?: string
-    model?: string
-    maxIterations?: number
-    maxCost?: number
-    runTests?: boolean
-    runLint?: boolean
-  }) => Promise<RalphPrd | undefined>
   refreshAll: () => Promise<void>
   clearError: () => void
 }
@@ -542,28 +532,6 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       const ralphFiles = await ralphLoopApi.getRalphFiles(projectPath)
       return { ralphFiles, __result: ralphFiles }
     })
-  },
-
-  // Convert a database PRD to Ralph format (legacy)
-  convertPrdToRalph: async (request: {
-    prdId: string
-    branch: string
-    agentType?: string
-    model?: string
-    maxIterations?: number
-    maxCost?: number
-    runTests?: boolean
-    runLint?: boolean
-  }) => {
-    // This is legacy - creates .ralph/ format files
-    return asyncAction(
-      set,
-      async () => {
-        const prd = await ralphLoopApi.convertPrdToRalph(request)
-        return { prd, __result: prd }
-      },
-      { rethrow: true }
-    )
   },
 
   // Refresh all data for the current project

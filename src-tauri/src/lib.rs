@@ -1,7 +1,6 @@
 // Module declarations
 mod commands;
 mod models;
-mod database;
 mod git;
 mod github;
 pub mod agents;
@@ -13,7 +12,6 @@ mod config;
 pub mod events;
 pub mod shutdown;
 pub mod watchers;
-pub mod session_files;
 pub mod ralph_loop;
 pub mod file_storage;
 pub mod plugins;
@@ -140,22 +138,9 @@ pub fn run() {
         log::warn!("Failed to register signal handlers: {}", e);
     }
 
-    // Initialize database
-    let db_path = std::env::var("RALPH_DB_PATH")
-        .unwrap_or_else(|_| {
-            let mut path = std::env::current_dir().unwrap();
-            path.push("ralph-ui.db");
-            path.to_str().unwrap().to_string()
-        });
-
-    let db = database::Database::new(&db_path)
-        .expect("Failed to open database");
-
-    db.init().expect("Failed to initialize database");
-
-    // Perform auto-recovery on startup
-    // Check all known project paths for stale sessions that need recovery
-    perform_auto_recovery(&db);
+    // Perform file-based auto-recovery on startup (for stale sessions)
+    // Note: SQLite database removed - all data is now file-based
+    perform_auto_recovery();
 
     // Initialize git state
     let git_state = commands::git::GitState::new();
@@ -201,10 +186,8 @@ pub fn run() {
 
     // Log startup info
     log::info!("Ralph-UI starting up");
-    log::info!("Database path: {}", db_path);
 
     tauri::Builder::default()
-        .manage(std::sync::Mutex::new(db))
         .manage(git_state)
         .manage(config_state)
         .manage(shutdown_state)
@@ -275,18 +258,10 @@ pub fn run() {
             commands::delete_task,
             commands::update_task_status,
             commands::import_prd,
-            commands::create_prd,
-            commands::get_prd,
-            commands::update_prd,
-            commands::delete_prd,
-            commands::list_prds,
             commands::scan_prd_files,
             commands::get_prd_file,
             commands::update_prd_file,
             commands::delete_prd_file,
-            commands::list_prd_templates,
-            commands::export_prd,
-            commands::analyze_prd_quality,
             // NOTE: execute_prd is deprecated - use convert_prd_file_to_ralph instead
             // commands::execute_prd,
             commands::create_agent,
@@ -359,7 +334,6 @@ pub fn run() {
             commands::list_templates,
             commands::list_builtin_templates,
             commands::render_template,
-            commands::render_task_prompt,
             commands::get_template_content,
             commands::save_template,
             commands::delete_template,
@@ -439,7 +413,6 @@ pub fn run() {
             commands::get_ralph_loop_worktree_path,
             commands::cleanup_ralph_worktree,
             commands::list_ralph_worktrees,
-            commands::convert_prd_to_ralph,
             commands::convert_prd_file_to_ralph,
             commands::has_ralph_files,
             commands::get_ralph_files,
@@ -496,15 +469,14 @@ pub fn run() {
 }
 
 /// Perform automatic recovery of stale sessions on startup
-/// This checks all known project paths for sessions that were left in Active state
+/// This checks all registered project paths for sessions that were left in Active state
 /// but have stale lock files (indicating a crash), and transitions them to Paused.
-/// It also imports any sessions from per-project .ralph-ui/sessions/ directories.
-fn perform_auto_recovery(db: &database::Database) {
-    let conn = db.get_connection();
-
-    // Get all unique project paths from existing sessions
-    let project_paths = match database::sessions::get_unique_project_paths(conn) {
-        Ok(paths) => paths,
+///
+/// Note: This now uses file-based storage via the project registry instead of SQLite.
+fn perform_auto_recovery() {
+    // Get all registered project paths from file-based project storage
+    let project_paths: Vec<String> = match file_storage::projects::get_all_projects() {
+        Ok(projects) => projects.into_iter().map(|p| p.path).collect(),
         Err(e) => {
             log::warn!("Failed to get project paths for auto-recovery: {}", e);
             return;
@@ -512,14 +484,13 @@ fn perform_auto_recovery(db: &database::Database) {
     };
 
     if project_paths.is_empty() {
-        log::debug!("No sessions found, skipping auto-recovery");
+        log::debug!("No projects found, skipping auto-recovery");
         return;
     }
 
-    log::info!("Checking {} project paths for stale sessions and file imports", project_paths.len());
+    log::info!("Checking {} project paths for stale sessions", project_paths.len());
 
     let mut total_recovered = 0;
-    let mut total_imported = 0;
 
     for project_path in project_paths {
         let path = Path::new(&project_path);
@@ -530,21 +501,7 @@ fn perform_auto_recovery(db: &database::Database) {
             continue;
         }
 
-        // Import sessions from .ralph-ui/sessions/ directory
-        match session_files::import_sessions_from_project(conn, path) {
-            Ok(imported) => {
-                total_imported += imported.len();
-            }
-            Err(e) => {
-                log::warn!(
-                    "Session file import failed for project '{}': {}",
-                    project_path,
-                    e
-                );
-            }
-        }
-
-        // Perform stale session recovery
+        // Perform stale session recovery using file-based storage
         match session::auto_recover_on_startup(path) {
             Ok(results) => {
                 for result in &results {
@@ -564,10 +521,9 @@ fn perform_auto_recovery(db: &database::Database) {
                 );
             }
         }
-    }
 
-    if total_imported > 0 {
-        log::info!("Imported {} sessions from project files", total_imported);
+        // Recover stale Ralph loop executions using file-based storage
+        recover_stale_ralph_executions(&project_path);
     }
 
     if total_recovered > 0 {
@@ -575,39 +531,36 @@ fn perform_auto_recovery(db: &database::Database) {
     } else {
         log::debug!("Auto-recovery complete: no stale sessions found");
     }
-
-    // Recover stale Ralph loop executions (crash recovery)
-    recover_stale_ralph_executions(conn);
 }
 
 /// Recover Ralph loop executions that were left running after a crash
 /// This checks for executions with stale heartbeats and marks their in-progress
 /// iterations as interrupted.
-fn recover_stale_ralph_executions(conn: &rusqlite::Connection) {
+fn recover_stale_ralph_executions(project_path: &str) {
     // Default threshold: 2 minutes (heartbeat interval is 30 seconds)
     const STALE_THRESHOLD_SECS: i64 = 120;
 
-    let stale_executions = match database::ralph_iterations::get_stale_executions(conn, STALE_THRESHOLD_SECS) {
+    let path = Path::new(project_path);
+    let stale_executions = match file_storage::iterations::get_stale_executions(path, STALE_THRESHOLD_SECS) {
         Ok(executions) => executions,
         Err(e) => {
-            log::warn!("Failed to check for stale Ralph loop executions: {}", e);
+            log::warn!("Failed to check for stale Ralph loop executions in {}: {}", project_path, e);
             return;
         }
     };
 
     if stale_executions.is_empty() {
-        log::debug!("No stale Ralph loop executions found");
         return;
     }
 
-    log::info!("Found {} stale Ralph loop executions to recover", stale_executions.len());
+    log::info!("Found {} stale Ralph loop executions to recover in {}", stale_executions.len(), project_path);
 
     for snapshot in stale_executions {
         let completed_at = chrono::Utc::now().to_rfc3339();
 
         // Mark in-progress iterations as interrupted
-        match database::ralph_iterations::mark_interrupted_iterations(
-            conn,
+        match file_storage::iterations::mark_interrupted_iterations(
+            path,
             &snapshot.execution_id,
             &completed_at,
         ) {
@@ -630,7 +583,7 @@ fn recover_stale_ralph_executions(conn: &rusqlite::Connection) {
         }
 
         // Clean up the execution state
-        if let Err(e) = database::ralph_iterations::delete_execution_state(conn, &snapshot.execution_id) {
+        if let Err(e) = file_storage::iterations::delete_execution_state(path, &snapshot.execution_id) {
             log::warn!(
                 "Failed to delete execution state for {}: {}",
                 snapshot.execution_id,

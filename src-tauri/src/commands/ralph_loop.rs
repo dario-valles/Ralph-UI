@@ -3,10 +3,9 @@
 //! These commands control the external Ralph loop that spawns fresh agent instances.
 
 use crate::commands::ConfigState;
-use crate::database::Database;  // Still needed for legacy PRD conversion
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    ConfigManager, ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
+    ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
     ProgressSummary, ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig,
     RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
     RalphStory, RetryConfig, SnapshotStore,
@@ -134,32 +133,6 @@ pub struct RalphStoryInput {
     pub dependencies: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     pub effort: Option<String>,
-}
-
-/// Request to convert a database PRD to Ralph format
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConvertPrdToRalphRequest {
-    /// Database PRD ID
-    pub prd_id: String,
-    /// PRD name for file storage (e.g., "my-feature-a1b2c3d4")
-    pub prd_name: String,
-    /// Branch name to use
-    pub branch: String,
-    /// Agent type to use (claude, opencode, cursor, codex)
-    pub agent_type: Option<String>,
-    /// Model to use (e.g., "claude-sonnet-4-5")
-    pub model: Option<String>,
-    /// Maximum iterations (default: 50)
-    pub max_iterations: Option<u32>,
-    /// Maximum cost limit in dollars
-    pub max_cost: Option<f64>,
-    /// Whether to run tests (default: true)
-    pub run_tests: Option<bool>,
-    /// Whether to run lint (default: true)
-    pub run_lint: Option<bool>,
-    /// Whether to use a worktree for isolation
-    pub use_worktree: Option<bool>,
 }
 
 /// Request to convert a file-based PRD to Ralph format
@@ -1129,132 +1102,6 @@ pub struct RalphWorktreeInfo {
     pub path: String,
     pub branch: Option<String>,
     pub is_locked: bool,
-}
-
-/// Convert PRD chat export to Ralph PRD format
-///
-/// This takes an existing PRD document and converts it to the Ralph loop format,
-/// writing prd.json, initializing progress.txt, config.yaml, and prompt.md.
-/// Settings from the PRD Execution Dialog are stored in the PRD JSON for future executions.
-#[tauri::command]
-pub fn convert_prd_to_ralph(
-    request: ConvertPrdToRalphRequest,
-    db: State<'_, Mutex<Database>>,
-) -> Result<RalphPrd, String> {
-    use crate::models::ExtractedPRDStructure;
-    use crate::ralph_loop::{LoopConfig, PrdExecutionConfig, ProjectConfig};
-
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-
-    // Get the PRD from database
-    let prd_doc = db
-        .get_prd(&request.prd_id)
-        .map_err(|e| format!("PRD not found or error: {}", e))?;
-
-    let project_path = prd_doc
-        .project_path
-        .ok_or_else(|| "PRD has no project path".to_string())?;
-
-    let project_path_buf = PathBuf::from(&project_path);
-    let executor = PrdExecutor::new(&project_path_buf, &request.prd_name);
-
-    // Create execution config from request parameters
-    let execution_config = PrdExecutionConfig {
-        agent_type: request.agent_type.clone(),
-        model: request.model.clone(),
-        max_iterations: request.max_iterations,
-        max_cost: request.max_cost,
-        run_tests: request.run_tests,
-        run_lint: request.run_lint,
-        use_worktree: request.use_worktree,
-        ..Default::default()
-    };
-
-    // Validate the execution config
-    execution_config.validate()?;
-
-    // Log config storage
-    if execution_config.has_any_fields() {
-        log::info!(
-            "[convert_prd_to_ralph] PRD '{}' storing execution config: agent={:?}, model={:?}, max_iterations={:?}",
-            request.prd_name,
-            execution_config.agent_type,
-            execution_config.model,
-            execution_config.max_iterations
-        );
-    }
-
-    // Create Ralph PRD with stored execution config
-    let mut ralph_prd = RalphPrd::new(&prd_doc.title, &request.branch);
-    ralph_prd.description = prd_doc.description;
-    ralph_prd.execution_config = if execution_config.has_any_fields() {
-        Some(execution_config)
-    } else {
-        None
-    };
-
-    // Convert extracted structure if available
-    if let Some(structure_json) = prd_doc.extracted_structure {
-        if let Ok(structure) = serde_json::from_str::<ExtractedPRDStructure>(&structure_json) {
-            for (index, task) in structure.tasks.iter().enumerate() {
-                let mut story = RalphStory::new(
-                    &task.id,
-                    &task.title,
-                    task.acceptance_criteria
-                        .as_ref()
-                        .map(|v| v.join("\n"))
-                        .unwrap_or_else(|| task.description.clone()),
-                );
-                story.description = Some(task.description.clone());
-                story.priority = task.priority.map(|p| p as u32).unwrap_or(index as u32);
-                story.dependencies = task.dependencies.clone().unwrap_or_default();
-                story.tags = task.tags.clone().unwrap_or_default();
-                ralph_prd.add_story(story);
-            }
-        }
-    }
-
-    // Write PRD to file
-    executor.write_prd(&ralph_prd)?;
-
-    // Initialize progress.txt
-    let tracker = ProgressTracker::new(&project_path_buf, &request.prd_name);
-    tracker.initialize()?;
-
-    // Create and write config.yaml with settings from the dialog
-    let config_manager = ConfigManager::new(&project_path_buf);
-    let ralph_config = RalphConfig {
-        project: ProjectConfig {
-            name: Some(prd_doc.title.clone()),
-            test_command: None,
-            lint_command: None,
-            build_command: None,
-        },
-        ralph: LoopConfig {
-            max_iterations: request.max_iterations.unwrap_or(50),
-            max_cost: request.max_cost,
-            agent: request.agent_type.clone().unwrap_or_else(|| "claude".to_string()),
-            model: request.model.clone(),
-            completion_promise: "<promise>COMPLETE</promise>".to_string(),
-        },
-    };
-    config_manager.write(&ralph_config)?;
-
-    // Generate prompt.md with the same config
-    let prompt_builder = PromptBuilder::new(&project_path_buf, &request.prd_name);
-    let loop_config = RalphLoopConfig {
-        project_path: project_path_buf.clone(),
-        prd_name: request.prd_name.clone(),
-        run_tests: request.run_tests.unwrap_or(true),
-        run_lint: request.run_lint.unwrap_or(true),
-        max_iterations: request.max_iterations.unwrap_or(50),
-        max_cost: request.max_cost,
-        model: request.model,
-        ..Default::default()
-    };
-    prompt_builder.generate_prompt(&loop_config)?;
-
-    Ok(ralph_prd)
 }
 
 /// Convert a file-based PRD (from .ralph-ui/prds/) to Ralph loop format

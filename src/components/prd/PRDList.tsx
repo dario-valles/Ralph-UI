@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -29,48 +29,31 @@ import {
   FileText,
   Loader2,
   CheckCircle,
-  AlertTriangle,
-  AlertCircle,
-  MessageSquare,
   FolderOpen,
-  Filter,
-  ChevronDown,
-  ChevronRight,
-  FileCode,
   RefreshCw,
 } from 'lucide-react'
-import { usePRDStore } from '@/stores/prdStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { prdApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import { formatBackendDateOnly, formatBackendTime } from '@/lib/date-utils'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
-import type { PRDDocument, PRDFile } from '@/types'
+import type { PRDFile } from '@/types'
 
-/** Unified display item for both database PRDs and file-based PRDs */
-type DisplayPRD =
-  | { type: 'database'; data: PRDDocument }
-  | { type: 'file'; data: PRDFile }
-
+/**
+ * PRD List Component - File-based storage only
+ * Lists and manages PRD markdown files from .ralph-ui/prds/ directory
+ */
 export function PRDList() {
   const navigate = useNavigate()
-  const { prds, loading, error, loadPRDs, deletePRD } = usePRDStore()
   const { getActiveProject } = useProjectStore()
   const activeProject = getActiveProject()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [filterByProject, setFilterByProject] = useState(true)
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [prdFiles, setPrdFiles] = useState<PRDFile[]>([])
-  const [loadingFiles, setLoadingFiles] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [executeDialogFile, setExecuteDialogFile] = useState<PRDFile | null>(null)
   const [deleteConfirmFile, setDeleteConfirmFile] = useState<PRDFile | null>(null)
-
-  // Load database PRDs
-  useEffect(() => {
-    loadPRDs()
-  }, [loadPRDs])
 
   // Load file-based PRDs when active project changes
   const loadPrdFiles = useCallback(async () => {
@@ -78,15 +61,15 @@ export function PRDList() {
       setPrdFiles([])
       return
     }
-    setLoadingFiles(true)
+    setLoading(true)
     try {
       const files = await prdApi.scanFiles(activeProject.path)
       setPrdFiles(files)
     } catch (err) {
       console.error('Failed to scan PRD files:', err)
-      // Don't show error toast - just silently fail
+      toast.error('Failed to load PRDs', err instanceof Error ? err.message : 'An unexpected error occurred.')
     } finally {
-      setLoadingFiles(false)
+      setLoading(false)
     }
   }, [activeProject])
 
@@ -94,101 +77,20 @@ export function PRDList() {
     loadPrdFiles()
   }, [loadPrdFiles])
 
-  // Combine database PRDs and file PRDs into unified display items
-  const allDisplayPRDs = useMemo((): DisplayPRD[] => {
-    // Start with database PRDs
-    const dbItems: DisplayPRD[] = prds.map((prd) => ({ type: 'database' as const, data: prd }))
-
-    // Add file PRDs that don't already exist in the database
-    // (check by comparing file path pattern with database PRD titles/IDs)
-    const fileItems: DisplayPRD[] = prdFiles
-      .filter((file) => {
-        // A file PRD is considered "new" if there's no database PRD with matching project path
-        // that was created from the same file (check by title similarity or sourceChatSessionId)
-        return !prds.some(
-          (dbPrd) =>
-            dbPrd.projectPath === file.projectPath &&
-            (dbPrd.title === file.title ||
-              // Check if file ID matches (e.g., "file:new-feature-prd-abc123" matches "abc123" in sourceChatSessionId)
-              (dbPrd.sourceChatSessionId && file.id.includes(dbPrd.sourceChatSessionId.substring(0, 8))))
-        )
-      })
-      .map((file) => ({ type: 'file' as const, data: file }))
-
-    return [...dbItems, ...fileItems]
-  }, [prds, prdFiles])
-
   // Filter by search query
-  const searchFilteredPRDs = allDisplayPRDs.filter((item) => {
-    const title = item.type === 'database' ? item.data.title : item.data.title
-    const description = item.type === 'database' ? item.data.description : undefined
-    return (
-      title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      description?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  })
-
-  // Filter by active project
   const filteredPRDs = useMemo(() => {
-    if (filterByProject && activeProject) {
-      return searchFilteredPRDs.filter((item) => {
-        const projectPath = item.type === 'database' ? item.data.projectPath : item.data.projectPath
-        return projectPath === activeProject.path
-      })
-    }
-    return searchFilteredPRDs
-  }, [searchFilteredPRDs, filterByProject, activeProject])
-
-  // Group PRDs by project path
-  const groupedPRDs = useMemo(() => {
-    const groups: Record<string, DisplayPRD[]> = {}
-    filteredPRDs.forEach((item) => {
-      const projectPath = item.type === 'database' ? item.data.projectPath : item.data.projectPath
-      const key = projectPath || 'No Project'
-      if (!groups[key]) {
-        groups[key] = []
-      }
-      groups[key].push(item)
+    return prdFiles.filter((file) => {
+      return (
+        file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        file.content.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     })
-    return groups
-  }, [filteredPRDs])
+  }, [prdFiles, searchQuery])
 
   // Get project name from path
   const getProjectName = (path: string) => {
-    if (path === 'No Project') return path
     const parts = path.split(/[/\\]/)
     return parts[parts.length - 1] || path
-  }
-
-  // Toggle group collapse
-  const toggleGroup = (groupKey: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(groupKey)) {
-        next.delete(groupKey)
-      } else {
-        next.add(groupKey)
-      }
-      return next
-    })
-  }
-
-  // Check if we should show grouped view (multiple projects)
-  const showGroupedView = Object.keys(groupedPRDs).length > 1 || (!filterByProject && activeProject)
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this PRD?')) return
-
-    setDeleting(id)
-    try {
-      await deletePRD(id)
-      toast.success('PRD deleted', 'The document has been removed.')
-    } catch (err) {
-      console.error('Failed to delete PRD:', err)
-      toast.error('Failed to delete PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
-    } finally {
-      setDeleting(null)
-    }
   }
 
   // Open execution dialog for a file-based PRD
@@ -198,7 +100,6 @@ export function PRDList() {
 
   // Navigate to file editor
   const handleEditFile = (file: PRDFile) => {
-    // Extract prd name from id (e.g., "file:new-feature-prd-abc123" -> "new-feature-prd-abc123")
     const prdName = file.id.replace('file:', '')
     navigate(`/prds/file?project=${encodeURIComponent(file.projectPath)}&name=${encodeURIComponent(prdName)}`)
   }
@@ -241,46 +142,55 @@ export function PRDList() {
     }
   }
 
-  const getQualityBadge = (prd: PRDDocument) => {
-    const score = prd.qualityScoreOverall
-
-    if (!score) {
-      return (
-        <Badge variant="outline" className="gap-1">
-          <FileText className="h-3 w-3" />
-          Not Analyzed
-        </Badge>
-      )
-    }
-
-    if (score >= 85) {
+  // Get status badge for a PRD file
+  const getStatusBadge = (file: PRDFile) => {
+    if (file.hasRalphJson && file.hasProgress) {
       return (
         <Badge variant="default" className="gap-1">
           <CheckCircle className="h-3 w-3" />
-          {score}%
-        </Badge>
-      )
-    } else if (score >= 70) {
-      return (
-        <Badge variant="secondary" className="gap-1">
-          <AlertTriangle className="h-3 w-3" />
-          {score}%
-        </Badge>
-      )
-    } else {
-      return (
-        <Badge variant="destructive" className="gap-1">
-          <AlertCircle className="h-3 w-3" />
-          {score}%
+          Active
         </Badge>
       )
     }
+    if (file.hasRalphJson) {
+      return (
+        <Badge variant="secondary" className="gap-1">
+          <FileText className="h-3 w-3" />
+          Initialized
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant="outline" className="gap-1">
+        <FileText className="h-3 w-3" />
+        Draft
+      </Badge>
+    )
   }
 
-  if (loading && prds.length === 0) {
+  if (loading && prdFiles.length === 0) {
     return (
       <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!activeProject) {
+    return (
+      <div className="container mx-auto max-w-6xl py-8">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">No Project Selected</h2>
+            <p className="text-muted-foreground text-center mb-4">
+              Select a project from the sidebar to view and manage its PRDs.
+            </p>
+            <Button onClick={() => navigate('/projects')}>
+              Select Project
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -292,51 +202,30 @@ export function PRDList() {
         <div>
           <h1 className="text-3xl font-bold">Product Requirements Documents</h1>
           <p className="mt-2 text-muted-foreground">
-            {activeProject && filterByProject
-              ? `PRDs for ${getProjectName(activeProject.path)}`
-              : 'Manage and execute your PRDs with AI agents'}
+            PRDs for {getProjectName(activeProject.path)}
           </p>
         </div>
         <div className="flex gap-2">
-          {activeProject && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadPrdFiles()}
-                disabled={loadingFiles}
-                className="gap-2"
-                title="Refresh PRD files from .ralph-ui/prds/"
-              >
-                <RefreshCw className={`h-4 w-4 ${loadingFiles ? 'animate-spin' : ''}`} />
-              </Button>
-              <Button
-                variant={filterByProject ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilterByProject(!filterByProject)}
-                className="gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                {filterByProject ? 'Active Project' : 'All Projects'}
-              </Button>
-            </>
-          )}
-          <Button onClick={() => navigate('/prds/chat')} className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadPrdFiles()}
+            disabled={loading}
+            className="gap-2"
+            title="Refresh PRD files from .ralph-ui/prds/"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button onClick={() => navigate('/prd/chat')} className="gap-2">
             <Plus className="h-4 w-4" />
-            Create PRD
+            New PRD Chat
           </Button>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-6 rounded-md bg-destructive/10 p-4 text-destructive">
-          {error}
-        </div>
-      )}
-
       {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
+      <div className="mb-6 flex items-center gap-4">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search PRDs..."
@@ -347,160 +236,116 @@ export function PRDList() {
         </div>
       </div>
 
-      {/* PRD List */}
+      {/* PRD Table */}
       {filteredPRDs.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <FileText className="h-16 w-16 text-muted-foreground" />
-            <h3 className="mt-4 text-lg font-semibold">
+            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">No PRDs Found</h2>
+            <p className="text-muted-foreground text-center mb-4">
               {searchQuery
-                ? 'No PRDs found'
-                : filterByProject && activeProject
-                  ? `No PRDs for ${getProjectName(activeProject.path)}`
-                  : 'No PRDs yet'}
-            </h3>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              {searchQuery
-                ? 'Try adjusting your search query'
-                : 'Create your first PRD to get started'}
+                ? 'No PRDs match your search. Try a different query.'
+                : 'Create your first PRD using the AI-assisted chat interface.'}
             </p>
             {!searchQuery && (
-              <Button onClick={() => navigate('/prds/chat')} className="mt-4 gap-2">
-                <Plus className="h-4 w-4" />
+              <Button onClick={() => navigate('/prd/chat')}>
+                <Plus className="h-4 w-4 mr-2" />
                 Create PRD
               </Button>
             )}
           </CardContent>
         </Card>
-      ) : showGroupedView ? (
-        // Grouped view - show PRDs grouped by project
-        <div className="space-y-4">
-          {Object.entries(groupedPRDs).map(([projectPath, projectPRDs]) => (
-            <Card key={projectPath}>
-              <CardHeader className="py-3">
-                <button
-                  onClick={() => toggleGroup(projectPath)}
-                  className="flex items-center gap-2 w-full text-left"
-                >
-                  {collapsedGroups.has(projectPath) ? (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">{getProjectName(projectPath)}</CardTitle>
-                  <Badge variant="secondary" className="ml-2">
-                    {projectPRDs.length}
-                  </Badge>
-                </button>
-                {!collapsedGroups.has(projectPath) && projectPath !== 'No Project' && (
-                  <CardDescription className="ml-6 text-xs truncate">
-                    {projectPath}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              {!collapsedGroups.has(projectPath) && (
-                <CardContent className="pt-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Quality</TableHead>
-                        <TableHead>Updated</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {projectPRDs.map((item) =>
-                        item.type === 'database' ? (
-                          <PRDTableRow
-                            key={item.data.id}
-                            prd={item.data}
-                            deleting={deleting}
-                            onNavigate={navigate}
-                            onDelete={handleDelete}
-                            getQualityBadge={getQualityBadge}
-                          />
-                        ) : (
-                          <PRDFileTableRow
-                            key={item.data.id}
-                            file={item.data}
-                            onExecute={handleExecuteFile}
-                            onEdit={handleEditFile}
-                            onDelete={(f) => setDeleteConfirmFile(f)}
-                            deleting={deleting}
-                          />
-                        )
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
       ) : (
-        // Flat view - simple table
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Quality</TableHead>
-                <TableHead>Updated</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Modified</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPRDs.map((item) =>
-                item.type === 'database' ? (
-                  <PRDTableRow
-                    key={item.data.id}
-                    prd={item.data}
-                    deleting={deleting}
-                    onNavigate={navigate}
-                    onDelete={handleDelete}
-                    getQualityBadge={getQualityBadge}
-                  />
-                ) : (
-                  <PRDFileTableRow
-                    key={item.data.id}
-                    file={item.data}
-                    onExecute={handleExecuteFile}
-                    onEdit={handleEditFile}
-                    onDelete={(f) => setDeleteConfirmFile(f)}
-                    deleting={deleting}
-                  />
-                )
-              )}
+              {filteredPRDs.map((file) => (
+                <TableRow key={file.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <div className="font-medium">{file.title}</div>
+                        <div className="text-xs text-muted-foreground">{file.filePath}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>{getStatusBadge(file)}</TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {formatBackendDateOnly(file.modifiedAt)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatBackendTime(file.modifiedAt)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleExecuteFile(file)}
+                        title="Execute PRD"
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleEditFile(file)}
+                        title="Edit PRD"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setDeleteConfirmFile(file)}
+                        disabled={deleting === file.id}
+                        title="Delete PRD"
+                      >
+                        {deleting === file.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </Card>
       )}
 
-      {/* Delete confirmation dialog */}
-      <Dialog open={deleteConfirmFile !== null} onOpenChange={(open) => !open && setDeleteConfirmFile(null)}>
+      {/* Execution Dialog */}
+      {executeDialogFile && (
+        <PRDFileExecutionDialog
+          file={executeDialogFile}
+          open={true}
+          onOpenChange={(open) => !open && setExecuteDialogFile(null)}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmFile} onOpenChange={(open) => !open && setDeleteConfirmFile(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete PRD</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteConfirmFile?.title}"?
+              Are you sure you want to delete &quot;{deleteConfirmFile?.title}&quot;?
+              This will also delete associated worktrees and branches.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground mb-2">
-              This will permanently delete:
-            </p>
-            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-              <li>The PRD markdown file (.md)</li>
-              {deleteConfirmFile?.hasRalphJson && <li>The Ralph Loop configuration (.json)</li>}
-              {deleteConfirmFile?.hasProgress && <li>The progress tracking file</li>}
-              <li>Any associated worktrees</li>
-              <li>Any associated git branches</li>
-            </ul>
-          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmFile(null)}>
               Cancel
@@ -508,188 +353,12 @@ export function PRDList() {
             <Button
               variant="destructive"
               onClick={() => deleteConfirmFile && handleDeleteFile(deleteConfirmFile)}
-              disabled={deleting !== null}
             >
-              {deleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                'Delete PRD'
-              )}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Execution dialog for file-based PRDs */}
-      <PRDFileExecutionDialog
-        file={executeDialogFile}
-        open={executeDialogFile !== null}
-        onOpenChange={(open) => !open && setExecuteDialogFile(null)}
-        onSuccess={() => loadPrdFiles()}
-      />
     </div>
-  )
-}
-
-// Extracted PRD table row component to avoid duplication
-interface PRDTableRowProps {
-  prd: PRDDocument
-  deleting: string | null
-  onNavigate: (path: string) => void
-  onDelete: (id: string) => void
-  getQualityBadge: (prd: PRDDocument) => React.ReactNode
-}
-
-function PRDTableRow({ prd, deleting, onNavigate, onDelete, getQualityBadge }: PRDTableRowProps) {
-  return (
-    <TableRow className="cursor-pointer hover:bg-muted/50">
-      <TableCell onClick={() => onNavigate(`/prds/${prd.id}`)}>
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{prd.title}</span>
-          {prd.sourceChatSessionId && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              <MessageSquare className="h-3 w-3" />
-              From Chat
-            </Badge>
-          )}
-        </div>
-        {prd.templateId && (
-          <div className="mt-1 text-xs text-muted-foreground">
-            Template: {prd.templateId}
-          </div>
-        )}
-      </TableCell>
-      <TableCell onClick={() => onNavigate(`/prds/${prd.id}`)}>
-        <div className="max-w-md truncate text-sm text-muted-foreground">
-          {prd.description || 'No description'}
-        </div>
-      </TableCell>
-      <TableCell onClick={() => onNavigate(`/prds/${prd.id}`)}>
-        {getQualityBadge(prd)}
-      </TableCell>
-      <TableCell onClick={() => onNavigate(`/prds/${prd.id}`)}>
-        <div className="text-sm">{formatBackendDateOnly(prd.updatedAt)}</div>
-        <div className="text-xs text-muted-foreground">
-          {formatBackendTime(prd.updatedAt)}
-        </div>
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onNavigate(`/prds/${prd.id}`)}>
-            <Edit className="h-4 w-4" />
-          </Button>
-          {/* Note: Execute button removed - database PRD execution is deprecated */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(prd.id)}
-            disabled={deleting === prd.id}
-          >
-            {deleting === prd.id ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-// Table row for file-based PRDs (from .ralph-ui/prds/ directory)
-interface PRDFileTableRowProps {
-  file: PRDFile
-  onExecute: (file: PRDFile) => void
-  onEdit: (file: PRDFile) => void
-  onDelete: (file: PRDFile) => void
-  deleting: string | null
-}
-
-function PRDFileTableRow({ file, onExecute, onEdit, onDelete, deleting }: PRDFileTableRowProps) {
-  const isDeleting = deleting === file.id
-  return (
-    <TableRow className="cursor-pointer hover:bg-muted/50">
-      <TableCell>
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{file.title}</span>
-          <Badge variant="outline" className="gap-1 text-xs">
-            <FileCode className="h-3 w-3" />
-            From File
-          </Badge>
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground font-mono">
-          {file.filePath}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="max-w-md truncate text-sm text-muted-foreground">
-          {/* Show first line of content as description */}
-          {file.content.split('\n').find((line) => line.trim() && !line.startsWith('#'))?.trim().slice(0, 100) || 'No description'}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-col gap-1">
-          {file.hasRalphJson ? (
-            <Badge variant="default" className="gap-1 text-xs w-fit">
-              <CheckCircle className="h-3 w-3" />
-              Ralph Ready
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="gap-1 text-xs w-fit">
-              <FileText className="h-3 w-3" />
-              Not Initialized
-            </Badge>
-          )}
-          {file.hasProgress && (
-            <Badge variant="secondary" className="gap-1 text-xs w-fit">
-              In Progress
-            </Badge>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="text-sm">{formatBackendDateOnly(file.modifiedAt)}</div>
-        <div className="text-xs text-muted-foreground">
-          {formatBackendTime(file.modifiedAt)}
-        </div>
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onEdit(file)}
-            title="Edit PRD file"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onExecute(file)}
-            title="Execute with Ralph Loop"
-          >
-            <Play className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(file)}
-            disabled={isDeleting}
-            title="Delete PRD and related resources"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
   )
 }

@@ -42,7 +42,6 @@ bun run tauri build            # Production bundle
 - **Tauri 2.0 + Rust** with tokio async runtime
 - **Command handlers** (`src/commands/`): 14 modules for IPC boundaries
 - **File storage** (`src/file_storage/`): JSON files in `.ralph-ui/` for sessions, PRDs, chat
-- **Database** (`src/database/`): SQLite (legacy, being phased out)
 - **Git operations** (`src/git/`): git2-rs integration for branches, worktrees, commits
 - **Agent management** (`src/agents/`): Process spawning, rate limiting, log parsing
 - **Parallel orchestration** (`src/parallel/`): Pool, scheduler, worktree coordination
@@ -143,9 +142,6 @@ Data is stored in `.ralph-ui/` directories within each project for git-trackable
 ```
 
 All file operations use atomic writes (temp file + rename) for safety.
-
-### SQLite (Legacy)
-SQLite database in `src-tauri/src/database/` is being phased out. New features should use file storage.
 
 ## Testing
 

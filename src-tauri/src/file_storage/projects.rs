@@ -331,55 +331,6 @@ fn delete_project_in(base_dir: &Path, project_id: &str) -> FileResult<()> {
     Ok(())
 }
 
-/// Import a project from database format
-pub fn import_project_from_db(db_project: &crate::database::projects::Project) -> FileResult<ProjectEntry> {
-    import_project_from_db_in(&get_global_ralph_ui_dir(), db_project)
-}
-
-/// Import a project from database format to a specific directory
-fn import_project_from_db_in(base_dir: &Path, db_project: &crate::database::projects::Project) -> FileResult<ProjectEntry> {
-    let last_used_at = DateTime::parse_from_rfc3339(&db_project.last_used_at)
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now());
-    let created_at = DateTime::parse_from_rfc3339(&db_project.created_at)
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now());
-
-    let mut registry = read_projects_registry_from(base_dir)?;
-
-    // Check if already exists
-    if let Some(existing) = registry.projects.iter_mut().find(|p| p.path == db_project.path) {
-        // Update if database has newer data
-        if last_used_at > existing.last_used_at {
-            existing.last_used_at = last_used_at;
-        }
-        existing.name = db_project.name.clone();
-        existing.is_favorite = db_project.is_favorite;
-        let result = existing.clone();
-
-        registry.updated_at = Utc::now();
-        write_projects_registry_to(base_dir, &registry)?;
-        return Ok(result);
-    }
-
-    // Create new entry with the same ID from database
-    let project = ProjectEntry {
-        id: db_project.id.clone(),
-        path: db_project.path.clone(),
-        name: db_project.name.clone(),
-        last_used_at,
-        is_favorite: db_project.is_favorite,
-        created_at,
-    };
-
-    let result = project.clone();
-    registry.projects.push(project);
-    registry.updated_at = Utc::now();
-    write_projects_registry_to(base_dir, &registry)?;
-
-    Ok(result)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

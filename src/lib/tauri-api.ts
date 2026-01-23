@@ -1,11 +1,8 @@
 // Tauri API wrappers for backend commands
+// NOTE: Legacy SQLite-based PRD API has been removed. All PRD operations now use file-based storage.
 
 import type {
-  PRDDocument,
   PRDFile,
-  PRDTemplate,
-  CreatePRDRequest,
-  UpdatePRDRequest,
   ChatSession,
   ChatMessage,
   SendMessageResponse,
@@ -23,40 +20,8 @@ import type {
 } from '@/types'
 import { invoke } from './invoke'
 
-// PRD API
+// PRD API (File-based storage only)
 export const prdApi = {
-  create: async (request: CreatePRDRequest): Promise<PRDDocument> => {
-    return await invoke('create_prd', { request })
-  },
-
-  getById: async (id: string): Promise<PRDDocument> => {
-    return await invoke('get_prd', { id })
-  },
-
-  update: async (request: UpdatePRDRequest): Promise<PRDDocument> => {
-    return await invoke('update_prd', { request })
-  },
-
-  delete: async (id: string): Promise<void> => {
-    return await invoke('delete_prd', { id })
-  },
-
-  list: async (): Promise<PRDDocument[]> => {
-    return await invoke('list_prds')
-  },
-
-  listTemplates: async (): Promise<PRDTemplate[]> => {
-    return await invoke('list_prd_templates')
-  },
-
-  export: async (prdId: string, format: 'json' | 'markdown' | 'yaml'): Promise<string> => {
-    return await invoke('export_prd', { prdId, format })
-  },
-
-  analyzeQuality: async (prdId: string): Promise<PRDDocument> => {
-    return await invoke('analyze_prd_quality', { prdId })
-  },
-
   /** Scan .ralph-ui/prds/ directory for PRD markdown files */
   scanFiles: async (projectPath: string): Promise<PRDFile[]> => {
     return await invoke('scan_prd_files', { projectPath })
@@ -425,21 +390,6 @@ export const ralphLoopApi = {
   /** List all Ralph worktrees for a project */
   listWorktrees: async (projectPath: string): Promise<RalphWorktreeInfo[]> => {
     return await invoke('list_ralph_worktrees', { projectPath })
-  },
-
-  /** Convert PRD chat export to Ralph PRD format */
-  convertPrdToRalph: async (request: {
-    prdId: string
-    branch: string
-    agentType?: string
-    model?: string
-    maxIterations?: number
-    maxCost?: number
-    runTests?: boolean
-    runLint?: boolean
-    useWorktree?: boolean
-  }): Promise<RalphPrd> => {
-    return await invoke('convert_prd_to_ralph', { request })
   },
 
   /** Convert a file-based PRD to Ralph loop format */

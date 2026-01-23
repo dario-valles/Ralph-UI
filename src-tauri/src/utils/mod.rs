@@ -79,14 +79,6 @@ pub fn lock_mutex_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     }
 }
 
-/// Lock database mutex for Tauri commands, returning a String error for IPC compatibility.
-/// Use this in command handlers: `let db = lock_db(&db)?;`
-pub fn lock_db<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
-    mutex
-        .lock()
-        .map_err(|e| format!("Database lock error: {}", e))
-}
-
 /// Generate a unique ID using timestamp and random string.
 ///
 /// Note: Currently not used in the codebase but provided as a reusable utility.

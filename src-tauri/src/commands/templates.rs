@@ -5,10 +5,8 @@ use crate::templates::{
     builtin::get_builtin_templates,
     resolver::{TemplateResolver, TemplateSource},
 };
-use crate::utils::lock_db;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::State;
 
 /// Template info for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,36 +131,6 @@ pub async fn render_template(
 
     // Resolve @filename references if project_path is provided
     if let Some(path) = request.project_path {
-        let base_path = std::path::Path::new(&path);
-        Ok(engine.resolve_file_references(&rendered, base_path))
-    } else {
-        Ok(rendered)
-    }
-}
-
-/// Render task prompt using template system
-/// Supports @filename syntax for injecting file contents into prompts
-#[tauri::command]
-pub async fn render_task_prompt(
-    task_id: String,
-    template_name: Option<String>,
-    project_path: Option<String>,
-    db: State<'_, std::sync::Mutex<crate::database::Database>>,
-) -> Result<String, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    // Get task
-    let task = crate::database::tasks::get_task(conn, &task_id)
-        .map_err(|e| format!("Failed to get task: {}", e))?;
-
-    // Render the template
-    let rendered = crate::templates::render_task_prompt(&task, template_name.as_deref())
-        .map_err(|e| format!("Failed to render: {}", e))?;
-
-    // Resolve @filename references if project_path is provided
-    if let Some(path) = project_path {
-        let engine = TemplateEngine::new();
         let base_path = std::path::Path::new(&path);
         Ok(engine.resolve_file_references(&rendered, base_path))
     } else {

@@ -121,7 +121,6 @@ export function createMockRalphLoopApi() {
     getWorktreePath: vi.fn(),
     cleanupWorktree: vi.fn(),
     listWorktrees: vi.fn(),
-    convertPrdToRalph: vi.fn(),
     hasRalphFiles: vi.fn(),
     getRalphFiles: vi.fn(),
     getConfig: vi.fn(),
