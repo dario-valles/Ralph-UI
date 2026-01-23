@@ -20,6 +20,7 @@ interface SessionsSidebarProps {
   qualityAssessment: QualityAssessment | null
   loading: boolean
   onRefreshQuality: () => void
+  className?: string
 }
 
 /**
@@ -39,12 +40,14 @@ export function SessionsSidebar({
   qualityAssessment,
   loading,
   onRefreshQuality,
+  className,
 }: SessionsSidebarProps) {
   return (
     <Card
       className={cn(
         'shrink-0 flex flex-col transition-all duration-200',
-        collapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64'
+        collapsed ? 'w-12' : 'w-48 xl:w-56 2xl:w-64',
+        className
       )}
     >
       <CardHeader className={cn('pb-2', collapsed && 'px-2')}>

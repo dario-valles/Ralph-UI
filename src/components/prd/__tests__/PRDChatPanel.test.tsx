@@ -623,8 +623,9 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      const session2 = screen.getByText('E-commerce PRD')
-      await user.click(session2)
+      // Session title appears in both desktop sidebar and mobile selector, get the first (desktop sidebar)
+      const session2Elements = screen.getAllByText('E-commerce PRD')
+      await user.click(session2Elements[0])
 
       // setCurrentSession is called directly on click
       expect(mockSetCurrentSession).toHaveBeenCalledWith(mockSessions[1])

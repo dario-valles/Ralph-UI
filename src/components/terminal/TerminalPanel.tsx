@@ -17,6 +17,7 @@ import { TerminalTabs } from './TerminalTabs'
 import { ResizeHandle } from './ResizeHandle'
 import { SplitResizeHandle } from './SplitResizeHandle'
 import { Tooltip } from '@/components/ui/tooltip'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 
 // Terminal info for rendering
 interface TerminalInfo {
@@ -142,6 +143,8 @@ export function TerminalPanel() {
     updatePaneSizes,
   } = useTerminalStore()
 
+  const isMobile = useIsMobile()
+
   const handleResize = useCallback(
     (deltaY: number) => {
       const windowHeight = window.innerHeight
@@ -170,28 +173,35 @@ export function TerminalPanel() {
   const isMinimized = panelMode === 'minimized'
   const isFullScreen = panelMode === 'full'
 
+  // On mobile, always use fullscreen mode when open (not minimized)
+  const effectiveFullScreen = isMobile ? !isMinimized : isFullScreen
+
   return (
     <div
       className={cn(
-        'flex flex-col bg-card border-t',
-        isFullScreen && 'absolute inset-0 z-50',
+        'flex flex-col bg-card border-t safe-bottom',
+        effectiveFullScreen && 'fixed inset-0 z-50',
         isMinimized && 'h-auto'
       )}
       style={{
-        height: isMinimized ? 'auto' : isFullScreen ? '100%' : `${panelHeight}%`,
+        height: isMinimized ? 'auto' : effectiveFullScreen ? '100%' : `${panelHeight}%`,
       }}
     >
-      {!isMinimized && !isFullScreen && <ResizeHandle onResize={handleResize} />}
+      {/* Resize handle - hidden on mobile */}
+      {!isMinimized && !effectiveFullScreen && !isMobile && (
+        <ResizeHandle onResize={handleResize} />
+      )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[32px]">
+      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px]">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Terminal</span>
           {!isMinimized && <TerminalTabs className="flex-1 min-w-0" />}
         </div>
 
         <div className="flex items-center gap-0.5 shrink-0">
-          {!isMinimized && (
+          {/* Split controls - hidden on mobile */}
+          {!isMinimized && !isMobile && (
             <>
               <Tooltip content="Split Right" side="bottom">
                 <button
@@ -215,38 +225,45 @@ export function TerminalPanel() {
             </>
           )}
 
-          <Tooltip content={isMinimized ? 'Restore' : 'Minimize'} side="bottom">
-            <button
-              onClick={minimizePanel}
-              className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              {isMinimized ? (
-                <Maximize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Minus className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </Tooltip>
+          {/* Minimize - hidden on mobile (use close instead) */}
+          {!isMobile && (
+            <Tooltip content={isMinimized ? 'Restore' : 'Minimize'} side="bottom">
+              <button
+                onClick={minimizePanel}
+                className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                {isMinimized ? (
+                  <Maximize2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Minus className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </Tooltip>
+          )}
 
-          <Tooltip content={isFullScreen ? 'Restore' : 'Maximize'} side="bottom">
-            <button
-              onClick={maximizePanel}
-              className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              {isFullScreen ? (
-                <Minimize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize2 className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </Tooltip>
+          {/* Maximize - hidden on mobile */}
+          {!isMobile && (
+            <Tooltip content={isFullScreen ? 'Restore' : 'Maximize'} side="bottom">
+              <button
+                onClick={maximizePanel}
+                className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                {isFullScreen ? (
+                  <Minimize2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </Tooltip>
+          )}
 
           <Tooltip content="Close" side="bottom">
             <button
               onClick={closePanel}
-              className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex items-center justify-center w-9 h-9 md:w-6 md:h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label="Close terminal"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-5 w-5 md:h-3.5 md:w-3.5" />
             </button>
           </Tooltip>
         </div>

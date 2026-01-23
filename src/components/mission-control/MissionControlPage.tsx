@@ -42,17 +42,17 @@ export function MissionControlPage() {
   const isLoading = globalStats.loading || projectsLoading
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       {/* Global Stats Bar */}
       <GlobalStatsBar stats={globalStats} loading={globalStats.loading} />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex-1">
+        <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Mission Control</h1>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Mission Control</h1>
               <p className="text-sm text-muted-foreground">
                 Overview of all projects and Ralph Loop activity
               </p>

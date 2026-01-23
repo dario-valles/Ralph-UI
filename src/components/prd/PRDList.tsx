@@ -37,6 +37,7 @@ import { prdApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
 import { formatBackendDateOnly, formatBackendTime } from '@/lib/date-utils'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 import type { PRDFile } from '@/types'
 
 /**
@@ -47,6 +48,7 @@ export function PRDList() {
   const navigate = useNavigate()
   const { getActiveProject } = useProjectStore()
   const activeProject = getActiveProject()
+  const isMobile = useIsMobile()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -195,13 +197,65 @@ export function PRDList() {
     )
   }
 
+  // Mobile card view for a single PRD file
+  const PRDCard = ({ file }: { file: PRDFile }) => (
+    <Card key={file.id} className="p-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="font-medium truncate">{file.title}</div>
+            <div className="text-xs text-muted-foreground truncate">{file.filePath}</div>
+          </div>
+        </div>
+        {getStatusBadge(file)}
+      </div>
+      <div className="text-xs text-muted-foreground mb-3">
+        Modified {formatBackendDateOnly(file.modifiedAt)} at {formatBackendTime(file.modifiedAt)}
+      </div>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExecuteFile(file)}
+          className="flex-1 touch-target"
+        >
+          <Play className="h-4 w-4 mr-1" />
+          Execute
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleEditFile(file)}
+          className="flex-1 touch-target"
+        >
+          <Edit className="h-4 w-4 mr-1" />
+          Edit
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setDeleteConfirmFile(file)}
+          disabled={deleting === file.id}
+          className="touch-target"
+        >
+          {deleting === file.id ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </Card>
+  )
+
   return (
-    <div className="container mx-auto max-w-6xl py-8">
+    <div className="container mx-auto max-w-6xl py-4 md:py-8 px-4 md:px-6">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 md:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Product Requirements Documents</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold">Product Requirements Documents</h1>
+          <p className="mt-1 md:mt-2 text-sm text-muted-foreground">
             PRDs for {getProjectName(activeProject.path)}
           </p>
         </div>
@@ -211,21 +265,22 @@ export function PRDList() {
             size="sm"
             onClick={() => loadPrdFiles()}
             disabled={loading}
-            className="gap-2"
+            className="gap-2 touch-target md:min-h-0"
             title="Refresh PRD files from .ralph-ui/prds/"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => navigate('/prds/chat')} className="gap-2">
+          <Button onClick={() => navigate('/prds/chat')} className="gap-2 touch-target md:min-h-0">
             <Plus className="h-4 w-4" />
-            New PRD Chat
+            <span className="hidden sm:inline">New PRD Chat</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="relative flex-1">
+      <div className="mb-4 md:mb-6">
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search PRDs..."
@@ -236,26 +291,34 @@ export function PRDList() {
         </div>
       </div>
 
-      {/* PRD Table */}
+      {/* PRD List */}
       {filteredPRDs.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No PRDs Found</h2>
-            <p className="text-muted-foreground text-center mb-4">
+          <CardContent className="flex flex-col items-center justify-center py-12 md:py-16">
+            <FileText className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground mb-4" />
+            <h2 className="text-lg md:text-xl font-semibold mb-2">No PRDs Found</h2>
+            <p className="text-muted-foreground text-center mb-4 text-sm">
               {searchQuery
                 ? 'No PRDs match your search. Try a different query.'
                 : 'Create your first PRD using the AI-assisted chat interface.'}
             </p>
             {!searchQuery && (
-              <Button onClick={() => navigate('/prds/chat')}>
+              <Button onClick={() => navigate('/prds/chat')} className="touch-target md:min-h-0">
                 <Plus className="h-4 w-4 mr-2" />
                 Create PRD
               </Button>
             )}
           </CardContent>
         </Card>
+      ) : isMobile ? (
+        // Mobile: Card list view
+        <div className="space-y-3">
+          {filteredPRDs.map((file) => (
+            <PRDCard key={file.id} file={file} />
+          ))}
+        </div>
       ) : (
+        // Desktop: Table view
         <Card>
           <Table>
             <TableHeader>

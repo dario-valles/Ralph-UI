@@ -45,6 +45,8 @@ import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
+import { useIsMobile } from '@/hooks/useMediaQuery'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 // ============================================================================
 // Main Component
@@ -76,6 +78,10 @@ export function PRDChatPanel() {
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
   // Track if sessions have been initially loaded
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+  // Mobile plan sheet visibility
+  const [mobilePlanSheetOpen, setMobilePlanSheetOpen] = useState(false)
+
+  const isMobile = useIsMobile()
 
   const {
     sessions,
@@ -371,9 +377,20 @@ export function PRDChatPanel() {
     )
   }
 
+  // Handle plan sidebar/sheet toggle for mobile
+  const handlePlanToggle = () => {
+    if (isMobile) {
+      setMobilePlanSheetOpen(!mobilePlanSheetOpen)
+    } else {
+      setShowPlanSidebar(!showPlanSidebar)
+    }
+  }
+
+  const isPlanVisible = isMobile ? mobilePlanSheetOpen : showPlanSidebar
+
   return (
-    <div className="flex h-full gap-2 xl:gap-4">
-      {/* Session Sidebar - Collapsible */}
+    <div className="flex h-full flex-col lg:flex-row gap-2 xl:gap-4">
+      {/* Session Sidebar - Hidden on mobile, collapsible on larger screens */}
       <SessionsSidebar
         sessions={sessions}
         currentSession={currentSession}
@@ -387,10 +404,32 @@ export function PRDChatPanel() {
         qualityAssessment={qualityAssessment}
         loading={loading}
         onRefreshQuality={handleRefreshQuality}
+        className="hidden lg:flex"
       />
 
       {/* Chat Panel */}
       <Card className={cn('flex-1 flex flex-col min-w-0')}>
+        {/* Mobile Session Selector */}
+        <div className="lg:hidden px-3 py-2 border-b">
+          <Select
+            id="mobile-session-selector"
+            aria-label="Select session"
+            value={currentSession?.id || ''}
+            onChange={(e) => {
+              const session = sessions.find(s => s.id === e.target.value)
+              if (session) handleSelectSession(session)
+            }}
+            className="w-full text-sm"
+          >
+            <option value="" disabled>Select a session</option>
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.title || 'Untitled Session'}
+              </option>
+            ))}
+          </Select>
+        </div>
+
         <CardHeader className="pb-2 border-b px-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-shrink">
@@ -445,14 +484,14 @@ export function PRDChatPanel() {
               {/* Plan Sidebar Toggle */}
               {currentSession?.projectPath && (
                 <div className="flex items-center border rounded-md">
-                  <Tooltip content={showPlanSidebar ? 'Hide plan' : 'Show plan'} side="bottom">
+                  <Tooltip content={isPlanVisible ? 'Hide plan' : 'Show plan'} side="bottom">
                     <Button
-                      variant={showPlanSidebar ? 'default' : 'ghost'}
+                      variant={isPlanVisible ? 'default' : 'ghost'}
                       size="sm"
-                      onClick={() => setShowPlanSidebar(!showPlanSidebar)}
+                      onClick={handlePlanToggle}
                       disabled={streaming}
                       aria-label="Toggle plan sidebar"
-                      className="h-8 w-8 p-0 rounded-md relative"
+                      className="h-9 w-9 md:h-8 md:w-8 p-0 rounded-md relative"
                     >
                       <ScrollText className="h-4 w-4" />
                       {watchedPlanContent && (
@@ -631,15 +670,37 @@ export function PRDChatPanel() {
         </CardContent>
       </Card>
 
-      {/* Plan Document Sidebar */}
-      {showPlanSidebar && currentSession?.projectPath && (
+      {/* Plan Document Sidebar - Desktop */}
+      {showPlanSidebar && currentSession?.projectPath && !isMobile && (
         <PRDPlanSidebar
           content={watchedPlanContent}
           path={watchedPlanPath}
           isWatching={isWatchingPlan}
           onRefresh={startWatchingPlanFile}
-          className="w-60 xl:w-72 2xl:w-80 shrink-0"
+          className="hidden lg:flex w-60 xl:w-72 2xl:w-80 shrink-0"
         />
+      )}
+
+      {/* Plan Document Sheet - Mobile */}
+      {currentSession?.projectPath && (
+        <Sheet open={mobilePlanSheetOpen} onOpenChange={setMobilePlanSheetOpen}>
+          <SheetContent side="bottom" className="h-[70vh] lg:hidden p-0">
+            <SheetHeader className="px-4 py-3 border-b">
+              <SheetTitle className="text-base">PRD Plan</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto p-4">
+              {watchedPlanContent ? (
+                <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
+                  {watchedPlanContent}
+                </pre>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No plan content yet. Start chatting to generate a PRD.
+                </p>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
 
       {/* Delete Confirmation Dialog */}

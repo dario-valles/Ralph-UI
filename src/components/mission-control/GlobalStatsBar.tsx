@@ -58,7 +58,7 @@ export function GlobalStatsBar({ stats, loading }: GlobalStatsBarProps) {
 
   return (
     <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-      <div className="flex items-center justify-between gap-6 px-4 py-3 overflow-x-auto">
+      <div className="flex items-center justify-between gap-4 sm:gap-6 px-3 sm:px-4 py-3 overflow-x-auto">
         <StatItem
           icon={Repeat}
           label="Active Executions"
@@ -68,7 +68,8 @@ export function GlobalStatsBar({ stats, loading }: GlobalStatsBarProps) {
           loading={loading}
         />
 
-        <div className="h-8 w-px bg-border flex-shrink-0" />
+        {/* Separator - hidden on small screens */}
+        <div className="hidden sm:block h-8 w-px bg-border flex-shrink-0" />
 
         <StatItem
           icon={FolderOpen}
@@ -85,7 +86,7 @@ export function GlobalStatsBar({ stats, loading }: GlobalStatsBarProps) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
             </span>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
+            <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
               Live
             </span>
           </div>

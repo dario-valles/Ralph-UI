@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @theme {
   --color-border: hsl(var(--border));
@@ -94,4 +95,267 @@
 
 .animate-highlight-fade {
   animation: highlight-fade 2s ease-out forwards;
+}
+
+/* Responsive utilities */
+@layer utilities {
+  /* Touch-friendly target size (44x44px minimum per WCAG) */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Safe area padding for mobile devices with notches */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Skip link for accessibility */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md;
+  }
+
+  /* Improved focus ring for accessibility */
+  .focus-ring {
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none;
+  }
+}
+
+/* Sheet slide-in animations */
+@keyframes slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-0 {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-in {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+.fade-in-0 {
+  animation-name: fade-in-0;
+}
+
+.slide-in-from-left {
+  animation-name: slide-in-from-left;
+}
+
+.slide-in-from-right {
+  animation-name: slide-in-from-right;
+}
+
+.slide-in-from-top {
+  animation-name: slide-in-from-top;
+}
+
+.slide-in-from-bottom {
+  animation-name: slide-in-from-bottom;
+}
+
+/* ==========================================================================
+   Typography Enhancement
+   ========================================================================== */
+
+:root {
+  --font-display: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Apply display font to headings for that control-room aesthetic */
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+/* ==========================================================================
+   Micro-interactions
+   ========================================================================== */
+
+@layer utilities {
+  /* Button hover scale effect */
+  .hover-scale {
+    @apply transition-transform duration-150;
+  }
+  .hover-scale:hover {
+    transform: scale(1.02);
+  }
+  .hover-scale:active {
+    transform: scale(0.98);
+  }
+
+  /* Card hover lift effect */
+  .hover-lift {
+    @apply transition-shadow duration-200;
+  }
+  .hover-lift:hover {
+    @apply shadow-md;
+  }
+
+  /* Processing pulse animation for badges */
+  .processing-pulse {
+    animation: processing-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes processing-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Nav item active indicator slide-in */
+.nav-active-indicator {
+  position: relative;
+}
+
+.nav-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: hsl(var(--primary));
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.nav-active-indicator[data-active="true"]::before {
+  opacity: 1;
+}
+
+/* ==========================================================================
+   Interactive States
+   ========================================================================== */
+
+/* Improved focus states */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Active/pressed state for touch devices */
+@media (hover: none) {
+  button:active,
+  [role="button"]:active {
+    opacity: 0.8;
+  }
+}
+
+/* ==========================================================================
+   Card Refinements
+   ========================================================================== */
+
+/* Subtle border gradient for cards */
+.card-refined {
+  border-color: transparent;
+  background:
+    linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+    linear-gradient(180deg, hsl(var(--border)), hsl(var(--border) / 0.5)) border-box;
+}
+
+/* ==========================================================================
+   Badge Variants
+   ========================================================================== */
+
+.badge-processing {
+  @apply bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20;
+}
+
+.badge-success {
+  @apply bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20;
+}
+
+.badge-error {
+  @apply bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20;
+}
+
+/* ==========================================================================
+   Scrollbar Styling
+   ========================================================================== */
+
+/* Minimal scrollbars for a cleaner look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Hide scrollbars on mobile for cleaner look */
+@media (max-width: 640px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
 }

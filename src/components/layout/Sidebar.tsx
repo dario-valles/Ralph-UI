@@ -11,7 +11,11 @@ const navigation = [
   { name: 'Ralph Loop', to: '/ralph-loop', icon: Repeat },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  className?: string
+}
+
+export function Sidebar({ className }: SidebarProps) {
   const { sidebarCollapsed } = useUIStore()
   const processingSessionId = usePRDChatStore((state) => state.processingSessionId)
 
@@ -20,7 +24,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="flex flex-col w-48 border-r bg-card">
+    <div className={cn('flex flex-col w-48 border-r bg-card', className)}>
       <nav className="flex-1 space-y-0.5 p-1.5">
         {navigation.map((item) => {
           const Icon = item.icon
