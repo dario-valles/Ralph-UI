@@ -50,7 +50,7 @@ export function GSDWorkflow({
   // Global store state
   const {
     workflowState,
-    isLoading,
+    loading: isLoading,
     error,
     requirementsDoc,
     roadmapDoc,

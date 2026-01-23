@@ -1,7 +1,7 @@
 // PRD Chat State Management Store
 import { create } from 'zustand'
 import { prdChatApi } from '@/lib/tauri-api'
-import { asyncAction, type AsyncState } from '@/lib/store-utils'
+import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   ChatSession,
   ChatMessage,
@@ -107,10 +107,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         set({ guidedQuestions: questions })
       }
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to start session',
-        loading: false,
-      })
+      set({ error: errorToString(error), loading: false })
     }
   },
 
@@ -126,7 +123,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         sessions: state.sessions.map((s) => s.id === currentSession.id ? { ...s, agentType } : s)
       }))
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Failed to update agent' })
+      set({ error: errorToString(error) })
     }
   },
 
@@ -193,7 +190,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         messages: state.messages.filter((m) => m.id !== optimisticMessage.id),
         streaming: false,
         processingSessionId: null,
-        error: error instanceof Error && error.message ? error.message : 'Failed to send message',
+        error: errorToString(error),
       }))
       throw error
     }
@@ -269,10 +266,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       set({ qualityAssessment: assessment, loading: false })
       return assessment
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to assess quality',
-        loading: false,
-      })
+      set({ error: errorToString(error), loading: false })
       return null
     }
   },
@@ -283,9 +277,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       const questions = await prdChatApi.getGuidedQuestions(prdType)
       set({ guidedQuestions: questions })
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to load guided questions',
-      })
+      set({ error: errorToString(error) })
     }
   },
 
@@ -302,10 +294,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       set({ extractedContent: content, loading: false })
       return content
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to preview extraction',
-        loading: false,
-      })
+      set({ error: errorToString(error), loading: false })
       return null
     }
   },
@@ -333,9 +322,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         }
       })
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to set structured mode',
-      })
+      set({ error: errorToString(error) })
     }
   },
 
@@ -349,9 +336,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     try {
       await prdChatApi.clearExtractedStructure(currentSession.id, currentSession.projectPath)
     } catch (error) {
-      set({
-        error: error instanceof Error && error.message ? error.message : 'Failed to clear extracted structure',
-      })
+      set({ error: errorToString(error) })
     }
   },
 

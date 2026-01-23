@@ -559,16 +559,18 @@ describe('prdChatStore', () => {
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
-      expect(usePRDChatStore.getState().error).toBe('Failed to start session')
+      // errorToString() uses String(error) for non-Error objects
+      expect(usePRDChatStore.getState().error).toBe('String error')
     })
 
-    it('should handle undefined error message', async () => {
-      vi.mocked(prdChatApi.startSession).mockRejectedValue(new Error())
+    it('should handle Error with empty message', async () => {
+      vi.mocked(prdChatApi.startSession).mockRejectedValue(new Error(''))
 
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
-      expect(usePRDChatStore.getState().error).toBe('Failed to start session')
+      // errorToString() uses error.message which is empty string
+      expect(usePRDChatStore.getState().error).toBe('')
     })
   })
 

@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { projectApi } from '@/lib/tauri-api'
-import { asyncAction, type AsyncState } from '@/lib/store-utils'
+import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type { Project } from '@/types'
 export type { Project }
 
@@ -83,9 +83,7 @@ export const useProjectStore = create<ProjectStore>()(
           })
           return project
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to register project',
-          })
+          set({ error: errorToString(error) })
           throw error
         }
       },
@@ -119,9 +117,7 @@ export const useProjectStore = create<ProjectStore>()(
             ),
           }))
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to toggle favorite',
-          })
+          set({ error: errorToString(error) })
         }
       },
 
@@ -135,9 +131,7 @@ export const useProjectStore = create<ProjectStore>()(
             ),
           }))
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to update project name',
-          })
+          set({ error: errorToString(error) })
         }
       },
 
@@ -150,9 +144,7 @@ export const useProjectStore = create<ProjectStore>()(
             activeProjectId: state.activeProjectId === projectId ? null : state.activeProjectId,
           }))
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to delete project',
-          })
+          set({ error: errorToString(error) })
         }
       },
 

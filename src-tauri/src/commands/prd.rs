@@ -28,18 +28,20 @@ pub struct PRDFile {
 
 /// Extract title from markdown content or fallback to filename
 fn extract_markdown_title(content: &str, fallback_name: &str) -> String {
-    content.lines()
+    content
+        .lines()
         .find(|line| line.starts_with("# "))
         .map(|line| line.trim_start_matches("# ").trim().to_string())
         .unwrap_or_else(|| {
             // Convert filename to title (e.g., "new-feature-prd" -> "New Feature Prd")
             let name_part = fallback_name.rsplitn(2, '-').last().unwrap_or(fallback_name);
-            name_part.split('-')
+            name_part
+                .split('-')
                 .map(|word| {
                     let mut chars = word.chars();
                     match chars.next() {
                         None => String::new(),
-                        Some(first) => first.to_uppercase().chain(chars).collect()
+                        Some(first) => first.to_uppercase().chain(chars).collect(),
                     }
                 })
                 .collect::<Vec<_>>()
@@ -47,11 +49,52 @@ fn extract_markdown_title(content: &str, fallback_name: &str) -> String {
         })
 }
 
+/// Read a PRD markdown file and build a PRDFile struct.
+///
+/// This is a shared helper that reads the file content, extracts the title,
+/// gets modification time, and checks for associated files.
+fn read_prd_file_at_path(
+    prds_dir: &std::path::Path,
+    file_path: &std::path::Path,
+    prd_name: &str,
+    project_path: &str,
+) -> Result<PRDFile, String> {
+    use std::fs;
+
+    let content =
+        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let title = extract_markdown_title(&content, prd_name);
+
+    let metadata =
+        fs::metadata(file_path).map_err(|e| format!("Failed to get file metadata: {}", e))?;
+
+    let modified_at = metadata
+        .modified()
+        .map(|t| {
+            let datetime: chrono::DateTime<chrono::Utc> = t.into();
+            datetime.to_rfc3339()
+        })
+        .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+
+    let json_path = prds_dir.join(format!("{}.json", prd_name));
+    let progress_path = prds_dir.join(format!("{}-progress.txt", prd_name));
+
+    Ok(PRDFile {
+        id: format!("file:{}", prd_name),
+        title,
+        content,
+        project_path: project_path.to_string(),
+        file_path: format!(".ralph-ui/prds/{}.md", prd_name),
+        modified_at,
+        has_ralph_json: json_path.exists(),
+        has_progress: progress_path.exists(),
+    })
+}
+
 /// Scan .ralph-ui/prds/ directory for PRD markdown files
 #[tauri::command]
-pub async fn scan_prd_files(
-    project_path: String,
-) -> Result<Vec<PRDFile>, String> {
+pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String> {
     use std::fs;
     use std::path::Path;
 
@@ -63,64 +106,29 @@ pub async fn scan_prd_files(
 
     let mut prd_files = Vec::new();
 
-    let entries = fs::read_dir(&prds_dir)
-        .map_err(|e| format!("Failed to read prds directory: {}", e))?;
+    let entries =
+        fs::read_dir(&prds_dir).map_err(|e| format!("Failed to read prds directory: {}", e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let path = entry.path();
 
-        // Only process .md files, skip -prompt.md (Ralph Loop prompts)
-        if let Some(ext) = path.extension() {
-            if ext != "md" {
-                continue;
-            }
-        } else {
+        // Only process .md files
+        if path.extension().map_or(true, |ext| ext != "md") {
             continue;
         }
 
-        let filename = path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
+        let filename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
 
         // Skip prompt files (e.g., my-prd-prompt.md)
         if filename.ends_with("-prompt") {
             continue;
         }
 
-        // Read file content
-        let content = fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
-
-        // Extract title from first # heading or use filename
-        let title = extract_markdown_title(&content, filename);
-
-        // Get file modification time
-        let metadata = fs::metadata(&path)
-            .map_err(|e| format!("Failed to get file metadata: {}", e))?;
-        let modified_at = metadata.modified()
-            .map(|t| {
-                let datetime: chrono::DateTime<chrono::Utc> = t.into();
-                datetime.to_rfc3339()
-            })
-            .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
-
-        // Check for associated files
-        let json_path = prds_dir.join(format!("{}.json", filename));
-        let progress_path = prds_dir.join(format!("{}-progress.txt", filename));
-
-        let file_path = format!(".ralph-ui/prds/{}.md", filename);
-
-        prd_files.push(PRDFile {
-            id: format!("file:{}", filename),
-            title,
-            content,
-            project_path: project_path.clone(),
-            file_path,
-            modified_at,
-            has_ralph_json: json_path.exists(),
-            has_progress: progress_path.exists(),
-        });
+        match read_prd_file_at_path(&prds_dir, &path, filename, &project_path) {
+            Ok(prd_file) => prd_files.push(prd_file),
+            Err(e) => log::warn!("Failed to read PRD file {:?}: {}", path, e),
+        }
     }
 
     // Sort by modification time (newest first)
@@ -131,11 +139,7 @@ pub async fn scan_prd_files(
 
 /// Get a PRD file by name from .ralph-ui/prds/
 #[tauri::command]
-pub async fn get_prd_file(
-    project_path: String,
-    prd_name: String,
-) -> Result<PRDFile, String> {
-    use std::fs;
+pub async fn get_prd_file(project_path: String, prd_name: String) -> Result<PRDFile, String> {
     use std::path::Path;
 
     let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
@@ -145,37 +149,7 @@ pub async fn get_prd_file(
         return Err(format!("PRD file not found: {}.md", prd_name));
     }
 
-    // Read file content
-    let content = fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-
-    // Extract title from first # heading or use filename
-    let title = extract_markdown_title(&content, &prd_name);
-
-    // Get file modification time
-    let metadata = fs::metadata(&file_path)
-        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
-    let modified_at = metadata.modified()
-        .map(|t| {
-            let datetime: chrono::DateTime<chrono::Utc> = t.into();
-            datetime.to_rfc3339()
-        })
-        .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
-
-    // Check for associated files
-    let json_path = prds_dir.join(format!("{}.json", prd_name));
-    let progress_path = prds_dir.join(format!("{}-progress.txt", prd_name));
-
-    Ok(PRDFile {
-        id: format!("file:{}", prd_name),
-        title,
-        content,
-        project_path,
-        file_path: format!(".ralph-ui/prds/{}.md", prd_name),
-        modified_at,
-        has_ralph_json: json_path.exists(),
-        has_progress: progress_path.exists(),
-    })
+    read_prd_file_at_path(&prds_dir, &file_path, &prd_name, &project_path)
 }
 
 /// Update a PRD file's content

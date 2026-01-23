@@ -222,142 +222,94 @@ pub fn init_ralph_prd(request: InitRalphPrdRequest, prd_name: String) -> Result<
     Ok(prd)
 }
 
-/// Read the Ralph PRD from .ralph-ui/prds/{prd_name}.json
-/// 
-/// This command checks both the main project and any existing worktrees,
-/// returning the PRD from whichever has newer data. This ensures correct
-/// data is shown after app restart even if a worktree execution is ongoing.
-#[tauri::command]
-pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd, String> {
-    let project_path_buf = PathBuf::from(&project_path);
-    
-    // Try to read from main project first
-    let main_executor = PrdExecutor::new(&project_path_buf, &prd_name);
-    let main_prd_path = project_path_buf.join(".ralph-ui").join("prds").join(format!("{}.json", prd_name));
-    let main_modified = main_prd_path.metadata()
+/// Find the newest PRD by checking main project and all worktrees.
+///
+/// Returns the PRD from whichever location has the most recently modified file.
+/// This ensures correct data is shown after app restart even if a worktree
+/// execution is ongoing.
+fn find_newest_prd(project_path: &std::path::Path, prd_name: &str) -> Result<RalphPrd, String> {
+    use std::time::SystemTime;
+
+    let main_executor = PrdExecutor::new(project_path, prd_name);
+    let main_prd_path = project_path
+        .join(".ralph-ui")
+        .join("prds")
+        .join(format!("{}.json", prd_name));
+    let main_modified = main_prd_path
+        .metadata()
         .ok()
         .and_then(|m| m.modified().ok());
-    
-    // Check if there's a worktree with newer PRD data
-    let worktrees_dir = project_path_buf.join(".worktrees");
+
+    let worktrees_dir = project_path.join(".worktrees");
     let mut best_prd: Option<RalphPrd> = None;
-    let mut best_modified = main_modified;
-    
+    let mut best_modified: Option<SystemTime> = main_modified;
+
     if worktrees_dir.exists() {
         if let Ok(entries) = std::fs::read_dir(&worktrees_dir) {
             for entry in entries.flatten() {
                 let worktree_path = entry.path();
-                if worktree_path.is_dir() {
-                    // Check if this worktree has the same PRD
-                    let worktree_prd_path = worktree_path
-                        .join(".ralph-ui")
-                        .join("prds")
-                        .join(format!("{}.json", prd_name));
-                    
-                    if worktree_prd_path.exists() {
-                        if let Ok(metadata) = worktree_prd_path.metadata() {
-                            if let Ok(modified) = metadata.modified() {
-                                // Check if this is newer than what we have
-                                let is_newer = match best_modified {
-                                    Some(best) => modified > best,
-                                    None => true,
-                                };
-                                
-                                if is_newer {
-                                    // Try to read the PRD from worktree
-                                    let worktree_executor = PrdExecutor::new(&worktree_path, &prd_name);
-                                    if let Ok(prd) = worktree_executor.read_prd() {
-                                        log::debug!(
-                                            "[get_ralph_prd] Found newer PRD in worktree {:?}",
-                                            worktree_path
-                                        );
-                                        best_prd = Some(prd);
-                                        best_modified = Some(modified);
-                                    }
-                                }
-                            }
-                        }
+                if !worktree_path.is_dir() {
+                    continue;
+                }
+
+                let worktree_prd_path = worktree_path
+                    .join(".ralph-ui")
+                    .join("prds")
+                    .join(format!("{}.json", prd_name));
+
+                let modified = worktree_prd_path
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok());
+
+                let is_newer = match (modified, best_modified) {
+                    (Some(m), Some(best)) => m > best,
+                    (Some(_), None) => true,
+                    _ => false,
+                };
+
+                if is_newer {
+                    let worktree_executor = PrdExecutor::new(&worktree_path, prd_name);
+                    if let Ok(prd) = worktree_executor.read_prd() {
+                        log::debug!(
+                            "[find_newest_prd] Found newer PRD in worktree {:?}",
+                            worktree_path
+                        );
+                        best_prd = Some(prd);
+                        best_modified = modified;
                     }
                 }
             }
         }
     }
-    
-    // Use the best PRD we found (worktree if newer, otherwise main)
+
     match best_prd {
         Some(prd) => Ok(prd),
         None => main_executor.read_prd(),
     }
 }
 
+/// Read the Ralph PRD from .ralph-ui/prds/{prd_name}.json
+///
+/// This command checks both the main project and any existing worktrees,
+/// returning the PRD from whichever has newer data. This ensures correct
+/// data is shown after app restart even if a worktree execution is ongoing.
+#[tauri::command]
+pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd, String> {
+    find_newest_prd(&PathBuf::from(&project_path), &prd_name)
+}
+
 /// Get the status of the Ralph PRD
-/// 
+///
 /// This command checks both the main project and any existing worktrees,
 /// returning status from whichever has newer data. This ensures correct
 /// status is shown after app restart even if a worktree execution is ongoing.
 #[tauri::command]
 pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<PrdStatus, String> {
     let project_path_buf = PathBuf::from(&project_path);
-    
-    // Try to read from main project first
-    let main_executor = PrdExecutor::new(&project_path_buf, &prd_name);
-    let main_prd_path = project_path_buf.join(".ralph-ui").join("prds").join(format!("{}.json", prd_name));
-    let main_modified = main_prd_path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok());
-    
-    // Check if there's a worktree with newer PRD data
-    let worktrees_dir = project_path_buf.join(".worktrees");
-    let mut best_prd: Option<RalphPrd> = None;
-    let mut best_modified = main_modified;
-    
-    if worktrees_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(&worktrees_dir) {
-            for entry in entries.flatten() {
-                let worktree_path = entry.path();
-                if worktree_path.is_dir() {
-                    // Check if this worktree has the same PRD
-                    let worktree_prd_path = worktree_path
-                        .join(".ralph-ui")
-                        .join("prds")
-                        .join(format!("{}.json", prd_name));
-                    
-                    if worktree_prd_path.exists() {
-                        if let Ok(metadata) = worktree_prd_path.metadata() {
-                            if let Ok(modified) = metadata.modified() {
-                                // Check if this is newer than what we have
-                                let is_newer = match best_modified {
-                                    Some(best) => modified > best,
-                                    None => true,
-                                };
-                                
-                                if is_newer {
-                                    // Try to read the PRD from worktree
-                                    let worktree_executor = PrdExecutor::new(&worktree_path, &prd_name);
-                                    if let Ok(prd) = worktree_executor.read_prd() {
-                                        log::debug!(
-                                            "[get_ralph_prd_status] Found newer PRD in worktree {:?}",
-                                            worktree_path
-                                        );
-                                        best_prd = Some(prd);
-                                        best_modified = Some(modified);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Use the best PRD we found (worktree if newer, otherwise main)
-    let prd = match best_prd {
-        Some(prd) => prd,
-        None => main_executor.read_prd()?,
-    };
-    
-    Ok(main_executor.get_status(&prd))
+    let prd = find_newest_prd(&project_path_buf, &prd_name)?;
+    let executor = PrdExecutor::new(&project_path_buf, &prd_name);
+    Ok(executor.get_status(&prd))
 }
 
 /// Mark a story as passing in the PRD

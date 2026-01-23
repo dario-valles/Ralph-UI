@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 // Re-export types needed for proxy commands
 use crate::commands::ralph_loop::RalphStoryInput;
-use crate::ralph_loop::RalphConfig;
+use crate::ralph_loop::{ExecutionSnapshot, RalphConfig};
 
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
@@ -80,6 +80,23 @@ fn get_opt_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Resu
         .map(|v| serde_json::from_value(v.clone()))
         .transpose()
         .map_err(|e| format!("Invalid argument {}: {}", name, e))
+}
+
+/// Extract a field from an ExecutionSnapshot by execution ID
+fn get_snapshot_field<T, F>(
+    state: &ServerAppState,
+    args: &Value,
+    extractor: F,
+) -> Result<Value, String>
+where
+    T: Serialize,
+    F: FnOnce(&ExecutionSnapshot) -> T,
+{
+    let execution_id: String = get_arg(args, "executionId")?;
+    match state.ralph_loop_state.get_snapshot(&execution_id) {
+        Some(snapshot) => serde_json::to_value(extractor(&snapshot)).map_err(|e| e.to_string()),
+        None => Err(format!("Execution {} not found", execution_id)),
+    }
 }
 
 // =============================================================================
@@ -800,37 +817,10 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             Err("Ralph loop execution is not supported in browser mode. Use the desktop app.".to_string())
         }
 
-        "get_ralph_loop_state" => {
-            let execution_id: String = get_arg(&args, "executionId")?;
-            match state.ralph_loop_state.get_snapshot(&execution_id) {
-                Some(s) => serde_json::to_value(s.state).map_err(|e| e.to_string()),
-                None => Err(format!("Execution {} not found", execution_id)),
-            }
-        }
-
-        "get_ralph_loop_metrics" => {
-            let execution_id: String = get_arg(&args, "executionId")?;
-            match state.ralph_loop_state.get_snapshot(&execution_id) {
-                Some(s) => serde_json::to_value(s.metrics).map_err(|e| e.to_string()),
-                None => Err(format!("Execution {} not found", execution_id)),
-            }
-        }
-
-        "get_ralph_loop_current_agent" => {
-            let execution_id: String = get_arg(&args, "executionId")?;
-            match state.ralph_loop_state.get_snapshot(&execution_id) {
-                Some(s) => serde_json::to_value(s.current_agent_id).map_err(|e| e.to_string()),
-                None => Err(format!("Execution {} not found", execution_id)),
-            }
-        }
-
-        "get_ralph_loop_worktree_path" => {
-            let execution_id: String = get_arg(&args, "executionId")?;
-            match state.ralph_loop_state.get_snapshot(&execution_id) {
-                Some(s) => serde_json::to_value(s.worktree_path).map_err(|e| e.to_string()),
-                None => Err(format!("Execution {} not found", execution_id)),
-            }
-        }
+        "get_ralph_loop_state" => get_snapshot_field(state, &args, |s| s.state.clone()),
+        "get_ralph_loop_metrics" => get_snapshot_field(state, &args, |s| s.metrics.clone()),
+        "get_ralph_loop_current_agent" => get_snapshot_field(state, &args, |s| s.current_agent_id.clone()),
+        "get_ralph_loop_worktree_path" => get_snapshot_field(state, &args, |s| s.worktree_path.clone()),
 
         "get_ralph_loop_snapshot" => {
             let execution_id: String = get_arg(&args, "executionId")?;

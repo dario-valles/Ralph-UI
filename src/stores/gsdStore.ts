@@ -12,6 +12,7 @@ import type {
 } from '@/types/gsd'
 import { getNextPhase, getPreviousPhase } from '@/types/gsd'
 import { gsdApi } from '@/lib/tauri-api'
+import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   RequirementsDoc,
   RoadmapDoc,
@@ -25,11 +26,9 @@ import type { AgentType } from '@/types'
 /**
  * GSD Store State
  */
-interface GsdState {
+interface GsdState extends AsyncState {
   // Workflow state
   workflowState: GsdWorkflowState | null
-  isLoading: boolean
-  error: string | null
 
   // Planning documents
   requirementsDoc: RequirementsDoc | null
@@ -131,7 +130,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
     (set, get) => ({
       // Initial state
       workflowState: null,
-      isLoading: false,
+      loading: false,
       error: null,
       requirementsDoc: null,
       roadmapDoc: null,
@@ -147,29 +146,27 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Session management
       startGsdSession: async (projectPath, chatSessionId) => {
-        set({ isLoading: true, error: null })
-        try {
-          const state = await gsdApi.startSession(projectPath, chatSessionId)
-          set({ workflowState: state, isLoading: false })
-          return state
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to start GSD session'
-          set({ error: message, isLoading: false })
-          throw error
-        }
+        const result = await asyncAction(
+          set,
+          async () => {
+            const state = await gsdApi.startSession(projectPath, chatSessionId)
+            return { workflowState: state, __result: state }
+          },
+          { rethrow: true }
+        )
+        return result!
       },
 
       loadGsdState: async (projectPath, sessionId) => {
-        set({ isLoading: true, error: null })
-        try {
-          const state = await gsdApi.getState(projectPath, sessionId)
-          set({ workflowState: state, isLoading: false })
-          return state
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to load GSD state'
-          set({ error: message, isLoading: false })
-          throw error
-        }
+        const result = await asyncAction(
+          set,
+          async () => {
+            const state = await gsdApi.getState(projectPath, sessionId)
+            return { workflowState: state, __result: state }
+          },
+          { rethrow: true }
+        )
+        return result ?? null
       },
 
       setWorkflowState: (state) => {
@@ -324,8 +321,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
             },
           })
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to start research'
-          set({ error: message })
+          set({ error: errorToString(error) })
         }
       },
 
@@ -375,14 +371,14 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Requirements
       loadRequirements: async (projectPath, sessionId) => {
-        set({ isLoading: true })
-        try {
-          const requirementsDoc = await gsdApi.loadRequirements(projectPath, sessionId)
-          set({ requirementsDoc, isLoading: false })
-        } catch (error) {
-          set({ isLoading: false })
-          throw error
-        }
+        await asyncAction(
+          set,
+          async () => {
+            const requirementsDoc = await gsdApi.loadRequirements(projectPath, sessionId)
+            return { requirementsDoc }
+          },
+          { rethrow: true }
+        )
       },
 
       setRequirementsDoc: (doc: RequirementsDoc) => {
@@ -422,33 +418,31 @@ export const useGsdStore = create<GsdState & GsdActions>()(
               }
             }
           }
-          set({ requirementsDoc: { requirements: updatedRequirements } })
-          const message = error instanceof Error ? error.message : 'Failed to persist scope'
-          set({ error: message })
+          set({ requirementsDoc: { requirements: updatedRequirements }, error: errorToString(error) })
         }
       },
 
       // Roadmap
       loadRoadmap: async (projectPath, sessionId) => {
-        set({ isLoading: true })
-        try {
-          const roadmapDoc = await gsdApi.loadRoadmap(projectPath, sessionId)
-          set({ roadmapDoc, isLoading: false })
-        } catch (error) {
-          set({ isLoading: false })
-          throw error
-        }
+        await asyncAction(
+          set,
+          async () => {
+            const roadmapDoc = await gsdApi.loadRoadmap(projectPath, sessionId)
+            return { roadmapDoc }
+          },
+          { rethrow: true }
+        )
       },
 
       generateRoadmap: async (projectPath, sessionId) => {
-        set({ isLoading: true })
-        try {
-          const roadmapDoc = await gsdApi.createRoadmap(projectPath, sessionId)
-          set({ roadmapDoc, isLoading: false })
-        } catch (error) {
-          set({ isLoading: false })
-          throw error
-        }
+        await asyncAction(
+          set,
+          async () => {
+            const roadmapDoc = await gsdApi.createRoadmap(projectPath, sessionId)
+            return { roadmapDoc }
+          },
+          { rethrow: true }
+        )
       },
 
       setRoadmapDoc: (doc: RoadmapDoc) => {
@@ -457,23 +451,23 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Verification
       runVerification: async (projectPath, sessionId) => {
-        set({ isLoading: true })
-        try {
-          const iterationResult = await gsdApi.verifyPlans(projectPath, sessionId)
-          // Convert VerificationIterationResult to VerificationResult for local state
-          const result: VerificationResult = {
-            passed: iterationResult.passed,
-            coveragePercentage: iterationResult.coveragePercentage,
-            issues: iterationResult.issues,
-            warnings: iterationResult.warnings,
-            stats: iterationResult.stats,
-          }
-          set({ verificationResult: result, isLoading: false })
-          return result
-        } catch (error) {
-          set({ isLoading: false })
-          throw error
-        }
+        const result = await asyncAction(
+          set,
+          async () => {
+            const iterationResult = await gsdApi.verifyPlans(projectPath, sessionId)
+            // Convert VerificationIterationResult to VerificationResult for local state
+            const verificationResult: VerificationResult = {
+              passed: iterationResult.passed,
+              coveragePercentage: iterationResult.coveragePercentage,
+              issues: iterationResult.issues,
+              warnings: iterationResult.warnings,
+              stats: iterationResult.stats,
+            }
+            return { verificationResult, __result: verificationResult }
+          },
+          { rethrow: true }
+        )
+        return result!
       },
 
       setVerificationResult: (result: VerificationResult) => {
@@ -482,15 +476,15 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Conversion/Export
       exportToRalph: async (projectPath, sessionId, prdName, branch, includeV2, executionConfig) => {
-        set({ isLoading: true })
-        try {
-          const result = await gsdApi.exportToRalph(projectPath, sessionId, prdName, branch, includeV2, executionConfig)
-          set({ isLoading: false })
-          return result
-        } catch (error) {
-          set({ isLoading: false })
-          throw error
-        }
+        const result = await asyncAction(
+          set,
+          async () => {
+            const exportResult = await gsdApi.exportToRalph(projectPath, sessionId, prdName, branch, includeV2, executionConfig)
+            return { __result: exportResult }
+          },
+          { rethrow: true }
+        )
+        return result!
       },
 
       // Decisions
@@ -512,8 +506,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         set({ error })
       },
 
-      setLoading: (loading: boolean) => {
-        set({ isLoading: loading })
+      setLoading: (isLoading: boolean) => {
+        set({ loading: isLoading })
       },
 
       // Config
@@ -541,8 +535,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           const planningSessions = await gsdApi.listSessions(projectPath)
           set({ planningSessions })
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to load planning sessions'
-          set({ error: message, planningSessions: [] })
+          set({ error: errorToString(error), planningSessions: [] })
         }
       },
     }),

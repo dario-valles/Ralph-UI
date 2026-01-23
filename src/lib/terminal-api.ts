@@ -82,22 +82,6 @@ export function isPtyAvailable(): boolean {
 }
 
 /**
- * Check if we're in Tauri mode with PTY available
- */
-export function isTauriPtyAvailable(): boolean {
-  return isTauri && spawn !== null
-}
-
-/**
- * Check if we're in browser mode with WebSocket PTY available
- */
-export function isWebSocketPtyAvailable(): boolean {
-  if (isTauri) return false
-  const connection = getServerConnection()
-  return connection !== null
-}
-
-/**
  * Spawn a new PTY process (async to support WebSocket mode)
  * Returns null if PTY is not available
  */
@@ -149,38 +133,6 @@ export async function spawnTerminalAsync(
 
   console.warn('No PTY backend available')
   return null
-}
-
-/**
- * Spawn a new PTY process (sync, for backwards compatibility - Tauri only)
- * @deprecated Use spawnTerminalAsync instead
- */
-export function spawnTerminal(
-  terminalId: string,
-  options: SpawnOptions = {},
-  cols: number = 80,
-  rows: number = 24
-): UnifiedPty | null {
-  if (!isTauri || !spawn) {
-    console.warn('Sync spawnTerminal only works in Tauri mode. Use spawnTerminalAsync for browser mode.')
-    return null
-  }
-
-  const shell = options.shell || getDefaultShell()
-  const args = options.args || []
-  const cwd = options.cwd
-  const env = options.env || {}
-
-  const pty = spawn(shell, args, {
-    cwd,
-    cols,
-    rows,
-    env: Object.keys(env).length > 0 ? env : undefined,
-  })
-
-  const unified = wrapTauriPty(pty)
-  ptyInstances.set(terminalId, unified)
-  return unified
 }
 
 /**

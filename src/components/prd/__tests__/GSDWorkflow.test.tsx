@@ -53,7 +53,7 @@ vi.mock('@/lib/tauri-api', () => ({
 vi.mock('@/stores/gsdStore', () => ({
   useGsdStore: () => ({
     workflowState: null,
-    isLoading: false,
+    loading: false,
     error: null,
     requirementsDoc: null,
     roadmapDoc: null,
@@ -390,7 +390,7 @@ describe('GSDWorkflow Integration', () => {
     vi.mock('@/stores/gsdStore', () => ({
       useGsdStore: () => ({
         workflowState: null,
-        isLoading: true,
+        loading: true,
         error: null,
         requirementsDoc: null,
         roadmapDoc: null,
