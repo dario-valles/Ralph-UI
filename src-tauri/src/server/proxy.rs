@@ -77,10 +77,12 @@ fn get_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<T
 
 /// Extract an optional argument from JSON args
 fn get_opt_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<Option<T>, String> {
-    args.get(name)
-        .map(|v| serde_json::from_value(v.clone()))
-        .transpose()
-        .map_err(|e| format!("Invalid argument {}: {}", name, e))
+    match args.get(name) {
+        Some(v) if !v.is_null() => serde_json::from_value(v.clone())
+            .map(Some)
+            .map_err(|e| format!("Invalid argument {}: {}", name, e)),
+        _ => Ok(None),
+    }
 }
 
 /// Extract a field from an ExecutionSnapshot by execution ID
