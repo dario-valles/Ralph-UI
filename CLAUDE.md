@@ -62,7 +62,7 @@ bun run server:dev
 bun run server:dev:token
 
 # Custom port/bind/token
-cd src-tauri && cargo run -- --port 8080 --bind 127.0.0.1 --token my-secret-token
+cd server && cargo run -- --port 8080 --bind 127.0.0.1 --token my-secret-token
 
 # Or use environment variable
 RALPH_SERVER_TOKEN=my-secret-token bun run server:dev
@@ -110,7 +110,7 @@ WebSocket connections pass token as query parameter: `/ws/events?token=YOUR_TOKE
 - **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
 - **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
 
-### Backend (src-tauri/)
+### Backend (server/)
 - **Axum + Rust** with tokio async runtime
 - **HTTP/WebSocket server** (`src/server/`): API proxy, auth, events
 - **Command handlers** (`src/commands/`): 14 modules for business logic
@@ -122,7 +122,7 @@ WebSocket connections pass token as query parameter: `/ws/events?token=YOUR_TOKE
 ### Server Architecture
 
 ```
-src-tauri/src/server/
+server/src/server/
 ├── mod.rs      # Server setup, router, CORS
 ├── auth.rs     # Bearer token middleware (tower::Layer)
 ├── proxy.rs    # Command routing (150+ commands via routing macros)
@@ -147,7 +147,7 @@ The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint 
 ## Key Patterns
 
 ### Type Sharing
-Types in `src/types/index.ts` must match Rust structs in `src-tauri/src/models/`. Keep synchronized.
+Types in `src/types/index.ts` must match Rust structs in `server/src/models/`. Keep synchronized.
 
 ### State Management
 Each feature has its own Zustand store. Access via hooks, not direct imports:
@@ -177,13 +177,13 @@ const result = await invoke<T>('command_name', { args })
 **IMPORTANT**: When creating new prompts for AI agents, always add them to the template system so they can be edited by users.
 
 **Template System Architecture:**
-- **Builtin templates**: Hardcoded in `src-tauri/src/templates/builtin.rs` (read-only defaults)
+- **Builtin templates**: Hardcoded in `server/src/templates/builtin.rs` (read-only defaults)
 - **Project templates**: `{project}/.ralph-ui/templates/{name}.tera` (project-specific overrides)
 - **Global templates**: `~/.ralph-ui/templates/{name}.tera` (user-wide overrides)
 - **Resolution order**: Project → Global → Builtin (first found wins)
 
 **Adding a New Prompt Template:**
-1. Add the default template to `src-tauri/src/templates/builtin.rs`
+1. Add the default template to `server/src/templates/builtin.rs`
 2. Register it in the `BUILTIN_TEMPLATES` array
 3. Add TypeScript types if needed in `src/types/index.ts`
 4. The template will automatically appear in Settings → Templates for user editing
@@ -200,7 +200,7 @@ You are working on: {{ task.title }}
 {% endif %}
 ```
 
-**GSD/Chat Prompts:** Currently use `GsdCustomPrompts` in config (`src-tauri/src/gsd/config.rs`) with fields for `deep_questioning`, `architecture`, `codebase`, `best_practices`, `risks`. These should eventually migrate to the template system.
+**GSD/Chat Prompts:** Currently use `GsdCustomPrompts` in config (`server/src/gsd/config.rs`) with fields for `deep_questioning`, `architecture`, `codebase`, `best_practices`, `risks`. These should eventually migrate to the template system.
 
 ### Navigation Context Pattern
 **IMPORTANT**: When navigating between pages, always set the appropriate Zustand store context before navigating. Many pages require `currentSession` or `activeProject` to be set:
@@ -241,7 +241,7 @@ The GSD (Get Stuff Done) workflow provides guided PRD creation through 8 phases:
 
 Key files:
 - `src/stores/gsdStore.ts` - Workflow state management
-- `src-tauri/src/commands/gsd.rs` - Backend commands
+- `server/src/commands/gsd.rs` - Backend commands
 - `src/types/gsd.ts` - Type definitions
 
 ## Data Storage
@@ -312,5 +312,5 @@ CMD ["ralph-ui", "--bind", "0.0.0.0"]
 bun run cargo:build
 
 # Run directly
-./src-tauri/target/release/ralph-ui --port 3420 --bind 0.0.0.0
+./server/target/release/ralph-ui --port 3420 --bind 0.0.0.0
 ```

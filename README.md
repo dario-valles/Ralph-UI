@@ -198,7 +198,7 @@ See [CLAUDE.md](./CLAUDE.md) for detailed server documentation including authent
 ```dockerfile
 FROM rust:latest AS builder
 WORKDIR /app
-COPY src-tauri .
+COPY server .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
@@ -214,7 +214,7 @@ CMD ["ralph-ui", "--bind", "0.0.0.0"]
 bun run cargo:build
 
 # Run directly
-./src-tauri/target/release/ralph-ui --port 3420 --bind 0.0.0.0
+./server/target/release/ralph-ui --port 3420 --bind 0.0.0.0
 ```
 
 ---

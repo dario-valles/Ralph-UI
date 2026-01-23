@@ -1,5 +1,5 @@
 // Planning types for GSD workflow
-// These types must match the Rust structs in src-tauri/src/gsd/
+// These types must match the Rust structs in server/src/gsd/
 
 /**
  * Requirement category

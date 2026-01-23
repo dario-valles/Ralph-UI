@@ -7,10 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "server:build": "cd src-tauri && cargo build --release",
-    "server": "cd src-tauri && cargo run --release",
-    "server:dev": "cd src-tauri && cargo run",
-    "server:dev:token": "cd src-tauri && RALPH_SERVER_TOKEN=dev-token-ralph-ui-2026 cargo run",
+    "server:build": "cd server && cargo build --release",
+    "server": "cd server && cargo run --release",
+    "server:dev": "cd server && cargo run",
+    "server:dev:token": "cd server && RALPH_SERVER_TOKEN=dev-token-ralph-ui-2026 cargo run",
     "server:kill": "pkill -f 'ralph-ui' || true; lsof -ti:3420 | xargs kill -9 2>/dev/null || true",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
@@ -21,8 +21,8 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
-    "cargo:test": "cd src-tauri && cargo test",
-    "cargo:build": "cd src-tauri && cargo build --release"
+    "cargo:test": "cd server && cargo test",
+    "cargo:build": "cd server && cargo build --release"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

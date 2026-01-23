@@ -77,10 +77,10 @@ bun run cargo:build
 bun run build
 
 # Run the server
-./src-tauri/target/release/ralph-ui --port 3420 --bind 0.0.0.0
+./server/target/release/ralph-ui --port 3420 --bind 0.0.0.0
 ```
 
-Output: Single binary at `src-tauri/target/release/ralph-ui` (~14MB)
+Output: Single binary at `server/target/release/ralph-ui` (~14MB)
 
 ### Server Variants
 
@@ -146,7 +146,7 @@ Ralph-UI/
 │   ├── stores/             # Zustand state management
 │   ├── lib/                # Utilities and API wrappers
 │   └── types/              # TypeScript types
-├── src-tauri/              # Backend (Rust + Axum)
+├── server/              # Backend (Rust + Axum)
 │   ├── src/
 │   │   ├── commands/       # Business logic handlers
 │   │   ├── file_storage/   # JSON file storage
@@ -172,14 +172,14 @@ Ralph-UI/
 
 ### Making Backend Changes
 
-1. Edit files in `src-tauri/src/`
+1. Edit files in `server/src/`
 2. Restart server (Ctrl+C and re-run `bun run server:dev`)
 3. Run `bun run cargo:test` to verify
 
 ### Adding a New Backend Command
 
-1. Define function in `src-tauri/src/commands/`
-2. Add route in `src-tauri/src/server/proxy.rs`
+1. Define function in `server/src/commands/`
+2. Add route in `server/src/server/proxy.rs`
 3. Add TypeScript wrapper in `src/lib/invoke.ts` or API file
 4. Use via `invoke('command_name', { params })`
 

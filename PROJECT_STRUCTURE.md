@@ -29,7 +29,7 @@ Ralph-UI/
 │   ├── App.tsx                 # Main application component
 │   ├── main.tsx                # Application entry point
 │   └── index.css               # Global styles (Tailwind)
-├── src-tauri/                  # Tauri/Rust backend
+├── server/                  # Tauri/Rust backend
 │   ├── src/
 │   │   ├── main.rs             # Tauri application entry
 │   │   ├── lib.rs              # Library entry point
@@ -124,7 +124,7 @@ Centralized TypeScript definitions:
 
 ## Backend Architecture
 
-### Tauri Commands (`src-tauri/src/commands/`)
+### Tauri Commands (`server/src/commands/`)
 
 | Module | Purpose |
 |--------|---------|
@@ -140,7 +140,7 @@ Centralized TypeScript definitions:
 | `sessions.rs` | Session CRUD, resume, export |
 | `templates.rs` | Template operations |
 
-### File Storage (`src-tauri/src/file_storage/`)
+### File Storage (`server/src/file_storage/`)
 
 JSON file-based storage in `.ralph-ui/`:
 - `mod.rs` - Module exports
@@ -149,13 +149,13 @@ JSON file-based storage in `.ralph-ui/`:
 - `sessions.rs` - Session files
 - `projects.rs` - Project configuration
 
-### Models (`src-tauri/src/models/`)
+### Models (`server/src/models/`)
 
 - `mod.rs` - Core data structures
 - `state_machine.rs` - Task/Session state machines
 - `prd_chat.rs` - PRD chat models
 
-### Git Operations (`src-tauri/src/git/`)
+### Git Operations (`server/src/git/`)
 
 Full git2-rs integration:
 - Branch management (create, delete, list, checkout)
@@ -163,14 +163,14 @@ Full git2-rs integration:
 - Commit operations (create, history, diff)
 - File staging and status
 
-### Agent Management (`src-tauri/src/agents/`)
+### Agent Management (`server/src/agents/`)
 
 - `manager.rs` - Process spawn/monitor
 - `rate_limiter.rs` - API rate limiting
 - `fallback.rs` - Fallback strategies
 - `trace_parser.rs` - Agent output parsing
 
-### Parallel Execution (`src-tauri/src/parallel/`)
+### Parallel Execution (`server/src/parallel/`)
 
 Multi-agent orchestration:
 - `pool.rs` - Agent pool with resource limits
@@ -178,7 +178,7 @@ Multi-agent orchestration:
 - `coordinator.rs` - Worktree coordination
 - `conflicts.rs` - Merge conflict detection
 
-### Session Management (`src-tauri/src/session/`)
+### Session Management (`server/src/session/`)
 
 - `mod.rs` - Module exports
 - `lock.rs` - Session locking for crash recovery
@@ -214,7 +214,7 @@ bun test
 /e2e responsive         # Responsive tests only
 
 # Backend tests (Rust)
-cd src-tauri && cargo test
+cd server && cargo test
 ```
 
 ### E2E Test Files (Markdown)
