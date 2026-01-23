@@ -129,12 +129,18 @@ Key browser mode files:
 src-tauri/src/server/
 ├── mod.rs      # Server setup, router, CORS
 ├── auth.rs     # Bearer token middleware (tower::Layer)
-├── proxy.rs    # Command routing (~60+ commands)
+├── proxy.rs    # Command routing (141 commands via routing macros)
 ├── events.rs   # WebSocket broadcaster
 └── state.rs    # Shared application state
 ```
 
 The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint routes HTTP requests directly to existing Tauri command functions, requiring zero changes to existing commands.
+
+**Proxy routing patterns** (`proxy.rs`):
+- `route_async!` / `route_sync!` - Commands returning values
+- `route_unit!` / `route_unit_async!` - Commands returning nothing
+- `get_arg()` / `get_opt_arg()` - Type-safe argument extraction
+- Helper functions: `build_agent_command()`, `build_server_chat_prompt()`, `generate_session_title()`
 
 ### Graceful Degradation
 
