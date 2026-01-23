@@ -420,12 +420,13 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   // This combines 4 separate IPC calls into 1 for efficient polling
   loadSnapshot: async (silent?: boolean) => {
     const executionId = get().activeExecutionId
-    if (!executionId) return
+    const projectPath = get().currentProjectPath
+    if (!executionId || !projectPath) return
 
     await asyncAction(
       set,
       async () => {
-        const snapshot = await ralphLoopApi.getSnapshot(executionId)
+        const snapshot = await ralphLoopApi.getSnapshot(executionId, projectPath)
         return {
           executionState: snapshot.state,
           executionMetrics: snapshot.metrics,

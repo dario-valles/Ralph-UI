@@ -500,8 +500,8 @@ export const ralphLoopApi = {
   /** Get consolidated snapshot for efficient polling
    * Combines state, metrics, agent ID, worktree path, and iteration history in a single IPC call
    */
-  getSnapshot: async (executionId: string): Promise<RalphLoopSnapshot> => {
-    return await invoke('get_ralph_loop_snapshot', { executionId })
+  getSnapshot: async (executionId: string, projectPath: string): Promise<RalphLoopSnapshot> => {
+    return await invoke('get_ralph_loop_snapshot', { executionId, projectPath })
   },
 
   /** Cleanup old iteration history records (maintenance)
