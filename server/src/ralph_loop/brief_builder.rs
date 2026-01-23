@@ -1100,4 +1100,95 @@ mod tests {
         assert!(brief.contains("Report useful discoveries"));
         assert!(brief.contains("<learning>"));
     }
+
+    // =========================================================================
+    // US-3.2: Share Learnings in Brief Tests
+    // =========================================================================
+
+    #[test]
+    fn test_brief_learnings_grouped_by_type() {
+        // US-3.2: Learnings grouped by type for easy scanning
+        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        // Create learnings of different types
+        let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
+        learnings_manager.initialize().unwrap();
+
+        learnings_manager.add_learning(LearningEntry::with_type(1, LearningType::Gotcha, "Gotcha warning")).unwrap();
+        learnings_manager.add_learning(LearningEntry::with_type(2, LearningType::Pattern, "Pattern to follow")).unwrap();
+        learnings_manager.add_learning(LearningEntry::with_type(3, LearningType::Architecture, "Architecture note")).unwrap();
+
+        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+        let brief = builder.read_brief().unwrap();
+
+        // Check learnings section exists
+        assert!(brief.contains("## Accumulated Learnings"));
+
+        // Check all types are present as headers
+        assert!(brief.contains("### Gotcha"));
+        assert!(brief.contains("### Pattern"));
+        assert!(brief.contains("### Architecture"));
+
+        // Verify Gotcha comes first (most actionable)
+        let gotcha_pos = brief.find("### Gotcha").unwrap();
+        let pattern_pos = brief.find("### Pattern").unwrap();
+        assert!(gotcha_pos < pattern_pos, "Gotcha should appear before Pattern for easy scanning");
+    }
+
+    #[test]
+    fn test_brief_learnings_with_syntax_highlighted_code() {
+        // US-3.2: Code patterns include syntax-highlighted examples
+        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
+        learnings_manager.initialize().unwrap();
+
+        // Add a learning with Rust code
+        let entry = LearningEntry::with_type(1, LearningType::Pattern, "Use atomic writes")
+            .with_code("fn main() { let x = 5; }");
+        learnings_manager.add_learning(entry).unwrap();
+
+        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(2)).unwrap();
+        let brief = builder.read_brief().unwrap();
+
+        // Check that code block has language specifier for syntax highlighting
+        assert!(brief.contains("```rust"), "Code should have rust syntax highlighting");
+    }
+
+    #[test]
+    fn test_brief_learnings_prioritized_by_iteration() {
+        // US-3.2: Most useful learnings prioritized (by iteration - most recent first)
+        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
+        learnings_manager.initialize().unwrap();
+
+        // Add learnings in reverse order (1, 3, 2) - they should be sorted to 3, 2, 1
+        learnings_manager.add_learning(LearningEntry::with_type(1, LearningType::Pattern, "Old learning iter 1")).unwrap();
+        learnings_manager.add_learning(LearningEntry::with_type(3, LearningType::Pattern, "Recent learning iter 3")).unwrap();
+        learnings_manager.add_learning(LearningEntry::with_type(2, LearningType::Pattern, "Middle learning iter 2")).unwrap();
+
+        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+        let brief = builder.read_brief().unwrap();
+
+        // Most recent iteration should appear first within the type section
+        let iter3_pos = brief.find("[Iter 3]").unwrap();
+        let iter2_pos = brief.find("[Iter 2]").unwrap();
+        let iter1_pos = brief.find("[Iter 1]").unwrap();
+
+        assert!(iter3_pos < iter2_pos, "Iteration 3 should appear before iteration 2");
+        assert!(iter2_pos < iter1_pos, "Iteration 2 should appear before iteration 1");
+    }
 }

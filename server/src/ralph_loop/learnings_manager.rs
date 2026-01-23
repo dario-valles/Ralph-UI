@@ -211,7 +211,12 @@ impl LearningsFile {
         counts
     }
 
-    /// Format learnings for inclusion in BRIEF.md
+    /// Format learnings for inclusion in BRIEF.md (US-3.2)
+    ///
+    /// Learnings are:
+    /// - Grouped by type for easy scanning
+    /// - Sorted by most recent (highest iteration) first within each group
+    /// - Code examples include syntax-highlighted code fences with language detection
     pub fn format_for_brief(&self) -> String {
         if self.entries.is_empty() {
             return String::new();
@@ -219,7 +224,7 @@ impl LearningsFile {
 
         let mut output = String::new();
 
-        // Group by type
+        // Group by type (Gotcha first as most actionable)
         let types = [
             LearningType::Gotcha,
             LearningType::Pattern,
@@ -230,13 +235,18 @@ impl LearningsFile {
         ];
 
         for learning_type in types {
-            let entries = self.get_by_type(learning_type);
+            let mut entries: Vec<_> = self.get_by_type(learning_type);
             if !entries.is_empty() {
+                // US-3.2: Sort by most recent iteration first (higher = more recent = more useful)
+                entries.sort_by(|a, b| b.iteration.cmp(&a.iteration));
+
                 output.push_str(&format!("### {}\n\n", learning_type));
                 for entry in entries {
                     output.push_str(&format!("- [Iter {}] {}\n", entry.iteration, entry.content));
                     if let Some(ref code) = entry.code_example {
-                        output.push_str("  ```\n");
+                        // US-3.2: Detect language for syntax highlighting
+                        let lang = Self::detect_code_language(code);
+                        output.push_str(&format!("  ```{}\n", lang));
                         for line in code.lines() {
                             output.push_str(&format!("  {}\n", line));
                         }
@@ -248,6 +258,62 @@ impl LearningsFile {
         }
 
         output
+    }
+
+    /// Detect programming language from code snippet for syntax highlighting (US-3.2)
+    fn detect_code_language(code: &str) -> &'static str {
+        let code_lower = code.to_lowercase();
+
+        // Rust patterns
+        if code.contains("fn ") || code.contains("let mut ")
+            || code.contains("impl ") || code.contains("pub fn")
+            || code.contains("::") && (code.contains("Result<") || code.contains("Option<"))
+            || code.contains("unwrap()") || code.contains(".map_err(")
+        {
+            return "rust";
+        }
+
+        // TypeScript/JavaScript patterns
+        if code.contains("const ") || code.contains("interface ")
+            || code.contains("export ") || code.contains("import ")
+            || code.contains("=> {") || code.contains("useState")
+            || code.contains(": string") || code.contains(": number")
+            || code.contains("async function") || code.contains(".tsx")
+        {
+            if code.contains(": string") || code.contains(": number")
+                || code.contains("interface ") || code.contains("<T>")
+            {
+                return "typescript";
+            }
+            return "javascript";
+        }
+
+        // Python patterns
+        if code.contains("def ") || code.contains("import ")
+            || code_lower.contains("self.") || code.contains("__init__")
+            || code.contains("elif ") || code.contains("print(")
+        {
+            return "python";
+        }
+
+        // JSON patterns
+        if code.trim().starts_with('{') && code.trim().ends_with('}')
+            && code.contains("\":")
+        {
+            return "json";
+        }
+
+        // Shell/bash patterns
+        if code.contains("#!/") || code.starts_with("$")
+            || code.contains("&&") || code.contains("echo ")
+            || code.contains("cargo ") || code.contains("npm ")
+            || code.contains("bun ") || code.contains("git ")
+        {
+            return "bash";
+        }
+
+        // Default to empty (markdown will still render as code block)
+        ""
     }
 
     /// Export learnings to markdown format
@@ -1018,5 +1084,141 @@ Task complete!
         assert_eq!(entry.get("learningType").unwrap(), "pattern");
         assert_eq!(entry.get("storyId").unwrap(), "US-1.1");
         assert!(entry.get("codeExample").is_some());
+    }
+
+    // =========================================================================
+    // US-3.2: Share Learnings in Brief Tests
+    // =========================================================================
+
+    #[test]
+    fn test_learnings_grouped_by_type_in_brief() {
+        // US-3.2: Learnings grouped by type for easy scanning
+        let mut file = LearningsFile::default();
+
+        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Pattern A"));
+        file.add_entry(LearningEntry::with_type(2, LearningType::Gotcha, "Gotcha A"));
+        file.add_entry(LearningEntry::with_type(3, LearningType::Architecture, "Arch A"));
+        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Pattern B"));
+
+        let formatted = file.format_for_brief();
+
+        // Verify type headers are present
+        assert!(formatted.contains("### Gotcha"));
+        assert!(formatted.contains("### Pattern"));
+        assert!(formatted.contains("### Architecture"));
+
+        // Verify Gotcha comes before Pattern (prioritized as more actionable)
+        let gotcha_pos = formatted.find("### Gotcha").unwrap();
+        let pattern_pos = formatted.find("### Pattern").unwrap();
+        assert!(gotcha_pos < pattern_pos, "Gotcha should appear before Pattern");
+    }
+
+    #[test]
+    fn test_learnings_syntax_highlighted_code_rust() {
+        // US-3.2: Code patterns include syntax-highlighted examples
+        let mut file = LearningsFile::default();
+
+        let rust_code = "fn main() {\n    let x = 5;\n    println!(\"{}\", x);\n}";
+        let entry = LearningEntry::with_type(1, LearningType::Pattern, "Rust example")
+            .with_code(rust_code);
+        file.add_entry(entry);
+
+        let formatted = file.format_for_brief();
+
+        // Should contain rust language specifier
+        assert!(formatted.contains("```rust"), "Should have rust syntax highlighting");
+        assert!(formatted.contains("fn main()"));
+    }
+
+    #[test]
+    fn test_learnings_syntax_highlighted_code_typescript() {
+        // US-3.2: Code patterns include syntax-highlighted examples
+        let mut file = LearningsFile::default();
+
+        // Use clearer TypeScript-specific syntax with type annotations
+        let ts_code = "interface Config { name: string; value: number }\nconst x: string = 'hello';";
+        let entry = LearningEntry::with_type(1, LearningType::Pattern, "TypeScript example")
+            .with_code(ts_code);
+        file.add_entry(entry);
+
+        let formatted = file.format_for_brief();
+
+        // Should contain typescript language specifier
+        assert!(formatted.contains("```typescript"), "Should have typescript syntax highlighting");
+    }
+
+    #[test]
+    fn test_learnings_syntax_highlighted_code_bash() {
+        // US-3.2: Code patterns include syntax-highlighted examples
+        let mut file = LearningsFile::default();
+
+        let bash_code = "cargo test && cargo build";
+        let entry = LearningEntry::with_type(1, LearningType::Tooling, "Build command")
+            .with_code(bash_code);
+        file.add_entry(entry);
+
+        let formatted = file.format_for_brief();
+
+        // Should contain bash language specifier
+        assert!(formatted.contains("```bash"), "Should have bash syntax highlighting");
+    }
+
+    #[test]
+    fn test_learnings_prioritized_most_recent_first() {
+        // US-3.2: Most useful learnings prioritized (by most recent iteration first)
+        let mut file = LearningsFile::default();
+
+        // Add learnings in order: iter 1, iter 3, iter 2
+        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Old pattern from iter 1"));
+        file.add_entry(LearningEntry::with_type(3, LearningType::Pattern, "Newest pattern from iter 3"));
+        file.add_entry(LearningEntry::with_type(2, LearningType::Pattern, "Middle pattern from iter 2"));
+
+        let formatted = file.format_for_brief();
+
+        // Find positions - iter 3 should come first, then iter 2, then iter 1
+        let iter3_pos = formatted.find("[Iter 3]").unwrap();
+        let iter2_pos = formatted.find("[Iter 2]").unwrap();
+        let iter1_pos = formatted.find("[Iter 1]").unwrap();
+
+        assert!(iter3_pos < iter2_pos, "Iter 3 should appear before Iter 2");
+        assert!(iter2_pos < iter1_pos, "Iter 2 should appear before Iter 1");
+    }
+
+    #[test]
+    fn test_detect_code_language_rust() {
+        assert_eq!(LearningsFile::detect_code_language("fn main() {}"), "rust");
+        assert_eq!(LearningsFile::detect_code_language("let mut x = 5;"), "rust");
+        assert_eq!(LearningsFile::detect_code_language("impl Foo for Bar"), "rust");
+        assert_eq!(LearningsFile::detect_code_language("pub fn test() { x.unwrap() }"), "rust");
+    }
+
+    #[test]
+    fn test_detect_code_language_typescript() {
+        assert_eq!(LearningsFile::detect_code_language("const x: string = 'hello'"), "typescript");
+        assert_eq!(LearningsFile::detect_code_language("interface Foo { bar: number }"), "typescript");
+    }
+
+    #[test]
+    fn test_detect_code_language_javascript() {
+        assert_eq!(LearningsFile::detect_code_language("const x = () => {}"), "javascript");
+        assert_eq!(LearningsFile::detect_code_language("export default function foo()"), "javascript");
+    }
+
+    #[test]
+    fn test_detect_code_language_bash() {
+        assert_eq!(LearningsFile::detect_code_language("cargo build && cargo test"), "bash");
+        assert_eq!(LearningsFile::detect_code_language("npm install express"), "bash");
+        assert_eq!(LearningsFile::detect_code_language("git commit -m 'test'"), "bash");
+    }
+
+    #[test]
+    fn test_detect_code_language_json() {
+        assert_eq!(LearningsFile::detect_code_language("{\"key\": \"value\"}"), "json");
+    }
+
+    #[test]
+    fn test_detect_code_language_unknown() {
+        // Unknown code should return empty string (still renders as code block)
+        assert_eq!(LearningsFile::detect_code_language("some random text"), "");
     }
 }
