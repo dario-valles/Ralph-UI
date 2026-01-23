@@ -79,8 +79,9 @@ where
                 return inner.call(req).await;
             }
 
-            // For WebSocket, check query parameter
-            if path == "/ws/events" {
+            // For WebSocket endpoints, check query parameter
+            // This includes /ws/events and /ws/pty/:id
+            if path == "/ws/events" || path.starts_with("/ws/pty/") {
                 if let Some(query) = req.uri().query() {
                     if query.contains(&format!("token={}", *token)) {
                         return inner.call(req).await;
