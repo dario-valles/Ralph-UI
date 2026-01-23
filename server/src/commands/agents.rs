@@ -311,6 +311,51 @@ pub fn notify_agent_pty_exit(
     Ok(())
 }
 
+// ============================================================================
+// Internal PTY functions for use with pre-locked AgentManager
+// ============================================================================
+
+/// Check if an agent has an associated PTY (internal, for pre-locked manager)
+pub fn agent_has_pty_internal(manager: &AgentManager, agent_id: &str) -> Result<bool, String> {
+    Ok(manager.has_pty(agent_id))
+}
+
+/// Get the PTY ID for an agent (internal, for pre-locked manager)
+pub fn get_agent_pty_id_internal(
+    manager: &AgentManager,
+    agent_id: &str,
+) -> Result<Option<String>, String> {
+    Ok(manager.get_pty_id(agent_id))
+}
+
+/// Get the PTY history for an agent (internal, for pre-locked manager)
+pub fn get_agent_pty_history_internal(
+    manager: &AgentManager,
+    agent_id: &str,
+) -> Result<Vec<u8>, String> {
+    Ok(manager.get_pty_history(agent_id))
+}
+
+/// Process PTY data from an agent (internal, for pre-locked manager)
+pub fn process_agent_pty_data_internal(
+    manager: &AgentManager,
+    agent_id: &str,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    manager.process_pty_data(agent_id, &data);
+    Ok(())
+}
+
+/// Notify that an agent's PTY has exited (internal, for pre-locked manager)
+pub fn notify_agent_pty_exit_internal(
+    manager: &AgentManager,
+    agent_id: &str,
+    exit_code: i32,
+) -> Result<(), String> {
+    manager.notify_pty_exit(agent_id, exit_code);
+    Ok(())
+}
+
 /// Build command line for spawning an agent in PTY mode
 /// Returns (program, args, cwd)
 #[derive(Debug, Clone, Serialize, Deserialize)]

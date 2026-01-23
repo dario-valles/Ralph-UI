@@ -376,10 +376,9 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
 
         "get_agent_pty_history" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            route_sync!(commands::agents::get_agent_pty_history(
-                &state.agent_manager,
-                agent_id
-            ))
+            with_agent_manager(state, |mgr| {
+                commands::agents::get_agent_pty_history_internal(mgr, &agent_id)
+            })
         }
 
         "update_agent_status" => {
@@ -436,24 +435,28 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
 
         "agent_has_pty" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            route_sync!(commands::agents::agent_has_pty(&state.agent_manager, agent_id))
+            with_agent_manager(state, |mgr| commands::agents::agent_has_pty_internal(mgr, &agent_id))
         }
 
         "get_agent_pty_id" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            route_sync!(commands::agents::get_agent_pty_id(&state.agent_manager, agent_id))
+            with_agent_manager(state, |mgr| commands::agents::get_agent_pty_id_internal(mgr, &agent_id))
         }
 
         "process_agent_pty_data" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let data: Vec<u8> = get_arg(&args, "data")?;
-            route_unit!(commands::agents::process_agent_pty_data(&state.agent_manager, agent_id, data))
+            with_agent_manager(state, |mgr| {
+                commands::agents::process_agent_pty_data_internal(mgr, &agent_id, data)
+            })
         }
 
         "notify_agent_pty_exit" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let exit_code: i32 = get_arg(&args, "exitCode")?;
-            route_unit!(commands::agents::notify_agent_pty_exit(&state.agent_manager, agent_id, exit_code))
+            with_agent_manager(state, |mgr| {
+                commands::agents::notify_agent_pty_exit_internal(mgr, &agent_id, exit_code)
+            })
         }
 
         // =====================================================================
