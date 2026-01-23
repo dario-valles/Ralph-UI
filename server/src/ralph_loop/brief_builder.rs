@@ -408,6 +408,37 @@ impl BriefBuilder {
         }
 
         // Instructions
+        // US-3.1: Learning Reporting Protocol
+        brief.push_str("## Reporting Learnings (US-3.1)\n\n");
+        brief.push_str("When you discover something useful for future iterations, report it using this structured protocol.\n");
+        brief.push_str("The Ralph Loop will automatically extract and persist these learnings for future agents.\n\n");
+        brief.push_str("### Format\n\n");
+        brief.push_str("Use the `<learning>` tag with a `type` attribute:\n\n");
+        brief.push_str("```\n");
+        brief.push_str("<learning type=\"pattern\">Description of the coding pattern to follow</learning>\n");
+        brief.push_str("<learning type=\"gotcha\">Warning about something that caused problems</learning>\n");
+        brief.push_str("<learning type=\"architecture\">Insight about the codebase architecture</learning>\n");
+        brief.push_str("<learning type=\"testing\">Testing-related insight</learning>\n");
+        brief.push_str("<learning type=\"tooling\">Build/tooling insight</learning>\n");
+        brief.push_str("```\n\n");
+        brief.push_str("### With Code Example\n\n");
+        brief.push_str("```\n");
+        brief.push_str("<learning type=\"pattern\">\n");
+        brief.push_str("Use atomic writes for file operations\n");
+        brief.push_str("<code>\n");
+        brief.push_str("let temp_path = path.with_extension(\"tmp\");\n");
+        brief.push_str("std::fs::write(&temp_path, content)?;\n");
+        brief.push_str("std::fs::rename(&temp_path, &path)?;\n");
+        brief.push_str("</code>\n");
+        brief.push_str("</learning>\n");
+        brief.push_str("```\n\n");
+        brief.push_str("### Valid Types\n\n");
+        brief.push_str("- `architecture` - Codebase structure insights\n");
+        brief.push_str("- `gotcha` - Things that caused problems\n");
+        brief.push_str("- `pattern` - Coding patterns to follow\n");
+        brief.push_str("- `testing` - Testing approaches\n");
+        brief.push_str("- `tooling` - Build/tool configuration\n\n");
+
         brief.push_str("---\n\n");
         brief.push_str("## Instructions\n\n");
         brief.push_str("1. **Focus on the Current Story above** - implement only this story\n");
@@ -415,7 +446,7 @@ impl BriefBuilder {
         brief.push_str("3. **Avoid In-Progress Work** - other agents are working on those\n");
         brief.push_str("4. **Avoid Files Listed Above** - other agents are modifying those (US-2.2)\n");
         brief.push_str("5. **Meet all Acceptance Criteria** before marking as complete\n");
-        brief.push_str("6. **Add learnings** to `.ralph-ui/prds/{prd_name}-progress.txt` for future iterations\n");
+        brief.push_str("6. **Report useful discoveries** using `<learning>` tags (see above)\n");
         brief.push_str("7. **Update PRD JSON** - set `passes: true` for the story when complete\n");
         brief.push_str("8. **Commit your changes** with a clear message referencing the story ID\n");
 
@@ -1003,5 +1034,70 @@ mod tests {
 
         // Instructions should mention avoiding files (US-2.2)
         assert!(brief.contains("Avoid Files Listed Above"));
+    }
+
+    // =========================================================================
+    // US-3.1: Learning Protocol Tests
+    // =========================================================================
+
+    #[test]
+    fn test_brief_includes_learning_protocol_section() {
+        // US-3.1: Agents can report learnings via structured protocol in BRIEF.md
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        builder.generate_brief(&prd, None, Some(1)).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Check for learning protocol section
+        assert!(brief.contains("Reporting Learnings"));
+        assert!(brief.contains("<learning"));
+        assert!(brief.contains("type=\"pattern\""));
+        assert!(brief.contains("type=\"gotcha\""));
+        assert!(brief.contains("type=\"architecture\""));
+        assert!(brief.contains("type=\"testing\""));
+        assert!(brief.contains("type=\"tooling\""));
+
+        // Check for code example format
+        assert!(brief.contains("<code>"));
+        assert!(brief.contains("</code>"));
+        assert!(brief.contains("</learning>"));
+    }
+
+    #[test]
+    fn test_brief_learning_protocol_with_valid_types() {
+        // US-3.1: Learnings categorized by type
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        builder.generate_brief(&prd, None, None).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // All five types should be documented
+        assert!(brief.contains("`architecture`"));
+        assert!(brief.contains("`gotcha`"));
+        assert!(brief.contains("`pattern`"));
+        assert!(brief.contains("`testing`"));
+        assert!(brief.contains("`tooling`"));
+    }
+
+    #[test]
+    fn test_brief_instructions_mention_learning_tags() {
+        // US-3.1: Instructions should mention using <learning> tags
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        builder.generate_brief(&prd, None, None).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Instructions should mention reporting learnings
+        assert!(brief.contains("Report useful discoveries"));
+        assert!(brief.contains("<learning>"));
     }
 }

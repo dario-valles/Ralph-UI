@@ -266,6 +266,17 @@ impl LearningsFile {
     }
 }
 
+/// A learning parsed from agent output using the structured protocol
+#[derive(Debug, Clone)]
+pub struct ParsedLearning {
+    /// Type/category of the learning
+    pub learning_type: LearningType,
+    /// The learning content (description)
+    pub content: String,
+    /// Optional code example
+    pub code_example: Option<String>,
+}
+
 /// Learnings manager for file I/O
 pub struct LearningsManager {
     /// Base project path
@@ -379,6 +390,158 @@ impl LearningsManager {
     pub fn count(&self) -> Result<usize, String> {
         let file = self.read()?;
         Ok(file.entries.len())
+    }
+
+    /// Parse learnings from agent output using the structured protocol (US-3.1)
+    ///
+    /// Agents report learnings using XML-like tags:
+    /// ```text
+    /// <learning type="pattern">Description of the pattern</learning>
+    /// <learning type="gotcha">
+    /// Warning about something
+    /// <code>
+    /// example code here
+    /// </code>
+    /// </learning>
+    /// ```
+    ///
+    /// This function extracts all `<learning>` tags from the output and parses
+    /// them into structured `ParsedLearning` entries.
+    pub fn parse_learnings_from_output(output: &str) -> Vec<ParsedLearning> {
+        let mut learnings = Vec::new();
+
+        // Using a simple state machine approach for robustness
+        let mut pos = 0;
+
+        while pos < output.len() {
+            // Find opening tag
+            let remaining = &output[pos..];
+            if let Some(start_idx) = remaining.find("<learning") {
+                let tag_start = pos + start_idx;
+                let tag_content = &output[tag_start..];
+
+                // Find the closing > of the opening tag
+                if let Some(tag_end_offset) = tag_content.find('>') {
+                    let opening_tag = &tag_content[..tag_end_offset + 1];
+
+                    // Extract type attribute
+                    let learning_type = Self::extract_type_attribute(opening_tag);
+
+                    // Find the closing </learning> tag
+                    let after_tag = &tag_content[tag_end_offset + 1..];
+                    if let Some(close_idx) = after_tag.find("</learning>") {
+                        let content = &after_tag[..close_idx];
+
+                        // Parse content and optional code
+                        let (text_content, code_example) = Self::parse_learning_content(content);
+
+                        if !text_content.trim().is_empty() {
+                            learnings.push(ParsedLearning {
+                                learning_type,
+                                content: text_content.trim().to_string(),
+                                code_example,
+                            });
+                        }
+
+                        // Move past this learning
+                        pos = tag_start + tag_end_offset + 1 + close_idx + "</learning>".len();
+                        continue;
+                    }
+                }
+            }
+
+            // No more learnings found
+            break;
+        }
+
+        learnings
+    }
+
+    /// Extract the type attribute from an opening <learning type="..."> tag
+    fn extract_type_attribute(opening_tag: &str) -> LearningType {
+        // Look for type="..." or type='...'
+        if let Some(type_start) = opening_tag.find("type=") {
+            let after_type = &opening_tag[type_start + 5..];
+            let quote_char = after_type.chars().next();
+
+            if let Some(q) = quote_char {
+                if q == '"' || q == '\'' {
+                    let value_start = &after_type[1..];
+                    if let Some(end_idx) = value_start.find(q) {
+                        let type_value = &value_start[..end_idx];
+                        return type_value.parse().unwrap_or(LearningType::General);
+                    }
+                }
+            }
+        }
+        LearningType::General
+    }
+
+    /// Parse the content of a learning, extracting optional <code>...</code> block
+    fn parse_learning_content(content: &str) -> (String, Option<String>) {
+        // Look for <code>...</code> block
+        if let Some(code_start) = content.find("<code>") {
+            if let Some(code_end) = content.find("</code>") {
+                let before_code = &content[..code_start];
+                let code_content = &content[code_start + 6..code_end];
+                let after_code = &content[code_end + 7..];
+
+                let text_content = format!("{}{}", before_code.trim(), after_code.trim());
+                let code = code_content.trim().to_string();
+
+                return (
+                    text_content,
+                    if code.is_empty() { None } else { Some(code) },
+                );
+            }
+        }
+
+        (content.to_string(), None)
+    }
+
+    /// Extract learnings from agent output and save them to storage (US-3.1)
+    ///
+    /// This is the main integration point for the orchestrator. It:
+    /// 1. Parses the agent output for <learning> tags
+    /// 2. Creates LearningEntry objects with proper iteration and story context
+    /// 3. Saves them to the learnings.json file
+    ///
+    /// Returns the number of learnings extracted.
+    pub fn extract_and_save_learnings(
+        &self,
+        output: &str,
+        iteration: u32,
+        story_id: Option<&str>,
+    ) -> Result<usize, String> {
+        let parsed = Self::parse_learnings_from_output(output);
+
+        if parsed.is_empty() {
+            return Ok(0);
+        }
+
+        let mut file = self.read()?;
+
+        for parsed_learning in &parsed {
+            let mut entry = LearningEntry::with_type(
+                iteration,
+                parsed_learning.learning_type,
+                &parsed_learning.content,
+            );
+
+            if let Some(sid) = story_id {
+                entry = entry.for_story(sid);
+            }
+
+            if let Some(ref code) = parsed_learning.code_example {
+                entry = entry.with_code(code);
+            }
+
+            file.add_entry(entry);
+        }
+
+        self.write(&file)?;
+
+        Ok(parsed.len())
     }
 }
 
@@ -590,5 +753,270 @@ mod tests {
         assert_eq!(counts.get(&LearningType::Gotcha), Some(&2));
         assert_eq!(counts.get(&LearningType::Pattern), Some(&1));
         assert_eq!(counts.get(&LearningType::Architecture), None);
+    }
+
+    // =========================================================================
+    // US-3.1: Learning Protocol Parsing Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_simple_learning() {
+        let output = r#"
+Some agent output here
+<learning type="pattern">Use atomic writes for file operations</learning>
+More output
+"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert_eq!(learnings.len(), 1);
+        assert_eq!(learnings[0].learning_type, LearningType::Pattern);
+        assert_eq!(learnings[0].content, "Use atomic writes for file operations");
+        assert!(learnings[0].code_example.is_none());
+    }
+
+    #[test]
+    fn test_parse_learning_with_code() {
+        let output = r#"
+<learning type="pattern">
+Use atomic writes for file operations
+<code>
+let temp_path = path.with_extension("tmp");
+std::fs::write(&temp_path, content)?;
+std::fs::rename(&temp_path, &path)?;
+</code>
+</learning>
+"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert_eq!(learnings.len(), 1);
+        assert_eq!(learnings[0].learning_type, LearningType::Pattern);
+        assert!(learnings[0].content.contains("atomic writes"));
+        assert!(learnings[0].code_example.is_some());
+        let code = learnings[0].code_example.as_ref().unwrap();
+        assert!(code.contains("temp_path"));
+        assert!(code.contains("rename"));
+    }
+
+    #[test]
+    fn test_parse_multiple_learnings() {
+        let output = r#"
+<learning type="gotcha">Watch out for race conditions in async code</learning>
+Some other text here
+<learning type="architecture">Follow hexagonal architecture pattern</learning>
+<learning type="testing">Use table-driven tests for exhaustive coverage</learning>
+"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert_eq!(learnings.len(), 3);
+
+        assert_eq!(learnings[0].learning_type, LearningType::Gotcha);
+        assert!(learnings[0].content.contains("race conditions"));
+
+        assert_eq!(learnings[1].learning_type, LearningType::Architecture);
+        assert!(learnings[1].content.contains("hexagonal"));
+
+        assert_eq!(learnings[2].learning_type, LearningType::Testing);
+        assert!(learnings[2].content.contains("table-driven"));
+    }
+
+    #[test]
+    fn test_parse_learning_with_all_types() {
+        let test_cases = vec![
+            ("architecture", LearningType::Architecture),
+            ("gotcha", LearningType::Gotcha),
+            ("pattern", LearningType::Pattern),
+            ("testing", LearningType::Testing),
+            ("tooling", LearningType::Tooling),
+        ];
+
+        for (type_str, expected_type) in test_cases {
+            let output = format!(r#"<learning type="{}">Test content</learning>"#, type_str);
+            let learnings = LearningsManager::parse_learnings_from_output(&output);
+            assert_eq!(learnings.len(), 1);
+            assert_eq!(learnings[0].learning_type, expected_type, "Failed for type: {}", type_str);
+        }
+    }
+
+    #[test]
+    fn test_parse_learning_unknown_type_defaults_to_general() {
+        let output = r#"<learning type="unknown">Some content</learning>"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert_eq!(learnings.len(), 1);
+        assert_eq!(learnings[0].learning_type, LearningType::General);
+    }
+
+    #[test]
+    fn test_parse_learning_single_quotes() {
+        let output = r#"<learning type='gotcha'>Watch out for this</learning>"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert_eq!(learnings.len(), 1);
+        assert_eq!(learnings[0].learning_type, LearningType::Gotcha);
+    }
+
+    #[test]
+    fn test_parse_no_learnings() {
+        let output = "Some regular output without any learnings";
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert!(learnings.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_learning_ignored() {
+        let output = r#"<learning type="pattern">   </learning>"#;
+
+        let learnings = LearningsManager::parse_learnings_from_output(output);
+        assert!(learnings.is_empty());
+    }
+
+    #[test]
+    fn test_extract_and_save_learnings() {
+        let temp_dir = setup_test_dir();
+        let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+
+        let output = r#"
+Working on the task...
+<learning type="pattern">Follow the existing component structure</learning>
+<learning type="gotcha">
+Don't forget to handle null values
+<code>
+if value.is_none() { return Err(...) }
+</code>
+</learning>
+Task complete!
+"#;
+
+        let count = manager.extract_and_save_learnings(output, 1, Some("US-1.1")).unwrap();
+        assert_eq!(count, 2);
+
+        // Verify they were saved
+        let file = manager.read().unwrap();
+        assert_eq!(file.entries.len(), 2);
+
+        // Check first learning
+        assert_eq!(file.entries[0].learning_type, LearningType::Pattern);
+        assert_eq!(file.entries[0].story_id, Some("US-1.1".to_string()));
+        assert_eq!(file.entries[0].iteration, 1);
+
+        // Check second learning has code
+        assert_eq!(file.entries[1].learning_type, LearningType::Gotcha);
+        assert!(file.entries[1].code_example.is_some());
+    }
+
+    #[test]
+    fn test_extract_and_save_no_learnings() {
+        let temp_dir = setup_test_dir();
+        let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+
+        let output = "Just some regular output with no learning tags";
+
+        let count = manager.extract_and_save_learnings(output, 1, None).unwrap();
+        assert_eq!(count, 0);
+
+        // Verify file was created but empty
+        let file = manager.read().unwrap();
+        assert!(file.entries.is_empty());
+    }
+
+    #[test]
+    fn test_learnings_categorized_by_type() {
+        // US-3.1: Learnings categorized by type: Architecture, Gotcha, Pattern, Testing, Tooling
+        let temp_dir = setup_test_dir();
+        let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+
+        // Add learnings of different types
+        manager.add_typed(1, LearningType::Architecture, "Codebase uses MVC pattern").unwrap();
+        manager.add_typed(1, LearningType::Gotcha, "Watch out for async timing").unwrap();
+        manager.add_typed(2, LearningType::Pattern, "Use builder pattern for configs").unwrap();
+        manager.add_typed(2, LearningType::Testing, "Always test edge cases").unwrap();
+        manager.add_typed(3, LearningType::Tooling, "Run cargo fmt before commit").unwrap();
+
+        let file = manager.read().unwrap();
+
+        // Verify categorization
+        let arch = file.get_by_type(LearningType::Architecture);
+        assert_eq!(arch.len(), 1);
+        assert!(arch[0].content.contains("MVC"));
+
+        let gotchas = file.get_by_type(LearningType::Gotcha);
+        assert_eq!(gotchas.len(), 1);
+        assert!(gotchas[0].content.contains("async"));
+
+        let patterns = file.get_by_type(LearningType::Pattern);
+        assert_eq!(patterns.len(), 1);
+        assert!(patterns[0].content.contains("builder"));
+
+        let testing = file.get_by_type(LearningType::Testing);
+        assert_eq!(testing.len(), 1);
+        assert!(testing[0].content.contains("edge cases"));
+
+        let tooling = file.get_by_type(LearningType::Tooling);
+        assert_eq!(tooling.len(), 1);
+        assert!(tooling[0].content.contains("cargo fmt"));
+    }
+
+    #[test]
+    fn test_learnings_persist_across_sessions() {
+        // US-3.1: Learnings persist across sessions and restarts
+        let temp_dir = setup_test_dir();
+
+        // Session 1: Add learnings
+        {
+            let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+            manager.add_typed(1, LearningType::Pattern, "Learning from session 1").unwrap();
+            manager.add_typed(2, LearningType::Gotcha, "Another learning").unwrap();
+        }
+
+        // Session 2: Verify learnings persisted
+        {
+            let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+            let file = manager.read().unwrap();
+            assert_eq!(file.entries.len(), 2);
+
+            // Add more learnings
+            manager.add_typed(3, LearningType::Architecture, "New learning").unwrap();
+        }
+
+        // Session 3: Verify all learnings present
+        {
+            let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+            let file = manager.read().unwrap();
+            assert_eq!(file.entries.len(), 3);
+            assert_eq!(file.total_iterations, 3);
+        }
+    }
+
+    #[test]
+    fn test_learnings_stored_in_structured_json() {
+        // US-3.1: Learnings stored in structured JSON format
+        let temp_dir = setup_test_dir();
+        let manager = LearningsManager::new(temp_dir.path(), "test-prd");
+
+        // Add a learning with code
+        let entry = LearningEntry::with_type(1, LearningType::Pattern, "Use builder pattern")
+            .for_story("US-1.1")
+            .with_code("let config = ConfigBuilder::new().build();");
+        manager.add_learning(entry).unwrap();
+
+        // Read the raw JSON file
+        let json_path = manager.learnings_path();
+        let raw_json = std::fs::read_to_string(json_path).unwrap();
+
+        // Verify it's valid JSON with expected structure
+        let parsed: serde_json::Value = serde_json::from_str(&raw_json).unwrap();
+
+        assert!(parsed.get("entries").is_some());
+        assert!(parsed.get("createdAt").is_some());
+        assert!(parsed.get("lastUpdated").is_some());
+
+        let entries = parsed.get("entries").unwrap().as_array().unwrap();
+        assert_eq!(entries.len(), 1);
+
+        let entry = &entries[0];
+        assert_eq!(entry.get("learningType").unwrap(), "pattern");
+        assert_eq!(entry.get("storyId").unwrap(), "US-1.1");
+        assert!(entry.get("codeExample").is_some());
     }
 }

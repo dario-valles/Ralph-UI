@@ -484,11 +484,6 @@ impl RalphLoopOrchestrator {
         Ok(())
     }
 
-    /// Record a learning in the structured storage
-    fn record_learning(&self, iteration: u32, content: &str) -> Result<(), String> {
-        self.learnings_manager.add_simple(iteration, content)
-    }
-
     /// Get the assignments manager for external access
     pub fn assignments_manager(&self) -> &AssignmentsManager {
         &self.assignments_manager
@@ -497,6 +492,14 @@ impl RalphLoopOrchestrator {
     /// Get the learnings manager for external access
     pub fn learnings_manager(&self) -> &LearningsManager {
         &self.learnings_manager
+    }
+
+    /// Get the current story ID being worked on (from PRD)
+    fn get_current_story_id(&self) -> Option<String> {
+        self.prd_executor
+            .read_prd()
+            .ok()
+            .and_then(|prd| prd.next_story().map(|s| s.id.clone()))
     }
 
     /// Run the Ralph loop with a shared agent manager (Arc-wrapped sync Mutex).
@@ -1038,6 +1041,25 @@ impl RalphLoopOrchestrator {
 
             // Record end of iteration in progress.txt
             self.progress_tracker.end_iteration(iteration, exit_code == 0)?;
+
+            // US-3.1: Extract learnings from agent output using structured protocol
+            // The <learning> tags in the output are parsed and saved to learnings.json
+            let story_id_ref = self.get_current_story_id();
+            match self.learnings_manager.extract_and_save_learnings(
+                &output_str,
+                iteration,
+                story_id_ref.as_deref(),
+            ) {
+                Ok(count) if count > 0 => {
+                    log::info!("[RalphLoop] Extracted {} learning(s) from agent output", count);
+                }
+                Ok(_) => {
+                    log::debug!("[RalphLoop] No learnings found in agent output");
+                }
+                Err(e) => {
+                    log::warn!("[RalphLoop] Failed to extract learnings: {}", e);
+                }
+            }
 
             // Note: We intentionally keep current_agent_id set and don't unregister the PTY yet.
             // This allows the terminal to continue displaying the agent's output after it completes.
