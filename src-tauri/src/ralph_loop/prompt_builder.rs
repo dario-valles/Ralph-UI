@@ -40,12 +40,6 @@ impl PromptBuilder {
         }
     }
 
-    /// Alias for new() for backwards compatibility during migration
-    #[deprecated(note = "Use new() instead")]
-    pub fn new_with_name(project_path: &Path, prd_name: &str) -> Self {
-        Self::new(project_path, prd_name)
-    }
-
     /// Get the path to prompt.md
     pub fn prompt_path(&self) -> PathBuf {
         self.project_path

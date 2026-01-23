@@ -128,39 +128,6 @@ fn parse_agent_json_output(line: &str) -> String {
     parse_agent_json_output_with_tools(line).display_text
 }
 
-/// Legacy function for compatibility
-fn _parse_agent_json_output_legacy(line: &str) -> String {
-    // Try to parse as JSON
-    let json: serde_json::Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(_) => return line.to_string(), // Not JSON, return as-is
-    };
-
-    // Check for Claude stream-json format (has "type" field)
-    if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
-        return parse_claude_stream_json(&json, msg_type);
-    }
-
-    // Check for OpenCode format (has "role" or "content" at top level)
-    if json.get("role").is_some() || json.get("content").is_some() {
-        return parse_opencode_json(&json);
-    }
-
-    // Check for generic message/text fields
-    if let Some(text) = json.get("text").and_then(|v| v.as_str()) {
-        return text.to_string();
-    }
-    if let Some(message) = json.get("message").and_then(|v| v.as_str()) {
-        return message.to_string();
-    }
-    if let Some(output) = json.get("output").and_then(|v| v.as_str()) {
-        return output.to_string();
-    }
-
-    // Unknown JSON format - return as-is but formatted
-    line.to_string()
-}
-
 /// Parse Claude stream-json format with tool call extraction
 fn parse_claude_stream_json_with_tools(json: &serde_json::Value, msg_type: &str) -> ParsedAgentOutput {
     let mut result = ParsedAgentOutput::default();
