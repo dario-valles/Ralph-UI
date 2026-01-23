@@ -115,6 +115,125 @@ impl RalphStory {
     }
 }
 
+/// Execution configuration stored with a PRD
+///
+/// This captures the execution settings that were used (or should be used) when
+/// running the Ralph loop for this PRD. When a PRD is executed, these settings
+/// take precedence over global config. If not present, global RalphConfig is used.
+///
+/// Config precedence: PRD stored > global config > defaults
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrdExecutionConfig {
+    /// Agent type to use (claude, opencode, cursor, codex)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+
+    /// Model to use (e.g., "claude-sonnet-4-5")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Maximum iterations per execution
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<u32>,
+
+    /// Maximum cost limit in dollars
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_cost: Option<f64>,
+
+    /// Whether to run tests after each iteration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_tests: Option<bool>,
+
+    /// Whether to run lint after each iteration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_lint: Option<bool>,
+
+    /// Whether to use a worktree for isolation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_worktree: Option<bool>,
+
+    /// Agent timeout in seconds (0 = no timeout)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_timeout_secs: Option<u64>,
+
+    /// Template name for prompt generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template_name: Option<String>,
+
+    /// Automatically create PRs for completed stories
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_create_prs: Option<bool>,
+
+    /// Create PRs as drafts
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft_prs: Option<bool>,
+}
+
+impl Default for PrdExecutionConfig {
+    fn default() -> Self {
+        Self {
+            agent_type: None,
+            model: None,
+            max_iterations: None,
+            max_cost: None,
+            run_tests: None,
+            run_lint: None,
+            use_worktree: None,
+            agent_timeout_secs: None,
+            template_name: None,
+            auto_create_prs: None,
+            draft_prs: None,
+        }
+    }
+}
+
+impl PrdExecutionConfig {
+    /// Validate the execution config fields
+    ///
+    /// Returns Ok(()) if valid, Err with error message if invalid.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(max_iterations) = self.max_iterations {
+            if max_iterations == 0 {
+                return Err("max_iterations must be greater than 0".to_string());
+            }
+        }
+
+        if let Some(max_cost) = self.max_cost {
+            if max_cost < 0.0 {
+                return Err("max_cost cannot be negative".to_string());
+            }
+        }
+
+        if let Some(ref agent_type) = self.agent_type {
+            let valid_types = ["claude", "opencode", "cursor", "codex"];
+            if !valid_types.contains(&agent_type.to_lowercase().as_str()) {
+                return Err(format!(
+                    "Invalid agent_type '{}'. Valid types: {:?}",
+                    agent_type, valid_types
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if this config has any fields set
+    pub fn has_any_fields(&self) -> bool {
+        self.agent_type.is_some()
+            || self.model.is_some()
+            || self.max_iterations.is_some()
+            || self.max_cost.is_some()
+            || self.run_tests.is_some()
+            || self.run_lint.is_some()
+            || self.use_worktree.is_some()
+            || self.agent_timeout_secs.is_some()
+            || self.template_name.is_some()
+            || self.auto_create_prs.is_some()
+            || self.draft_prs.is_some()
+    }
+}
+
 /// The PRD document stored in .ralph-ui/prds/{prd_name}.json
 ///
 /// This is the source of truth for what tasks need to be done and their status.
@@ -141,6 +260,14 @@ pub struct RalphPrd {
     /// PRD metadata
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<PrdMetadata>,
+
+    /// Optional execution configuration stored with the PRD
+    ///
+    /// When present, these settings are used for PRD execution.
+    /// When absent, settings are loaded from global RalphConfig.
+    /// Config precedence: PRD stored > global config > defaults
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "executionConfig")]
+    pub execution_config: Option<PrdExecutionConfig>,
 
     /// Execution history (embedded, replaces database tables)
     /// Only the most recent executions are kept to avoid file bloat.
@@ -380,6 +507,7 @@ impl RalphPrd {
                 last_execution_id: None,
                 last_worktree_path: None,
             }),
+            execution_config: None,
             executions: Vec::new(),
         }
     }
@@ -1330,5 +1458,157 @@ mod tests {
         assert_eq!(ExecutionStatus::Stopped.to_string(), "stopped");
         assert_eq!(ExecutionStatus::Failed.to_string(), "failed");
         assert_eq!(ExecutionStatus::Interrupted.to_string(), "interrupted");
+    }
+
+    // ============================================================================
+    // PrdExecutionConfig Tests (US-002)
+    // ============================================================================
+
+    #[test]
+    fn test_prd_execution_config_default() {
+        let config = PrdExecutionConfig::default();
+        assert!(config.agent_type.is_none());
+        assert!(config.model.is_none());
+        assert!(config.max_iterations.is_none());
+        assert!(config.max_cost.is_none());
+        assert!(config.run_tests.is_none());
+        assert!(config.run_lint.is_none());
+        assert!(config.use_worktree.is_none());
+        assert!(!config.has_any_fields());
+    }
+
+    #[test]
+    fn test_prd_execution_config_has_any_fields() {
+        let mut config = PrdExecutionConfig::default();
+        assert!(!config.has_any_fields());
+
+        config.agent_type = Some("claude".to_string());
+        assert!(config.has_any_fields());
+
+        config.agent_type = None;
+        config.max_iterations = Some(50);
+        assert!(config.has_any_fields());
+    }
+
+    #[test]
+    fn test_prd_execution_config_validation_success() {
+        let config = PrdExecutionConfig {
+            agent_type: Some("claude".to_string()),
+            model: Some("claude-sonnet-4-5".to_string()),
+            max_iterations: Some(50),
+            max_cost: Some(10.0),
+            run_tests: Some(true),
+            run_lint: Some(true),
+            use_worktree: Some(true),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_prd_execution_config_validation_invalid_agent_type() {
+        let config = PrdExecutionConfig {
+            agent_type: Some("invalid_agent".to_string()),
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid agent_type"));
+    }
+
+    #[test]
+    fn test_prd_execution_config_validation_zero_iterations() {
+        let config = PrdExecutionConfig {
+            max_iterations: Some(0),
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max_iterations must be greater than 0"));
+    }
+
+    #[test]
+    fn test_prd_execution_config_validation_negative_cost() {
+        let config = PrdExecutionConfig {
+            max_cost: Some(-5.0),
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max_cost cannot be negative"));
+    }
+
+    #[test]
+    fn test_prd_with_execution_config_serialization() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        prd.execution_config = Some(PrdExecutionConfig {
+            agent_type: Some("claude".to_string()),
+            model: Some("claude-sonnet-4-5".to_string()),
+            max_iterations: Some(100),
+            max_cost: Some(25.0),
+            run_tests: Some(true),
+            run_lint: Some(false),
+            use_worktree: Some(true),
+            agent_timeout_secs: Some(1800),
+            template_name: Some("default".to_string()),
+            auto_create_prs: Some(true),
+            draft_prs: Some(false),
+        });
+
+        let json = serde_json::to_string_pretty(&prd).unwrap();
+        assert!(json.contains("executionConfig"));
+        assert!(json.contains("agentType"));
+        assert!(json.contains("claude"));
+        assert!(json.contains("maxIterations"));
+        assert!(json.contains("100"));
+
+        // Verify round-trip
+        let parsed: RalphPrd = serde_json::from_str(&json).unwrap();
+        assert!(parsed.execution_config.is_some());
+        let config = parsed.execution_config.unwrap();
+        assert_eq!(config.agent_type, Some("claude".to_string()));
+        assert_eq!(config.max_iterations, Some(100));
+        assert_eq!(config.max_cost, Some(25.0));
+        assert_eq!(config.run_tests, Some(true));
+        assert_eq!(config.run_lint, Some(false));
+        assert_eq!(config.agent_timeout_secs, Some(1800));
+    }
+
+    #[test]
+    fn test_prd_without_execution_config_backward_compatible() {
+        // Simulate JSON from before execution_config existed
+        let json = r#"{
+            "title": "Old PRD",
+            "branch": "feature/old",
+            "stories": []
+        }"#;
+
+        let parsed: RalphPrd = serde_json::from_str(json).unwrap();
+        assert!(parsed.execution_config.is_none());
+        assert_eq!(parsed.title, "Old PRD");
+        assert_eq!(parsed.branch, "feature/old");
+    }
+
+    #[test]
+    fn test_prd_with_partial_execution_config() {
+        // Simulate JSON with only some execution_config fields set
+        let json = r#"{
+            "title": "Partial Config PRD",
+            "branch": "feature/partial",
+            "stories": [],
+            "executionConfig": {
+                "maxIterations": 75,
+                "runTests": true
+            }
+        }"#;
+
+        let parsed: RalphPrd = serde_json::from_str(json).unwrap();
+        assert!(parsed.execution_config.is_some());
+        let config = parsed.execution_config.unwrap();
+        assert_eq!(config.max_iterations, Some(75));
+        assert_eq!(config.run_tests, Some(true));
+        assert!(config.agent_type.is_none());
+        assert!(config.model.is_none());
+        assert!(config.max_cost.is_none());
     }
 }

@@ -127,6 +127,7 @@ pub fn convert_to_ralph_prd(
             last_execution_id: None,
             last_worktree_path: None,
         }),
+        execution_config: None,
         executions: Vec::new(),
     };
 

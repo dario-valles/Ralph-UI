@@ -118,6 +118,8 @@ pub struct InitRalphPrdRequest {
     pub branch: String,
     /// Stories to add
     pub stories: Vec<RalphStoryInput>,
+    /// Optional execution configuration to store with the PRD
+    pub execution_config: Option<crate::ralph_loop::PrdExecutionConfig>,
 }
 
 /// Input for creating a Ralph story
@@ -194,8 +196,26 @@ pub fn init_ralph_prd(request: InitRalphPrdRequest, prd_name: String) -> Result<
     let project_path = PathBuf::from(&request.project_path);
     let executor = PrdExecutor::new(&project_path, &prd_name);
 
+    // Validate execution config if provided
+    if let Some(ref exec_config) = request.execution_config {
+        exec_config.validate()?;
+        log::info!(
+            "[init_ralph_prd] PRD '{}' includes stored execution config: agent={:?}, model={:?}, max_iterations={:?}",
+            prd_name,
+            exec_config.agent_type,
+            exec_config.model,
+            exec_config.max_iterations
+        );
+    } else {
+        log::info!(
+            "[init_ralph_prd] PRD '{}' has no stored execution config - will use global config at execution time",
+            prd_name
+        );
+    }
+
     let mut prd = RalphPrd::new(&request.title, &request.branch);
     prd.description = request.description;
+    prd.execution_config = request.execution_config.clone();
 
     for (index, story_input) in request.stories.iter().enumerate() {
         let mut story = RalphStory::new(&story_input.id, &story_input.title, &story_input.acceptance);
@@ -213,13 +233,15 @@ pub fn init_ralph_prd(request: InitRalphPrdRequest, prd_name: String) -> Result<
     let tracker = ProgressTracker::new(&project_path, &prd_name);
     tracker.initialize()?;
 
-    // Generate prompt.md
+    // Generate prompt.md - use execution config settings if provided
     let prompt_builder = PromptBuilder::new(&project_path, &prd_name);
+    let exec_config = request.execution_config.as_ref();
     let config = RalphLoopConfig {
         project_path: project_path.clone(),
         prd_name: prd_name.clone(),
-        run_tests: true,
-        run_lint: true,
+        run_tests: exec_config.and_then(|c| c.run_tests).unwrap_or(true),
+        run_lint: exec_config.and_then(|c| c.run_lint).unwrap_or(true),
+        template_name: exec_config.and_then(|c| c.template_name.clone()),
         ..Default::default()
     };
     prompt_builder.generate_prompt(&config)?;
@@ -447,6 +469,12 @@ pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String)
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 /// Start a Ralph loop execution
+///
+/// Config precedence (highest to lowest):
+/// 1. Explicit values in StartRalphLoopRequest (from UI)
+/// 2. PRD stored execution_config (from PRD JSON)
+/// 3. Global RalphConfig (from config files)
+/// 4. Defaults
 #[tauri::command]
 pub async fn start_ralph_loop(
     request: StartRalphLoopRequest,
@@ -456,7 +484,26 @@ pub async fn start_ralph_loop(
     config_state: State<'_, ConfigState>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    // Parse agent type
+    // Read PRD to get stored execution config
+    let project_path_buf = PathBuf::from(&request.project_path);
+    let executor = PrdExecutor::new(&project_path_buf, &request.prd_name);
+    let prd = executor.read_prd()?;
+    let prd_config = prd.execution_config.as_ref();
+
+    // Get global config
+    let user_config = config_state.get_config().ok();
+
+    // Log config sources
+    log::info!(
+        "[start_ralph_loop] Config sources: request={}, prd_stored={}, global_config={}",
+        "explicit",
+        if prd_config.is_some() { "present" } else { "absent" },
+        if user_config.is_some() { "present" } else { "absent" }
+    );
+
+    // Parse agent type (request.agent_type is required, so it always takes precedence)
+    // PRD stored config's agent_type could be used as default if request allowed it,
+    // but currently request.agent_type is required so it always takes precedence.
     let agent_type = match request.agent_type.to_lowercase().as_str() {
         "claude" => AgentType::Claude,
         "opencode" => AgentType::Opencode,
@@ -465,8 +512,53 @@ pub async fn start_ralph_loop(
         _ => return Err(format!("Unknown agent type: {}", request.agent_type)),
     };
 
+    // Log final resolved config values with their sources
+    let resolved_model = request.model.clone()
+        .or_else(|| prd_config.and_then(|c| c.model.clone()))
+        .or_else(|| user_config.as_ref().and_then(|c| c.execution.model.clone()));
+
+    let resolved_max_iterations = request.max_iterations
+        .or_else(|| prd_config.and_then(|c| c.max_iterations))
+        .or_else(|| user_config.as_ref().map(|c| c.execution.max_iterations as u32))
+        .unwrap_or(50);
+
+    let resolved_max_cost = request.max_cost
+        .or_else(|| prd_config.and_then(|c| c.max_cost));
+
+    let resolved_run_tests = request.run_tests
+        .or_else(|| prd_config.and_then(|c| c.run_tests))
+        .or_else(|| user_config.as_ref().map(|c| c.validation.run_tests))
+        .unwrap_or(true);
+
+    let resolved_run_lint = request.run_lint
+        .or_else(|| prd_config.and_then(|c| c.run_lint))
+        .or_else(|| user_config.as_ref().map(|c| c.validation.run_lint))
+        .unwrap_or(true);
+
+    let resolved_use_worktree = request.use_worktree
+        .or_else(|| prd_config.and_then(|c| c.use_worktree))
+        .unwrap_or(true);
+
+    let resolved_agent_timeout = request.agent_timeout_secs
+        .or_else(|| prd_config.and_then(|c| c.agent_timeout_secs))
+        .unwrap_or(0);
+
+    let resolved_template = request.template_name.clone()
+        .or_else(|| prd_config.and_then(|c| c.template_name.clone()));
+
+    log::info!(
+        "[start_ralph_loop] Resolved config: agent={:?}, model={:?}, max_iterations={}, max_cost={:?}, run_tests={}, run_lint={}, use_worktree={}, agent_timeout={}",
+        agent_type,
+        resolved_model,
+        resolved_max_iterations,
+        resolved_max_cost,
+        resolved_run_tests,
+        resolved_run_lint,
+        resolved_use_worktree,
+        resolved_agent_timeout
+    );
+
     // Get fallback config from user settings
-    let user_config = config_state.get_config().ok();
 
     let fallback_config = user_config.as_ref().and_then(|config| {
         if config.fallback.enabled {
@@ -534,23 +626,24 @@ pub async fn start_ralph_loop(
         })
         .unwrap_or_default();
 
+    // Build RalphLoopConfig using resolved values (respecting config precedence)
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
         agent_type: agent_type.clone(),
-        model: request.model,
-        max_iterations: request.max_iterations.unwrap_or(50),
-        run_tests: request.run_tests.unwrap_or(true),
-        run_lint: request.run_lint.unwrap_or(true),
+        model: resolved_model,
+        max_iterations: resolved_max_iterations,
+        run_tests: resolved_run_tests,
+        run_lint: resolved_run_lint,
         branch: request.branch,
         completion_promise: request.completion_promise,
-        max_cost: request.max_cost,
-        use_worktree: request.use_worktree.unwrap_or(true), // Use worktree for isolation by default
+        max_cost: resolved_max_cost,
+        use_worktree: resolved_use_worktree,
         retry_config: RetryConfig::default(),
         error_strategy,  // Use config value instead of hardcoded default
         fallback_config,
-        agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
+        agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
-        template_name: request.template_name,
+        template_name: resolved_template,
     };
 
     // Create orchestrator
@@ -573,13 +666,10 @@ pub async fn start_ralph_loop(
         });
     }
 
-    // Read existing PRD and initialize
-    let project_path = PathBuf::from(&request.project_path);
-    let executor = PrdExecutor::new(&project_path, &request.prd_name);
-    let mut prd = executor.read_prd()?;
-
-    // Update metadata with current execution ID immediately so frontend can recover
+    // Update PRD metadata with current execution ID immediately so frontend can recover
+    // Note: We already read the PRD above for config resolution
     use crate::ralph_loop::PrdMetadata;
+    let mut prd = prd; // Move from immutable to mutable
     if let Some(ref mut meta) = prd.metadata {
         meta.last_execution_id = Some(execution_id.clone());
         meta.updated_at = Some(chrono::Utc::now().to_rfc3339());
@@ -1067,14 +1157,14 @@ pub struct RalphWorktreeInfo {
 ///
 /// This takes an existing PRD document and converts it to the Ralph loop format,
 /// writing prd.json, initializing progress.txt, config.yaml, and prompt.md.
-/// Settings from the PRD Execution Dialog are used to initialize the config.
+/// Settings from the PRD Execution Dialog are stored in the PRD JSON for future executions.
 #[tauri::command]
 pub fn convert_prd_to_ralph(
     request: ConvertPrdToRalphRequest,
     db: State<'_, Mutex<Database>>,
 ) -> Result<RalphPrd, String> {
     use crate::models::ExtractedPRDStructure;
-    use crate::ralph_loop::{LoopConfig, ProjectConfig};
+    use crate::ralph_loop::{LoopConfig, PrdExecutionConfig, ProjectConfig};
 
     let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
@@ -1090,9 +1180,40 @@ pub fn convert_prd_to_ralph(
     let project_path_buf = PathBuf::from(&project_path);
     let executor = PrdExecutor::new(&project_path_buf, &request.prd_name);
 
-    // Create Ralph PRD
+    // Create execution config from request parameters
+    let execution_config = PrdExecutionConfig {
+        agent_type: request.agent_type.clone(),
+        model: request.model.clone(),
+        max_iterations: request.max_iterations,
+        max_cost: request.max_cost,
+        run_tests: request.run_tests,
+        run_lint: request.run_lint,
+        use_worktree: request.use_worktree,
+        ..Default::default()
+    };
+
+    // Validate the execution config
+    execution_config.validate()?;
+
+    // Log config storage
+    if execution_config.has_any_fields() {
+        log::info!(
+            "[convert_prd_to_ralph] PRD '{}' storing execution config: agent={:?}, model={:?}, max_iterations={:?}",
+            request.prd_name,
+            execution_config.agent_type,
+            execution_config.model,
+            execution_config.max_iterations
+        );
+    }
+
+    // Create Ralph PRD with stored execution config
     let mut ralph_prd = RalphPrd::new(&prd_doc.title, &request.branch);
     ralph_prd.description = prd_doc.description;
+    ralph_prd.execution_config = if execution_config.has_any_fields() {
+        Some(execution_config)
+    } else {
+        None
+    };
 
     // Convert extracted structure if available
     if let Some(structure_json) = prd_doc.extracted_structure {
@@ -1162,11 +1283,12 @@ pub fn convert_prd_to_ralph(
 ///
 /// This reads a markdown PRD file and its associated structure JSON (if any),
 /// then creates the Ralph loop files (prd.json, progress.txt, config.yaml, prompt.md).
+/// Execution settings from the request are stored in the PRD JSON for future executions.
 #[tauri::command]
 pub fn convert_prd_file_to_ralph(
     request: ConvertPrdFileToRalphRequest,
 ) -> Result<RalphPrd, String> {
-    use crate::ralph_loop::{LoopConfig, ProjectConfig};
+    use crate::ralph_loop::{LoopConfig, PrdExecutionConfig, ProjectConfig};
     use std::fs;
 
     let project_path = PathBuf::from(&request.project_path);
@@ -1194,8 +1316,40 @@ pub fn convert_prd_file_to_ralph(
         None
     };
 
-    // Create Ralph PRD
+    // Create execution config from request parameters
+    let execution_config = PrdExecutionConfig {
+        agent_type: request.agent_type.clone(),
+        model: request.model.clone(),
+        max_iterations: request.max_iterations,
+        max_cost: request.max_cost,
+        run_tests: request.run_tests,
+        run_lint: request.run_lint,
+        use_worktree: request.use_worktree,
+        template_name: request.template_name.clone(),
+        ..Default::default()
+    };
+
+    // Validate the execution config
+    execution_config.validate()?;
+
+    // Log config storage
+    if execution_config.has_any_fields() {
+        log::info!(
+            "[convert_prd_file_to_ralph] PRD '{}' storing execution config: agent={:?}, model={:?}, max_iterations={:?}",
+            request.prd_name,
+            execution_config.agent_type,
+            execution_config.model,
+            execution_config.max_iterations
+        );
+    }
+
+    // Create Ralph PRD with stored execution config
     let mut ralph_prd = RalphPrd::new(&title, &request.branch);
+    ralph_prd.execution_config = if execution_config.has_any_fields() {
+        Some(execution_config)
+    } else {
+        None
+    };
 
     // If we have extracted structure, use it
     if let Some(structure) = structure {

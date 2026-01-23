@@ -172,6 +172,7 @@ pub async fn github_import_issues_to_prd(
                 branch: format!("ralph-{}", prd_name),
                 stories: Vec::new(),
                 metadata: None,
+                execution_config: None,
                 executions: Vec::new(),
             }
         }
