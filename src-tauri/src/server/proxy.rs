@@ -3,6 +3,7 @@
 //! This implements the Command Proxy Pattern - a single /api/invoke endpoint
 //! that routes to existing command functions without modifying them.
 
+use super::events::EventBroadcaster;
 use super::ServerAppState;
 use axum::{
     extract::State,
@@ -13,6 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
@@ -52,6 +54,258 @@ impl IntoResponse for InvokeError {
         };
         (self.status, Json(body)).into_response()
     }
+}
+
+/// Server-compatible version of send_prd_chat_message that uses EventBroadcaster
+/// instead of Tauri's app_handle for streaming events.
+async fn send_prd_chat_message_server(
+    request: crate::commands::prd_chat::SendMessageRequest,
+    broadcaster: &Arc<EventBroadcaster>,
+) -> Result<crate::commands::prd_chat::SendMessageResponse, String> {
+    use crate::file_storage::chat_ops;
+    use crate::models::{AgentType, ChatMessage, MessageRole};
+    use crate::parsers::structured_output;
+    use std::process::Stdio;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
+    use uuid::Uuid;
+
+    const AGENT_TIMEOUT_SECS: u64 = 1500;
+
+    let project_path_obj = Path::new(&request.project_path);
+
+    // Get session
+    let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Store user message
+    let user_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::User,
+        content: request.content.clone(),
+        created_at: now.clone(),
+    };
+
+    chat_ops::create_chat_message(project_path_obj, &user_message)
+        .map_err(|e| format!("Failed to store user message: {}", e))?;
+
+    // Get chat history for context
+    let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Failed to get chat history: {}", e))?;
+
+    // Build prompt (simplified version - uses chat context)
+    let prompt = build_server_chat_prompt(&session, &history, &request.content);
+
+    // Parse agent type
+    let agent_type: AgentType = session
+        .agent_type
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {}", e))?;
+
+    // Build command args based on agent type
+    let (program, args) = match agent_type {
+        AgentType::Claude => (
+            "claude",
+            vec![
+                "-p".to_string(),
+                "--dangerously-skip-permissions".to_string(),
+                prompt.clone(),
+            ],
+        ),
+        AgentType::Opencode => ("opencode", vec!["run".to_string(), prompt.clone()]),
+        AgentType::Cursor => (
+            "cursor-agent",
+            vec!["--prompt".to_string(), prompt.clone()],
+        ),
+        AgentType::Codex => ("codex", vec!["--prompt".to_string(), prompt.clone()]),
+        AgentType::Qwen => ("qwen", vec!["--prompt".to_string(), prompt.clone()]),
+        AgentType::Droid => (
+            "droid",
+            vec!["chat".to_string(), "--prompt".to_string(), prompt.clone()],
+        ),
+    };
+
+    // Execute agent
+    let mut cmd = Command::new(program);
+    cmd.args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if let Some(ref dir) = session.project_path {
+        cmd.current_dir(dir);
+    }
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn {}: {}", program, e))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to capture stdout".to_string())?;
+
+    let mut reader = BufReader::new(stdout).lines();
+    let mut accumulated = String::new();
+
+    let session_id_clone = request.session_id.clone();
+    let broadcaster_clone = broadcaster.clone();
+
+    // Stream lines with timeout
+    let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
+        while let Some(line) = reader
+            .next_line()
+            .await
+            .map_err(|e| format!("Read error: {}", e))?
+        {
+            if !accumulated.is_empty() {
+                accumulated.push('\n');
+            }
+            accumulated.push_str(&line);
+
+            // Emit streaming chunk via WebSocket broadcaster
+            broadcaster_clone.broadcast(
+                "prd:chat:chunk",
+                serde_json::json!({
+                    "sessionId": session_id_clone,
+                    "content": line,
+                }),
+            );
+        }
+        Ok::<(), String>(())
+    })
+    .await;
+
+    if stream_result.is_err() {
+        let _ = child.kill().await;
+        return Err(format!(
+            "Agent timed out after {} seconds",
+            AGENT_TIMEOUT_SECS
+        ));
+    }
+
+    stream_result
+        .unwrap()
+        .map_err(|e| format!("Streaming error: {}", e))?;
+
+    // Wait for process to complete
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("Failed to wait for process: {}", e))?;
+
+    if !status.success() && accumulated.is_empty() {
+        return Err(format!("Agent process failed with status: {}", status));
+    }
+
+    let response_content = accumulated;
+
+    // Store assistant message
+    let response_now = chrono::Utc::now().to_rfc3339();
+    let assistant_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::Assistant,
+        content: response_content.clone(),
+        created_at: response_now.clone(),
+    };
+
+    chat_ops::create_chat_message(project_path_obj, &assistant_message)
+        .map_err(|e| format!("Failed to store assistant message: {}", e))?;
+
+    // Update session timestamp
+    chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
+        .map_err(|e| format!("Failed to update session: {}", e))?;
+
+    // Auto-generate title if not set
+    if session.title.is_none() {
+        let title = generate_session_title_server(&request.content, session.prd_type.as_deref());
+        chat_ops::update_chat_session_title(project_path_obj, &request.session_id, &title).ok();
+    }
+
+    // Handle structured mode
+    if session.structured_mode {
+        let new_items = structured_output::extract_items(&response_content);
+        if !new_items.is_empty() {
+            let mut structure: crate::models::ExtractedPRDStructure = session
+                .extracted_structure
+                .as_ref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+
+            structured_output::merge_items(&mut structure, new_items);
+
+            let structure_json = serde_json::to_string(&structure)
+                .map_err(|e| format!("Failed to serialize structure: {}", e))?;
+            chat_ops::update_chat_session_extracted_structure(
+                project_path_obj,
+                &request.session_id,
+                Some(&structure_json),
+            )
+            .map_err(|e| format!("Failed to update structure: {}", e))?;
+        }
+    }
+
+    Ok(crate::commands::prd_chat::SendMessageResponse {
+        user_message,
+        assistant_message,
+    })
+}
+
+/// Build a chat prompt for server mode (simplified version)
+fn build_server_chat_prompt(
+    session: &crate::models::ChatSession,
+    history: &[crate::models::ChatMessage],
+    user_message: &str,
+) -> String {
+    let mut prompt = String::new();
+
+    // Add system context
+    prompt.push_str("You are a helpful AI assistant helping to create a PRD (Product Requirements Document).\n\n");
+
+    if let Some(ref prd_type) = session.prd_type {
+        prompt.push_str(&format!("PRD Type: {}\n\n", prd_type));
+    }
+
+    // Add conversation history
+    if !history.is_empty() {
+        prompt.push_str("Previous conversation:\n");
+        for msg in history.iter().take(20) {
+            // Limit context
+            let role = match msg.role {
+                crate::models::MessageRole::User => "User",
+                crate::models::MessageRole::Assistant => "Assistant",
+                crate::models::MessageRole::System => "System",
+            };
+            prompt.push_str(&format!("{}: {}\n", role, msg.content));
+        }
+        prompt.push('\n');
+    }
+
+    prompt.push_str(&format!("User: {}\n\nAssistant:", user_message));
+    prompt
+}
+
+/// Generate a session title from the first message (server version)
+fn generate_session_title_server(first_message: &str, prd_type: Option<&str>) -> String {
+    let prefix = prd_type
+        .map(|t| match t {
+            "new_feature" => "Feature: ",
+            "bug_fix" => "Bug Fix: ",
+            "refactoring" => "Refactor: ",
+            "api_integration" => "API: ",
+            "full_new_app" => "New App: ",
+            _ => "",
+        })
+        .unwrap_or("");
+
+    let summary: String = first_message.chars().take(50).collect();
+    let summary = summary.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
+
+    format!("{}{}", prefix, summary)
 }
 
 /// Main invoke handler - routes commands to their implementations
@@ -724,6 +978,21 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         // =====================================================================
         // PRD Chat Commands
         // =====================================================================
+        "start_prd_chat_session" => {
+            let request: commands::prd_chat::StartChatSessionRequest =
+                get_arg!(args, "request", commands::prd_chat::StartChatSessionRequest);
+            let session = commands::prd_chat::start_prd_chat_session(request).await?;
+            serde_json::to_value(session).map_err(|e| e.to_string())
+        }
+
+        "send_prd_chat_message" => {
+            let request: commands::prd_chat::SendMessageRequest =
+                get_arg!(args, "request", commands::prd_chat::SendMessageRequest);
+            // Use server-compatible version with EventBroadcaster for streaming
+            let response = send_prd_chat_message_server(request, &state.broadcaster).await?;
+            serde_json::to_value(response).map_err(|e| e.to_string())
+        }
+
         "list_prd_chat_sessions" => {
             let project_path: String = get_arg!(args, "projectPath", String);
             let sessions = commands::prd_chat::list_prd_chat_sessions(project_path).await?;
@@ -744,6 +1013,28 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             Ok(Value::Null)
         }
 
+        "update_prd_chat_agent" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let agent_type: String = get_arg!(args, "agentType", String);
+            commands::prd_chat::update_prd_chat_agent(session_id, project_path, agent_type).await?;
+            Ok(Value::Null)
+        }
+
+        "assess_prd_quality" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let assessment = commands::prd_chat::assess_prd_quality(session_id, project_path).await?;
+            serde_json::to_value(assessment).map_err(|e| e.to_string())
+        }
+
+        "preview_prd_extraction" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let content = commands::prd_chat::preview_prd_extraction(session_id, project_path).await?;
+            serde_json::to_value(content).map_err(|e| e.to_string())
+        }
+
         "check_agent_availability" => {
             let agent_type: String = get_arg!(args, "agentType", String);
             let result = commands::prd_chat::check_agent_availability(agent_type).await?;
@@ -754,6 +1045,28 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let prd_type: String = get_arg!(args, "prdType", String);
             let questions = commands::prd_chat::get_guided_questions(prd_type).await?;
             serde_json::to_value(questions).map_err(|e| e.to_string())
+        }
+
+        "set_structured_mode" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let enabled: bool = get_arg!(args, "enabled", bool);
+            commands::prd_chat::set_structured_mode(session_id, project_path, enabled).await?;
+            Ok(Value::Null)
+        }
+
+        "clear_extracted_structure" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            commands::prd_chat::clear_extracted_structure(session_id, project_path).await?;
+            Ok(Value::Null)
+        }
+
+        "get_prd_plan_content" => {
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let content = commands::prd_chat::get_prd_plan_content(session_id, project_path).await?;
+            serde_json::to_value(content).map_err(|e| e.to_string())
         }
 
         // File watching stubs for browser mode (desktop-only functionality)
