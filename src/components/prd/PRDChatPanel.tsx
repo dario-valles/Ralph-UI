@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,9 +43,10 @@ import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
-import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
+import { ModelSelector } from '@/components/shared/ModelSelector'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 import { useIsMobile } from '@/hooks/useMediaQuery'
+import { usePRDChatPanelState } from '@/hooks/usePRDChatPanelState'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 // ============================================================================
@@ -61,25 +62,34 @@ export function PRDChatPanel() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
-  const [showTypeSelector, setShowTypeSelector] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
-  const [agentError, setAgentError] = useState<string | null>(null)
-  // Track user's explicit model selection; empty string means "use default"
-  const [userSelectedModel, setUserSelectedModel] = useState<string>('')
-  // Track the last agent type to detect changes
   const prevAgentTypeRef = useRef<string>('')
-  // Track when streaming started and last message for retry
-  const [streamingStartedAt, setStreamingStartedAt] = useState<string | null>(null)
-  const [lastMessageContent, setLastMessageContent] = useState<string | null>(null)
-  // Plan sidebar visibility
-  const [showPlanSidebar, setShowPlanSidebar] = useState(true)
-  // Sessions sidebar collapsed state for smaller screens
-  const [sessionsCollapsed, setSessionsCollapsed] = useState(false)
-  // Track if sessions have been initially loaded
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false)
-  // Mobile plan sheet visibility
-  const [mobilePlanSheetOpen, setMobilePlanSheetOpen] = useState(false)
+
+  // Consolidated UI state
+  const {
+    showTypeSelector,
+    showDeleteConfirm,
+    sessionToDelete,
+    agentError,
+    userSelectedModel,
+    streamingStartedAt,
+    lastMessageContent,
+    showPlanSidebar,
+    sessionsCollapsed,
+    mobilePlanSheetOpen,
+    initialLoadComplete,
+    openTypeSelector,
+    closeTypeSelector,
+    openDeleteConfirm,
+    closeDeleteConfirm,
+    setAgentError,
+    setUserSelectedModel,
+    startStreaming,
+    stopStreaming,
+    setShowPlanSidebar,
+    setSessionsCollapsed,
+    setMobilePlanSheetOpen,
+    setInitialLoadComplete,
+  } = usePRDChatPanelState()
 
   const isMobile = useIsMobile()
 
@@ -127,12 +137,14 @@ export function PRDChatPanel() {
   })
 
   // Reset user selection when agent type changes
-  if (prevAgentTypeRef.current !== agentType) {
-    prevAgentTypeRef.current = agentType
-    if (userSelectedModel) {
-      setUserSelectedModel('')
+  useEffect(() => {
+    if (prevAgentTypeRef.current !== agentType) {
+      prevAgentTypeRef.current = agentType
+      if (userSelectedModel) {
+        setUserSelectedModel('')
+      }
     }
-  }
+  }, [agentType, userSelectedModel, setUserSelectedModel])
 
   // Effective model: user selection if set, otherwise default
   const selectedModel = userSelectedModel || defaultModelId
@@ -159,7 +171,7 @@ export function PRDChatPanel() {
     }
 
     init()
-  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path])
+  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path, setInitialLoadComplete])
 
   // Keep track of processing session ID changes
   useEffect(() => {
@@ -237,7 +249,7 @@ export function PRDChatPanel() {
     if (!watchedPlanContent) {
       hadPlanContentRef.current = false
     }
-  }, [watchedPlanContent])
+  }, [watchedPlanContent, setShowPlanSidebar])
 
   // Auto-refresh quality score when plan file content changes
   const prevPlanContentRef = useRef<string | null>(null)
@@ -269,7 +281,7 @@ export function PRDChatPanel() {
         await updateSessionAgent(newAgentType)
       } else {
         // No active session - show type selector to create new one
-        setShowTypeSelector(true)
+        openTypeSelector()
       }
     } catch (err) {
       setAgentError(
@@ -279,12 +291,11 @@ export function PRDChatPanel() {
   }
 
   const handleSendMessage = async (content: string) => {
-    setLastMessageContent(content)
-    setStreamingStartedAt(new Date().toISOString())
+    startStreaming(content)
     try {
       await sendMessage(content)
     } finally {
-      setStreamingStartedAt(null)
+      stopStreaming()
     }
   }
 
@@ -297,14 +308,14 @@ export function PRDChatPanel() {
   const handleCancelStreaming = () => {
     // For now, just clear the streaming state on frontend
     // The backend timeout will handle actual process termination
-    setStreamingStartedAt(null)
+    stopStreaming()
     // Note: The actual request cannot be cancelled from frontend,
     // but we can show the user the interface is responsive
     toast.warning('Request will complete in background. You can retry with a new message.')
   }
 
   const handleCreateSession = () => {
-    setShowTypeSelector(true)
+    openTypeSelector()
   }
 
   const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, gsdMode?: boolean) => {
@@ -319,7 +330,7 @@ export function PRDChatPanel() {
       gsdMode: gsdMode || false,
       projectPath: projectPath || activeProject?.path || '',
     })
-    setShowTypeSelector(false)
+    closeTypeSelector()
   }
 
   const handleQuickStart = () => {
@@ -331,25 +342,22 @@ export function PRDChatPanel() {
       guidedMode: true,
       projectPath: activeProject?.path || '',
     })
-    setShowTypeSelector(false)
+    closeTypeSelector()
   }
 
   const handleDeleteSession = (sessionId: string) => {
-    setSessionToDelete(sessionId)
-    setShowDeleteConfirm(true)
+    openDeleteConfirm(sessionId)
   }
 
   const confirmDeleteSession = async () => {
     if (sessionToDelete) {
       await deleteSession(sessionToDelete)
-      setSessionToDelete(null)
-      setShowDeleteConfirm(false)
+      closeDeleteConfirm()
     }
   }
 
   const cancelDeleteSession = () => {
-    setSessionToDelete(null)
-    setShowDeleteConfirm(false)
+    closeDeleteConfirm()
   }
 
   const handleSelectSession = (session: ChatSession) => {
@@ -454,30 +462,15 @@ export function PRDChatPanel() {
                   <option value="cursor">Cursor</option>
                 </Select>
 
-                <Select
+                <ModelSelector
                   id="model-selector"
-                  aria-label="Model"
                   value={selectedModel || defaultModelId || ''}
-                  onChange={(e) => setUserSelectedModel(e.target.value)}
-                  disabled={streaming || modelsLoading}
+                  onChange={setUserSelectedModel}
+                  models={models}
+                  loading={modelsLoading}
+                  disabled={streaming}
                   className="w-28 xl:w-36 text-xs h-8"
-                >
-                  {modelsLoading ? (
-                    <option>Loading...</option>
-                  ) : (
-                    Object.entries(groupModelsByProvider(models)).map(
-                      ([provider, providerModels]) => (
-                        <optgroup key={provider} label={formatProviderName(provider)}>
-                          {providerModels.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )
-                    )
-                  )}
-                </Select>
+                />
               </div>
 
               {/* View Toggle Buttons - Compact */}
@@ -704,7 +697,7 @@ export function PRDChatPanel() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <Dialog open={showDeleteConfirm} onOpenChange={(open) => !open && closeDeleteConfirm()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Session?</DialogTitle>

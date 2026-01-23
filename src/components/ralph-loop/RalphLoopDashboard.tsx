@@ -37,7 +37,7 @@ import {
   GripHorizontal,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
-import { gitApi, type CommitInfo, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
+import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
 import { toast } from '@/stores/toastStore'
 import { ConflictResolutionDialog } from '@/components/git/ConflictResolutionDialog'
 import {
@@ -51,10 +51,13 @@ import { UnifiedTerminalView } from '@/components/terminal/UnifiedTerminalView'
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { AgentTree } from '@/components/ralph-loop/AgentTree'
+import { StoryCard } from '@/components/ralph-loop/StoryCard'
+import { ProgressViewer } from '@/components/ralph-loop/ProgressViewer'
+import { CommitCard } from '@/components/ralph-loop/CommitCard'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
-import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
+import { ModelSelector } from '@/components/shared/ModelSelector'
 import { ralphLoopApi } from '@/lib/tauri-api'
 import { Wand2 } from 'lucide-react'
 
@@ -774,30 +777,16 @@ export function RalphLoopDashboard({
                       <RefreshCw className={`h-3 w-3 ${modelsLoading ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
-                  <Select
+                  <ModelSelector
                     id="model"
                     value={effectiveModel || getDefaultModel(effectiveAgent as AgentType)}
-                    onChange={(e) =>
-                      setConfigOverrides((prev) => ({ ...prev, model: e.target.value }))
+                    onChange={(value) =>
+                      setConfigOverrides((prev) => ({ ...prev, model: value }))
                     }
-                    disabled={modelsLoading}
-                  >
-                    {modelsLoading ? (
-                      <option>Loading models...</option>
-                    ) : (
-                      Object.entries(groupModelsByProvider(availableModels)).map(
-                        ([provider, providerModels]) => (
-                          <optgroup key={provider} label={formatProviderName(provider)}>
-                            {providerModels.map((model) => (
-                              <option key={model.id} value={model.id}>
-                                {model.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )
-                      )
-                    )}
-                  </Select>
+                    models={availableModels}
+                    loading={modelsLoading}
+                    loadingText="Loading models..."
+                  />
                   <p className="text-xs text-muted-foreground">Model to use for the agent</p>
                 </div>
               </div>
@@ -1265,193 +1254,6 @@ export function RalphLoopDashboard({
           setConflicts([])
         }}
       />
-    </div>
-  )
-}
-
-// Story card component
-interface StoryCardProps {
-  story: RalphStory
-  isNext: boolean
-  onToggle: () => void
-}
-
-function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JSX.Element {
-  return (
-    <div
-      className={`p-3 rounded-lg border ${
-        story.passes
-          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-900'
-          : isNext
-            ? 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-900'
-            : 'bg-card border-border'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <button onClick={onToggle} className="mt-0.5 flex-shrink-0">
-            {story.passes ? (
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-            ) : (
-              <Circle className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-muted-foreground">{story.id}</span>
-              {isNext && !story.passes && (
-                <Badge variant="secondary" className="text-xs">
-                  Next
-                </Badge>
-              )}
-            </div>
-            <h4
-              className={`font-medium ${story.passes ? 'line-through text-muted-foreground' : ''}`}
-            >
-              {story.title}
-            </h4>
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{story.acceptance}</p>
-            {story.tags && story.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {story.tags.map((tag) => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {story.effort && (
-            <Badge variant="outline" className="text-xs">
-              {story.effort}
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-xs">
-            P{story.priority}
-          </Badge>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Progress viewer component
-interface ProgressViewerProps {
-  content: string
-}
-
-function ProgressViewer({ content }: ProgressViewerProps): React.JSX.Element {
-  if (!content) {
-    return (
-      <div className="text-center text-muted-foreground py-8">
-        <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-        <p>No progress recorded yet</p>
-        <p className="text-sm">Learnings will appear here as the agent works</p>
-      </div>
-    )
-  }
-
-  // Parse progress entries
-  const lines = content.split('\n')
-
-  return (
-    <div className="space-y-2 font-mono text-sm">
-      {lines.map((line, index) => {
-        // Skip empty lines and comments
-        if (!line.trim() || line.startsWith('#')) {
-          return null
-        }
-
-        // Parse entry type from line
-        const isLearning = line.includes('[LEARNING]')
-        const isError = line.includes('[ERROR]')
-        const isStart = line.includes('[START]')
-        const isEnd = line.includes('[END]')
-        const isCompleted = line.includes('[COMPLETED]')
-
-        let bgColor = 'bg-muted/30'
-        let icon = <Clock className="h-3 w-3 text-muted-foreground" />
-
-        if (isLearning) {
-          bgColor = 'bg-blue-50 dark:bg-blue-950/30'
-          icon = <BookOpen className="h-3 w-3 text-blue-500" />
-        } else if (isError) {
-          bgColor = 'bg-red-50 dark:bg-red-950/30'
-          icon = <XCircle className="h-3 w-3 text-red-500" />
-        } else if (isCompleted) {
-          bgColor = 'bg-green-50 dark:bg-green-950/30'
-          icon = <CheckCircle2 className="h-3 w-3 text-green-500" />
-        } else if (isStart || isEnd) {
-          bgColor = 'bg-muted/50'
-        }
-
-        return (
-          <div key={index} className={`p-2 rounded ${bgColor} flex items-start gap-2`}>
-            <span className="flex-shrink-0 mt-0.5">{icon}</span>
-            <span className="break-all">{line}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Commit card component
-interface CommitCardProps {
-  commit: CommitInfo
-}
-
-function CommitCard({ commit }: CommitCardProps): React.JSX.Element {
-  // Format timestamp to readable date
-  const formatTimestamp = (timestamp: number): string => {
-    const date = new Date(timestamp * 1000)
-    return date.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  // Get first line of commit message
-  const firstLine = commit.message.split('\n')[0]
-  const hasMoreLines = commit.message.split('\n').length > 1
-
-  return (
-    <div className="p-3 rounded-lg border bg-card">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <GitCommit className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Badge variant="outline" className="font-mono text-xs">
-                {commit.short_id}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                {formatTimestamp(commit.timestamp)}
-              </span>
-            </div>
-            <p className="font-medium text-sm">
-              {firstLine.length > 80 ? firstLine.substring(0, 77) + '...' : firstLine}
-            </p>
-            {hasMoreLines && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                (+ {commit.message.split('\n').length - 1} more lines)
-              </p>
-            )}
-            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-              <span>{commit.author}</span>
-              {commit.parent_ids.length > 1 && (
-                <Badge variant="secondary" className="text-xs">
-                  Merge
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

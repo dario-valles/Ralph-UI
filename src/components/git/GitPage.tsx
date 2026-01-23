@@ -47,7 +47,7 @@ export const GitPage: React.FC = () => {
         {/* Repository Path Input */}
         <div className="flex flex-col sm:flex-row gap-2 mb-6">
           <div className="flex-1 relative">
-            <FolderOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <FolderOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
               placeholder="Enter repository path (e.g., /path/to/repo)"
@@ -100,30 +100,30 @@ export const GitPage: React.FC = () => {
 
               <div>
                 {selectedCommit ? (
-                  <div className="border rounded-lg p-6 bg-white">
+                  <div className="border rounded-lg p-6 bg-card">
                     <h3 className="text-lg font-bold mb-4">Commit Details</h3>
                     <div className="space-y-3">
                       <div>
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-sm font-medium text-muted-foreground">
                           ID:
                         </span>
-                        <code className="ml-2 bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                        <code className="ml-2 bg-muted px-2 py-1 rounded text-sm font-mono">
                           {selectedCommit.id}
                         </code>
                       </div>
 
                       <div>
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-sm font-medium text-muted-foreground">
                           Author:
                         </span>
                         <span className="ml-2">{selectedCommit.author}</span>
-                        <span className="text-gray-500 ml-1">
+                        <span className="text-muted-foreground ml-1">
                           ({selectedCommit.email})
                         </span>
                       </div>
 
                       <div>
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-sm font-medium text-muted-foreground">
                           Date:
                         </span>
                         <span className="ml-2">
@@ -134,23 +134,23 @@ export const GitPage: React.FC = () => {
                       </div>
 
                       <div>
-                        <span className="text-sm font-medium text-gray-600 block mb-1">
+                        <span className="text-sm font-medium text-muted-foreground block mb-1">
                           Message:
                         </span>
-                        <pre className="bg-gray-50 p-3 rounded text-sm whitespace-pre-wrap">
+                        <pre className="bg-muted p-3 rounded text-sm whitespace-pre-wrap">
                           {selectedCommit.message}
                         </pre>
                       </div>
 
                       {selectedCommit.parent_ids.length > 0 && (
                         <div>
-                          <span className="text-sm font-medium text-gray-600 block mb-1">
+                          <span className="text-sm font-medium text-muted-foreground block mb-1">
                             Parent{selectedCommit.parent_ids.length > 1 ? "s" : ""}:
                           </span>
                           {selectedCommit.parent_ids.map((parentId, i) => (
                             <code
                               key={i}
-                              className="block bg-gray-100 px-2 py-1 rounded text-sm font-mono mb-1"
+                              className="block bg-muted px-2 py-1 rounded text-sm font-mono mb-1"
                             >
                               {parentId}
                             </code>
@@ -160,7 +160,7 @@ export const GitPage: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="border rounded-lg p-6 bg-gray-50 text-center text-gray-500">
+                  <div className="border rounded-lg p-6 bg-muted text-center text-muted-foreground">
                     Select a commit to view details
                   </div>
                 )}
@@ -184,7 +184,7 @@ export const GitPage: React.FC = () => {
       )}
 
       {!activeRepoPath && (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg">Enter a repository path above to get started</p>
         </div>
       )}
