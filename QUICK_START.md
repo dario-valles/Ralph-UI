@@ -82,6 +82,29 @@ Output locations:
 - **Windows:** `src-tauri/target/release/bundle/msi/`
 - **Linux:** `src-tauri/target/release/bundle/deb/` or `.appimage`
 
+### Server Mode (Browser Access)
+
+Run Ralph UI as a server and access it from any browser on your network:
+
+```bash
+# Terminal 1: Start the backend server
+bun run server
+
+# Terminal 2: Start the frontend dev server
+bun run dev
+
+# Open http://localhost:1420 in your browser
+```
+
+The server displays an auth token on startup - enter it in the browser connection dialog.
+
+**Server variants:**
+- `bun run server` - Production server (port 3420)
+- `bun run server:dev` - Development mode (faster builds)
+- `bun run server:dev:token` - Dev mode with fixed token (no re-entry after restart)
+
+See [CLAUDE.md](./CLAUDE.md) for full server mode documentation.
+
 ---
 
 ## Running Tests

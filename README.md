@@ -1,6 +1,6 @@
 # Ralph UI
 
-**A modern cross-platform desktop application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique.**
+**A modern cross-platform application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. Runs as a native desktop app or in your browser via server mode.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://v2.tauri.app/)
@@ -15,6 +15,7 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 
 ### Key Features
 
+- **Desktop & Browser Access** - Run as a native app or access via browser from any device
 - **Mission Control** - Bird's-eye view of all projects and active agents
 - **Multi-Project Support** - Manage multiple projects with VS Code-style project switching
 - **Multi-Agent Orchestration** - Run multiple AI agents in parallel with complete isolation
@@ -132,13 +133,41 @@ Signal handlers (SIGINT, SIGTERM, SIGHUP) ensure clean shutdown:
 - Cleans up worktrees
 - Preserves committed branches
 
-### Server Mode
-Ralph UI can run as an HTTP/WebSocket server for browser-based access:
+### Server Mode (Browser Access)
+
+Ralph UI can run as an HTTP/WebSocket server, enabling browser-based access from any device on your network - no desktop app installation required. The frontend works identically in both Tauri desktop and browser modes.
+
+**Quick Start:**
 ```bash
-bun run server        # Start server (default port 3420)
-bun run server:dev    # Development mode with faster builds
+# Terminal 1: Start the backend server
+bun run server
+
+# Terminal 2: Start the frontend dev server
+bun run dev
+
+# Open http://localhost:1420 in your browser
+# Enter the auth token displayed by the server
 ```
-See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation.
+
+**Server Commands:**
+```bash
+bun run server           # Production server (port 3420)
+bun run server:dev       # Development mode (faster builds)
+bun run server:dev:token # Dev mode with fixed token (persists across restarts)
+```
+
+**Feature Parity:**
+
+| Feature | Desktop | Browser |
+|---------|---------|---------|
+| All UI features | ✓ | ✓ |
+| Real-time events | ✓ | ✓ (WebSocket) |
+| Live terminal output | ✓ | ✓ (WebSocket PTY) |
+| File watching | ✓ | ✓ |
+| Native file dialogs | ✓ | ✗ (uses folder browser) |
+| PTY terminal input | ✓ | ✗ (output only) |
+
+See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation including authentication, endpoints, and architecture.
 
 ---
 
