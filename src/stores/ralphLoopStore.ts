@@ -1,6 +1,6 @@
 // Ralph Wiggum Loop State Management Store
 import { create } from 'zustand'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import { gitApi, type CommitInfo } from '@/lib/git-api'
 import { asyncAction, type AsyncState } from '@/lib/store-utils'
 import type {
@@ -398,7 +398,7 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       set,
       async () => {
         const iterationHistory = await ralphLoopApi.getIterationHistory(executionId)
-        return { iterationHistory }
+        return { iterationHistory: iterationHistory ?? [] }
       },
       { silent }
     )
@@ -428,11 +428,11 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
       async () => {
         const snapshot = await ralphLoopApi.getSnapshot(executionId, projectPath)
         return {
-          executionState: snapshot.state,
-          executionMetrics: snapshot.metrics,
-          currentAgentId: snapshot.currentAgentId,
-          worktreePath: snapshot.worktreePath,
-          iterationHistory: snapshot.iterationHistory,
+          executionState: snapshot.state ?? null,
+          executionMetrics: snapshot.metrics ?? null,
+          currentAgentId: snapshot.currentAgentId ?? null,
+          worktreePath: snapshot.worktreePath ?? null,
+          iterationHistory: snapshot.iterationHistory ?? [],
         }
       },
       { silent }

@@ -37,7 +37,7 @@ vi.mock('@/lib/config-api', () => ({
 }))
 
 // Mock the template API
-vi.mock('@/lib/tauri-api', () => ({
+vi.mock('@/lib/backend-api', () => ({
   templateApi: {
     list: () => mockListTemplates(),
     getContent: (name: string, projectPath?: string) => mockGetTemplateContent(name, projectPath),
@@ -57,9 +57,10 @@ vi.mock('@/stores/projectStore', () => ({
   })),
 }))
 
-// Mock isTauri to true so templates can load
-vi.mock('@/lib/tauri-check', () => ({
-  isTauri: true,
+// Mock env-check (browser mode)
+vi.mock('@/lib/env-check', () => ({
+  isTauri: false,
+  isDesktopApp: false,
 }))
 
 // Mock useAvailableModels hook
@@ -74,11 +75,6 @@ vi.mock('@/hooks/useAvailableModels', () => ({
     refresh: vi.fn(),
     defaultModelId: 'claude-sonnet-4-5',
   })),
-}))
-
-// Mock Tauri
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
 }))
 
 const mockConfig: RalphConfig = {

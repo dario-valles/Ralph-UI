@@ -5,20 +5,6 @@ import { expect, vi } from 'vitest'
 // Extend Vitest's expect with jest-axe matchers
 expect.extend(toHaveNoViolations)
 
-// Mock __TAURI_INTERNALS__ to make isTauri checks pass in tests
-Object.defineProperty(globalThis, '__TAURI_INTERNALS__', {
-  value: {},
-  writable: true,
-  configurable: true,
-})
-if (typeof window !== 'undefined') {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    value: {},
-    writable: true,
-    configurable: true,
-  })
-}
-
 // Mock ResizeObserver for Radix UI components
 class ResizeObserverMock {
   observe = vi.fn()

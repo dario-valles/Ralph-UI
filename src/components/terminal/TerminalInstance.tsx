@@ -1,5 +1,5 @@
 // Terminal instance component - wraps xterm.js with PTY connection
-// Supports both Tauri desktop mode (native PTY) and browser mode (WebSocket PTY)
+// Uses WebSocket PTY for browser mode
 
 import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'

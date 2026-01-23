@@ -1,14 +1,9 @@
 /**
- * Shared Tauri invoke wrapper with HTTP fallback for browser mode
+ * HTTP invoke wrapper for backend API calls
  *
- * Provides a safe wrapper around Tauri's invoke function that:
- * - Uses native Tauri IPC when running in desktop mode
- * - Falls back to HTTP API when running in browser mode (server mode)
- * - Provides consistent error handling across both modes
+ * Provides a consistent interface for calling backend commands via HTTP.
+ * All commands are routed through the /api/invoke endpoint on the Axum server.
  */
-
-import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import { isTauri } from './tauri-check'
 
 /**
  * Server configuration for browser mode
@@ -50,26 +45,17 @@ export function clearServerConfig(): void {
 }
 
 /**
- * Check if we're in browser mode (not Tauri, but have server config)
+ * Check if we're connected to a server
  */
 export function isBrowserMode(): boolean {
-  return !isTauri && getServerConfig() !== null
+  return getServerConfig() !== null
 }
 
 /**
- * Safe invoke wrapper that handles both Tauri and browser modes.
- * Use this instead of directly importing from @tauri-apps/api/core.
- *
- * In Tauri desktop mode: Uses native IPC
- * In browser mode: Uses HTTP POST to /api/invoke
+ * Invoke a backend command via HTTP
+ * All commands are routed through POST /api/invoke
  */
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  // If Tauri is available, use native IPC
-  if (isTauri && typeof tauriInvoke === 'function') {
-    return tauriInvoke<T>(cmd, args)
-  }
-
-  // Browser mode - use HTTP fallback
   const config = getServerConfig()
   if (!config) {
     throw new Error(

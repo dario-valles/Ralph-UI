@@ -1,4 +1,4 @@
-// Tauri command handlers for IPC communication
+// Backend command handlers for IPC communication
 
 pub mod sessions;
 pub mod tasks;

@@ -1,4 +1,4 @@
-// PRD Tauri commands - File-based storage only
+// PRD Backend commands - File-based storage only
 // NOTE: Legacy SQLite-based PRD commands have been removed.
 // All PRD operations now use file-based storage in .ralph-ui/prds/
 

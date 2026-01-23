@@ -1,4 +1,4 @@
-// Recovery Tauri commands
+// Recovery Backend commands
 // Uses file-based storage for session data
 
 use crate::session::{

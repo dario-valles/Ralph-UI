@@ -12,7 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ServerConnectionDialog } from './components/ServerConnectionDialog'
 import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
-import { ralphLoopApi } from './lib/tauri-api'
+import { ralphLoopApi } from './lib/backend-api'
 import { useRalphLoopNotifications } from './hooks/useRalphLoopNotifications'
 
 /** Component that mounts global notification listeners inside the router */

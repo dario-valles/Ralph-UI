@@ -1,4 +1,4 @@
-// Configuration Tauri commands
+// Configuration Backend commands
 
 use crate::config::{
     load_merged_config, get_config_paths, RalphConfig, ExecutionConfig, GitConfig, ValidationConfig,

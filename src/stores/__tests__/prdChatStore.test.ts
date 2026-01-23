@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { usePRDChatStore } from '../prdChatStore'
-import { prdChatApi } from '@/lib/tauri-api'
+import { prdChatApi } from '@/lib/backend-api'
 import { resetStore } from '@/test/store-test-utils'
 import type { ChatSession, ChatMessage } from '@/types'
 
-// Mock the tauri API
-vi.mock('@/lib/tauri-api', () => ({
+// Mock the backend API
+vi.mock('@/lib/backend-api', () => ({
   prdChatApi: {
     startSession: vi.fn(),
     sendMessage: vi.fn(),

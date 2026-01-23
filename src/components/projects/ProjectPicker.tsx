@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FolderOpen, ChevronDown, Star, Clock, X, GitBranch, AlertCircle, Loader2 } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@/lib/invoke'
 
 interface ProjectPickerProps {
@@ -22,7 +21,7 @@ export function ProjectPicker({
   value,
   onChange,
   label = 'Project Path',
-  placeholder = 'Select a project folder',
+  placeholder = 'Enter project folder path',
   className,
   disabled = false,
 }: ProjectPickerProps) {
@@ -94,23 +93,6 @@ export function ProjectPicker({
     }
   }
 
-  const handleSelectFolder = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Folder',
-      })
-      if (selected && typeof selected === 'string') {
-        registerProject(selected)
-        onChange(selected)
-        setIsOpen(false)
-      }
-    } catch (error) {
-      console.error('Failed to open folder dialog:', error)
-    }
-  }
-
   const handleSelectProject = (project: Project) => {
     registerProject(project.path) // Touch to update lastUsedAt
     onChange(project.path)
@@ -156,6 +138,7 @@ export function ProjectPicker({
               onClick={() => setIsOpen(!isOpen)}
               disabled={disabled}
               className="shrink-0"
+              title="Select from recent projects"
             >
               <ChevronDown
                 className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
@@ -163,16 +146,10 @@ export function ProjectPicker({
             </Button>
           )}
 
-          {/* Browse button */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleSelectFolder}
-            disabled={disabled}
-            className="shrink-0"
-          >
-            <FolderOpen className="h-4 w-4" />
-          </Button>
+          {/* Folder icon (visual indicator) */}
+          <div className="flex items-center justify-center w-10 h-10 shrink-0 border rounded-md bg-muted/50">
+            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+          </div>
         </div>
 
         {/* Dropdown with recent/favorite projects */}

@@ -96,22 +96,21 @@ export const useToolCallStore = create<ToolCallStore>((set, get) => ({
   },
 }))
 
-// Hook to listen for tool call events from Tauri
+// Hook to listen for tool call events via WebSocket
 export function setupToolCallEventListeners() {
-  // Only import Tauri on client side
   if (typeof window === 'undefined') return
 
-  import('@tauri-apps/api/event').then(({ listen }) => {
+  import('@/lib/events-client').then(({ subscribeEvent }) => {
     const store = useToolCallStore.getState()
 
     // Listen for tool call started events
-    listen<ToolCallStartedPayload>('tool:started', (event) => {
-      store.addToolCall(event.payload)
+    subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+      store.addToolCall(payload)
     })
 
     // Listen for tool call completed events
-    listen<ToolCallCompletedPayload>('tool:completed', (event) => {
-      store.completeToolCall(event.payload)
+    subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+      store.completeToolCall(payload)
     })
   })
 }

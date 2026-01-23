@@ -247,20 +247,12 @@ export function PRDPlanSidebar({
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0 shrink-0"
-                  title="Reveal file in file manager"
+                  title="Copy file path"
                   onClick={async () => {
                     try {
-                      const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
-                      await revealItemInDir(path)
+                      await navigator.clipboard.writeText(path)
                     } catch {
-                      // Fallback: try to open the parent folder
-                      try {
-                        const { open } = await import('@tauri-apps/plugin-shell')
-                        const parentDir = path.substring(0, path.lastIndexOf('/'))
-                        await open(parentDir || path)
-                      } catch {
-                        // Ignore if both fail (e.g., in browser dev mode)
-                      }
+                      // Ignore if clipboard fails
                     }
                   }}
                 >

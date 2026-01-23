@@ -118,7 +118,7 @@ export interface RalphProgressState {
 }
 
 /**
- * Hook to subscribe to Ralph Loop progress events from Tauri.
+ * Hook to subscribe to Ralph Loop progress events from the server.
  *
  * @param executionId - Optional filter by execution ID
  * @param prdName - Optional filter by PRD name

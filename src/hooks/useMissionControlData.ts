@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/shallow'
 import { useProjectStore } from '@/stores/projectStore'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import type { Project } from '@/types'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 
 // ============================================================================
 // Types

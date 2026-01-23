@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, Server, Key, Loader2, CheckCircle2 } from 'lucide-react'
 import { getServerConfig, setServerConfig } from '@/lib/invoke'
 import { connectEvents } from '@/lib/events-client'
-import { isTauri } from '@/lib/tauri-check'
+import { isTauri } from '@/lib/env-check'
 
 interface ServerConnectionDialogProps {
   onConnected: () => void

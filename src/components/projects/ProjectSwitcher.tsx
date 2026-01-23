@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   FolderOpen,
   ChevronDown,
@@ -14,7 +15,6 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react'
-import { isTauri } from '@/lib/tauri-check'
 import { RemoteFolderBrowser } from './RemoteFolderBrowser'
 
 interface ProjectSwitcherProps {
@@ -62,27 +62,8 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
   }, [isOpen])
 
   const handleSelectFolder = async () => {
-    if (isTauri) {
-      // Use native file dialog in Tauri desktop mode
-      try {
-        const { open } = await import('@tauri-apps/plugin-dialog')
-        const selected = await open({
-          directory: true,
-          multiple: false,
-          title: 'Select Project Folder',
-        })
-        if (selected && typeof selected === 'string') {
-          const project = await registerProject(selected)
-          setActiveProject(project.id)
-          setIsOpen(false)
-        }
-      } catch (error) {
-        console.error('Failed to open folder dialog:', error)
-      }
-    } else {
-      // Show folder browser in browser mode
-      setShowBrowser(true)
-    }
+    // Show folder browser
+    setShowBrowser(true)
   }
 
   const handleBrowserSelect = async (path: string) => {

@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { isBrowserMode } from '@/lib/invoke'
-import { isTauri } from '@/lib/tauri-check'
+import { isTauri } from '@/lib/env-check'
 
 export function useServerConnection() {
   const [isConnected, setIsConnected] = useState(() => {

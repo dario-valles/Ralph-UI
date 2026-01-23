@@ -1,4 +1,4 @@
-// PRD Chat Tauri commands - AI-assisted PRD creation through conversation
+// PRD Chat Backend commands - AI-assisted PRD creation through conversation
 //
 // This module is organized into submodules:
 // - types: Request/response types for the API

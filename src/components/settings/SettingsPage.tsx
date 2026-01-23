@@ -43,8 +43,7 @@ import {
   Info,
 } from 'lucide-react'
 import { configApi } from '@/lib/config-api'
-import { templateApi } from '@/lib/tauri-api'
-import { isTauri } from '@/lib/tauri-check'
+import { templateApi } from '@/lib/backend-api'
 import { useProjectStore } from '@/stores/projectStore'
 import type {
   RalphConfig,
@@ -427,17 +426,15 @@ export function SettingsPage() {
 
     try {
       // Save backend config
-      if (isTauri) {
-        // Update in-memory config first
-        await Promise.all([
-          configApi.updateExecution(config.execution),
-          configApi.updateGit(config.git),
-          configApi.updateValidation(config.validation),
-          configApi.updateFallback(config.fallback),
-        ])
-        // Persist to disk
-        await configApi.save()
-      }
+      // Update in-memory config first
+      await Promise.all([
+        configApi.updateExecution(config.execution),
+        configApi.updateGit(config.git),
+        configApi.updateValidation(config.validation),
+        configApi.updateFallback(config.fallback),
+      ])
+      // Persist to disk
+      await configApi.save()
 
       // Save UI settings to localStorage
       localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(uiSettings))
@@ -497,13 +494,11 @@ export function SettingsPage() {
           <p className="text-sm sm:text-base text-muted-foreground">Configure your Ralph UI preferences</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isTauri && (
-            <Button variant="outline" size="sm" onClick={handleReload} disabled={loading}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Reload from Files</span>
-              <span className="sm:hidden">Reload</span>
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={handleReload} disabled={loading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Reload from Files</span>
+            <span className="sm:hidden">Reload</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={handleReset} disabled={loading}>
             <RotateCcw className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Reset to Defaults</span>
@@ -1533,11 +1528,25 @@ export function SettingsPage() {
                     resumeAudioContext()
                     playPreviewSound(uiSettings.soundMode, uiSettings.soundVolume)
                   }
-                  // Send desktop notification if enabled and in Tauri
-                  if (uiSettings.notificationsEnabled && isTauri) {
+                  // Send browser notification if enabled
+                  if (uiSettings.notificationsEnabled) {
                     try {
-                      const { invoke } = await import('@tauri-apps/api/core')
-                      await invoke('send_test_notification')
+                      if ('Notification' in window) {
+                        if (Notification.permission === 'granted') {
+                          new Notification('Ralph UI Test', {
+                            body: 'This is a test notification from Ralph UI',
+                            icon: '/favicon.ico',
+                          })
+                        } else if (Notification.permission !== 'denied') {
+                          const permission = await Notification.requestPermission()
+                          if (permission === 'granted') {
+                            new Notification('Ralph UI Test', {
+                              body: 'This is a test notification from Ralph UI',
+                              icon: '/favicon.ico',
+                            })
+                          }
+                        }
+                      }
                     } catch (err) {
                       console.error('Failed to send test notification:', err)
                     }

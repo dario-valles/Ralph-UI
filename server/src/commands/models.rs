@@ -1,4 +1,4 @@
-// Model discovery Tauri commands
+// Model discovery Backend commands
 
 
 use crate::agents::{ModelCache, ModelInfo};

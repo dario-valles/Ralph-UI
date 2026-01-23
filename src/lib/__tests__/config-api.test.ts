@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { configApi, templateApi, recoveryApi, traceApi } from '../config-api'
 
 // Note: These tests verify the API structure and exports.
-// Actual Tauri command integration is tested via E2E tests.
+// Actual server command integration is tested via E2E tests.
 
 describe('config-api', () => {
   describe('configApi', () => {

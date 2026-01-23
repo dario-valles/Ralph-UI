@@ -1,4 +1,4 @@
-// Tauri commands for project management
+// Backend commands for project management
 //
 // Uses file-based storage in ~/.ralph-ui/projects.json (global registry)
 

@@ -11,8 +11,8 @@ import { QuestioningGuide } from '../gsd/QuestioningGuide'
 import { ResearchSummary } from '../gsd/ResearchSummary'
 import type { QuestioningContext, ResearchSynthesis } from '@/types/gsd'
 
-// Mock the Tauri API
-vi.mock('@/lib/tauri-api', () => ({
+// Mock the backend API
+vi.mock('@/lib/backend-api', () => ({
   gsdApi: {
     getState: vi.fn().mockResolvedValue(null),
     startSession: vi.fn().mockResolvedValue({

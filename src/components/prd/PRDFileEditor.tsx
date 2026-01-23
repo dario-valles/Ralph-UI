@@ -20,7 +20,7 @@ import {
   Clock,
   Terminal,
 } from 'lucide-react'
-import { prdApi } from '@/lib/tauri-api'
+import { prdApi } from '@/lib/backend-api'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
 import { PRDStoriesTab } from './PRDStoriesTab'
 import { PRDExecutionTab } from './PRDExecutionTab'

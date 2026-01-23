@@ -1,4 +1,4 @@
-// Template Tauri commands
+// Template Backend commands
 
 use crate::templates::{
     engine::{TemplateEngine, TemplateContext, DependencyContext, TaskContext},

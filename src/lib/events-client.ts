@@ -1,12 +1,10 @@
 /**
- * WebSocket event client for browser mode
+ * WebSocket event client for real-time events
  *
- * Provides a subscription-based event system that mirrors Tauri's event system.
- * In browser mode, connects to the server's WebSocket endpoint for real-time events.
+ * Provides a subscription-based event system for real-time updates from the server.
+ * Connects to the server's WebSocket endpoint at /ws/events.
  */
 
-import { listen as tauriListen, UnlistenFn } from '@tauri-apps/api/event'
-import { isTauri } from './tauri-check'
 import { getServerConfig } from './invoke'
 
 /**
@@ -23,7 +21,12 @@ interface ServerEvent {
 type EventHandler<T> = (payload: T) => void
 
 /**
- * WebSocket-based event client for browser mode
+ * Unlisten function type
+ */
+export type UnlistenFn = () => void
+
+/**
+ * WebSocket-based event client
  */
 class EventsClient {
   private ws: WebSocket | null = null
@@ -115,7 +118,7 @@ class EventsClient {
   /**
    * Subscribe to an event
    */
-  subscribe<T>(event: string, handler: EventHandler<T>): () => void {
+  subscribe<T>(event: string, handler: EventHandler<T>): UnlistenFn {
     if (!this.handlers.has(event)) {
       this.handlers.set(event, new Set())
     }
@@ -166,11 +169,11 @@ class EventsClient {
   }
 }
 
-// Singleton instance for browser mode
+// Singleton instance
 const eventsClient = new EventsClient()
 
 /**
- * Universal event subscription that works in both Tauri and browser modes.
+ * Subscribe to an event from the server.
  *
  * Usage:
  * ```ts
@@ -186,12 +189,6 @@ export async function subscribeEvent<T>(
   event: string,
   handler: (payload: T) => void
 ): Promise<UnlistenFn> {
-  if (isTauri) {
-    // Use Tauri's native event system
-    return tauriListen<T>(event, (e) => handler(e.payload))
-  }
-
-  // Browser mode - use WebSocket client
   // Ensure we're connected
   await eventsClient.connect()
 
@@ -200,31 +197,24 @@ export async function subscribeEvent<T>(
 }
 
 /**
- * Connect to the WebSocket server (browser mode only).
- * Call this when the app initializes in browser mode.
+ * Connect to the WebSocket server.
+ * Call this when the app initializes.
  */
 export async function connectEvents(): Promise<void> {
-  if (!isTauri) {
-    await eventsClient.connect()
-  }
+  await eventsClient.connect()
 }
 
 /**
- * Disconnect from the WebSocket server (browser mode only).
+ * Disconnect from the WebSocket server.
  * Call this when the app unmounts or user logs out.
  */
 export function disconnectEvents(): void {
-  if (!isTauri) {
-    eventsClient.disconnect()
-  }
+  eventsClient.disconnect()
 }
 
 /**
  * Check if connected to event stream
  */
 export function isEventsConnected(): boolean {
-  if (isTauri) {
-    return true // Tauri is always "connected"
-  }
   return eventsClient.isConnected()
 }

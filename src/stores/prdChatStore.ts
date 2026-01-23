@@ -1,6 +1,6 @@
 // PRD Chat State Management Store
 import { create } from 'zustand'
-import { prdChatApi } from '@/lib/tauri-api'
+import { prdChatApi } from '@/lib/backend-api'
 import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   ChatSession,

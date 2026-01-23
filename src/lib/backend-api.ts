@@ -1,5 +1,5 @@
-// Tauri API wrappers for backend commands
-// NOTE: Legacy SQLite-based PRD API has been removed. All PRD operations now use file-based storage.
+// Backend API wrappers
+// All commands are proxied through HTTP to the Rust/Axum backend server.
 
 import type {
   PRDFile,

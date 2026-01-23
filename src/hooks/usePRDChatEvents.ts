@@ -30,7 +30,7 @@ interface UsePRDChatEventsReturn {
 }
 
 /**
- * Hook to listen for PRD chat events from the Tauri backend
+ * Hook to listen for PRD chat events from the server backend
  *
  * Listens for:
  * - prd:file_updated - Plan file changes from agent

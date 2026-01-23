@@ -11,7 +11,7 @@ import type {
   PlanningSessionInfo,
 } from '@/types/gsd'
 import { getNextPhase, getPreviousPhase } from '@/types/gsd'
-import { gsdApi } from '@/lib/tauri-api'
+import { gsdApi } from '@/lib/backend-api'
 import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   RequirementsDoc,
@@ -29,6 +29,8 @@ import type { AgentType } from '@/types'
 interface GsdState extends AsyncState {
   // Workflow state
   workflowState: GsdWorkflowState | null
+  // Project path for the current workflow (not part of GsdWorkflowState)
+  currentProjectPath: string | null
 
   // Planning documents
   requirementsDoc: RequirementsDoc | null
@@ -130,6 +132,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
     (set, get) => ({
       // Initial state
       workflowState: null,
+      currentProjectPath: null,
       loading: false,
       error: null,
       requirementsDoc: null,
@@ -150,7 +153,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           set,
           async () => {
             const state = await gsdApi.startSession(projectPath, chatSessionId)
-            return { workflowState: state, __result: state }
+            return { workflowState: state, currentProjectPath: projectPath, __result: state }
           },
           { rethrow: true }
         )
@@ -162,7 +165,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           set,
           async () => {
             const state = await gsdApi.getState(projectPath, sessionId)
-            return { workflowState: state, __result: state }
+            return { workflowState: state, currentProjectPath: projectPath, __result: state }
           },
           { rethrow: true }
         )
@@ -176,6 +179,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       clearGsdState: () => {
         set({
           workflowState: null,
+          currentProjectPath: null,
           requirementsDoc: null,
           roadmapDoc: null,
           verificationResult: null,
@@ -352,7 +356,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       loadAvailableAgents: async () => {
         try {
-          const { gsdApi } = await import('@/lib/tauri-api')
+          const { gsdApi } = await import('@/lib/backend-api')
           const agents = await gsdApi.getAvailableAgents()
           set({ availableResearchAgents: agents })
           // Auto-select first available agent if none selected
@@ -386,13 +390,13 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       applyScopeSelection: async (selection: ScopeSelection) => {
-        const { requirementsDoc, workflowState } = get()
-        if (!requirementsDoc || !workflowState) return
+        const { requirementsDoc, workflowState, currentProjectPath } = get()
+        if (!requirementsDoc || !workflowState || !currentProjectPath) return
 
         try {
           // Call backend to persist and get updated doc
           const updatedDoc = await gsdApi.scopeRequirements(
-            workflowState.projectPath,
+            currentProjectPath,
             workflowState.sessionId,
             selection
           )
@@ -455,14 +459,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           set,
           async () => {
             const iterationResult = await gsdApi.verifyPlans(projectPath, sessionId)
-            // Convert VerificationIterationResult to VerificationResult for local state
-            const verificationResult: VerificationResult = {
-              passed: iterationResult.passed,
-              coveragePercentage: iterationResult.coveragePercentage,
-              issues: iterationResult.issues,
-              warnings: iterationResult.warnings,
-              stats: iterationResult.stats,
-            }
+            // Extract VerificationResult from VerificationIterationResult
+            const verificationResult: VerificationResult = iterationResult.result
             return { verificationResult, __result: verificationResult }
           },
           { rethrow: true }
@@ -512,8 +510,8 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Config
       loadConfig: async (projectPath) => {
-        void projectPath // Will be used when Tauri command is implemented
-        // TODO: Load from Tauri
+        void projectPath // Will be used when backend config is implemented
+        // TODO: Load from backend
         const defaultConfig: GsdConfig = {
           researchAgentType: 'claude',
           maxParallelResearch: 4,

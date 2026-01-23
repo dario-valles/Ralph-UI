@@ -1,4 +1,4 @@
-//! Command proxy handler that routes HTTP requests to Tauri commands
+//! Command proxy handler that routes HTTP requests to Backend commands
 //!
 //! This implements the Command Proxy Pattern - a single /api/invoke endpoint
 //! that routes to existing command functions without modifying them.
@@ -361,6 +361,14 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let agent_id: String = get_arg(&args, "agentId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
             route_unit!(commands::agents::delete_agent(agent_id, project_path))
+        }
+
+        "get_agent_pty_history" => {
+            let agent_id: String = get_arg(&args, "agentId")?;
+            route_sync!(commands::agents::get_agent_pty_history(
+                &state.agent_manager,
+                agent_id
+            ))
         }
 
         // =====================================================================
@@ -1359,7 +1367,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
 // =============================================================================
 
 /// Server-compatible version of send_prd_chat_message that uses EventBroadcaster
-/// instead of Tauri's app_handle for streaming events.
+/// instead of the old's app_handle for streaming events.
 ///
 /// Uses the shared agent_executor module for unified chat agent execution.
 async fn send_prd_chat_message_server(
@@ -1517,7 +1525,7 @@ fn build_server_chat_prompt(
 // =============================================================================
 
 /// Server-compatible version of regenerate_ralph_prd_stories that uses EventBroadcaster
-/// instead of Tauri's app_handle for streaming events.
+/// instead of the old's app_handle for streaming events.
 async fn regenerate_ralph_prd_stories_server(
     request: crate::commands::ralph_loop::RegenerateStoriesRequest,
     broadcaster: &Arc<EventBroadcaster>,
@@ -1693,9 +1701,9 @@ fn parse_ai_story_response(
 //
 // NOTE: This implementation mirrors `start_ralph_loop` in commands/ralph_loop.rs
 // with the following differences:
-// - Uses EventBroadcaster instead of Tauri's app_handle for event emission
+// - Uses EventBroadcaster instead of the old's app_handle for event emission
 // - Uses tokio::spawn instead of tokio::spawn
-// - Accesses state via ServerAppState instead of Tauri State<>
+// - Accesses state via ServerAppState instead of the old State<>
 // - Skips desktop notifications (server clients handle their own notifications)
 //
 // If you modify the Ralph loop logic, remember to update both implementations.
@@ -1704,7 +1712,7 @@ fn parse_ai_story_response(
 // =============================================================================
 
 /// Server-compatible version of start_ralph_loop that uses EventBroadcaster
-/// instead of Tauri's app_handle for events.
+/// instead of the old's app_handle for events.
 async fn start_ralph_loop_server(
     request: crate::commands::ralph_loop::StartRalphLoopRequest,
     state: &ServerAppState,

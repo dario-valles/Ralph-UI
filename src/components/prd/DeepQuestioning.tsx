@@ -61,7 +61,7 @@ export function DeepQuestioning({
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Get project context
-  const { activeProject } = useProjectStore()
+  const activeProject = useProjectStore((s) => s.getActiveProject())
   const projectPath = activeProject?.path
 
   // Get chat store for sending messages

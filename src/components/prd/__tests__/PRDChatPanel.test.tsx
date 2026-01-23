@@ -38,18 +38,18 @@ vi.mock('@/stores/projectStore', () => ({
   }),
 }))
 
-// Mock the tauri-api
+// Mock the backend-api
 const mockCheckAgentAvailability = vi.fn()
 
-vi.mock('@/lib/tauri-api', () => ({
+vi.mock('@/lib/backend-api', () => ({
   prdChatApi: {
     checkAgentAvailability: () => mockCheckAgentAvailability(),
   },
 }))
 
-// Mock Tauri event listener
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(() => Promise.resolve(() => {})),
+// Mock events-client
+vi.mock('@/lib/events-client', () => ({
+  subscribeEvent: vi.fn(() => Promise.resolve(() => {})),
 }))
 
 // Mock the useAvailableModels hook

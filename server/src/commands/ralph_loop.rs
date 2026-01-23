@@ -1,4 +1,4 @@
-//! Tauri commands for Ralph Wiggum Loop orchestration
+//! Backend commands for Ralph Wiggum Loop orchestration
 //!
 //! These commands control the external Ralph loop that spawns fresh agent instances.
 
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-/// State for managing active Ralph loop executions (Tauri managed state)
+/// State for managing active Ralph loop executions (Application state)
 pub struct RalphLoopManagerState {
     /// Active executions by execution ID
     /// Uses tokio::sync::Mutex for async-friendly locking during run()

@@ -1,12 +1,10 @@
-// Terminal API wrapper for tauri-pty and WebSocket PTY
-// Provides an abstraction layer over both desktop (Tauri) and browser (WebSocket) PTY
+// Terminal API wrapper for WebSocket PTY
+// Provides an abstraction layer for browser-based terminal emulation
 
-import type { IPty } from 'tauri-pty'
 import type { SpawnOptions } from '@/types/terminal'
-import { isTauri } from '@/lib/tauri-check'
 import { createWebSocketPty, getServerConnection } from '@/lib/websocket-pty'
 
-// Unified PTY interface that works for both Tauri and WebSocket
+// Unified PTY interface
 export interface UnifiedPty {
   write(data: string): void
   onData(callback: (data: Uint8Array | string) => void): () => void
@@ -15,74 +13,22 @@ export interface UnifiedPty {
   kill(): void
 }
 
-// Dynamically import spawn only in Tauri environment
-let spawn: typeof import('tauri-pty').spawn | null = null
-if (isTauri) {
-  import('tauri-pty').then((mod) => {
-    spawn = mod.spawn
-  })
-}
-
-// Store for active PTY instances (both types)
+// Store for active PTY instances
 const ptyInstances = new Map<string, UnifiedPty>()
 
 // Text decoder for converting Uint8Array to string
 const textDecoder = new TextDecoder()
 
 /**
- * Get the default shell based on the platform
- */
-function getDefaultShell(): string {
-  // macOS and Linux use $SHELL, Windows uses cmd.exe
-  if (typeof navigator !== 'undefined' && navigator.platform) {
-    if (navigator.platform.toLowerCase().includes('win')) {
-      return 'cmd.exe'
-    }
-  }
-  // Default to zsh on macOS (default since Catalina), bash on Linux
-  if (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel') {
-    return '/bin/zsh'
-  }
-  return '/bin/bash'
-}
-
-/**
- * Wrap a tauri-pty IPty to match the UnifiedPty interface
- */
-function wrapTauriPty(pty: IPty): UnifiedPty {
-  return {
-    write(data: string) {
-      pty.write(data)
-    },
-    onData(callback) {
-      return pty.onData(callback)
-    },
-    onExit(callback) {
-      return pty.onExit(callback)
-    },
-    resize(cols: number, rows: number) {
-      pty.resize(cols, rows)
-    },
-    kill() {
-      pty.kill()
-    },
-  }
-}
-
-/**
- * Check if PTY is available in any mode (Tauri or WebSocket)
+ * Check if PTY is available (requires server connection)
  */
 export function isPtyAvailable(): boolean {
-  if (isTauri && spawn !== null) {
-    return true
-  }
-  // Check for WebSocket PTY availability
   const connection = getServerConnection()
   return connection !== null
 }
 
 /**
- * Spawn a new PTY process (async to support WebSocket mode)
+ * Spawn a new PTY process via WebSocket
  * Returns null if PTY is not available
  */
 export async function spawnTerminalAsync(
@@ -91,48 +37,28 @@ export async function spawnTerminalAsync(
   cols: number = 80,
   rows: number = 24
 ): Promise<UnifiedPty | null> {
-  // Try Tauri PTY first
-  if (isTauri && spawn) {
-    const shell = options.shell || getDefaultShell()
-    const args = options.args || []
-    const cwd = options.cwd
-    const env = options.env || {}
+  const connection = getServerConnection()
+  if (!connection) {
+    console.warn('No server connection available for PTY')
+    return null
+  }
 
-    const pty = spawn(shell, args, {
-      cwd,
+  try {
+    const wsPty = await createWebSocketPty({
+      serverUrl: connection.url,
+      token: connection.token,
+      terminalId,
       cols,
       rows,
-      env: Object.keys(env).length > 0 ? env : undefined,
+      cwd: options.cwd,
     })
 
-    const unified = wrapTauriPty(pty)
-    ptyInstances.set(terminalId, unified)
-    return unified
+    ptyInstances.set(terminalId, wsPty)
+    return wsPty
+  } catch (error) {
+    console.error('Failed to create WebSocket PTY:', error)
+    return null
   }
-
-  // Try WebSocket PTY
-  const connection = getServerConnection()
-  if (connection) {
-    try {
-      const wsPty = await createWebSocketPty({
-        serverUrl: connection.url,
-        token: connection.token,
-        terminalId,
-        cols,
-        rows,
-        cwd: options.cwd,
-      })
-
-      ptyInstances.set(terminalId, wsPty)
-      return wsPty
-    } catch (error) {
-      console.error('Failed to create WebSocket PTY:', error)
-      return null
-    }
-  }
-
-  console.warn('No PTY backend available')
-  return null
 }
 
 /**

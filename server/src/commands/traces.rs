@@ -1,4 +1,4 @@
-// Subagent trace Tauri commands
+// Subagent trace Backend commands
 
 use crate::agents::{SubagentEvent, SubagentEventType, SubagentTree};
 use crate::AgentManagerState;

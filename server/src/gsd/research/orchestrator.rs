@@ -1,7 +1,7 @@
 //! Research orchestrator for parallel agent coordination
 //!
 //! Spawns multiple research agents in parallel using tokio::join! and
-//! collects their results for synthesis. Emits progress events via Tauri.
+//! collects their results for synthesis. Emits progress events via HTTP.
 
 use crate::agents::providers::get_provider;
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};

@@ -1,4 +1,4 @@
-// Tauri commands for Mission Control dashboard
+// Backend commands for Mission Control dashboard
 // Uses file-based storage for aggregating stats across projects
 
 use crate::file_storage::agents as agent_storage;

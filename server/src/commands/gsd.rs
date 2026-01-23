@@ -1,6 +1,6 @@
 //! GSD (Get Stuff Done) workflow commands
 //!
-//! Tauri commands for the GSD PRD generation workflow.
+//! Backend commands for the GSD PRD generation workflow.
 
 use crate::gsd::{
     config::GsdConfig,

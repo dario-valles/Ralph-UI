@@ -4,7 +4,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { projectApi } from '@/lib/tauri-api'
+import { projectApi } from '@/lib/backend-api'
 import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type { Project } from '@/types'
 export type { Project }

@@ -1,10 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { getDefaultModelId, getModelName, type ModelInfo } from '../model-api'
-
-// Mock the Tauri invoke function
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
 
 describe('model-api', () => {
   describe('getDefaultModelId', () => {

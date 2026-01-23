@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { subscribeEvent } from '@/lib/events-client'
+import { subscribeEvent, type UnlistenFn } from '@/lib/events-client'
 
 // Event constants (must match backend)
 const EVENT_SUBAGENT_SPAWNED = 'subagent:spawned'

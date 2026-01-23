@@ -58,7 +58,7 @@ import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { ModelSelector } from '@/components/shared/ModelSelector'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import { Sparkles } from 'lucide-react'
 
 interface RalphLoopDashboardProps {
@@ -566,31 +566,16 @@ export function RalphLoopDashboard({
   }
 
   // Handle opening code editor in worktree directory
+  // This feature requires desktop app - show path for manual navigation in browser mode
   const handleOpenInEditor = async () => {
     if (!effectiveWorktreePath) return
+    // In browser mode, we can't open native apps
+    // Just copy the path to clipboard and show a toast
     try {
-      const { openPath, revealItemInDir } = await import('@tauri-apps/plugin-opener')
-      // Try to open in VS Code or Cursor
-      // VS Code first - on macOS, openWith can be the app name
-      try {
-        await openPath(effectiveWorktreePath, 'Visual Studio Code')
-        return
-      } catch {
-        // VS Code not available
-      }
-      // Try Cursor
-      try {
-        await openPath(effectiveWorktreePath, 'Cursor')
-        return
-      } catch {
-        // Cursor not available
-      }
-      // Fallback: open folder in file explorer
-      await revealItemInDir(effectiveWorktreePath)
-      toast.default('Folder opened', 'Install VS Code or Cursor to open directly in editor')
-    } catch (err) {
-      console.error('Failed to open editor:', err)
-      toast.error('Failed to open editor', 'Could not open worktree in code editor')
+      await navigator.clipboard.writeText(effectiveWorktreePath)
+      toast.success('Path copied', `Open this path in your editor: ${effectiveWorktreePath}`)
+    } catch {
+      toast.default('Worktree path', effectiveWorktreePath)
     }
   }
 
@@ -1018,7 +1003,7 @@ export function RalphLoopDashboard({
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
               >
                 <Clock className="mr-2 h-4 w-4" />
-                History ({iterationHistory.length})
+                History ({iterationHistory?.length ?? 0})
               </TabsTrigger>
             </TabsList>
             <Button
@@ -1151,7 +1136,7 @@ export function RalphLoopDashboard({
 
           <TabsContent value="history" className="p-0 mt-0">
             <div className="max-h-[400px] overflow-y-auto p-4">
-              <IterationHistoryView iterations={iterationHistory} />
+              <IterationHistoryView iterations={iterationHistory ?? []} />
             </div>
           </TabsContent>
         </Tabs>

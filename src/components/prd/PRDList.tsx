@@ -33,7 +33,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useProjectStore } from '@/stores/projectStore'
-import { prdApi } from '@/lib/tauri-api'
+import { prdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import { formatBackendDateOnly, formatBackendTime } from '@/lib/date-utils'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
