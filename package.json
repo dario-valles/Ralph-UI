@@ -10,7 +10,7 @@
     "server:build": "cd src-tauri && cargo build --release",
     "server": "cd src-tauri && cargo run --release",
     "server:dev": "cd src-tauri && cargo run",
-    "server:dev:token": "RALPH_SERVER_TOKEN=dev-token-ralph-ui-2026 cd src-tauri && cargo run",
+    "server:dev:token": "cd src-tauri && RALPH_SERVER_TOKEN=dev-token-ralph-ui-2026 cargo run",
     "server:kill": "pkill -f 'ralph-ui' || true; lsof -ti:3420 | xargs kill -9 2>/dev/null || true",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
