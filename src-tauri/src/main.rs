@@ -82,19 +82,22 @@ fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
         let (completion_tx, _completion_rx) =
             mpsc::unbounded_channel::<ralph_ui_lib::agents::AgentCompletionEvent>();
 
-        // Create PTY and subagent channels (not used in server mode but needed for AgentManager)
-        let (pty_data_tx, _pty_data_rx) =
+        // Create PTY and subagent channels
+        let (pty_data_tx, pty_data_rx) =
             mpsc::unbounded_channel::<ralph_ui_lib::agents::AgentPtyDataEvent>();
-        let (subagent_tx, _subagent_rx) =
+        let (pty_exit_tx, pty_exit_rx) =
+            mpsc::unbounded_channel::<ralph_ui_lib::agents::AgentPtyExitEvent>();
+        let (subagent_tx, subagent_rx) =
             mpsc::unbounded_channel::<ralph_ui_lib::agents::SubagentEvent>();
-        let (tool_call_tx, _tool_call_rx) =
+        let (tool_call_tx, tool_call_rx) =
             mpsc::unbounded_channel::<ralph_ui_lib::agents::ToolCallStartEvent>();
-        let (tool_call_complete_tx, _tool_call_complete_rx) =
+        let (tool_call_complete_tx, tool_call_complete_rx) =
             mpsc::unbounded_channel::<ralph_ui_lib::agents::ToolCallCompleteEvent>();
 
         // Initialize AgentManager
         let mut agent_manager = AgentManager::new();
         agent_manager.set_pty_data_sender(pty_data_tx);
+        agent_manager.set_pty_exit_sender(pty_exit_tx);
         agent_manager.set_subagent_sender(subagent_tx);
         agent_manager.set_tool_call_sender(tool_call_tx);
         agent_manager.set_tool_call_complete_sender(tool_call_complete_tx);
@@ -124,10 +127,158 @@ fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
             completion_tx,
         );
 
+        // Spawn event forwarders to broadcast agent events to WebSocket clients
+        let broadcaster = state.broadcaster.clone();
+        tokio::spawn(forward_pty_data_events(broadcaster, pty_data_rx));
+
+        let broadcaster = state.broadcaster.clone();
+        tokio::spawn(forward_pty_exit_events(broadcaster, pty_exit_rx));
+
+        let broadcaster = state.broadcaster.clone();
+        tokio::spawn(forward_subagent_events(broadcaster, subagent_rx));
+
+        let broadcaster = state.broadcaster.clone();
+        tokio::spawn(forward_tool_call_events(broadcaster, tool_call_rx));
+
+        let broadcaster = state.broadcaster.clone();
+        tokio::spawn(forward_tool_call_complete_events(broadcaster, tool_call_complete_rx));
+
         // Run the server
         if let Err(e) = server::run_server(port, bind, state).await {
             eprintln!("Server error: {}", e);
             std::process::exit(1);
         }
     });
+}
+
+/// Forward PTY data events from agents to WebSocket clients
+#[cfg(feature = "server")]
+async fn forward_pty_data_events(
+    broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::AgentPtyDataEvent>,
+) {
+    log::debug!("Server PTY data event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        log::trace!(
+            "Broadcasting PTY data event for agent {} ({} bytes)",
+            event.agent_id,
+            event.data.len()
+        );
+        broadcaster.broadcast(
+            "agent-pty-data",
+            serde_json::json!({
+                "agentId": event.agent_id,
+                "data": event.data,
+            }),
+        );
+    }
+
+    log::debug!("Server PTY data event forwarder stopped");
+}
+
+/// Forward PTY exit events from agents to WebSocket clients
+#[cfg(feature = "server")]
+async fn forward_pty_exit_events(
+    broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::AgentPtyExitEvent>,
+) {
+    log::debug!("Server PTY exit event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        log::trace!(
+            "Broadcasting PTY exit event for agent {} (code {})",
+            event.agent_id,
+            event.exit_code
+        );
+        broadcaster.broadcast(
+            "agent-pty-exit",
+            serde_json::json!({
+                "agentId": event.agent_id,
+                "exitCode": event.exit_code,
+            }),
+        );
+    }
+
+    log::debug!("Server PTY exit event forwarder stopped");
+}
+
+/// Forward subagent events to WebSocket clients
+#[cfg(feature = "server")]
+async fn forward_subagent_events(
+    broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::SubagentEvent>,
+) {
+    use ralph_ui_lib::agents::SubagentEventType;
+
+    log::debug!("Server subagent event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        let event_name = match event.event_type {
+            SubagentEventType::Spawned => "subagent-spawned",
+            SubagentEventType::Completed => "subagent-completed",
+            SubagentEventType::Failed => "subagent-failed",
+            SubagentEventType::Progress => "subagent-progress",
+        };
+
+        broadcaster.broadcast(
+            event_name,
+            serde_json::json!({
+                "parentAgentId": event.parent_agent_id,
+                "subagentId": event.subagent_id,
+                "description": event.description,
+                "eventType": format!("{:?}", event.event_type),
+            }),
+        );
+    }
+
+    log::debug!("Server subagent event forwarder stopped");
+}
+
+/// Forward tool call start events to WebSocket clients
+#[cfg(feature = "server")]
+async fn forward_tool_call_events(
+    broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::ToolCallStartEvent>,
+) {
+    log::debug!("Server tool call event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        broadcaster.broadcast(
+            "tool-call-start",
+            serde_json::json!({
+                "agentId": event.agent_id,
+                "toolName": event.tool_name,
+                "toolId": event.tool_id,
+                "input": event.input,
+                "timestamp": event.timestamp,
+            }),
+        );
+    }
+
+    log::debug!("Server tool call event forwarder stopped");
+}
+
+/// Forward tool call complete events to WebSocket clients
+#[cfg(feature = "server")]
+async fn forward_tool_call_complete_events(
+    broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::ToolCallCompleteEvent>,
+) {
+    log::debug!("Server tool call complete event forwarder started");
+
+    while let Some(event) = rx.recv().await {
+        broadcaster.broadcast(
+            "tool-call-complete",
+            serde_json::json!({
+                "agentId": event.agent_id,
+                "toolId": event.tool_id,
+                "output": event.output,
+                "isError": event.is_error,
+                "timestamp": event.timestamp,
+            }),
+        );
+    }
+
+    log::debug!("Server tool call complete event forwarder stopped");
 }
