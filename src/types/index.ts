@@ -1073,6 +1073,7 @@ export type {
   ConversionOptions,
   SkippedRequirement,
   ConversionResult,
+  PrdExecutionConfig,
 } from './planning'
 
 export {
@@ -1084,4 +1085,6 @@ export {
   getUnscopedRequirements,
   parseReqId,
   getCategoryFromReqId,
+  hasAnyExecutionConfigFields,
+  validateExecutionConfig,
 } from './planning'

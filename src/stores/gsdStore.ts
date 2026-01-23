@@ -18,6 +18,7 @@ import type {
   VerificationResult,
   ScopeSelection,
   ConversionResult,
+  PrdExecutionConfig,
 } from '@/types/planning'
 import type { AgentType } from '@/types'
 
@@ -102,7 +103,9 @@ interface GsdActions {
     projectPath: string,
     sessionId: string,
     prdName: string,
-    branch: string
+    branch: string,
+    includeV2?: boolean,
+    executionConfig?: PrdExecutionConfig
   ) => Promise<ConversionResult>
 
   // Decisions
@@ -478,10 +481,10 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       // Conversion/Export
-      exportToRalph: async (projectPath, sessionId, prdName, branch) => {
+      exportToRalph: async (projectPath, sessionId, prdName, branch, includeV2, executionConfig) => {
         set({ isLoading: true })
         try {
-          const result = await gsdApi.exportToRalph(projectPath, sessionId, prdName, branch)
+          const result = await gsdApi.exportToRalph(projectPath, sessionId, prdName, branch, includeV2, executionConfig)
           set({ isLoading: false })
           return result
         } catch (error) {

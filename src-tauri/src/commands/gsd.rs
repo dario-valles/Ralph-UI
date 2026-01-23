@@ -545,6 +545,7 @@ pub async fn export_gsd_to_ralph(
     prd_name: String,
     branch: String,
     include_v2: Option<bool>,
+    execution_config: Option<crate::ralph_loop::PrdExecutionConfig>,
 ) -> Result<ConversionResult, String> {
     let path = Path::new(&project_path);
 
@@ -578,6 +579,31 @@ pub async fn export_gsd_to_ralph(
         Err(_) => (None, None),
     };
 
+    // Validate and log execution config if provided
+    let validated_config = if let Some(ref config) = execution_config {
+        // Validate config
+        config.validate().map_err(|e| format!("Invalid execution config: {}", e))?;
+
+        // Log the captured settings
+        if config.has_any_fields() {
+            log::info!(
+                "GSD export capturing execution settings for PRD '{}': agent_type={:?}, model={:?}, max_iterations={:?}, max_cost={:?}",
+                prd_name,
+                config.agent_type,
+                config.model,
+                config.max_iterations,
+                config.max_cost
+            );
+            Some(config.clone())
+        } else {
+            log::info!("GSD export for PRD '{}': no execution settings captured, will use global config at execution time", prd_name);
+            None
+        }
+    } else {
+        log::info!("GSD export for PRD '{}': no execution settings provided, will use global config at execution time", prd_name);
+        None
+    };
+
     // Create conversion options
     let options = ConversionOptions {
         branch,
@@ -585,6 +611,7 @@ pub async fn export_gsd_to_ralph(
         source_chat_id: Some(session_id.clone()),
         custom_title: Some(prd_name.clone()),
         custom_description: description,
+        execution_config: validated_config,
     };
 
     // Convert to Ralph PRD
@@ -616,9 +643,10 @@ pub async fn export_gsd_to_ralph(
     }
 
     log::info!(
-        "Exported GSD session {} to Ralph PRD: {}",
+        "Exported GSD session {} to Ralph PRD: {} (with execution config: {})",
         session_id,
-        prd_name
+        prd_name,
+        execution_config.is_some()
     );
 
     Ok(result)

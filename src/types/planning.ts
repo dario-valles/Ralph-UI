@@ -260,6 +260,79 @@ export interface VerificationIterationResult {
 }
 
 /**
+ * Execution configuration stored with a PRD
+ *
+ * This captures the execution settings that were used (or should be used) when
+ * running the Ralph loop for this PRD. When a PRD is executed, these settings
+ * take precedence over global config. If not present, global RalphConfig is used.
+ *
+ * Config precedence: PRD stored > global config > defaults
+ */
+export interface PrdExecutionConfig {
+  /** Agent type to use (claude, opencode, cursor, codex) */
+  agentType?: string
+  /** Model to use (e.g., "claude-sonnet-4-5") */
+  model?: string
+  /** Maximum iterations per execution */
+  maxIterations?: number
+  /** Maximum cost limit in dollars */
+  maxCost?: number
+  /** Whether to run tests after each iteration */
+  runTests?: boolean
+  /** Whether to run lint after each iteration */
+  runLint?: boolean
+  /** Whether to use a worktree for isolation */
+  useWorktree?: boolean
+  /** Agent timeout in seconds (0 = no timeout) */
+  agentTimeoutSecs?: number
+  /** Template name for prompt generation */
+  templateName?: string
+  /** Automatically create PRs for completed stories */
+  autoCreatePrs?: boolean
+  /** Create PRs as drafts */
+  draftPrs?: boolean
+}
+
+/**
+ * Check if an execution config has any fields set
+ */
+export function hasAnyExecutionConfigFields(config: PrdExecutionConfig): boolean {
+  return (
+    config.agentType !== undefined ||
+    config.model !== undefined ||
+    config.maxIterations !== undefined ||
+    config.maxCost !== undefined ||
+    config.runTests !== undefined ||
+    config.runLint !== undefined ||
+    config.useWorktree !== undefined ||
+    config.agentTimeoutSecs !== undefined ||
+    config.templateName !== undefined ||
+    config.autoCreatePrs !== undefined ||
+    config.draftPrs !== undefined
+  )
+}
+
+/**
+ * Validate execution config fields
+ * Returns error message if invalid, undefined if valid
+ */
+export function validateExecutionConfig(config: PrdExecutionConfig): string | undefined {
+  if (config.maxIterations !== undefined && config.maxIterations <= 0) {
+    return 'Max iterations must be greater than 0'
+  }
+  if (config.maxCost !== undefined && config.maxCost < 0) {
+    return 'Max cost cannot be negative'
+  }
+  if (config.agentType !== undefined) {
+    const validTypes = ['claude', 'opencode', 'cursor', 'codex']
+    if (!validTypes.includes(config.agentType)) {
+      return `Invalid agent type: ${config.agentType}. Must be one of: ${validTypes.join(', ')}`
+    }
+  }
+  return undefined
+}
+
+/**
  * Options for converting to RalphPrd
  */
 export interface ConversionOptions {
@@ -273,6 +346,8 @@ export interface ConversionOptions {
   customTitle?: string
   /** Custom description (overrides derived description) */
   customDescription?: string
+  /** Execution settings to store with the PRD */
+  executionConfig?: PrdExecutionConfig
 }
 
 /**

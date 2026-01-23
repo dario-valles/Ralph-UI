@@ -5,7 +5,7 @@
 use crate::gsd::config::ScopeLevel;
 use crate::gsd::requirements::RequirementsDoc;
 use crate::gsd::roadmap::RoadmapDoc;
-use crate::ralph_loop::{PrdMetadata, RalphPrd, RalphStory};
+use crate::ralph_loop::{PrdExecutionConfig, PrdMetadata, RalphPrd, RalphStory};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,8 @@ pub struct ConversionOptions {
     pub custom_title: Option<String>,
     /// Custom description (overrides derived description)
     pub custom_description: Option<String>,
+    /// Execution settings to store with the PRD
+    pub execution_config: Option<PrdExecutionConfig>,
 }
 
 /// Result of conversion
@@ -127,7 +129,7 @@ pub fn convert_to_ralph_prd(
             last_execution_id: None,
             last_worktree_path: None,
         }),
-        execution_config: None,
+        execution_config: options.execution_config.clone(),
         executions: Vec::new(),
     };
 

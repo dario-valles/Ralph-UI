@@ -592,6 +592,7 @@ import type {
   VerificationHistory,
   ScopeSelection,
   ConversionResult,
+  PrdExecutionConfig,
 } from '@/types/planning'
 
 // GSD Workflow API
@@ -742,9 +743,10 @@ export const gsdApi = {
     sessionId: string,
     prdName: string,
     branch: string,
-    includeV2?: boolean
+    includeV2?: boolean,
+    executionConfig?: PrdExecutionConfig
   ): Promise<ConversionResult> => {
-    return await invoke('export_gsd_to_ralph', { projectPath, sessionId, prdName, branch, includeV2 })
+    return await invoke('export_gsd_to_ralph', { projectPath, sessionId, prdName, branch, includeV2, executionConfig })
   },
 
   /** Save a planning file (generic) */

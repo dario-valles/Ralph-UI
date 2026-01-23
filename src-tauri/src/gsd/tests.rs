@@ -441,6 +441,7 @@ mod tests {
             source_chat_id: Some("chat-123".to_string()),
             custom_title: Some("Auth Feature".to_string()),
             custom_description: None,
+            execution_config: None,
         };
 
         let result = convert_to_ralph_prd(
