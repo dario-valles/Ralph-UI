@@ -562,6 +562,38 @@ export const ralphLoopApi = {
     return await invoke('get_ralph_files_in_use', { projectPath, prdName })
   },
 
+  /** Manually assign a story to an agent (US-4.3: Manual Story Assignment) */
+  manuallyAssignStory: async (
+    projectPath: string,
+    prdName: string,
+    agentId: string,
+    agentType: string,
+    storyId: string,
+    force: boolean = false,
+    estimatedFiles?: string[]
+  ): Promise<Assignment> => {
+    return await invoke('manual_assign_ralph_story', {
+      projectPath,
+      prdName,
+      input: {
+        agent_id: agentId,
+        agent_type: agentType,
+        story_id: storyId,
+        force,
+        estimated_files: estimatedFiles,
+      },
+    })
+  },
+
+  /** Release a story assignment back to the pool (US-4.3: Manual Story Assignment) */
+  releaseStoryAssignment: async (
+    projectPath: string,
+    prdName: string,
+    storyId: string
+  ): Promise<boolean> => {
+    return await invoke('release_ralph_story_assignment', { projectPath, prdName, storyId })
+  },
+
   // ============================================================================
   // Learnings API (US-3.3: Manual Learning Entry)
   // ============================================================================

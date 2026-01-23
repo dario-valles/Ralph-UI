@@ -1177,6 +1177,7 @@ export function RalphLoopDashboard({
               <AssignmentsPanel
                 projectPath={projectPath}
                 prdName={prdName}
+                stories={prd?.stories ?? []}
                 autoRefresh={!!activeExecutionId}
                 refreshInterval={3000}
               />

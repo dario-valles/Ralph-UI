@@ -10,7 +10,7 @@
  * - Visual indicator for potential conflict zones
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,9 +27,12 @@ import {
   Loader2,
   ChevronDown,
   User,
+  GripVertical,
+  Trash2,
 } from 'lucide-react'
 import { ralphLoopApi } from '@/lib/tauri-api'
 import { subscribeEvent } from '@/lib/events-client'
+import { toast } from '@/stores/toastStore'
 import type {
   Assignment,
   AssignmentsFile,
@@ -37,6 +40,7 @@ import type {
   AssignmentStatus,
   AssignmentChangedPayload,
   FileConflictDetectedPayload,
+  RalphStory,
 } from '@/types'
 import { FileConflictWarning } from './FileConflictWarning'
 
@@ -63,6 +67,8 @@ const EVENT_FILE_CONFLICT_DETECTED = 'assignment:file_conflict'
 interface AssignmentsPanelProps {
   projectPath: string
   prdName: string
+  /** List of available stories for manual assignment */
+  stories?: RalphStory[]
   /** Whether to auto-refresh assignments */
   autoRefresh?: boolean
   /** Refresh interval in milliseconds (default: 5000) */
@@ -104,7 +110,15 @@ function StatusIcon({ status }: { status: AssignmentStatus }) {
 }
 
 /** Single assignment card */
-function AssignmentCard({ assignment, filesInUse }: { assignment: Assignment; filesInUse: FileInUse[] }) {
+function AssignmentCard({
+  assignment,
+  filesInUse,
+  onRelease,
+}: {
+  assignment: Assignment
+  filesInUse: FileInUse[]
+  onRelease?: (storyId: string) => void
+}) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Find conflicting files (files also in use by other agents)
@@ -184,6 +198,22 @@ function AssignmentCard({ assignment, filesInUse }: { assignment: Assignment; fi
             )}
           </div>
 
+          {/* Release Button */}
+          {onRelease && assignment.status === 'active' && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRelease(assignment.storyId)
+              }}
+              className="w-full text-xs h-7"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              Release Assignment
+            </Button>
+          )}
+
           {/* Estimated Files */}
           {assignment.estimatedFiles.length > 0 && (
             <div className="space-y-1">
@@ -236,6 +266,7 @@ function AssignmentCard({ assignment, filesInUse }: { assignment: Assignment; fi
 export function AssignmentsPanel({
   projectPath,
   prdName,
+  stories = [],
   autoRefresh = true,
   refreshInterval = 5000,
   className = '',
@@ -244,6 +275,11 @@ export function AssignmentsPanel({
   const [filesInUse, setFilesInUse] = useState<FileInUse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showManualAssign, setShowManualAssign] = useState(false)
+  const [selectedAgentType, setSelectedAgentType] = useState<string>('claude')
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('')
+  const [selectedStoryId, setSelectedStoryId] = useState<string>('')
+  const [isAssigning, setIsAssigning] = useState(false)
 
   const loadAssignments = useCallback(async () => {
     try {
@@ -261,6 +297,61 @@ export function AssignmentsPanel({
       setLoading(false)
     }
   }, [projectPath, prdName])
+
+  const handleManualAssign = useCallback(async () => {
+    if (!selectedAgentId || !selectedStoryId) {
+      toast.error('Please select both an agent and a story')
+      return
+    }
+
+    try {
+      setIsAssigning(true)
+      await ralphLoopApi.manuallyAssignStory(
+        projectPath,
+        prdName,
+        selectedAgentId,
+        selectedAgentType,
+        selectedStoryId,
+        false
+      )
+      toast.success(`Story ${selectedStoryId} assigned to ${selectedAgentId}`)
+      setShowManualAssign(false)
+      setSelectedAgentId('')
+      setSelectedStoryId('')
+      await loadAssignments()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to assign story')
+    } finally {
+      setIsAssigning(false)
+    }
+  }, [projectPath, prdName, selectedAgentId, selectedAgentType, selectedStoryId, loadAssignments])
+
+  const handleReleaseAssignment = useCallback(
+    async (storyId: string) => {
+      if (!confirm(`Release story ${storyId} back to the pool?`)) {
+        return
+      }
+
+      try {
+        await ralphLoopApi.releaseStoryAssignment(projectPath, prdName, storyId)
+        toast.success(`Story ${storyId} released back to the pool`)
+        await loadAssignments()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to release story')
+      }
+    },
+    [projectPath, prdName, loadAssignments]
+  )
+
+  // Get list of available stories for assignment (not currently assigned)
+  const assignedStoryIds = useMemo(
+    () => new Set((assignmentsFile?.assignments ?? []).map((a) => a.storyId)),
+    [assignmentsFile?.assignments]
+  )
+  const availableStories = useMemo(
+    () => stories.filter((s) => !assignedStoryIds.has(s.id)),
+    [stories, assignedStoryIds]
+  )
 
   // Initial load
   useEffect(() => {
@@ -345,20 +436,118 @@ export function AssignmentsPanel({
               {activeAssignments.length} active, {historicalAssignments.length} historical
             </CardDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={loadAssignments}
-            disabled={loading}
-            className="h-8 w-8 p-0"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            {availableStories.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowManualAssign(!showManualAssign)}
+                className="h-8"
+              >
+                <GripVertical className="h-3 w-3 mr-1" />
+                Assign Story
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadAssignments}
+              disabled={loading}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
         {error && (
           <div className="text-sm text-destructive mb-3">{error}</div>
+        )}
+
+        {/* Manual Assignment Section (US-4.3) */}
+        {showManualAssign && availableStories.length > 0 && (
+          <div className="rounded-lg border border-dashed border-primary/50 bg-primary/5 p-4 mb-4">
+            <h4 className="text-sm font-medium mb-3">Manually Assign Story</h4>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Agent Type</label>
+                <select
+                  value={selectedAgentType}
+                  onChange={(e) => setSelectedAgentType(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-xs"
+                >
+                  <option value="claude">Claude</option>
+                  <option value="opencode">OpenCode</option>
+                  <option value="cursor">Cursor</option>
+                  <option value="codex">Codex</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Agent ID</label>
+                <input
+                  type="text"
+                  placeholder="e.g., agent-001"
+                  value={selectedAgentId}
+                  onChange={(e) => setSelectedAgentId(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-xs font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Story</label>
+                <select
+                  value={selectedStoryId}
+                  onChange={(e) => setSelectedStoryId(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-xs"
+                >
+                  <option value="">Select a story...</option>
+                  {availableStories.map((story) => (
+                    <option key={story.id} value={story.id}>
+                      {story.id}: {story.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleManualAssign}
+                  disabled={isAssigning || !selectedAgentId || !selectedStoryId}
+                  className="flex-1 h-7 text-xs"
+                >
+                  {isAssigning ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <GripVertical className="h-3 w-3 mr-1" />
+                  )}
+                  Assign
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowManualAssign(false)}
+                  className="flex-1 h-7 text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
+
+              {/* Conflict warning if selecting a story with potential conflicts */}
+              {selectedStoryId && (
+                <div className="rounded border border-yellow-500/30 bg-yellow-500/10 p-2">
+                  <div className="flex items-start gap-2 text-xs text-yellow-600">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Verify this assignment doesn't conflict with files in use by other agents
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* File Conflict Warning */}
@@ -379,6 +568,7 @@ export function AssignmentsPanel({
                   key={assignment.id}
                   assignment={assignment}
                   filesInUse={filesInUse}
+                  onRelease={handleReleaseAssignment}
                 />
               ))}
             </div>
