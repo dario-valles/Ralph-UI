@@ -654,16 +654,17 @@ export function RalphLoopDashboard({
       {/* Header with PRD info and controls */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl">{prd.title}</CardTitle>
-              <CardDescription className="mt-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-lg sm:text-xl truncate">{prd.title}</CardTitle>
+              <CardDescription className="mt-1 text-xs sm:text-sm">
                 Branch: {prd.branch} | {prd.stories.length} stories
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Badge
                 variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
+                className="text-xs"
               >
                 <stateDisplay.icon className={`mr-1 h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
                 {stateDisplay.label}
@@ -705,7 +706,7 @@ export function RalphLoopDashboard({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="max-iterations">Max Iterations</Label>
                   <Input
@@ -879,7 +880,7 @@ export function RalphLoopDashboard({
           {/* Worktree Info - shown when worktree exists (active or detected) */}
           {effectiveWorktreePath && (
             <div className="mt-4 p-3 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <GitBranch className="h-4 w-4 text-green-500 flex-shrink-0" />
                   <div className="min-w-0">
@@ -894,7 +895,7 @@ export function RalphLoopDashboard({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -907,7 +908,8 @@ export function RalphLoopDashboard({
                     ) : (
                       <FileDiff className="mr-2 h-4 w-4" />
                     )}
-                    View Diff
+                    <span className="hidden sm:inline">View Diff</span>
+                    <span className="sm:hidden">Diff</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -925,7 +927,8 @@ export function RalphLoopDashboard({
                     ) : (
                       <GitMerge className="mr-2 h-4 w-4" />
                     )}
-                    Merge to Main
+                    <span className="hidden sm:inline">Merge to Main</span>
+                    <span className="sm:hidden">Merge</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -934,7 +937,8 @@ export function RalphLoopDashboard({
                     title="Open worktree in code editor"
                   >
                     <Code2 className="mr-2 h-4 w-4" />
-                    Open in Editor
+                    <span className="hidden sm:inline">Open in Editor</span>
+                    <span className="sm:hidden">Editor</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -943,7 +947,8 @@ export function RalphLoopDashboard({
                     title="Open terminal in worktree directory"
                   >
                     <Terminal className="mr-2 h-4 w-4" />
-                    Terminal
+                    <span className="hidden sm:inline">Terminal</span>
+                    <span className="sm:hidden">Term</span>
                   </Button>
                 </div>
               </div>
@@ -952,7 +957,7 @@ export function RalphLoopDashboard({
 
           {/* Metrics */}
           {executionMetrics && (
-            <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
               <div className="text-center">
                 <div className="text-2xl font-bold">{executionMetrics.totalIterations ?? 0}</div>
                 <div className="text-xs text-muted-foreground">Iterations</div>

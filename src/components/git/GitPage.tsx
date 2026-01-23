@@ -40,12 +40,12 @@ export const GitPage: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Git Management</h1>
+    <div className="container mx-auto py-4 md:py-8 px-4">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold mb-4">Git Management</h1>
 
         {/* Repository Path Input */}
-        <div className="flex space-x-2 mb-6">
+        <div className="flex flex-col sm:flex-row gap-2 mb-6">
           <div className="flex-1 relative">
             <FolderOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
@@ -61,16 +61,16 @@ export const GitPage: React.FC = () => {
               className="pl-10"
             />
           </div>
-          <Button onClick={handleSetRepo} disabled={!repoPath.trim()}>
+          <Button onClick={handleSetRepo} disabled={!repoPath.trim()} className="w-full sm:w-auto">
             Load Repository
           </Button>
         </div>
 
         {activeRepoPath && (
-          <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded">
-            <p className="text-sm text-blue-800">
+          <div className="bg-muted border px-4 py-2 rounded">
+            <p className="text-sm">
               <strong>Active Repository:</strong>{" "}
-              <code className="bg-blue-100 px-2 py-1 rounded">
+              <code className="bg-muted-foreground/10 px-2 py-1 rounded text-xs sm:text-sm break-all">
                 {activeRepoPath}
               </code>
             </p>
@@ -80,11 +80,11 @@ export const GitPage: React.FC = () => {
 
       {activeRepoPath && (
         <Tabs defaultValue="branches" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="branches">Branches</TabsTrigger>
-            <TabsTrigger value="commits">Commits</TabsTrigger>
-            <TabsTrigger value="diff">Diff</TabsTrigger>
-            <TabsTrigger value="worktrees">Worktrees</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+            <TabsTrigger value="branches" className="text-xs sm:text-sm">Branches</TabsTrigger>
+            <TabsTrigger value="commits" className="text-xs sm:text-sm">Commits</TabsTrigger>
+            <TabsTrigger value="diff" className="text-xs sm:text-sm">Diff</TabsTrigger>
+            <TabsTrigger value="worktrees" className="text-xs sm:text-sm">Worktrees</TabsTrigger>
           </TabsList>
 
           <TabsContent value="branches" className="space-y-6">

@@ -207,7 +207,7 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('tab', { name: 'Validation' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Fallback' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Templates' })).toBeInTheDocument()
-      expect(screen.getByRole('tab', { name: 'UI Preferences' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'UI' })).toBeInTheDocument()
     })
   })
 
@@ -326,7 +326,7 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('tab', { name: 'Fallback' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Notifications' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Templates' })).toBeInTheDocument()
-      expect(screen.getByRole('tab', { name: 'UI Preferences' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'UI' })).toBeInTheDocument()
     })
   })
 

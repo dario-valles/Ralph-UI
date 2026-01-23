@@ -491,29 +491,32 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">Configure your Ralph UI preferences</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Configure your Ralph UI preferences</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isTauri && (
-            <Button variant="outline" onClick={handleReload} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={handleReload} disabled={loading}>
               <RefreshCw className="mr-2 h-4 w-4" />
-              Reload from Files
+              <span className="hidden sm:inline">Reload from Files</span>
+              <span className="sm:hidden">Reload</span>
             </Button>
           )}
-          <Button variant="outline" onClick={handleReset} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={handleReset} disabled={loading}>
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset to Defaults
+            <span className="hidden sm:inline">Reset to Defaults</span>
+            <span className="sm:hidden">Reset</span>
           </Button>
-          <Button onClick={handleSave} disabled={!hasChanges || saving}>
+          <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving}>
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            Save Changes
+            <span className="hidden sm:inline">Save Changes</span>
+            <span className="sm:hidden">Save</span>
           </Button>
         </div>
       </div>
@@ -538,14 +541,14 @@ export function SettingsPage() {
       )}
 
       <Tabs defaultValue="execution" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="execution">Execution</TabsTrigger>
-          <TabsTrigger value="git">Git</TabsTrigger>
-          <TabsTrigger value="validation">Validation</TabsTrigger>
-          <TabsTrigger value="fallback">Fallback</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="ui">UI Preferences</TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="execution" className="text-xs sm:text-sm">Execution</TabsTrigger>
+          <TabsTrigger value="git" className="text-xs sm:text-sm">Git</TabsTrigger>
+          <TabsTrigger value="validation" className="text-xs sm:text-sm">Validation</TabsTrigger>
+          <TabsTrigger value="fallback" className="text-xs sm:text-sm">Fallback</TabsTrigger>
+          <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notifications</TabsTrigger>
+          <TabsTrigger value="templates" className="text-xs sm:text-sm">Templates</TabsTrigger>
+          <TabsTrigger value="ui" className="text-xs sm:text-sm">UI</TabsTrigger>
         </TabsList>
 
         {/* Execution Settings */}
