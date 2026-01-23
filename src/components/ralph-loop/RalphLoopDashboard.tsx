@@ -44,6 +44,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -108,6 +109,7 @@ export function RalphLoopDashboard({
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
   const [regeneratingStories, setRegeneratingStories] = useState(false)
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
 
   // Worktree action states
   const [diffDialogOpen, setDiffDialogOpen] = useState(false)
@@ -1030,7 +1032,7 @@ export function RalphLoopDashboard({
               variant="ghost"
               size="sm"
               className="h-6 sm:h-7 text-[10px] sm:text-xs px-1.5 sm:px-2 flex-shrink-0"
-              onClick={handleRegenerateStories}
+              onClick={() => setRegenerateConfirmOpen(true)}
               disabled={regeneratingStories || isRunning}
               title="Use AI to extract properly formatted user stories from PRD"
             >
@@ -1174,6 +1176,37 @@ export function RalphLoopDashboard({
           </CardContent>
         </Card>
       )}
+
+      {/* Regenerate Stories Confirm Dialog */}
+      <Dialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Regenerate Stories
+            </DialogTitle>
+            <DialogDescription>
+              This will use AI to re-extract user stories from the PRD markdown. Any manual changes to stories will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setRegenerateConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setRegenerateConfirmOpen(false)
+                handleRegenerateStories()
+              }}
+            >
+              Regenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diff Dialog */}
       <Dialog open={diffDialogOpen} onOpenChange={setDiffDialogOpen}>
