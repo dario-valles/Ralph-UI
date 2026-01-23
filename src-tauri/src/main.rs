@@ -1,26 +1,23 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 use clap::Parser;
+use ralph_ui_lib::agents::AgentManager;
+use ralph_ui_lib::server::{self, generate_auth_token, ServerAppState};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
-/// Ralph UI - Cross-platform desktop UI for autonomous AI agents
+/// Ralph UI - HTTP/WebSocket server for autonomous AI agents
 #[derive(Parser, Debug)]
 #[command(name = "ralph-ui")]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Run in server mode (HTTP/WebSocket API instead of native GUI)
-    #[arg(long)]
-    server: bool,
-
-    /// Port to bind the server to (only used with --server)
+    /// Port to bind the server to
     #[arg(long, default_value = "3420")]
     port: u16,
 
-    /// Address to bind the server to (only used with --server)
+    /// Address to bind the server to
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
 
-    /// Fixed auth token for server mode (or set RALPH_SERVER_TOKEN env var)
+    /// Fixed auth token (or set RALPH_SERVER_TOKEN env var)
     /// If not provided, a random token is generated on each startup
     #[arg(long, env = "RALPH_SERVER_TOKEN")]
     token: Option<String>,
@@ -28,32 +25,10 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-
-    if cli.server {
-        #[cfg(feature = "server")]
-        {
-            run_server_mode(cli.port, &cli.bind, cli.token);
-        }
-
-        #[cfg(not(feature = "server"))]
-        {
-            eprintln!("Error: Server mode requires the 'server' feature to be enabled.");
-            eprintln!("Rebuild with: cargo build --features server");
-            std::process::exit(1);
-        }
-    } else {
-        // Normal Tauri desktop mode
-        ralph_ui_lib::run()
-    }
+    run_server(cli.port, &cli.bind, cli.token);
 }
 
-#[cfg(feature = "server")]
-fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
-    use ralph_ui_lib::agents::AgentManager;
-    use ralph_ui_lib::server::{self, generate_auth_token, ServerAppState};
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-
+fn run_server(port: u16, bind: &str, token: Option<String>) {
     // Initialize logger
     env_logger::init();
 
@@ -66,6 +41,9 @@ fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
         if let Err(e) = ralph_ui_lib::shutdown::register_signal_handlers(shutdown_state.clone()) {
             log::warn!("Failed to register signal handlers: {}", e);
         }
+
+        // Perform auto-recovery on startup
+        ralph_ui_lib::perform_auto_recovery();
 
         // Initialize git state
         let git_state = ralph_ui_lib::commands::git::GitState::new();
@@ -152,7 +130,6 @@ fn run_server_mode(port: u16, bind: &str, token: Option<String>) {
 }
 
 /// Forward PTY data events from agents to WebSocket clients
-#[cfg(feature = "server")]
 async fn forward_pty_data_events(
     broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::AgentPtyDataEvent>,
@@ -178,7 +155,6 @@ async fn forward_pty_data_events(
 }
 
 /// Forward PTY exit events from agents to WebSocket clients
-#[cfg(feature = "server")]
 async fn forward_pty_exit_events(
     broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::AgentPtyExitEvent>,
@@ -204,7 +180,6 @@ async fn forward_pty_exit_events(
 }
 
 /// Forward subagent events to WebSocket clients
-#[cfg(feature = "server")]
 async fn forward_subagent_events(
     broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::SubagentEvent>,
@@ -236,7 +211,6 @@ async fn forward_subagent_events(
 }
 
 /// Forward tool call start events to WebSocket clients
-#[cfg(feature = "server")]
 async fn forward_tool_call_events(
     broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::ToolCallStartEvent>,
@@ -260,7 +234,6 @@ async fn forward_tool_call_events(
 }
 
 /// Forward tool call complete events to WebSocket clients
-#[cfg(feature = "server")]
 async fn forward_tool_call_complete_events(
     broadcaster: std::sync::Arc<ralph_ui_lib::server::EventBroadcaster>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ralph_ui_lib::agents::ToolCallCompleteEvent>,

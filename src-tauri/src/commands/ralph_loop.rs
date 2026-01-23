@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 /// State for managing active Ralph loop executions (Tauri managed state)
 pub struct RalphLoopManagerState {
@@ -50,6 +49,32 @@ impl RalphLoopManagerState {
             }
         };
         snapshots.get(execution_id).cloned()
+    }
+
+    /// Get an execution orchestrator by ID (for server mode)
+    pub fn get_execution(
+        &self,
+        execution_id: &str,
+    ) -> Result<Option<Arc<tokio::sync::Mutex<RalphLoopOrchestrator>>>, String> {
+        let executions = self
+            .executions
+            .lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
+        Ok(executions.get(execution_id).cloned())
+    }
+
+    /// Insert an execution orchestrator (for server mode)
+    pub fn insert_execution(
+        &self,
+        execution_id: String,
+        orchestrator: Arc<tokio::sync::Mutex<RalphLoopOrchestrator>>,
+    ) -> Result<(), String> {
+        let mut executions = self
+            .executions
+            .lock()
+            .map_err(|e| format!("Executions lock error: {}", e))?;
+        executions.insert(execution_id, orchestrator);
+        Ok(())
     }
 }
 
@@ -165,7 +190,6 @@ pub struct ConvertPrdFileToRalphRequest {
 }
 
 /// Initialize a Ralph PRD at .ralph-ui/prds/{prd_name}.json
-#[tauri::command]
 pub fn init_ralph_prd(request: InitRalphPrdRequest, prd_name: String) -> Result<RalphPrd, String> {
     let project_path = PathBuf::from(&request.project_path);
     let executor = PrdExecutor::new(&project_path, &prd_name);
@@ -295,7 +319,6 @@ fn find_newest_prd(project_path: &std::path::Path, prd_name: &str) -> Result<Ral
 /// This command checks both the main project and any existing worktrees,
 /// returning the PRD from whichever has newer data. This ensures correct
 /// data is shown after app restart even if a worktree execution is ongoing.
-#[tauri::command]
 pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd, String> {
     find_newest_prd(&to_path_buf(&project_path), &prd_name)
 }
@@ -305,7 +328,6 @@ pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd,
 /// This command checks both the main project and any existing worktrees,
 /// returning status from whichever has newer data. This ensures correct
 /// status is shown after app restart even if a worktree execution is ongoing.
-#[tauri::command]
 pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<PrdStatus, String> {
     let project_path_buf = to_path_buf(&project_path);
     let prd = find_newest_prd(&project_path_buf, &prd_name)?;
@@ -314,21 +336,18 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
 }
 
 /// Mark a story as passing in the PRD
-#[tauri::command]
 pub fn mark_ralph_story_passing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
     let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.mark_story_passing(&story_id)
 }
 
 /// Mark a story as failing in the PRD
-#[tauri::command]
 pub fn mark_ralph_story_failing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
     let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.mark_story_failing(&story_id)
 }
 
 /// Add a story to the PRD
-#[tauri::command]
 pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStoryInput) -> Result<(), String> {
     let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
 
@@ -343,49 +362,42 @@ pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStory
 }
 
 /// Remove a story from the PRD
-#[tauri::command]
 pub fn remove_ralph_story(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
     let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.remove_story(&story_id)
 }
 
 /// Get progress.txt content
-#[tauri::command]
 pub fn get_ralph_progress(project_path: String, prd_name: String) -> Result<String, String> {
     let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.read_raw()
 }
 
 /// Get progress summary
-#[tauri::command]
 pub fn get_ralph_progress_summary(project_path: String, prd_name: String) -> Result<ProgressSummary, String> {
     let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.get_summary()
 }
 
 /// Add a note to progress.txt
-#[tauri::command]
 pub fn add_ralph_progress_note(project_path: String, prd_name: String, iteration: u32, note: String) -> Result<(), String> {
     let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.add_note(iteration, &note)
 }
 
 /// Clear progress.txt and reinitialize
-#[tauri::command]
 pub fn clear_ralph_progress(project_path: String, prd_name: String) -> Result<(), String> {
     let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.clear()
 }
 
 /// Get the prompt.md content
-#[tauri::command]
 pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
     let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
     builder.read_prompt()
 }
 
 /// Update the prompt.md content
-#[tauri::command]
 pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
     let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
     builder.write_prompt(&content)
@@ -401,13 +413,12 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 /// 2. PRD stored execution_config (from PRD JSON)
 /// 3. Global RalphConfig (from config files)
 /// 4. Defaults
-#[tauri::command]
 pub async fn start_ralph_loop(
     request: StartRalphLoopRequest,
-    ralph_state: State<'_, RalphLoopManagerState>,
-    agent_manager_state: State<'_, crate::AgentManagerState>,
-    config_state: State<'_, ConfigState>,
-    app_handle: tauri::AppHandle,
+    ralph_state: &RalphLoopManagerState,
+    agent_manager_state: &crate::AgentManagerState,
+    config_state: &ConfigState,
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
 ) -> Result<String, String> {
     // Read PRD to get stored execution config
     let project_path_buf = PathBuf::from(&request.project_path);
@@ -505,7 +516,7 @@ pub async fn start_ralph_loop(
                 })
                 .unwrap_or_else(|| {
                     // Legacy behavior: build chain from primary + deprecated fallback_agent field
-                    let mut chain = vec![agent_type.clone()];
+                    let mut chain = vec![agent_type];
                     #[allow(deprecated)]
                     if let Some(ref fallback_str) = config.fallback.fallback_agent {
                         log::warn!(
@@ -561,7 +572,7 @@ pub async fn start_ralph_loop(
     // Build RalphLoopConfig using resolved values (respecting config precedence)
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
-        agent_type: agent_type.clone(),
+        agent_type,
         model: resolved_model,
         max_iterations: resolved_max_iterations,
         run_tests: resolved_run_tests,
@@ -650,7 +661,7 @@ pub async fn start_ralph_loop(
     let orchestrator_arc_for_heartbeat = orchestrator_arc.clone();
 
     // Spawn heartbeat task (uses file storage)
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
         loop {
@@ -686,7 +697,7 @@ pub async fn start_ralph_loop(
     let prd_name_for_loop = request.prd_name.clone();
     let app_handle_for_loop = app_handle.clone();
 
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         log::info!("[RalphLoop] Background task started for {}", execution_id_for_loop);
 
         // Lock orchestrator, then run with the shared agent manager
@@ -731,9 +742,7 @@ pub async fn start_ralph_loop(
                         };
 
                         // Emit event to frontend
-                        if let Err(e) = crate::events::emit_ralph_loop_completed(&app_handle_for_loop, payload) {
-                            log::warn!("[RalphLoop] Failed to emit loop completed event: {}", e);
-                        }
+                        app_handle_for_loop.broadcast("ralph:loop_completed", serde_json::to_value(&payload).unwrap_or_default());
 
                         // Send desktop notification
                         send_loop_completion_notification(
@@ -849,10 +858,9 @@ pub async fn start_ralph_loop(
 }
 
 /// Stop a running Ralph loop
-#[tauri::command]
 pub async fn stop_ralph_loop(
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<(), String> {
     let orchestrator_arc = {
         let executions = ralph_state.executions.lock()
@@ -870,10 +878,9 @@ pub async fn stop_ralph_loop(
 }
 
 /// Get the state of a Ralph loop execution
-#[tauri::command]
 pub async fn get_ralph_loop_state(
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<RalphLoopExecutionState, String> {
     // Read from snapshot (doesn't require locking orchestrator)
     if let Some(snapshot) = ralph_state.get_snapshot(&execution_id) {
@@ -898,10 +905,9 @@ pub async fn get_ralph_loop_state(
 }
 
 /// Get metrics for a Ralph loop execution
-#[tauri::command]
 pub async fn get_ralph_loop_metrics(
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<RalphLoopMetrics, String> {
     // Read from snapshot first (doesn't require locking orchestrator)
     if let Some(snapshot) = ralph_state.get_snapshot(&execution_id) {
@@ -926,9 +932,8 @@ pub async fn get_ralph_loop_metrics(
 }
 
 /// List all active Ralph loop executions
-#[tauri::command]
 pub fn list_ralph_loop_executions(
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<Vec<String>, String> {
     let executions = ralph_state.executions.lock()
         .map_err(|e| format!("Executions lock error: {}", e))?;
@@ -936,10 +941,9 @@ pub fn list_ralph_loop_executions(
 }
 
 /// Get current agent ID for a Ralph loop execution (for terminal connection)
-#[tauri::command]
 pub async fn get_ralph_loop_current_agent(
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<Option<String>, String> {
     // Read from snapshot (doesn't require locking orchestrator)
     if let Some(snapshot) = ralph_state.get_snapshot(&execution_id) {
@@ -963,10 +967,9 @@ pub async fn get_ralph_loop_current_agent(
 }
 
 /// Get worktree path for a Ralph loop execution
-#[tauri::command]
 pub async fn get_ralph_loop_worktree_path(
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<Option<String>, String> {
     // Read from snapshot (doesn't require locking orchestrator)
     if let Some(snapshot) = ralph_state.get_snapshot(&execution_id) {
@@ -991,7 +994,6 @@ pub async fn get_ralph_loop_worktree_path(
 ///
 /// Removes the git worktree and optionally deletes the directory.
 /// The worktree should be kept for review until this command is called.
-#[tauri::command]
 pub fn cleanup_ralph_worktree(
     project_path: String,
     worktree_path: String,
@@ -1022,7 +1024,6 @@ pub fn cleanup_ralph_worktree(
 }
 
 /// List all Ralph worktrees for a project
-#[tauri::command]
 pub fn list_ralph_worktrees(project_path: String) -> Result<Vec<RalphWorktreeInfo>, String> {
     use crate::git::GitManager;
 
@@ -1062,7 +1063,6 @@ pub struct RalphWorktreeInfo {
 /// This reads a markdown PRD file and its associated structure JSON (if any),
 /// then creates the Ralph loop files (prd.json, progress.txt, config.yaml, prompt.md).
 /// Execution settings from the request are stored in the PRD JSON for future executions.
-#[tauri::command]
 pub fn convert_prd_file_to_ralph(
     request: ConvertPrdFileToRalphRequest,
 ) -> Result<RalphPrd, String> {
@@ -1215,7 +1215,6 @@ pub fn convert_prd_file_to_ralph(
 }
 
 /// Check if a project has Ralph loop files
-#[tauri::command]
 pub fn has_ralph_files(project_path: String) -> bool {
     let prds_dir = prds_dir(&project_path);
 
@@ -1235,7 +1234,6 @@ pub fn has_ralph_files(project_path: String) -> bool {
 }
 
 /// Get all Ralph files for a project
-#[tauri::command]
 pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
     let prds_dir = prds_dir(&project_path);
 
@@ -1307,7 +1305,6 @@ pub struct RalphFiles {
 // ============================================================================
 
 /// Get Ralph config for a project
-#[tauri::command]
 pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
@@ -1316,7 +1313,6 @@ pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
 }
 
 /// Set Ralph config for a project
-#[tauri::command]
 pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(), String> {
     use crate::ralph_loop::ConfigManager;
 
@@ -1325,7 +1321,6 @@ pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(),
 }
 
 /// Initialize Ralph config with defaults
-#[tauri::command]
 pub fn init_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
@@ -1338,7 +1333,6 @@ pub fn init_ralph_config(project_path: String) -> Result<RalphConfig, String> {
 }
 
 /// Update specific Ralph config fields
-#[tauri::command]
 pub fn update_ralph_config(
     project_path: String,
     max_iterations: Option<u32>,
@@ -1387,7 +1381,6 @@ use crate::file_storage::iterations::IterationStats;
 use crate::ralph_loop::{ExecutionStateSnapshot, IterationOutcome, IterationRecord};
 
 /// Get iteration history for an execution
-#[tauri::command]
 pub fn get_ralph_iteration_history(
     project_path: String,
     execution_id: String,
@@ -1398,7 +1391,6 @@ pub fn get_ralph_iteration_history(
 }
 
 /// Get iteration statistics for an execution
-#[tauri::command]
 pub fn get_ralph_iteration_stats(
     project_path: String,
     execution_id: String,
@@ -1409,7 +1401,6 @@ pub fn get_ralph_iteration_stats(
 }
 
 /// Get all iteration history with optional filters
-#[tauri::command]
 pub fn get_all_ralph_iterations(
     project_path: String,
     execution_id: Option<String>,
@@ -1431,7 +1422,6 @@ pub fn get_all_ralph_iterations(
 }
 
 /// Save an iteration record (used by orchestrator)
-#[tauri::command]
 pub fn save_ralph_iteration(project_path: String, record: IterationRecord) -> Result<(), String> {
     let path = as_path(&project_path);
     iteration_storage::insert_iteration(path, &record)
@@ -1439,7 +1429,6 @@ pub fn save_ralph_iteration(project_path: String, record: IterationRecord) -> Re
 }
 
 /// Update an iteration record (used by orchestrator on completion)
-#[tauri::command]
 pub fn update_ralph_iteration(
     project_path: String,
     execution_id: String,
@@ -1474,7 +1463,6 @@ pub fn update_ralph_iteration(
 }
 
 /// Save execution state snapshot (for heartbeat/crash recovery)
-#[tauri::command]
 pub fn save_ralph_execution_state(
     project_path: String,
     snapshot: ExecutionStateSnapshot,
@@ -1485,7 +1473,6 @@ pub fn save_ralph_execution_state(
 }
 
 /// Update heartbeat for an execution
-#[tauri::command]
 pub fn update_ralph_heartbeat(project_path: String, execution_id: String) -> Result<(), String> {
     let path = as_path(&project_path);
     let heartbeat = chrono::Utc::now().to_rfc3339();
@@ -1495,7 +1482,6 @@ pub fn update_ralph_heartbeat(project_path: String, execution_id: String) -> Res
 }
 
 /// Get execution state snapshot
-#[tauri::command]
 pub fn get_ralph_execution_state(
     project_path: String,
     execution_id: String,
@@ -1506,7 +1492,6 @@ pub fn get_ralph_execution_state(
 }
 
 /// Check for stale executions (crash recovery)
-#[tauri::command]
 pub fn check_stale_ralph_executions(
     project_path: String,
     threshold_secs: Option<i64>,
@@ -1518,7 +1503,6 @@ pub fn check_stale_ralph_executions(
 }
 
 /// Mark stale iterations as interrupted (crash recovery)
-#[tauri::command]
 pub fn recover_stale_ralph_iterations(
     project_path: String,
     execution_id: String,
@@ -1537,7 +1521,6 @@ pub fn recover_stale_ralph_iterations(
 }
 
 /// Delete iteration history for an execution (cleanup)
-#[tauri::command]
 pub fn delete_ralph_iteration_history(
     project_path: String,
     execution_id: String,
@@ -1570,11 +1553,10 @@ pub struct RalphLoopSnapshot {
 /// - Current agent ID (for terminal connection)
 /// - Worktree path (for file operations)
 /// - Iteration history (from file storage)
-#[tauri::command]
 pub async fn get_ralph_loop_snapshot(
     project_path: String,
     execution_id: String,
-    ralph_state: State<'_, RalphLoopManagerState>,
+    ralph_state: &RalphLoopManagerState,
 ) -> Result<RalphLoopSnapshot, String> {
     let path = as_path(&project_path);
 
@@ -1620,7 +1602,6 @@ pub async fn get_ralph_loop_snapshot(
 
 /// Cleanup old iteration history records (maintenance)
 /// File-based iterations are stored per-execution, so this removes old execution files
-#[tauri::command]
 pub fn cleanup_ralph_iteration_history(
     project_path: String,
     days_to_keep: Option<i64>,
@@ -1878,7 +1859,6 @@ pub struct RegenerateAcceptanceRequest {
 ///
 /// This reads the PRD markdown file and re-extracts acceptance criteria for each story,
 /// updating the PRD JSON while preserving pass/fail status.
-#[tauri::command]
 pub fn regenerate_ralph_prd_acceptance(
     request: RegenerateAcceptanceRequest,
 ) -> Result<RalphPrd, String> {
@@ -1968,12 +1948,11 @@ pub struct ExtractedStory {
 ///
 /// This is useful when the initial story extraction created generic tasks like
 /// "Problem Statement", "Solution" instead of proper US-X.X user stories.
-#[tauri::command]
 pub async fn regenerate_ralph_prd_stories(
-    app_handle: tauri::AppHandle,
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
     request: RegenerateStoriesRequest,
 ) -> Result<RalphPrd, String> {
-    use crate::commands::prd_chat::agent_executor::{execute_chat_agent, TauriEmitter};
+    use crate::commands::prd_chat::agent_executor::{execute_chat_agent, BroadcastEmitter};
     use crate::models::AgentType;
     use std::fs;
 
@@ -2001,7 +1980,7 @@ pub async fn regenerate_ralph_prd_stories(
     let prompt = build_story_extraction_prompt(&content);
 
     // Execute AI agent to extract stories
-    let emitter = TauriEmitter::new(&app_handle);
+    let emitter = BroadcastEmitter::new(app_handle.clone());
     let session_id = format!("story-regen-{}", uuid::Uuid::new_v4());
 
     let response = execute_chat_agent(
@@ -2136,43 +2115,26 @@ fn format_duration(secs: f64) -> String {
     }
 }
 
-/// Send a desktop notification when a Ralph loop completes successfully
+/// Log when a Ralph loop completes successfully
+/// Note: Desktop notifications are handled by the frontend via Web Notifications API
 fn send_loop_completion_notification(
-    app_handle: &tauri::AppHandle,
+    _app_handle: &std::sync::Arc<crate::server::EventBroadcaster>,
     prd_name: &str,
     total_iterations: u32,
     completed_stories: u32,
     duration_secs: f64,
 ) {
-    use tauri_plugin_notification::NotificationExt;
-
     // Format the notification body
     let duration_str = format_duration(duration_secs);
-    let body = format!(
-        "{} stories completed in {} iterations\nDuration: {}",
-        completed_stories, total_iterations, duration_str
+    log::info!(
+        "[RalphLoop] Loop completed: {} - {} stories completed in {} iterations, Duration: {}",
+        prd_name, completed_stories, total_iterations, duration_str
     );
-
-    // Send the desktop notification
-    match app_handle
-        .notification()
-        .builder()
-        .title(&format!("Ralph Loop Complete: {}", prd_name))
-        .body(&body)
-        .show()
-    {
-        Ok(_) => {
-            log::info!("[RalphLoop] Desktop notification sent for loop completion: {}", prd_name);
-        }
-        Err(e) => {
-            log::warn!("[RalphLoop] Failed to send desktop notification: {}", e);
-        }
-    }
 }
 
 /// Send a desktop notification when a Ralph loop encounters an error
 fn send_error_notification(
-    app_handle: &tauri::AppHandle,
+    app_handle: &std::sync::Arc<crate::server::EventBroadcaster>,
     execution_id: &str,
     prd_name: &str,
     error_type: crate::events::RalphLoopErrorType,
@@ -2181,7 +2143,6 @@ fn send_error_notification(
     stories_remaining: Option<u32>,
     total_stories: Option<u32>,
 ) {
-    use tauri_plugin_notification::NotificationExt;
 
     // Truncate message to 200 chars for notification display
     let truncated_message = if message.len() > 200 {
@@ -2234,48 +2195,25 @@ fn send_error_notification(
         total_stories,
     };
 
-    if let Err(e) = crate::events::emit_ralph_loop_error(app_handle, payload) {
-        log::warn!("[RalphLoop] Failed to emit error event: {}", e);
-    }
+    app_handle.broadcast("ralph:loop_error", serde_json::to_value(&payload).unwrap_or_default());
 
-    // Send the desktop notification
-    match app_handle
-        .notification()
-        .builder()
-        .title(&format!("Ralph Loop {}: {}", error_label, prd_name))
-        .body(&body)
-        .show()
-    {
-        Ok(_) => {
-            log::info!("[RalphLoop] Error notification sent: {} - {}", error_label, prd_name);
-        }
-        Err(e) => {
-            log::warn!("[RalphLoop] Failed to send error notification: {}", e);
-        }
-    }
+    // Log the error (desktop notification is handled by frontend via Web Notifications API)
+    log::warn!("[RalphLoop] Loop error: {} - {} - {}", error_label, prd_name, body);
 }
 
 /// Send a test notification to verify notification settings (US-005)
-#[tauri::command]
-pub fn send_test_notification(app_handle: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_notification::NotificationExt;
-
-    match app_handle
-        .notification()
-        .builder()
-        .title("Ralph UI Test Notification")
-        .body("If you can see this, notifications are working! Ralph says hi.")
-        .show()
-    {
-        Ok(_) => {
-            log::info!("[Notification] Test notification sent successfully");
-            Ok(())
-        }
-        Err(e) => {
-            log::warn!("[Notification] Failed to send test notification: {}", e);
-            Err(format!("Failed to send test notification: {}", e))
-        }
-    }
+/// In server mode, this broadcasts an event for the frontend to show a Web Notification
+pub fn send_test_notification(app_handle: std::sync::Arc<crate::server::EventBroadcaster>) -> Result<(), String> {
+    // Broadcast notification event for frontend to display via Web Notifications API
+    app_handle.broadcast(
+        "notification:test",
+        serde_json::json!({
+            "title": "Ralph UI Test Notification",
+            "body": "If you can see this, notifications are working! Ralph says hi.",
+        }),
+    );
+    log::info!("[Notification] Test notification event broadcast");
+    Ok(())
 }
 
 // ============================================================================

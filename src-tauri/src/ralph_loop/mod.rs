@@ -276,7 +276,7 @@ impl RalphLoopOrchestrator {
 
         // Initialize fallback orchestrator if config is provided
         let fallback_orchestrator = config.fallback_config.clone().map(FallbackOrchestrator::new);
-        let active_agent_type = config.agent_type.clone();
+        let active_agent_type = config.agent_type;
 
         // Create executors for .ralph-ui/prds/{prd_name}.*
         let prd_executor = PrdExecutor::new(&config.project_path, &config.prd_name);
@@ -306,7 +306,7 @@ impl RalphLoopOrchestrator {
 
     /// Get the currently active agent type (may differ from config due to fallback)
     pub fn active_agent_type(&self) -> AgentType {
-        self.active_agent_type.clone()
+        self.active_agent_type
     }
 
     /// Get fallback statistics if fallback orchestrator is enabled
@@ -321,10 +321,10 @@ impl RalphLoopOrchestrator {
     fn get_agent_for_iteration(&mut self) -> AgentType {
         if let Some(ref mut fo) = self.fallback_orchestrator {
             let agent = fo.get_agent_for_iteration();
-            self.active_agent_type = agent.clone();
+            self.active_agent_type = agent;
             agent
         } else {
-            self.config.agent_type.clone()
+            self.config.agent_type
         }
     }
 
@@ -701,7 +701,7 @@ impl RalphLoopOrchestrator {
             // Use the passed agent_type (may be primary or fallback)
             log::debug!("[RalphLoop] Building spawn config for {:?} agent...", agent_type);
             let spawn_config = AgentSpawnConfig {
-                agent_type: agent_type.clone(),
+                agent_type,
                 task_id,
                 worktree_path: self.working_path.to_string_lossy().to_string(),
                 branch: self.config.branch.clone().unwrap_or_else(|| "main".to_string()),

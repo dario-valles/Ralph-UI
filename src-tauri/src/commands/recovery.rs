@@ -41,7 +41,7 @@ pub struct RecoveryResult {
 }
 
 /// Check for stale sessions that need recovery
-#[tauri::command]
+
 pub async fn check_stale_sessions(
     project_path: String,
 ) -> Result<Vec<StaleLockInfo>, String> {
@@ -53,7 +53,7 @@ pub async fn check_stale_sessions(
 }
 
 /// Recover a single stale session
-#[tauri::command]
+
 pub async fn recover_stale_session(
     project_path: String,
     session_id: String,
@@ -81,7 +81,7 @@ pub async fn recover_stale_session(
 }
 
 /// Recover all stale sessions
-#[tauri::command]
+
 pub async fn recover_all_stale_sessions(
     project_path: String,
 ) -> Result<Vec<RecoveryResult>, String> {
@@ -118,7 +118,7 @@ pub async fn recover_all_stale_sessions(
 }
 
 /// Acquire lock for a session
-#[tauri::command]
+
 pub async fn acquire_session_lock(
     project_path: String,
     session_id: String,
@@ -164,7 +164,7 @@ pub async fn acquire_session_lock(
 }
 
 /// Release lock for a session
-#[tauri::command]
+
 pub async fn release_session_lock(
     project_path: String,
     session_id: String,
@@ -185,7 +185,7 @@ pub async fn release_session_lock(
 }
 
 /// Get lock info for a session
-#[tauri::command]
+
 pub async fn get_session_lock_info(
     project_path: String,
     session_id: String,
@@ -206,7 +206,7 @@ pub async fn get_session_lock_info(
 }
 
 /// Refresh session lock (heartbeat)
-#[tauri::command]
+
 pub async fn refresh_session_lock(
     project_path: String,
     session_id: String,

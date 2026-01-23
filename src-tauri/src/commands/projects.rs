@@ -18,7 +18,7 @@ pub struct DirectoryEntry {
 
 /// List directory contents for remote folder browsing
 /// Only returns directories (not files) for project selection
-#[tauri::command]
+
 pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, String> {
     // Default to home directory if no path provided
     let dir_path = match path {
@@ -73,7 +73,7 @@ pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, Strin
 }
 
 /// Get the home directory path
-#[tauri::command]
+
 pub fn get_home_directory() -> Result<String, String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -82,7 +82,7 @@ pub fn get_home_directory() -> Result<String, String> {
 
 /// Register (or get existing) project from a folder path
 /// Also imports any sessions from the project's .ralph-ui/sessions/ directory
-#[tauri::command]
+
 pub fn register_project(
     path: String,
     name: Option<String>,
@@ -106,7 +106,7 @@ pub fn register_project(
 }
 
 /// Get a project by ID
-#[tauri::command]
+
 pub fn get_project(
     project_id: String,
 ) -> Result<ApiProject, String> {
@@ -116,7 +116,7 @@ pub fn get_project(
 }
 
 /// Get a project by path
-#[tauri::command]
+
 pub fn get_project_by_path(
     path: String,
 ) -> Result<ApiProject, String> {
@@ -126,14 +126,14 @@ pub fn get_project_by_path(
 }
 
 /// Get all projects
-#[tauri::command]
+
 pub fn get_all_projects() -> Result<Vec<ApiProject>, String> {
     let entries = file_projects::get_all_projects()?;
     Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Get recent projects (limited)
-#[tauri::command]
+
 pub fn get_recent_projects(
     limit: Option<i32>,
 ) -> Result<Vec<ApiProject>, String> {
@@ -142,14 +142,14 @@ pub fn get_recent_projects(
 }
 
 /// Get favorite projects
-#[tauri::command]
+
 pub fn get_favorite_projects() -> Result<Vec<ApiProject>, String> {
     let entries = file_projects::get_favorite_projects()?;
     Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Update project name
-#[tauri::command]
+
 pub fn update_project_name(
     project_id: String,
     name: String,
@@ -158,7 +158,7 @@ pub fn update_project_name(
 }
 
 /// Toggle project favorite status
-#[tauri::command]
+
 pub fn toggle_project_favorite(
     project_id: String,
 ) -> Result<bool, String> {
@@ -166,7 +166,7 @@ pub fn toggle_project_favorite(
 }
 
 /// Set project favorite status explicitly
-#[tauri::command]
+
 pub fn set_project_favorite(
     project_id: String,
     is_favorite: bool,
@@ -175,7 +175,7 @@ pub fn set_project_favorite(
 }
 
 /// Touch project (update last_used_at)
-#[tauri::command]
+
 pub fn touch_project(
     project_id: String,
 ) -> Result<(), String> {
@@ -183,7 +183,7 @@ pub fn touch_project(
 }
 
 /// Delete a project
-#[tauri::command]
+
 pub fn delete_project(
     project_id: String,
 ) -> Result<(), String> {

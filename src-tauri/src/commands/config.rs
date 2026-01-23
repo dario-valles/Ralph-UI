@@ -8,7 +8,6 @@ use crate::utils::ResultExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::RwLock;
-use tauri::State;
 
 /// Application configuration state
 pub struct ConfigState {
@@ -80,18 +79,18 @@ pub struct ConfigPaths {
 }
 
 /// Get current configuration
-#[tauri::command]
+
 pub async fn get_config(
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<RalphConfig, String> {
     config_state.get_config()
 }
 
 /// Set project path and reload configuration
-#[tauri::command]
+
 pub async fn set_config_project_path(
     project_path: Option<String>,
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<RalphConfig, String> {
     let path = project_path.map(PathBuf::from);
     config_state.set_project_path(path)?;
@@ -99,9 +98,9 @@ pub async fn set_config_project_path(
 }
 
 /// Get configuration file paths
-#[tauri::command]
+
 pub async fn get_config_paths_cmd(
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<ConfigPaths, String> {
     let project_path = config_state.project_path.read()
         .with_context("Failed to acquire lock")?;
@@ -117,7 +116,7 @@ pub async fn get_config_paths_cmd(
 }
 
 /// Update execution configuration
-#[tauri::command]
+
 pub async fn update_execution_config(
     max_parallel: Option<i32>,
     max_iterations: Option<i32>,
@@ -125,7 +124,7 @@ pub async fn update_execution_config(
     agent_type: Option<String>,
     strategy: Option<String>,
     model: Option<String>,
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<ExecutionConfig, String> {
     let mut config = config_state.config.write()
         .with_context("Failed to acquire lock")?;
@@ -159,12 +158,12 @@ pub async fn update_execution_config(
 }
 
 /// Update git configuration
-#[tauri::command]
+
 pub async fn update_git_config(
     auto_create_prs: Option<bool>,
     draft_prs: Option<bool>,
     branch_pattern: Option<String>,
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<GitConfig, String> {
     let mut config = config_state.config.write()
         .with_context("Failed to acquire lock")?;
@@ -183,13 +182,13 @@ pub async fn update_git_config(
 }
 
 /// Update validation configuration
-#[tauri::command]
+
 pub async fn update_validation_config(
     run_tests: Option<bool>,
     run_lint: Option<bool>,
     test_command: Option<String>,
     lint_command: Option<String>,
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<ValidationConfig, String> {
     let mut config = config_state.config.write()
         .with_context("Failed to acquire lock")?;
@@ -211,7 +210,7 @@ pub async fn update_validation_config(
 }
 
 /// Update fallback configuration
-#[tauri::command]
+
 pub async fn update_fallback_config(
     enabled: Option<bool>,
     base_backoff_ms: Option<u64>,
@@ -221,7 +220,7 @@ pub async fn update_fallback_config(
     fallback_chain: Option<Vec<String>>,
     test_primary_recovery: Option<bool>,
     recovery_test_interval: Option<u32>,
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<FallbackSettings, String> {
     let mut config = config_state.config.write()
         .with_context("Failed to acquire lock")?;
@@ -255,9 +254,9 @@ pub async fn update_fallback_config(
 }
 
 /// Reload configuration from files
-#[tauri::command]
+
 pub async fn reload_config(
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<RalphConfig, String> {
     let project_path = config_state.project_path.read()
         .with_context("Failed to acquire lock")?;
@@ -274,9 +273,9 @@ pub async fn reload_config(
 
 /// Save configuration to global config file
 /// Settings from the Settings page are app-level defaults, so always save to global config
-#[tauri::command]
+
 pub async fn save_config(
-    config_state: State<'_, ConfigState>,
+    config_state: &ConfigState,
 ) -> Result<(), String> {
     log::info!("[save_config] Starting save to global config...");
 

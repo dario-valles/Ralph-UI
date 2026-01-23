@@ -17,10 +17,10 @@ pub struct SubagentTreeSummary {
 }
 
 /// Initialize trace parser for an agent
-#[tauri::command]
+
 pub async fn init_trace_parser(
     agent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<(), String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     manager.init_trace_parser(&agent_id);
@@ -28,31 +28,31 @@ pub async fn init_trace_parser(
 }
 
 /// Parse agent output for subagent events
-#[tauri::command]
+
 pub async fn parse_agent_output(
     agent_id: String,
     output: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<Vec<SubagentEvent>, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     Ok(manager.parse_text_output(&agent_id, &output))
 }
 
 /// Get subagent tree for an agent
-#[tauri::command]
+
 pub async fn get_subagent_tree(
     agent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<Option<SubagentTree>, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     Ok(manager.get_subagent_tree(&agent_id))
 }
 
 /// Get subagent tree summary
-#[tauri::command]
+
 pub async fn get_subagent_summary(
     agent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<Option<SubagentTreeSummary>, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     let tree = manager.get_subagent_tree(&agent_id);
@@ -80,11 +80,11 @@ pub async fn get_subagent_summary(
 }
 
 /// Get all events for a specific subagent
-#[tauri::command]
+
 pub async fn get_subagent_events(
     agent_id: String,
     subagent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<Vec<SubagentEvent>, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     let tree = manager.get_subagent_tree(&agent_id);
@@ -98,10 +98,10 @@ pub async fn get_subagent_events(
 }
 
 /// Clear trace data for an agent
-#[tauri::command]
+
 pub async fn clear_trace_data(
     agent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<(), String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     manager.clear_trace_data(&agent_id);
@@ -109,11 +109,11 @@ pub async fn clear_trace_data(
 }
 
 /// Check if a subagent is active
-#[tauri::command]
+
 pub async fn is_subagent_active(
     agent_id: String,
     subagent_id: String,
-    agent_manager: tauri::State<'_, AgentManagerState>,
+    agent_manager: &AgentManagerState,
 ) -> Result<bool, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     let tree = manager.get_subagent_tree(&agent_id);

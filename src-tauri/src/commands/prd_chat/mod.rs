@@ -22,7 +22,6 @@ use crate::parsers::structured_output;
 use crate::utils::as_path;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tauri::State;
 use uuid::Uuid;
 
 // ============================================================================
@@ -30,7 +29,7 @@ use uuid::Uuid;
 // ============================================================================
 
 /// Start a new PRD chat session
-#[tauri::command]
+
 pub async fn start_prd_chat_session(
     request: StartChatSessionRequest,
 ) -> Result<ChatSession, String> {
@@ -168,9 +167,9 @@ fn generate_welcome_message(prd_type: Option<&PRDType>) -> String {
 }
 
 /// Send a message to the chat and get an AI response
-#[tauri::command]
+
 pub async fn send_prd_chat_message(
-    app_handle: tauri::AppHandle,
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
     request: SendMessageRequest,
 ) -> Result<SendMessageResponse, String> {
     // Validate request (including attachment constraints)
@@ -239,7 +238,7 @@ pub async fn send_prd_chat_message(
     }
 
     // Execute CLI agent and get response with streaming using the unified executor
-    let emitter = agent_executor::TauriEmitter::new(&app_handle);
+    let emitter = agent_executor::BroadcastEmitter::new(app_handle.clone());
     let response_content = match agent_executor::execute_chat_agent(
         &emitter,
         &request.session_id,
@@ -322,7 +321,7 @@ pub async fn send_prd_chat_message(
 }
 
 /// Get all messages for a chat session
-#[tauri::command]
+
 pub async fn get_prd_chat_history(
     session_id: String,
     project_path: String,
@@ -334,7 +333,7 @@ pub async fn get_prd_chat_history(
 }
 
 /// List all chat sessions for a project
-#[tauri::command]
+
 pub async fn list_prd_chat_sessions(
     project_path: String,
 ) -> Result<Vec<ChatSession>, String> {
@@ -345,7 +344,7 @@ pub async fn list_prd_chat_sessions(
 }
 
 /// Delete a chat session and all its messages
-#[tauri::command]
+
 pub async fn delete_prd_chat_session(
     session_id: String,
     project_path: String,
@@ -359,7 +358,7 @@ pub async fn delete_prd_chat_session(
 
 /// Assess the quality of a PRD chat session before export
 /// Prioritizes the PRD plan file content if it exists, falls back to chat messages
-#[tauri::command]
+
 pub async fn assess_prd_quality(
     session_id: String,
     project_path: String,
@@ -408,7 +407,7 @@ pub async fn assess_prd_quality(
 }
 
 /// Get guided questions based on PRD type
-#[tauri::command]
+
 pub async fn get_guided_questions(
     prd_type: String,
 ) -> Result<Vec<GuidedQuestion>, String> {
@@ -419,7 +418,7 @@ pub async fn get_guided_questions(
 }
 
 /// Extract content from chat for preview before export
-#[tauri::command]
+
 pub async fn preview_prd_extraction(
     session_id: String,
     project_path: String,
@@ -435,7 +434,7 @@ pub async fn preview_prd_extraction(
 }
 
 /// Check if an agent CLI is available in the system PATH
-#[tauri::command]
+
 pub async fn check_agent_availability(
     agent_type: String,
 ) -> Result<AgentAvailabilityResult, String> {
@@ -485,7 +484,7 @@ pub async fn check_agent_availability(
 }
 
 /// Get the extracted PRD structure for a session
-#[tauri::command]
+
 pub async fn get_extracted_structure(
     session_id: String,
     project_path: String,
@@ -505,7 +504,7 @@ pub async fn get_extracted_structure(
 }
 
 /// Set structured output mode for a session
-#[tauri::command]
+
 pub async fn set_structured_mode(
     session_id: String,
     project_path: String,
@@ -520,7 +519,7 @@ pub async fn set_structured_mode(
 }
 
 /// Clear extracted structure for a session
-#[tauri::command]
+
 pub async fn clear_extracted_structure(
     session_id: String,
     project_path: String,
@@ -534,7 +533,7 @@ pub async fn clear_extracted_structure(
 }
 
 /// Update agent type for a chat session
-#[tauri::command]
+
 pub async fn update_prd_chat_agent(
     session_id: String,
     project_path: String,
@@ -563,11 +562,11 @@ pub struct WatchFileResponse {
 }
 
 /// Start watching a PRD plan file for changes
-#[tauri::command]
+
 pub async fn start_watching_prd_file(
     session_id: String,
     project_path: String,
-    watcher_state: State<'_, crate::PrdFileWatcherState>,
+    watcher_state: &crate::PrdFileWatcherState,
 ) -> Result<WatchFileResponse, String> {
     let project_path_obj = as_path(&project_path);
 
@@ -601,10 +600,10 @@ pub async fn start_watching_prd_file(
 }
 
 /// Stop watching a PRD plan file
-#[tauri::command]
+
 pub async fn stop_watching_prd_file(
     session_id: String,
-    watcher_state: State<'_, crate::PrdFileWatcherState>,
+    watcher_state: &crate::PrdFileWatcherState,
 ) -> Result<bool, String> {
     let manager = watcher_state.manager.lock()
         .map_err(|e| format!("Failed to lock watcher manager: {}", e))?;
@@ -617,7 +616,7 @@ pub async fn stop_watching_prd_file(
 }
 
 /// Get the current content of a PRD plan file
-#[tauri::command]
+
 pub async fn get_prd_plan_content(
     session_id: String,
     project_path: String,

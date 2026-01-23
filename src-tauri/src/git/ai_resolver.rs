@@ -210,7 +210,7 @@ Output ONLY the final resolved file content, with no conflict markers, no explan
 
         // Build the agent spawn config
         let spawn_config = AgentSpawnConfig {
-            agent_type: self.config.agent_type.clone(),
+            agent_type: self.config.agent_type,
             task_id: format!("conflict-resolution-{}", uuid::Uuid::new_v4()),
             worktree_path: self.config.project_path.clone(),
             branch: "HEAD".to_string(),

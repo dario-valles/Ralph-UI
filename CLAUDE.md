@@ -4,25 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ralph UI is a Tauri desktop application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. The app enables multi-agent parallel development sessions where progress persists in files and git history rather than LLM context.
+Ralph UI is an HTTP/WebSocket server application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. The app enables multi-agent parallel development sessions where progress persists in files and git history rather than LLM context.
+
+The backend is built with Rust (Axum), and the frontend is a React SPA that connects via HTTP/WebSocket.
 
 ## Development Commands
 
 ```bash
 # Development
-bun run tauri dev              # Start full dev environment (Vite + Rust backend)
 bun run dev                    # Frontend only (Vite dev server on port 1420)
+bun run server:dev             # Backend server in dev mode
 
-# Server Mode (Browser Access)
+# Production
 bun run server                 # Run HTTP/WebSocket server (release build)
-bun run server:dev             # Run server in dev mode (faster builds)
 bun run server:build           # Build server binary only
 
 # Testing
 bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test", not "bun test"
 bun run test:run               # Run tests once
 bun run test:coverage          # With coverage report
-cd src-tauri && cargo test     # Rust backend tests (650+ tests)
+bun run cargo:test             # Rust backend tests (650+ tests)
 /e2e                           # E2E tests via Claude Code skill
 
 # Code Quality
@@ -31,18 +32,15 @@ bun run lint:fix               # Auto-fix lint issues
 bun run format                 # Prettier format
 
 # Building
-bun run tauri build            # Production bundle
+bun run cargo:build            # Production backend build
+bun run build                  # Production frontend build
 ```
 
-## Server Mode (Browser Access)
-
-Ralph UI can run as an HTTP/WebSocket server for browser-based access, enabling use from any device on the network without installing the desktop app. The frontend works identically in both Tauri desktop and browser modes.
-
-### Quick Start (Browser Mode)
+## Quick Start
 
 ```bash
 # Terminal 1: Start the backend server
-bun run server
+bun run server:dev
 
 # Terminal 2: Start the frontend dev server
 bun run dev
@@ -51,7 +49,7 @@ bun run dev
 # Enter the auth token displayed by the server
 ```
 
-### Running the Server
+## Running the Server
 
 ```bash
 # Start server with default settings (port 3420, bind 0.0.0.0)
@@ -64,7 +62,7 @@ bun run server:dev
 bun run server:dev:token
 
 # Custom port/bind/token
-cd src-tauri && cargo run --features server -- --server --port 8080 --bind 127.0.0.1 --token my-secret-token
+cd src-tauri && cargo run -- --port 8080 --bind 127.0.0.1 --token my-secret-token
 
 # Or use environment variable
 RALPH_SERVER_TOKEN=my-secret-token bun run server:dev
@@ -74,24 +72,24 @@ The server displays a startup banner with:
 - Server URL (e.g., `http://0.0.0.0:3420`)
 - Auth token (32-char hex string, or your custom token)
 
-### Browser Connection
+## Browser Connection
 
-When accessing the frontend from a browser (not Tauri), a connection dialog appears automatically. Enter:
+When accessing the frontend from a browser, a connection dialog appears automatically. Enter:
 1. **Server URL**: `http://localhost:3420` (or your server address)
 2. **Auth Token**: Copy from server startup output
 
 The connection is stored in localStorage and persists across page reloads.
 
-### Endpoints
+## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/invoke` | POST | Command proxy - routes to Tauri commands |
+| `/api/invoke` | POST | Command proxy - routes to backend commands |
 | `/ws/events` | GET | WebSocket for real-time events |
 | `/health` | GET | Health check |
 | `/` | GET | Connection instructions page |
 
-### Authentication
+## Authentication
 
 All requests require Bearer token authentication:
 ```bash
@@ -103,25 +101,23 @@ curl -X POST http://localhost:3420/api/invoke \
 
 WebSocket connections pass token as query parameter: `/ws/events?token=YOUR_TOKEN`
 
-### Frontend Browser Mode Architecture
+## Architecture
 
-The frontend uses a unified API layer that works in both Tauri and browser modes:
+### Frontend (src/)
+- **React 19 + TypeScript** with Vite bundler
+- **Zustand stores** (`src/stores/`): 8 feature-isolated stores (session, task, agent, prd, prdChat, gsd, project, ui, toast, ralphLoop)
+- **API wrappers** (`src/lib/`): Centralized HTTP/WebSocket calls to backend
+- **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
+- **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
 
-```typescript
-// src/lib/invoke.ts - Automatically routes to Tauri IPC or HTTP
-import { invoke } from '@/lib/invoke'
-await invoke('get_sessions', { projectPath: '/path' })
-
-// src/lib/events-client.ts - Automatically uses Tauri events or WebSocket
-import { subscribeEvent } from '@/lib/events-client'
-const unlisten = await subscribeEvent('ralph:progress', handler)
-```
-
-Key browser mode files:
-- `src/lib/invoke.ts` - HTTP fallback for `invoke()` calls
-- `src/lib/events-client.ts` - WebSocket client for real-time events
-- `src/components/ServerConnectionDialog.tsx` - Connection UI
-- `src/hooks/useServerConnection.ts` - Connection state management
+### Backend (src-tauri/)
+- **Axum + Rust** with tokio async runtime
+- **HTTP/WebSocket server** (`src/server/`): API proxy, auth, events
+- **Command handlers** (`src/commands/`): 14 modules for business logic
+- **File storage** (`src/file_storage/`): JSON files in `.ralph-ui/` for sessions, PRDs, chat
+- **Git operations** (`src/git/`): git2-rs integration for branches, worktrees, commits
+- **Agent management** (`src/agents/`): Process spawning, rate limiting, log parsing, PTY support
+- **Parallel orchestration** (`src/parallel/`): Pool, scheduler, worktree coordination
 
 ### Server Architecture
 
@@ -129,12 +125,12 @@ Key browser mode files:
 src-tauri/src/server/
 ├── mod.rs      # Server setup, router, CORS
 ├── auth.rs     # Bearer token middleware (tower::Layer)
-├── proxy.rs    # Command routing (141 commands via routing macros)
+├── proxy.rs    # Command routing (150+ commands via routing macros)
 ├── events.rs   # WebSocket broadcaster
 └── state.rs    # Shared application state
 ```
 
-The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint routes HTTP requests directly to existing Tauri command functions, requiring zero changes to existing commands.
+The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint routes HTTP requests to command handler functions.
 
 **Proxy routing patterns** (`proxy.rs`):
 - `route_async!` / `route_sync!` - Commands returning values
@@ -142,36 +138,9 @@ The server uses the **Command Proxy Pattern** - a single `/api/invoke` endpoint 
 - `get_arg()` / `get_opt_arg()` - Type-safe argument extraction
 - Helper functions: `build_agent_command()`, `build_server_chat_prompt()`, `generate_session_title()`
 
-### Graceful Degradation
-
-| Feature | Desktop (Tauri) | Browser | Notes |
-|---------|-----------------|---------|-------|
-| All UI features | ✓ | ✓ | Full parity |
-| Real-time events | ✓ | ✓ | WebSocket in browser |
-| Native file dialogs | ✓ | ✗ | Use project path input |
-| PTY terminal input | ✓ | ✗ | Output streaming only |
-| Desktop notifications | ✓ | ✓ | Web Notifications API |
-
-## Architecture
-
-### Frontend (src/)
-- **React 19 + TypeScript** with Vite bundler
-- **Zustand stores** (`src/stores/`): 8 feature-isolated stores (session, task, agent, prd, prdChat, gsd, project, ui, toast, ralphLoop)
-- **Tauri API wrappers** (`src/lib/`): Centralized IPC calls to Rust backend
-- **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
-- **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
-
-### Backend (src-tauri/)
-- **Tauri 2.0 + Rust** with tokio async runtime
-- **Command handlers** (`src/commands/`): 14 modules for IPC boundaries
-- **File storage** (`src/file_storage/`): JSON files in `.ralph-ui/` for sessions, PRDs, chat
-- **Git operations** (`src/git/`): git2-rs integration for branches, worktrees, commits
-- **Agent management** (`src/agents/`): Process spawning, rate limiting, log parsing
-- **Parallel orchestration** (`src/parallel/`): Pool, scheduler, worktree coordination
-
 ### Data Flow
-1. React component → Zustand store + Tauri API wrapper
-2. `invoke()` IPC call → Rust command handler
+1. React component → Zustand store + API wrapper
+2. `invoke()` HTTP call → Rust command handler
 3. Handler accesses file storage/git/agents → returns typed response
 4. Store updates → React re-renders
 
@@ -187,10 +156,10 @@ import { useSessionStore } from '@/stores/sessionStore'
 const { sessions, createSession } = useSessionStore()
 ```
 
-### Tauri Commands
-All backend calls go through `src/lib/tauri-api.ts`:
+### API Calls
+All backend calls go through `src/lib/invoke.ts`:
 ```typescript
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/invoke'
 const result = await invoke<T>('command_name', { args })
 ```
 
@@ -320,3 +289,28 @@ Test files are organized in:
 - `e2e/responsive/` - Viewport-specific tests (mobile, tablet, desktop)
 
 See `e2e/README.md` for test format and writing guidelines.
+
+## Deployment
+
+### Docker
+
+```dockerfile
+FROM rust:latest AS builder
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /target/release/ralph-ui /usr/local/bin/
+EXPOSE 3420
+CMD ["ralph-ui", "--bind", "0.0.0.0"]
+```
+
+### Binary
+
+```bash
+# Build release binary
+bun run cargo:build
+
+# Run directly
+./src-tauri/target/release/ralph-ui --port 3420 --bind 0.0.0.0
+```

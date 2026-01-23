@@ -22,7 +22,6 @@ use crate::gsd::{
 use crate::models::AgentType;
 use crate::utils::as_path;
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
 
 /// Helper trait for serialization errors
 trait SerializeExt<T> {
@@ -37,7 +36,7 @@ impl<T: Serialize> SerializeExt<T> for T {
 }
 
 /// Start a new GSD workflow session
-#[tauri::command]
+
 pub async fn start_gsd_session(
     project_path: String,
     chat_session_id: String,
@@ -58,7 +57,7 @@ pub async fn start_gsd_session(
 }
 
 /// Get the current GSD workflow state for a session
-#[tauri::command]
+
 pub async fn get_gsd_state(
     project_path: String,
     session_id: String,
@@ -72,7 +71,7 @@ pub async fn get_gsd_state(
 }
 
 /// Update the GSD workflow phase
-#[tauri::command]
+
 pub async fn update_gsd_phase(
     project_path: String,
     session_id: String,
@@ -90,7 +89,7 @@ pub async fn update_gsd_phase(
 }
 
 /// Update questioning context
-#[tauri::command]
+
 pub async fn update_questioning_context(
     project_path: String,
     session_id: String,
@@ -108,7 +107,7 @@ pub async fn update_questioning_context(
 }
 
 /// Generate PROJECT.md from questioning context
-#[tauri::command]
+
 pub async fn generate_project_document(
     project_path: String,
     session_id: String,
@@ -142,9 +141,9 @@ pub async fn generate_project_document(
 }
 
 /// Start parallel research agents with streaming output
-#[tauri::command]
+
 pub async fn start_research(
-    app_handle: AppHandle,
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
     project_path: String,
     session_id: String,
     context: String,
@@ -185,7 +184,7 @@ pub async fn start_research(
 }
 
 /// Get research results for a session
-#[tauri::command]
+
 pub async fn get_research_results(
     project_path: String,
     session_id: String,
@@ -232,7 +231,7 @@ pub async fn get_research_results(
 }
 
 /// Synthesize research into SUMMARY.md
-#[tauri::command]
+
 pub async fn synthesize_research_cmd(
     project_path: String,
     session_id: String,
@@ -242,7 +241,7 @@ pub async fn synthesize_research_cmd(
 }
 
 /// Generate requirements from research output
-#[tauri::command]
+
 pub async fn generate_requirements_from_research(
     project_path: String,
     session_id: String,
@@ -281,7 +280,7 @@ pub async fn generate_requirements_from_research(
 }
 
 /// Apply scope selections to requirements
-#[tauri::command]
+
 pub async fn scope_requirements(
     project_path: String,
     session_id: String,
@@ -309,7 +308,7 @@ pub async fn scope_requirements(
 }
 
 /// Validate requirements quality
-#[tauri::command]
+
 pub async fn validate_requirements(
     project_path: String,
     session_id: String,
@@ -347,7 +346,7 @@ pub struct RequirementsValidationResult {
 }
 
 /// Save requirements document
-#[tauri::command]
+
 pub async fn save_requirements(
     project_path: String,
     session_id: String,
@@ -366,7 +365,7 @@ pub async fn save_requirements(
 }
 
 /// Load requirements document
-#[tauri::command]
+
 pub async fn load_requirements(
     project_path: String,
     session_id: String,
@@ -384,7 +383,7 @@ pub async fn load_requirements(
 }
 
 /// Create roadmap from requirements
-#[tauri::command]
+
 pub async fn create_roadmap(
     project_path: String,
     session_id: String,
@@ -411,7 +410,7 @@ pub async fn create_roadmap(
 }
 
 /// Load roadmap document
-#[tauri::command]
+
 pub async fn load_roadmap(
     project_path: String,
     session_id: String,
@@ -432,7 +431,7 @@ pub async fn load_roadmap(
 }
 
 /// Verify plans for completeness (with iteration tracking)
-#[tauri::command]
+
 pub async fn verify_gsd_plans(
     project_path: String,
     session_id: String,
@@ -503,7 +502,7 @@ pub struct VerificationIterationResult {
 }
 
 /// Get verification history for a session
-#[tauri::command]
+
 pub async fn get_verification_history(
     project_path: String,
     session_id: String,
@@ -524,7 +523,7 @@ pub async fn get_verification_history(
 }
 
 /// Clear verification history (for starting fresh)
-#[tauri::command]
+
 pub async fn clear_verification_history(
     project_path: String,
     session_id: String,
@@ -538,7 +537,7 @@ pub async fn clear_verification_history(
 }
 
 /// Export GSD plans to Ralph PRD format
-#[tauri::command]
+
 pub async fn export_gsd_to_ralph(
     project_path: String,
     session_id: String,
@@ -653,7 +652,7 @@ pub async fn export_gsd_to_ralph(
 }
 
 /// Save a planning file (generic)
-#[tauri::command]
+
 pub async fn save_planning_file(
     project_path: String,
     session_id: String,
@@ -677,7 +676,7 @@ pub async fn save_planning_file(
 }
 
 /// Read a planning file (generic)
-#[tauri::command]
+
 pub async fn read_gsd_planning_file(
     project_path: String,
     session_id: String,
@@ -702,21 +701,21 @@ pub async fn read_gsd_planning_file(
 }
 
 /// List all planning sessions for a project
-#[tauri::command]
+
 pub async fn list_gsd_sessions(project_path: String) -> Result<Vec<PlanningSessionInfo>, String> {
     let path = as_path(&project_path);
     list_planning_sessions(path)
 }
 
 /// Delete a planning session
-#[tauri::command]
+
 pub async fn delete_gsd_session(project_path: String, session_id: String) -> Result<(), String> {
     let path = as_path(&project_path);
     delete_planning_session(path, &session_id)
 }
 
 /// Add a custom requirement to the requirements document
-#[tauri::command]
+
 pub async fn add_requirement(
     project_path: String,
     session_id: String,
@@ -778,7 +777,7 @@ pub async fn add_requirement(
 /// Get list of available CLI agents for GSD research
 ///
 /// Returns only agents that are installed and available on the system.
-#[tauri::command]
+
 pub fn get_available_research_agents() -> Vec<AgentType> {
     get_available_agents()
 }

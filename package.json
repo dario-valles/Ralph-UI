@@ -7,12 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "server:build": "cd src-tauri && cargo build --features server --release",
-    "server": "cd src-tauri && cargo run --features server --release -- --server",
-    "server:dev": "cd src-tauri && cargo run --features server -- --server",
-    "server:dev:token": "cd src-tauri && cargo run --features server -- --server --token dev-token-ralph-ui-2026",
-    "server:kill": "pkill -f 'ralph-ui.*--server' || true; lsof -ti:3420 | xargs kill -9 2>/dev/null || true",
+    "server:build": "cd src-tauri && cargo build --release",
+    "server": "cd src-tauri && cargo run --release",
+    "server:dev": "cd src-tauri && cargo run",
+    "server:dev:token": "RALPH_SERVER_TOKEN=dev-token-ralph-ui-2026 cd src-tauri && cargo run",
+    "server:kill": "pkill -f 'ralph-ui' || true; lsof -ti:3420 | xargs kill -9 2>/dev/null || true",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
@@ -21,7 +20,9 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "cargo:test": "cd src-tauri && cargo test",
+    "cargo:build": "cd src-tauri && cargo build --release"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
@@ -57,7 +58,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",

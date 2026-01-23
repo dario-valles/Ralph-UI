@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Create a pull request
-#[tauri::command]
+
 pub async fn github_create_pull_request(
     token: String,
     owner: String,
@@ -32,7 +32,7 @@ pub async fn github_create_pull_request(
 }
 
 /// Get a pull request by number
-#[tauri::command]
+
 pub async fn github_get_pull_request(
     token: String,
     owner: String,
@@ -44,7 +44,7 @@ pub async fn github_get_pull_request(
 }
 
 /// List pull requests
-#[tauri::command]
+
 pub async fn github_list_pull_requests(
     token: String,
     owner: String,
@@ -56,7 +56,7 @@ pub async fn github_list_pull_requests(
 }
 
 /// Get an issue by number
-#[tauri::command]
+
 pub async fn github_get_issue(
     token: String,
     owner: String,
@@ -68,7 +68,7 @@ pub async fn github_get_issue(
 }
 
 /// List issues
-#[tauri::command]
+
 pub async fn github_list_issues(
     token: String,
     owner: String,
@@ -113,7 +113,7 @@ fn save_prd_file(project_path: &Path, prd_name: &str, prd: &RalphPrd) -> Result<
 ///
 /// Fetches issues from a GitHub repository and converts them into Ralph stories,
 /// then adds them to an existing or new PRD.
-#[tauri::command]
+
 pub async fn github_import_issues_to_prd(
     token: String,
     owner: String,

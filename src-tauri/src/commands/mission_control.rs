@@ -9,7 +9,7 @@ use crate::utils::as_path;
 
 /// Get activity feed for Mission Control dashboard
 /// Aggregates events from tasks and sessions across all projects
-#[tauri::command]
+
 pub fn get_activity_feed(
     limit: Option<i32>,
     _offset: Option<i32>,
@@ -102,7 +102,7 @@ pub fn get_activity_feed(
 }
 
 /// Get global statistics for Mission Control dashboard
-#[tauri::command]
+
 pub fn get_global_stats() -> Result<GlobalStats, String> {
     // Get all registered projects
     let projects = project_storage::get_all_projects().unwrap_or_default();

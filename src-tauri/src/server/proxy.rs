@@ -1683,6 +1683,18 @@ fn parse_ai_story_response(
 // =============================================================================
 // Server-specific Ralph Loop Implementation
 // =============================================================================
+//
+// NOTE: This implementation mirrors `start_ralph_loop` in commands/ralph_loop.rs
+// with the following differences:
+// - Uses EventBroadcaster instead of Tauri's app_handle for event emission
+// - Uses tokio::spawn instead of tokio::spawn
+// - Accesses state via ServerAppState instead of Tauri State<>
+// - Skips desktop notifications (server clients handle their own notifications)
+//
+// If you modify the Ralph loop logic, remember to update both implementations.
+// Consider extracting shared logic into a trait-based abstraction if changes
+// become frequent.
+// =============================================================================
 
 /// Server-compatible version of start_ralph_loop that uses EventBroadcaster
 /// instead of Tauri's app_handle for events.
@@ -1694,11 +1706,12 @@ async fn start_ralph_loop_server(
         RalphLoopCompletedPayload, RalphLoopErrorPayload, RalphLoopErrorType,
         EVENT_RALPH_LOOP_COMPLETED, EVENT_RALPH_LOOP_ERROR,
     };
+    use crate::file_storage::iterations as iteration_storage;
     use crate::models::AgentType;
-    use crate::ralph_loop::iteration_storage::{self, ExecutionStateSnapshot};
     use crate::ralph_loop::{
-        ErrorStrategy, FallbackChainConfig, PrdExecutor, PrdMetadata, RalphLoopConfig,
-        RalphLoopExecutionState, RalphLoopOrchestrator, RetryConfig,
+        ErrorStrategy, ExecutionStateSnapshot, FallbackChainConfig, PrdExecutor, PrdMetadata,
+        RalphLoopConfig, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState,
+        RetryConfig,
     };
     use std::path::PathBuf;
 
@@ -1818,9 +1831,14 @@ async fn start_ralph_loop_server(
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_else(|| {
-                    let mut chain = vec![agent_type.clone()];
+                    let mut chain = vec![agent_type];
                     #[allow(deprecated)]
                     if let Some(ref fallback_str) = config.fallback.fallback_agent {
+                        log::warn!(
+                            "[start_ralph_loop_server] DEPRECATED: Config uses 'fallback_agent' field. \
+                             Migrating to 'fallback_chain'. Please update your config to use \
+                             'fallback_chain' instead."
+                        );
                         let legacy_fallback = match fallback_str.to_lowercase().as_str() {
                             "claude" => Some(AgentType::Claude),
                             "opencode" => Some(AgentType::Opencode),
@@ -1872,7 +1890,7 @@ async fn start_ralph_loop_server(
     // Build RalphLoopConfig
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
-        agent_type: agent_type.clone(),
+        agent_type,
         model: resolved_model,
         max_iterations: resolved_max_iterations,
         run_tests: resolved_run_tests,
@@ -1944,14 +1962,9 @@ async fn start_ralph_loop_server(
 
     // Store orchestrator in state
     let orchestrator_arc = Arc::new(tokio::sync::Mutex::new(orchestrator));
-    {
-        let mut executions = state
-            .ralph_loop_state
-            .executions
-            .lock()
-            .map_err(|e| format!("Executions lock error: {}", e))?;
-        executions.insert(execution_id.clone(), orchestrator_arc.clone());
-    }
+    state
+        .ralph_loop_state
+        .insert_execution(execution_id.clone(), orchestrator_arc.clone())?;
 
     // Clone the agent manager Arc for the spawned task
     let agent_manager_arc = state.agent_manager.clone();
@@ -2174,14 +2187,7 @@ async fn start_ralph_loop_server(
 
 /// Server-compatible version of stop_ralph_loop
 async fn stop_ralph_loop_server(execution_id: String, state: &ServerAppState) -> Result<(), String> {
-    let orchestrator_arc = {
-        let executions = state
-            .ralph_loop_state
-            .executions
-            .lock()
-            .map_err(|e| format!("Executions lock error: {}", e))?;
-        executions.get(&execution_id).cloned()
-    };
+    let orchestrator_arc = state.ralph_loop_state.get_execution(&execution_id)?;
 
     if let Some(orchestrator_arc) = orchestrator_arc {
         let mut orchestrator = orchestrator_arc.lock().await;

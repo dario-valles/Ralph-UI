@@ -1,15 +1,16 @@
-// Tauri commands for agent management
+// Agent management commands
 // Uses file-based storage in .ralph-ui/agents/
 
-use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
+use crate::agents::{AgentManager, AgentSpawnConfig, AgentSpawnMode};
 use crate::file_storage::agents as agent_storage;
-use crate::models::{Agent, AgentStatus, LogEntry};
+use crate::models::{Agent, AgentStatus, AgentType, LogEntry};
 use crate::utils::as_path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 use sysinfo::{Pid, System};
 
 /// Create a new agent
-#[tauri::command]
 pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {
     let path = as_path(&project_path);
     agent_storage::save_agent_state(path, &agent)?;
@@ -17,7 +18,6 @@ pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {
 }
 
 /// Get an agent by ID
-#[tauri::command]
 pub fn get_agent(agent_id: String, project_path: String) -> Result<Option<Agent>, String> {
     let path = as_path(&project_path);
     match agent_storage::read_agent_with_logs(path, &agent_id) {
@@ -27,7 +27,6 @@ pub fn get_agent(agent_id: String, project_path: String) -> Result<Option<Agent>
 }
 
 /// Get all agents for a session
-#[tauri::command]
 pub fn get_agents_for_session(
     session_id: String,
     project_path: String,
@@ -37,11 +36,7 @@ pub fn get_agents_for_session(
 }
 
 /// Get all agents for a task
-#[tauri::command]
-pub fn get_agents_for_task(
-    task_id: String,
-    project_path: String,
-) -> Result<Vec<Agent>, String> {
+pub fn get_agents_for_task(task_id: String, project_path: String) -> Result<Vec<Agent>, String> {
     let path = as_path(&project_path);
     let agent_ids = agent_storage::list_agent_ids(path)?;
     let mut agents = Vec::new();
@@ -58,11 +53,7 @@ pub fn get_agents_for_task(
 }
 
 /// Get active agents for a session
-#[tauri::command]
-pub fn get_active_agents(
-    session_id: String,
-    project_path: String,
-) -> Result<Vec<Agent>, String> {
+pub fn get_active_agents(session_id: String, project_path: String) -> Result<Vec<Agent>, String> {
     let path = as_path(&project_path);
     let agents = agent_storage::list_agents_for_session(path, &session_id)?;
     Ok(agents
@@ -72,50 +63,32 @@ pub fn get_active_agents(
 }
 
 /// Get ALL active agents across all sessions (for Mission Control dashboard)
-#[tauri::command]
 pub fn get_all_active_agents(project_path: String) -> Result<Vec<Agent>, String> {
     let path = as_path(&project_path);
     agent_storage::get_all_active_agents(path)
 }
 
-/// Update agent status
-#[tauri::command]
-pub fn update_agent_status(
-    app_handle: tauri::AppHandle,
-    agent_id: String,
+/// Update agent status and return old/new status for event emission
+/// Event emission is handled by the proxy layer
+pub fn update_agent_status_internal(
+    project_path: &Path,
+    agent_id: &str,
     status: AgentStatus,
-    project_path: String,
-) -> Result<(), String> {
-    let path = as_path(&project_path);
-
+) -> Result<(String, String, String), String> {
     // Get the current agent to capture old status and session_id
-    let agent = agent_storage::read_agent_with_logs(path, &agent_id)
+    let agent = agent_storage::read_agent_with_logs(project_path, agent_id)
         .map_err(|e| format!("Agent not found: {}", e))?;
 
     let old_status = format!("{:?}", agent.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
     // Update the status
-    agent_storage::update_agent_status(path, &agent_id, status)?;
+    agent_storage::update_agent_status(project_path, agent_id, status)?;
 
-    // Emit the status changed event
-    let payload = AgentStatusChangedPayload {
-        agent_id: agent_id.clone(),
-        session_id: agent.session_id.clone(),
-        old_status,
-        new_status,
-    };
-
-    // Log any event emission errors but don't fail the command
-    if let Err(e) = emit_agent_status_changed(&app_handle, payload) {
-        log::warn!("Failed to emit agent status changed event: {}", e);
-    }
-
-    Ok(())
+    Ok((agent.session_id, old_status, new_status))
 }
 
 /// Update agent metrics (tokens, cost, iterations)
-#[tauri::command]
 pub fn update_agent_metrics(
     agent_id: String,
     tokens: i32,
@@ -128,7 +101,6 @@ pub fn update_agent_metrics(
 }
 
 /// Update agent process ID
-#[tauri::command]
 pub fn update_agent_process_id(
     agent_id: String,
     process_id: Option<u32>,
@@ -139,29 +111,19 @@ pub fn update_agent_process_id(
 }
 
 /// Delete an agent
-#[tauri::command]
 pub fn delete_agent(agent_id: String, project_path: String) -> Result<(), String> {
     let path = as_path(&project_path);
     agent_storage::delete_agent_files(path, &agent_id)
 }
 
 /// Add a log entry for an agent
-#[tauri::command]
-pub fn add_agent_log(
-    agent_id: String,
-    log: LogEntry,
-    project_path: String,
-) -> Result<(), String> {
+pub fn add_agent_log(agent_id: String, log: LogEntry, project_path: String) -> Result<(), String> {
     let path = as_path(&project_path);
     agent_storage::append_agent_log(path, &agent_id, &log)
 }
 
 /// Get all logs for an agent
-#[tauri::command]
-pub fn get_agent_logs(
-    agent_id: String,
-    project_path: String,
-) -> Result<Vec<LogEntry>, String> {
+pub fn get_agent_logs(agent_id: String, project_path: String) -> Result<Vec<LogEntry>, String> {
     let path = as_path(&project_path);
     agent_storage::read_agent_logs(path, &agent_id)
 }
@@ -174,22 +136,19 @@ pub struct StaleAgentCleanupResult {
     pub session_id: String,
     pub process_id: Option<u32>,
     pub was_zombie: bool,
+    pub old_status: String,
 }
 
 /// Cleanup stale agents whose processes are no longer running
-/// This is useful after app restart when the scheduler is not initialized
-/// but agents in the database are still marked as active.
-#[tauri::command]
-pub fn cleanup_stale_agents(
-    app_handle: tauri::AppHandle,
-    project_path: String,
+/// Returns list of cleaned up agents with their old status for event emission
+/// Event emission is handled by the proxy layer
+pub fn cleanup_stale_agents_internal(
+    project_path: &Path,
 ) -> Result<Vec<StaleAgentCleanupResult>, String> {
     log::info!("[Agents] cleanup_stale_agents called");
 
-    let path = as_path(&project_path);
-
     // Get all active agents
-    let active_agents = agent_storage::get_all_active_agents(path)?;
+    let active_agents = agent_storage::get_all_active_agents(project_path)?;
 
     if active_agents.is_empty() {
         log::debug!("[Agents] No active agents to cleanup");
@@ -235,33 +194,30 @@ pub fn cleanup_stale_agents(
                 // No process ID - the agent spawn likely failed or the app restarted
                 log::info!(
                     "[Agents] Agent {} has no process ID with status {:?}, marking as stale",
-                    agent.id, agent.status
+                    agent.id,
+                    agent.status
                 );
                 true
             }
         };
 
         if should_cleanup {
+            let old_status = format!("{:?}", agent.status).to_lowercase();
+
             // Update agent status to idle
-            if let Err(e) = agent_storage::update_agent_status(path, &agent.id, AgentStatus::Idle) {
+            if let Err(e) =
+                agent_storage::update_agent_status(project_path, &agent.id, AgentStatus::Idle)
+            {
                 log::error!("[Agents] Failed to update agent {} status: {}", agent.id, e);
                 continue;
             }
-
-            // Emit status changed event
-            let payload = AgentStatusChangedPayload {
-                agent_id: agent.id.clone(),
-                session_id: agent.session_id.clone(),
-                old_status: format!("{:?}", agent.status).to_lowercase(),
-                new_status: "idle".to_string(),
-            };
-            let _ = emit_agent_status_changed(&app_handle, payload);
 
             cleaned_up.push(StaleAgentCleanupResult {
                 agent_id: agent.id,
                 session_id: agent.session_id,
                 process_id: agent.process_id,
                 was_zombie: agent.process_id.is_some(),
+                old_status,
             });
         }
     }
@@ -274,60 +230,43 @@ pub fn cleanup_stale_agents(
 // Agent PTY Commands - for interactive terminal support
 // ============================================================================
 
-use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
-use crate::models::AgentType;
-use crate::AgentManagerState;
-use tauri::State;
-
 /// Check if an agent has an associated PTY
-#[tauri::command]
-pub fn agent_has_pty(
-    agent_manager: State<AgentManagerState>,
-    agent_id: String,
-) -> Result<bool, String> {
+pub fn agent_has_pty(agent_manager: &Arc<Mutex<AgentManager>>, agent_id: String) -> Result<bool, String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.has_pty(&agent_id))
 }
 
 /// Get the PTY ID for an agent
-#[tauri::command]
 pub fn get_agent_pty_id(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<Option<String>, String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.get_pty_id(&agent_id))
 }
 
 /// Get the PTY history (raw output) for an agent
-#[tauri::command]
 pub fn get_agent_pty_history(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<Vec<u8>, String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     Ok(manager.get_pty_history(&agent_id))
 }
 
 /// Register a PTY association for an agent
-/// Called by frontend after spawning a PTY for an agent
-#[tauri::command]
 pub fn register_agent_pty(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
     pty_id: String,
 ) -> Result<(), String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.register_pty(&agent_id, &pty_id);
@@ -335,14 +274,11 @@ pub fn register_agent_pty(
 }
 
 /// Unregister a PTY association for an agent
-/// Called when PTY exits or agent stops
-#[tauri::command]
 pub fn unregister_agent_pty(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<(), String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.unregister_pty(&agent_id);
@@ -350,15 +286,12 @@ pub fn unregister_agent_pty(
 }
 
 /// Process PTY data from an agent
-/// Called by frontend to forward PTY output for log parsing and history storage
-#[tauri::command]
 pub fn process_agent_pty_data(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
     data: Vec<u8>,
 ) -> Result<(), String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.process_pty_data(&agent_id, &data);
@@ -366,14 +299,12 @@ pub fn process_agent_pty_data(
 }
 
 /// Notify that an agent's PTY has exited
-#[tauri::command]
 pub fn notify_agent_pty_exit(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
     exit_code: i32,
 ) -> Result<(), String> {
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     manager.notify_pty_exit(&agent_id, exit_code);
@@ -390,9 +321,8 @@ pub struct AgentCommandLine {
     pub cwd: String,
 }
 
-#[tauri::command]
 pub fn get_agent_command_line(
-    agent_manager: State<AgentManagerState>,
+    agent_manager: &Arc<Mutex<AgentManager>>,
     agent_type: String,
     task_id: String,
     worktree_path: String,
@@ -426,7 +356,6 @@ pub fn get_agent_command_line(
     };
 
     let manager = agent_manager
-        .manager
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
 

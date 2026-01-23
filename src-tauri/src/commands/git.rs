@@ -7,7 +7,6 @@ use crate::models::AgentType;
 use crate::utils::ResultExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::State;
 
 /// Git manager state
 pub struct GitState {
@@ -46,24 +45,22 @@ impl GitState {
 }
 
 /// Create a new branch
-#[tauri::command]
 pub fn git_create_branch(
     repo_path: String,
     name: String,
     force: bool,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<BranchInfo, String> {
     state.with_manager(&repo_path, |manager| manager.create_branch(&name, force))
 }
 
 /// Create a branch from a specific commit
-#[tauri::command]
 pub fn git_create_branch_from_commit(
     repo_path: String,
     name: String,
     commit_id: String,
     force: bool,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<BranchInfo, String> {
     state.with_manager(&repo_path, |manager| {
         manager.create_branch_from_commit(&name, &commit_id, force)
@@ -71,50 +68,45 @@ pub fn git_create_branch_from_commit(
 }
 
 /// Delete a branch
-#[tauri::command]
 pub fn git_delete_branch(
     repo_path: String,
     name: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.delete_branch(&name))
 }
 
 /// List all branches
-#[tauri::command]
 pub fn git_list_branches(
     repo_path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<BranchInfo>, String> {
     state.with_manager(&repo_path, |manager| manager.list_branches())
 }
 
 /// Get current branch
-#[tauri::command]
 pub fn git_get_current_branch(
     repo_path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<BranchInfo, String> {
     state.with_manager(&repo_path, |manager| manager.get_current_branch())
 }
 
 /// Checkout a branch
-#[tauri::command]
 pub fn git_checkout_branch(
     repo_path: String,
     name: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.checkout_branch(&name))
 }
 
 /// Create a worktree
-#[tauri::command]
 pub fn git_create_worktree(
     repo_path: String,
     branch: String,
     path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<WorktreeInfo, String> {
     state.with_manager(&repo_path, |manager| {
         manager.create_worktree(&branch, &path)
@@ -122,61 +114,55 @@ pub fn git_create_worktree(
 }
 
 /// List worktrees
-#[tauri::command]
 pub fn git_list_worktrees(
     repo_path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<WorktreeInfo>, String> {
     state.with_manager(&repo_path, |manager| manager.list_worktrees())
 }
 
 /// Remove a worktree
-#[tauri::command]
 pub fn git_remove_worktree(
     repo_path: String,
     name: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.remove_worktree(&name))
 }
 
 /// Get git status
-#[tauri::command]
 pub fn git_get_status(
     repo_path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<FileStatus>, String> {
     state.with_manager(&repo_path, |manager| manager.get_status())
 }
 
 /// Get commit history
-#[tauri::command]
 pub fn git_get_commit_history(
     repo_path: String,
     max_count: usize,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<CommitInfo>, String> {
     state.with_manager(&repo_path, |manager| manager.get_commit_history(max_count))
 }
 
 /// Get a specific commit
-#[tauri::command]
 pub fn git_get_commit(
     repo_path: String,
     commit_id: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<CommitInfo, String> {
     state.with_manager(&repo_path, |manager| manager.get_commit(&commit_id))
 }
 
 /// Create a commit
-#[tauri::command]
 pub fn git_create_commit(
     repo_path: String,
     message: String,
     author_name: String,
     author_email: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<CommitInfo, String> {
     state.with_manager(&repo_path, |manager| {
         manager.create_commit(&message, &author_name, &author_email)
@@ -184,11 +170,10 @@ pub fn git_create_commit(
 }
 
 /// Stage files
-#[tauri::command]
 pub fn git_stage_files(
     repo_path: String,
     paths: Vec<String>,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| {
         let path_refs: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
@@ -197,18 +182,16 @@ pub fn git_stage_files(
 }
 
 /// Stage all files
-#[tauri::command]
-pub fn git_stage_all(repo_path: String, state: State<GitState>) -> Result<(), String> {
+pub fn git_stage_all(repo_path: String, state: &GitState) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.stage_all())
 }
 
 /// Get diff between commits
-#[tauri::command]
 pub fn git_get_diff(
     repo_path: String,
     from_commit: Option<String>,
     to_commit: Option<String>,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<DiffInfo, String> {
     state.with_manager(&repo_path, |manager| {
         manager.get_diff(from_commit.as_deref(), to_commit.as_deref())
@@ -216,13 +199,11 @@ pub fn git_get_diff(
 }
 
 /// Get working directory diff
-#[tauri::command]
-pub fn git_get_working_diff(repo_path: String, state: State<GitState>) -> Result<DiffInfo, String> {
+pub fn git_get_working_diff(repo_path: String, state: &GitState) -> Result<DiffInfo, String> {
     state.with_manager(&repo_path, |manager| manager.get_working_diff())
 }
 
 /// Check if a path is a git repository
-#[tauri::command]
 pub fn git_is_repository(path: String) -> Result<bool, String> {
     use std::path::Path;
     let git_path = Path::new(&path).join(".git");
@@ -230,7 +211,6 @@ pub fn git_is_repository(path: String) -> Result<bool, String> {
 }
 
 /// Initialize a new git repository
-#[tauri::command]
 pub fn git_init_repository(path: String) -> Result<(), String> {
     use git2::Repository;
     use std::path::Path;
@@ -247,12 +227,11 @@ pub fn git_init_repository(path: String) -> Result<(), String> {
 }
 
 /// Merge a source branch into a target branch
-#[tauri::command]
 pub fn git_merge_branch(
     repo_path: String,
     source_branch: String,
     target_branch: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<MergeResult, String> {
     state.with_manager(&repo_path, |manager| {
         manager.merge_branch(&source_branch, &target_branch)
@@ -260,18 +239,16 @@ pub fn git_merge_branch(
 }
 
 /// Abort an ongoing merge
-#[tauri::command]
-pub fn git_merge_abort(repo_path: String, state: State<GitState>) -> Result<(), String> {
+pub fn git_merge_abort(repo_path: String, state: &GitState) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.merge_abort())
 }
 
 /// Check for merge conflicts between two branches without actually merging
-#[tauri::command]
 pub fn git_check_merge_conflicts(
     repo_path: String,
     source_branch: String,
     target_branch: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<String>, String> {
     state.with_manager(&repo_path, |manager| {
         manager.check_merge_conflicts(&source_branch, &target_branch)
@@ -280,22 +257,22 @@ pub fn git_check_merge_conflicts(
 
 /// Get detailed conflict information for files in a merge conflict state.
 /// Call this after git_merge_branch returns with conflicts.
-#[tauri::command]
+
 pub fn git_get_conflict_details(
     repo_path: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<Vec<ConflictInfo>, String> {
     state.with_manager(&repo_path, |manager| manager.get_conflict_details())
 }
 
 /// Apply resolved content to a conflicted file and stage it.
 /// Use this after AI has resolved the conflict.
-#[tauri::command]
+
 pub fn git_resolve_conflict(
     repo_path: String,
     path: String,
     resolved_content: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| {
         manager.resolve_conflict(&path, &resolved_content)
@@ -304,13 +281,13 @@ pub fn git_resolve_conflict(
 
 /// Complete a merge after all conflicts have been resolved.
 /// Creates the merge commit.
-#[tauri::command]
+
 pub fn git_complete_merge(
     repo_path: String,
     message: String,
     author_name: String,
     author_email: String,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<CommitInfo, String> {
     state.with_manager(&repo_path, |manager| {
         manager.complete_merge(&message, &author_name, &author_email)
@@ -318,12 +295,12 @@ pub fn git_complete_merge(
 }
 
 /// Push a branch to the remote repository
-#[tauri::command]
+
 pub fn git_push_branch(
     repo_path: String,
     branch_name: String,
     force: bool,
-    state: State<GitState>,
+    state: &GitState,
 ) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| {
         manager.push_branch(&branch_name, force)
@@ -337,13 +314,13 @@ pub fn git_push_branch(
 /// 3. Applies the resolved content and stages the files
 ///
 /// After this succeeds, call git_complete_merge to create the merge commit.
-#[tauri::command]
+
 pub async fn git_resolve_conflicts_with_ai(
     repo_path: String,
     agent_type: Option<String>,
     model: Option<String>,
     timeout_secs: Option<u64>,
-    state: State<'_, GitState>,
+    state: &GitState,
 ) -> Result<MergeResolutionResult, String> {
     log::info!(
         "[Git] Resolving conflicts with AI in {} using {:?}",

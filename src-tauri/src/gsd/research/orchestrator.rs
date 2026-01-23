@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -87,7 +86,7 @@ pub struct ResearchOrchestrator {
     config: GsdConfig,
     project_path: String,
     session_id: String,
-    app_handle: Option<AppHandle>,
+    app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
 }
 
 impl ResearchOrchestrator {
@@ -106,7 +105,7 @@ impl ResearchOrchestrator {
         config: GsdConfig,
         project_path: String,
         session_id: String,
-        app_handle: AppHandle,
+        app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
     ) -> Self {
         Self {
             config,
@@ -125,9 +124,7 @@ impl ResearchOrchestrator {
                 chunk: chunk.to_string(),
                 is_complete,
             };
-            if let Err(e) = app_handle.emit("gsd:research_output", event) {
-                log::warn!("Failed to emit research output event: {}", e);
-            }
+            app_handle.broadcast("gsd:research_output", serde_json::to_value(&event).unwrap_or_default());
         }
     }
 
@@ -140,9 +137,7 @@ impl ResearchOrchestrator {
                 status: status.to_string(),
                 error,
             };
-            if let Err(e) = app_handle.emit("gsd:research_status", event) {
-                log::warn!("Failed to emit research status event: {}", e);
-            }
+            app_handle.broadcast("gsd:research_status", serde_json::to_value(&event).unwrap_or_default());
         }
     }
 
@@ -413,7 +408,7 @@ pub async fn run_research_agents_with_handle(
     project_path: &str,
     session_id: &str,
     context: &str,
-    app_handle: Option<AppHandle>,
+    app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
     let orchestrator = if let Some(handle) = app_handle {
         ResearchOrchestrator::with_app_handle(

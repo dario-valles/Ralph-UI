@@ -1,6 +1,5 @@
 // Model discovery Tauri commands
 
-use tauri::State;
 
 use crate::agents::{ModelCache, ModelInfo};
 use crate::models::AgentType;
@@ -30,10 +29,10 @@ impl Default for ModelCacheState {
 ///
 /// Returns models from cache if available, otherwise discovers them from CLI.
 /// Falls back to default models if CLI discovery fails.
-#[tauri::command]
+
 pub async fn get_available_models(
     agent_type: AgentType,
-    model_cache: State<'_, ModelCacheState>,
+    model_cache: &ModelCacheState,
 ) -> Result<Vec<ModelInfo>, String> {
     log::info!("[get_available_models] Getting models for {:?}", agent_type);
     Ok(model_cache.cache.get_or_fetch(agent_type))
@@ -42,10 +41,10 @@ pub async fn get_available_models(
 /// Refresh model cache for a specific agent type or all if None
 ///
 /// Invalidates the cache, forcing a fresh discovery on next request.
-#[tauri::command]
+
 pub async fn refresh_models(
     agent_type: Option<AgentType>,
-    model_cache: State<'_, ModelCacheState>,
+    model_cache: &ModelCacheState,
 ) -> Result<(), String> {
     log::info!("[refresh_models] Refreshing models for {:?}", agent_type);
     model_cache.cache.invalidate(agent_type);

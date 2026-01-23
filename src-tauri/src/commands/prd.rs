@@ -94,7 +94,7 @@ fn read_prd_file_at_path(
 }
 
 /// Scan .ralph-ui/prds/ directory for PRD markdown files
-#[tauri::command]
+
 pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String> {
     use crate::utils::prds_dir;
     use std::fs;
@@ -139,7 +139,7 @@ pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String
 }
 
 /// Get a PRD file by name from .ralph-ui/prds/
-#[tauri::command]
+
 pub async fn get_prd_file(project_path: String, prd_name: String) -> Result<PRDFile, String> {
     use crate::utils::prds_dir;
 
@@ -154,7 +154,7 @@ pub async fn get_prd_file(project_path: String, prd_name: String) -> Result<PRDF
 }
 
 /// Update a PRD file's content
-#[tauri::command]
+
 pub async fn update_prd_file(
     project_path: String,
     prd_name: String,
@@ -193,7 +193,7 @@ pub struct DeletePrdResult {
 }
 
 /// Delete a PRD file and all associated resources (JSON, progress, worktrees, branches)
-#[tauri::command]
+
 pub async fn delete_prd_file(
     project_path: String,
     prd_name: String,

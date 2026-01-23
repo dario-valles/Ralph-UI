@@ -1,11 +1,11 @@
-// Task-related Tauri commands
+// Task-related commands
 // Uses file-based storage in .ralph-ui/sessions/
 
-use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::file_storage::sessions as session_storage;
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
 use crate::utils::as_path;
+use std::path::Path;
 use uuid::Uuid;
 
 /// Convert TaskStatus to ProgressStatus for progress file tracking
@@ -18,7 +18,7 @@ fn task_status_to_progress_status(status: TaskStatus) -> ProgressStatus {
     }
 }
 
-#[tauri::command]
+/// Create a new task in a session
 pub async fn create_task(
     session_id: String,
     task: Task,
@@ -28,7 +28,7 @@ pub async fn create_task(
     Ok(task)
 }
 
-#[tauri::command]
+/// Get a specific task by ID
 pub async fn get_task(
     task_id: String,
     session_id: String,
@@ -37,7 +37,7 @@ pub async fn get_task(
     session_storage::get_task(as_path(&project_path), &session_id, &task_id)
 }
 
-#[tauri::command]
+/// Get all tasks for a session
 pub async fn get_tasks_for_session(
     session_id: String,
     project_path: String,
@@ -45,7 +45,7 @@ pub async fn get_tasks_for_session(
     session_storage::get_tasks(as_path(&project_path), &session_id)
 }
 
-#[tauri::command]
+/// Update a task
 pub async fn update_task(
     task: Task,
     session_id: String,
@@ -55,7 +55,7 @@ pub async fn update_task(
     Ok(task)
 }
 
-#[tauri::command]
+/// Delete a task
 pub async fn delete_task(
     task_id: String,
     session_id: String,
@@ -64,18 +64,16 @@ pub async fn delete_task(
     session_storage::delete_task(as_path(&project_path), &session_id, &task_id)
 }
 
-#[tauri::command]
-pub async fn update_task_status(
-    app_handle: tauri::AppHandle,
-    task_id: String,
+/// Update task status and return old/new status for event emission
+/// Event emission is handled by the proxy layer
+pub fn update_task_status_internal(
+    project_path: &Path,
+    session_id: &str,
+    task_id: &str,
     status: TaskStatus,
-    session_id: String,
-    project_path: String,
-) -> Result<(), String> {
-    let path = as_path(&project_path);
-
+) -> Result<(String, String), String> {
     // Get the current task to validate the transition
-    let current_task = session_storage::get_task(path, &session_id, &task_id)?;
+    let current_task = session_storage::get_task(project_path, session_id, task_id)?;
 
     let old_status = format!("{:?}", current_task.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
@@ -85,33 +83,20 @@ pub async fn update_task_status(
         .map_err(|e| format!("Invalid state transition: {:?}", e))?;
 
     // Update task status
-    session_storage::update_task_status(path, &session_id, &task_id, status)?;
+    session_storage::update_task_status(project_path, session_id, task_id, status)?;
 
     // Write to progress file for session recovery
-    let tracker = ProgressTracker::new(path);
+    let tracker = ProgressTracker::new(project_path);
     let progress_status = task_status_to_progress_status(status);
 
-    if let Err(e) = tracker.append_progress(&session_id, &task_id, progress_status, None) {
+    if let Err(e) = tracker.append_progress(session_id, task_id, progress_status, None) {
         log::warn!("Failed to write progress file: {}", e);
     }
 
-    // Emit the status changed event
-    let payload = TaskStatusChangedPayload {
-        task_id: task_id.clone(),
-        session_id,
-        old_status,
-        new_status,
-    };
-
-    // Log any event emission errors but don't fail the command
-    if let Err(e) = emit_task_status_changed(&app_handle, payload) {
-        log::warn!("Failed to emit task status changed event: {}", e);
-    }
-
-    Ok(())
+    Ok((old_status, new_status))
 }
 
-#[tauri::command]
+/// Import PRD content and create tasks
 pub async fn import_prd(
     session_id: String,
     content: String,

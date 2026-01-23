@@ -1,8 +1,7 @@
-//! Unified chat agent executor with trait-based event emission
+//! Chat agent executor with broadcast-based event emission
 //!
-//! This module provides a single implementation for executing chat agents
-//! that works in both Tauri desktop mode and HTTP server mode by abstracting
-//! the event emission mechanism behind a trait.
+//! This module provides the implementation for executing chat agents
+//! with streaming output via WebSocket broadcast.
 
 use crate::models::AgentType;
 use std::process::Stdio;
@@ -14,56 +13,22 @@ use tokio::time::{timeout, Duration};
 pub const AGENT_TIMEOUT_SECS: u64 = 1500;
 
 /// Trait for emitting chat streaming events
-///
-/// Implementations exist for:
-/// - `TauriEmitter` - wraps Tauri's AppHandle for desktop mode
-/// - `BroadcastEmitter` - wraps EventBroadcaster for server mode
 pub trait ChatEventEmitter: Send + Sync {
     /// Emit a chat chunk event with the given session ID and content
     fn emit_chunk(&self, session_id: &str, content: &str);
 }
 
-/// Tauri AppHandle-based event emitter for desktop mode
-pub struct TauriEmitter<'a> {
-    app_handle: &'a tauri::AppHandle,
-}
-
-impl<'a> TauriEmitter<'a> {
-    pub fn new(app_handle: &'a tauri::AppHandle) -> Self {
-        Self { app_handle }
-    }
-}
-
-impl ChatEventEmitter for TauriEmitter<'_> {
-    fn emit_chunk(&self, session_id: &str, content: &str) {
-        use crate::events::{emit_prd_chat_chunk, PrdChatChunkPayload};
-
-        let _ = emit_prd_chat_chunk(
-            self.app_handle,
-            PrdChatChunkPayload {
-                session_id: session_id.to_string(),
-                content: content.to_string(),
-            },
-        );
-    }
-}
-
-/// Broadcast-based event emitter for HTTP server mode
-///
-/// This is only available when the `server` feature is enabled.
-#[cfg(feature = "server")]
+/// Broadcast-based event emitter for WebSocket clients
 pub struct BroadcastEmitter {
     broadcaster: std::sync::Arc<crate::server::EventBroadcaster>,
 }
 
-#[cfg(feature = "server")]
 impl BroadcastEmitter {
     pub fn new(broadcaster: std::sync::Arc<crate::server::EventBroadcaster>) -> Self {
         Self { broadcaster }
     }
 }
 
-#[cfg(feature = "server")]
 impl ChatEventEmitter for BroadcastEmitter {
     fn emit_chunk(&self, session_id: &str, content: &str) {
         self.broadcaster.broadcast(
@@ -107,7 +72,6 @@ pub fn build_agent_command(agent_type: AgentType, prompt: &str) -> (&'static str
 
 /// Execute a chat agent with streaming output
 ///
-/// This is the unified implementation used by both Tauri commands and HTTP server.
 /// The `emitter` parameter abstracts the event emission mechanism.
 pub async fn execute_chat_agent<E: ChatEventEmitter>(
     emitter: &E,
