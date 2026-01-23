@@ -1,13 +1,11 @@
 // Task-related Tauri commands
+// Uses file-based storage in .ralph-ui/sessions/
 
-use crate::database::{self, Database};
 use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
+use crate::file_storage::sessions as session_storage;
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
-use crate::session_files;
-use crate::utils::{lock_db, ResultExt};
 use std::path::Path;
-use tauri::State;
 use uuid::Uuid;
 
 /// Convert TaskStatus to ProgressStatus for progress file tracking
@@ -24,65 +22,51 @@ fn task_status_to_progress_status(status: TaskStatus) -> ProgressStatus {
 pub async fn create_task(
     session_id: String,
     task: Task,
-    db: State<'_, std::sync::Mutex<Database>>,
+    project_path: String,
 ) -> Result<Task, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    database::tasks::create_task(conn, &session_id, &task)
-        .with_context("Failed to create task")?;
-
+    let path = Path::new(&project_path);
+    session_storage::create_task(path, &session_id, &task)?;
     Ok(task)
 }
 
 #[tauri::command]
 pub async fn get_task(
     task_id: String,
-    db: State<'_, std::sync::Mutex<Database>>,
+    session_id: String,
+    project_path: String,
 ) -> Result<Task, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    database::tasks::get_task(conn, &task_id)
-        .with_context("Failed to get task")
+    let path = Path::new(&project_path);
+    session_storage::get_task(path, &session_id, &task_id)
 }
 
 #[tauri::command]
 pub async fn get_tasks_for_session(
     session_id: String,
-    db: State<'_, std::sync::Mutex<Database>>,
+    project_path: String,
 ) -> Result<Vec<Task>, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    database::tasks::get_tasks_for_session(conn, &session_id)
-        .with_context("Failed to get tasks")
+    let path = Path::new(&project_path);
+    session_storage::get_tasks(path, &session_id)
 }
 
 #[tauri::command]
 pub async fn update_task(
     task: Task,
-    db: State<'_, std::sync::Mutex<Database>>,
+    session_id: String,
+    project_path: String,
 ) -> Result<Task, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    database::tasks::update_task(conn, &task)
-        .with_context("Failed to update task")?;
-
+    let path = Path::new(&project_path);
+    session_storage::update_task(path, &session_id, &task)?;
     Ok(task)
 }
 
 #[tauri::command]
 pub async fn delete_task(
     task_id: String,
-    db: State<'_, std::sync::Mutex<Database>>,
+    session_id: String,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    database::tasks::delete_task(conn, &task_id)
-        .with_context("Failed to delete task")
+    let path = Path::new(&project_path);
+    session_storage::delete_task(path, &session_id, &task_id)
 }
 
 #[tauri::command]
@@ -90,53 +74,30 @@ pub async fn update_task_status(
     app_handle: tauri::AppHandle,
     task_id: String,
     status: TaskStatus,
-    db: State<'_, std::sync::Mutex<Database>>,
+    session_id: String,
+    project_path: String,
 ) -> Result<(), String> {
-    // First validate the state transition
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
+    let path = Path::new(&project_path);
 
-    let current_task = database::tasks::get_task(conn, &task_id)
-        .with_context("Failed to get task")?;
+    // Get the current task to validate the transition
+    let current_task = session_storage::get_task(path, &session_id, &task_id)?;
 
     let old_status = format!("{:?}", current_task.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
     // Validate state transition
     crate::models::state_machine::transition_state(current_task.status, status)
-        .with_context("Invalid state transition")?;
+        .map_err(|e| format!("Invalid state transition: {:?}", e))?;
 
-    database::tasks::update_task_status(conn, &task_id, status)
-        .with_context("Failed to update task status")?;
-
-    // Get the session_id for this task
-    let session_id = database::tasks::get_session_id_for_task(conn, &task_id)
-        .unwrap_or_else(|_| "unknown".to_string());
+    // Update task status
+    session_storage::update_task_status(path, &session_id, &task_id, status)?;
 
     // Write to progress file for session recovery
-    // Get the project path from the session
-    if let Ok(session) = database::sessions::get_session(conn, &session_id) {
-        let project_path = Path::new(&session.project_path);
-        let tracker = ProgressTracker::new(project_path);
-        let progress_status = task_status_to_progress_status(status);
+    let tracker = ProgressTracker::new(path);
+    let progress_status = task_status_to_progress_status(status);
 
-        if let Err(e) = tracker.append_progress(
-            &session_id,
-            &task_id,
-            progress_status,
-            None,
-        ) {
-            log::warn!("Failed to write progress file: {}", e);
-        }
-
-        // Export session to file on task status change (for persistence)
-        // This ensures task state is saved to .ralph-ui/sessions/ for git tracking
-        // Only export on significant status changes (completed, failed)
-        if matches!(status, TaskStatus::Completed | TaskStatus::Failed) {
-            if let Err(e) = session_files::export_session_to_file(conn, &session_id, None) {
-                log::warn!("Failed to export session to file: {}", e);
-            }
-        }
+    if let Err(e) = tracker.append_progress(&session_id, &task_id, progress_status, None) {
+        log::warn!("Failed to write progress file: {}", e);
     }
 
     // Emit the status changed event
@@ -160,9 +121,11 @@ pub async fn import_prd(
     session_id: String,
     content: String,
     format: Option<String>,
-    db: State<'_, std::sync::Mutex<Database>>,
+    project_path: String,
 ) -> Result<Vec<Task>, String> {
     use crate::parsers::{parse_prd, parse_prd_auto, PRDFormat};
+
+    let path = Path::new(&project_path);
 
     // Parse the PRD
     let prd = if let Some(fmt) = format {
@@ -176,11 +139,7 @@ pub async fn import_prd(
     } else {
         parse_prd_auto(&content)
     }
-    .with_context("Failed to parse PRD")?;
-
-    // Convert PRD tasks to database tasks
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
+    .map_err(|e| format!("Failed to parse PRD: {}", e))?;
 
     let mut tasks = Vec::new();
 
@@ -202,9 +161,7 @@ pub async fn import_prd(
             error: None,
         };
 
-        database::tasks::create_task(conn, &session_id, &task)
-            .with_context("Failed to create task")?;
-
+        session_storage::create_task(path, &session_id, &task)?;
         tasks.push(task);
     }
 

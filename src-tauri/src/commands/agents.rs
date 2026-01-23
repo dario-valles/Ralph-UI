@@ -1,92 +1,102 @@
 // Tauri commands for agent management
+// Uses file-based storage in .ralph-ui/agents/
 
-use crate::database::Database;
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
+use crate::file_storage::agents as agent_storage;
 use crate::models::{Agent, AgentStatus, LogEntry};
-use crate::utils::{lock_db, ResultExt};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::path::Path;
 use sysinfo::{Pid, System};
-use tauri::State;
 
 /// Create a new agent
 #[tauri::command]
-pub fn create_agent(db: State<Mutex<Database>>, agent: Agent) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    db.create_agent(&agent)
-        .with_context("Failed to create agent")
+pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {
+    let path = Path::new(&project_path);
+    agent_storage::save_agent_state(path, &agent)?;
+    Ok(())
 }
 
 /// Get an agent by ID
 #[tauri::command]
-pub fn get_agent(db: State<Mutex<Database>>, agent_id: String) -> Result<Option<Agent>, String> {
-    let db = lock_db(&db)?;
-    db.get_agent(&agent_id).with_context("Failed to get agent")
+pub fn get_agent(agent_id: String, project_path: String) -> Result<Option<Agent>, String> {
+    let path = Path::new(&project_path);
+    match agent_storage::read_agent_with_logs(path, &agent_id) {
+        Ok(agent) => Ok(Some(agent)),
+        Err(_) => Ok(None),
+    }
 }
 
 /// Get all agents for a session
 #[tauri::command]
 pub fn get_agents_for_session(
-    db: State<Mutex<Database>>,
     session_id: String,
+    project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = lock_db(&db)?;
-    db.get_agents_for_session(&session_id)
-        .with_context("Failed to get agents for session")
+    let path = Path::new(&project_path);
+    agent_storage::list_agents_for_session(path, &session_id)
 }
 
 /// Get all agents for a task
 #[tauri::command]
 pub fn get_agents_for_task(
-    db: State<Mutex<Database>>,
     task_id: String,
+    project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = lock_db(&db)?;
-    db.get_agents_for_task(&task_id)
-        .with_context("Failed to get agents for task")
+    let path = Path::new(&project_path);
+    let agent_ids = agent_storage::list_agent_ids(path)?;
+    let mut agents = Vec::new();
+
+    for agent_id in agent_ids {
+        if let Ok(agent) = agent_storage::read_agent_with_logs(path, &agent_id) {
+            if agent.task_id == task_id {
+                agents.push(agent);
+            }
+        }
+    }
+
+    Ok(agents)
 }
 
 /// Get active agents for a session
 #[tauri::command]
 pub fn get_active_agents(
-    db: State<Mutex<Database>>,
     session_id: String,
+    project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let db = lock_db(&db)?;
-    db.get_active_agents(&session_id)
-        .with_context("Failed to get active agents")
+    let path = Path::new(&project_path);
+    let agents = agent_storage::list_agents_for_session(path, &session_id)?;
+    Ok(agents
+        .into_iter()
+        .filter(|a| a.status != AgentStatus::Idle)
+        .collect())
 }
 
 /// Get ALL active agents across all sessions (for Mission Control dashboard)
 #[tauri::command]
-pub fn get_all_active_agents(db: State<Mutex<Database>>) -> Result<Vec<Agent>, String> {
-    let db = lock_db(&db)?;
-    db.get_all_active_agents()
-        .with_context("Failed to get all active agents")
+pub fn get_all_active_agents(project_path: String) -> Result<Vec<Agent>, String> {
+    let path = Path::new(&project_path);
+    agent_storage::get_all_active_agents(path)
 }
 
 /// Update agent status
 #[tauri::command]
 pub fn update_agent_status(
     app_handle: tauri::AppHandle,
-    db: State<Mutex<Database>>,
     agent_id: String,
     status: AgentStatus,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
+    let path = Path::new(&project_path);
 
     // Get the current agent to capture old status and session_id
-    let agent = db
-        .get_agent(&agent_id)
-        .with_context("Failed to get agent")?
-        .ok_or_else(|| format!("Agent not found: {}", agent_id))?;
+    let agent = agent_storage::read_agent_with_logs(path, &agent_id)
+        .map_err(|e| format!("Agent not found: {}", e))?;
 
     let old_status = format!("{:?}", agent.status).to_lowercase();
     let new_status = format!("{:?}", status).to_lowercase();
 
-    // Update the status in the database
-    db.update_agent_status(&agent_id, &status)
-        .with_context("Failed to update agent status")?;
+    // Update the status
+    agent_storage::update_agent_status(path, &agent_id, status)?;
 
     // Emit the status changed event
     let payload = AgentStatusChangedPayload {
@@ -107,58 +117,53 @@ pub fn update_agent_status(
 /// Update agent metrics (tokens, cost, iterations)
 #[tauri::command]
 pub fn update_agent_metrics(
-    db: State<Mutex<Database>>,
     agent_id: String,
     tokens: i32,
     cost: f64,
     iteration_count: i32,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    db.update_agent_metrics(&agent_id, tokens, cost, iteration_count)
-        .with_context("Failed to update agent metrics")
+    let path = Path::new(&project_path);
+    agent_storage::update_agent_metrics(path, &agent_id, tokens, cost, iteration_count)
 }
 
 /// Update agent process ID
 #[tauri::command]
 pub fn update_agent_process_id(
-    db: State<Mutex<Database>>,
     agent_id: String,
     process_id: Option<u32>,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    db.update_agent_process_id(&agent_id, process_id)
-        .with_context("Failed to update agent process ID")
+    let path = Path::new(&project_path);
+    agent_storage::update_agent_process_id(path, &agent_id, process_id)
 }
 
 /// Delete an agent
 #[tauri::command]
-pub fn delete_agent(db: State<Mutex<Database>>, agent_id: String) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    db.delete_agent(&agent_id)
-        .with_context("Failed to delete agent")
+pub fn delete_agent(agent_id: String, project_path: String) -> Result<(), String> {
+    let path = Path::new(&project_path);
+    agent_storage::delete_agent_files(path, &agent_id)
 }
 
 /// Add a log entry for an agent
 #[tauri::command]
 pub fn add_agent_log(
-    db: State<Mutex<Database>>,
     agent_id: String,
     log: LogEntry,
+    project_path: String,
 ) -> Result<(), String> {
-    let db = lock_db(&db)?;
-    db.add_log(&agent_id, &log)
-        .with_context("Failed to add log")
+    let path = Path::new(&project_path);
+    agent_storage::append_agent_log(path, &agent_id, &log)
 }
 
 /// Get all logs for an agent
 #[tauri::command]
 pub fn get_agent_logs(
-    db: State<Mutex<Database>>,
     agent_id: String,
+    project_path: String,
 ) -> Result<Vec<LogEntry>, String> {
-    let db = lock_db(&db)?;
-    db.get_logs_for_agent(&agent_id)
-        .with_context("Failed to get logs")
+    let path = Path::new(&project_path);
+    agent_storage::read_agent_logs(path, &agent_id)
 }
 
 /// Result of cleaning up stale agents
@@ -177,16 +182,14 @@ pub struct StaleAgentCleanupResult {
 #[tauri::command]
 pub fn cleanup_stale_agents(
     app_handle: tauri::AppHandle,
-    db: State<Mutex<Database>>,
+    project_path: String,
 ) -> Result<Vec<StaleAgentCleanupResult>, String> {
     log::info!("[Agents] cleanup_stale_agents called");
 
-    let db = lock_db(&db)?;
+    let path = Path::new(&project_path);
 
     // Get all active agents
-    let active_agents = db
-        .get_all_active_agents()
-        .with_context("Failed to get active agents")?;
+    let active_agents = agent_storage::get_all_active_agents(path)?;
 
     if active_agents.is_empty() {
         log::debug!("[Agents] No active agents to cleanup");
@@ -230,12 +233,8 @@ pub fn cleanup_stale_agents(
             }
             None => {
                 // No process ID - the agent spawn likely failed or the app restarted
-                // while the agent was spawning. In cleanup context, these should be
-                // cleaned up since there's no process to verify.
-                // If the agent was truly still spawning, the spawn process would have
-                // registered a process_id by now.
                 log::info!(
-                    "[Agents] Agent {} has no process ID with status {:?}, marking as stale (spawn likely failed or app restarted)",
+                    "[Agents] Agent {} has no process ID with status {:?}, marking as stale",
                     agent.id, agent.status
                 );
                 true
@@ -244,7 +243,7 @@ pub fn cleanup_stale_agents(
 
         if should_cleanup {
             // Update agent status to idle
-            if let Err(e) = db.update_agent_status(&agent.id, &AgentStatus::Idle) {
+            if let Err(e) = agent_storage::update_agent_status(path, &agent.id, AgentStatus::Idle) {
                 log::error!("[Agents] Failed to update agent {} status: {}", agent.id, e);
                 continue;
             }
@@ -278,6 +277,7 @@ pub fn cleanup_stale_agents(
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
 use crate::models::AgentType;
 use crate::AgentManagerState;
+use tauri::State;
 
 /// Check if an agent has an associated PTY
 #[tauri::command]
@@ -440,69 +440,15 @@ pub fn get_agent_command_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::Database;
-    use crate::models::{
-        AgentType, LogLevel, Session, SessionConfig, SessionStatus, Task, TaskStatus,
-    };
+    use crate::models::LogLevel;
     use chrono::Utc;
-    use std::sync::Mutex;
-    use uuid::Uuid;
+    use tempfile::TempDir;
 
-    fn create_test_db() -> Mutex<Database> {
-        let db = Database::new(":memory:").unwrap();
-        db.init().unwrap();
-
-        // Create a test session
-        let session = Session {
-            id: "test-session".to_string(),
-            name: "Test Session".to_string(),
-            project_path: "/tmp/test".to_string(),
-            created_at: Utc::now(),
-            last_resumed_at: None,
-            status: SessionStatus::Active,
-            config: SessionConfig {
-                max_parallel: 1,
-                max_iterations: 10,
-                max_retries: 3,
-                agent_type: AgentType::Claude,
-                auto_create_prs: false,
-                draft_prs: false,
-                run_tests: false,
-                run_lint: false,
-            },
-            tasks: Vec::new(),
-            total_cost: 0.0,
-            total_tokens: 0,
-        };
-        crate::database::sessions::create_session(db.get_connection(), &session).unwrap();
-
-        // Create a test task
-        let task = Task {
-            id: "test-task".to_string(),
-            title: "Test Task".to_string(),
-            description: "A test task".to_string(),
-            status: TaskStatus::Pending,
-            priority: 1,
-            dependencies: Vec::new(),
-            assigned_agent: None,
-            estimated_tokens: None,
-            actual_tokens: None,
-            started_at: None,
-            completed_at: None,
-            branch: None,
-            worktree_path: None,
-            error: None,
-        };
-        crate::database::tasks::create_task(db.get_connection(), "test-session", &task).unwrap();
-
-        Mutex::new(db)
-    }
-
-    fn create_test_agent() -> Agent {
+    fn create_test_agent(id: &str, session_id: &str) -> Agent {
         Agent {
-            id: Uuid::new_v4().to_string(),
-            session_id: "test-session".to_string(),
-            task_id: "test-task".to_string(),
+            id: id.to_string(),
+            session_id: session_id.to_string(),
+            task_id: "task-1".to_string(),
             status: AgentStatus::Idle,
             process_id: None,
             worktree_path: "/tmp/worktree".to_string(),
@@ -516,127 +462,94 @@ mod tests {
     }
 
     #[test]
-    fn test_create_agent_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
-        let agent_id = agent.id.clone();
+    fn test_create_and_get_agent() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap().to_string();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
-        let db_lock = db.lock().unwrap();
-        let result = db_lock.create_agent(&agent);
-        assert!(result.is_ok());
+        let agent = create_test_agent("agent-1", "session-1");
+        create_agent(agent.clone(), project_path.clone()).unwrap();
 
-        let retrieved = db_lock.get_agent(&agent_id).unwrap();
+        let retrieved = get_agent("agent-1".to_string(), project_path).unwrap();
         assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id, "agent-1");
     }
 
     #[test]
-    fn test_get_agents_for_session_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
+    fn test_get_agents_for_session() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap().to_string();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
-        {
-            let db_lock = db.lock().unwrap();
-            db_lock.create_agent(&agent).unwrap();
-            let agents = db_lock.get_agents_for_session("test-session").unwrap();
-            assert_eq!(agents.len(), 1);
-        }
+        let agent1 = create_test_agent("agent-1", "session-1");
+        let agent2 = create_test_agent("agent-2", "session-1");
+        let agent3 = create_test_agent("agent-3", "session-2");
+
+        create_agent(agent1, project_path.clone()).unwrap();
+        create_agent(agent2, project_path.clone()).unwrap();
+        create_agent(agent3, project_path.clone()).unwrap();
+
+        let agents = get_agents_for_session("session-1".to_string(), project_path).unwrap();
+        assert_eq!(agents.len(), 2);
     }
 
     #[test]
-    fn test_update_agent_status_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
-        let agent_id = agent.id.clone();
+    fn test_update_agent_metrics() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap().to_string();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
-        {
-            let db_lock = db.lock().unwrap();
-            db_lock.create_agent(&agent).unwrap();
-            let result = db_lock.update_agent_status(&agent_id, &AgentStatus::Thinking);
-            assert!(result.is_ok());
+        let agent = create_test_agent("agent-1", "session-1");
+        create_agent(agent, project_path.clone()).unwrap();
 
-            let updated = db_lock.get_agent(&agent_id).unwrap().unwrap();
-            assert_eq!(updated.status, AgentStatus::Thinking);
-        }
+        update_agent_metrics(
+            "agent-1".to_string(),
+            1000,
+            0.05,
+            5,
+            project_path.clone(),
+        )
+        .unwrap();
+
+        let retrieved = get_agent("agent-1".to_string(), project_path).unwrap().unwrap();
+        assert_eq!(retrieved.tokens, 1000);
+        assert_eq!(retrieved.cost, 0.05);
+        assert_eq!(retrieved.iteration_count, 5);
     }
 
     #[test]
-    fn test_update_agent_metrics_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
-        let agent_id = agent.id.clone();
+    fn test_add_and_get_agent_logs() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap().to_string();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
-        {
-            let db_lock = db.lock().unwrap();
-            db_lock.create_agent(&agent).unwrap();
-            let result = db_lock.update_agent_metrics(&agent_id, 1000, 0.05, 5);
-            assert!(result.is_ok());
+        let agent = create_test_agent("agent-1", "session-1");
+        create_agent(agent, project_path.clone()).unwrap();
 
-            let updated = db_lock.get_agent(&agent_id).unwrap().unwrap();
-            assert_eq!(updated.tokens, 1000);
-            assert_eq!(updated.cost, 0.05);
-            assert_eq!(updated.iteration_count, 5);
-        }
+        let log = LogEntry {
+            timestamp: Utc::now(),
+            level: LogLevel::Info,
+            message: "Test log".to_string(),
+        };
+        add_agent_log("agent-1".to_string(), log, project_path.clone()).unwrap();
+
+        let logs = get_agent_logs("agent-1".to_string(), project_path).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].message, "Test log");
     }
 
     #[test]
-    fn test_add_agent_log_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
-        let agent_id = agent.id.clone();
+    fn test_delete_agent() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().to_str().unwrap().to_string();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
-        {
-            let db_lock = db.lock().unwrap();
-            db_lock.create_agent(&agent).unwrap();
+        let agent = create_test_agent("agent-1", "session-1");
+        create_agent(agent, project_path.clone()).unwrap();
 
-            let log = LogEntry {
-                timestamp: Utc::now(),
-                level: LogLevel::Info,
-                message: "Test log".to_string(),
-            };
+        delete_agent("agent-1".to_string(), project_path.clone()).unwrap();
 
-            let result = db_lock.add_log(&agent_id, &log);
-            assert!(result.is_ok());
-
-            let logs = db_lock.get_logs_for_agent(&agent_id).unwrap();
-            assert_eq!(logs.len(), 1);
-            assert_eq!(logs[0].message, "Test log");
-        }
-    }
-
-    #[test]
-    fn test_delete_agent_command() {
-        let db = create_test_db();
-        let agent = create_test_agent();
-        let agent_id = agent.id.clone();
-
-        {
-            let db_lock = db.lock().unwrap();
-            db_lock.create_agent(&agent).unwrap();
-            let result = db_lock.delete_agent(&agent_id);
-            assert!(result.is_ok());
-
-            let retrieved = db_lock.get_agent(&agent_id).unwrap();
-            assert!(retrieved.is_none());
-        }
-    }
-
-    #[test]
-    fn test_get_active_agents_command() {
-        let db = create_test_db();
-
-        {
-            let db_lock = db.lock().unwrap();
-
-            let mut agent1 = create_test_agent();
-            agent1.status = AgentStatus::Thinking;
-            db_lock.create_agent(&agent1).unwrap();
-
-            let mut agent2 = create_test_agent();
-            agent2.status = AgentStatus::Idle;
-            db_lock.create_agent(&agent2).unwrap();
-
-            let active = db_lock.get_active_agents("test-session").unwrap();
-            assert_eq!(active.len(), 1);
-        }
+        let retrieved = get_agent("agent-1".to_string(), project_path).unwrap();
+        assert!(retrieved.is_none());
     }
 }

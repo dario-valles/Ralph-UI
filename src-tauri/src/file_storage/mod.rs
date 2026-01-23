@@ -23,6 +23,7 @@ pub mod chat;
 pub mod chat_ops;
 pub mod index;
 pub mod projects;
+pub mod sessions;
 
 use std::fs;
 use std::path::{Path, PathBuf};
