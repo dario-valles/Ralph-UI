@@ -7,6 +7,23 @@
 
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// Assignment strategy for multi-agent scenarios (US-4.2)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum AssignmentStrategy {
+    /// Assign stories in priority order (default, higher priority = lower number)
+    Priority,
+    /// Assign story with lowest overlap with in-progress work
+    MinimalConflict,
+}
+
+impl Default for AssignmentStrategy {
+    fn default() -> Self {
+        Self::Priority
+    }
+}
 
 /// Generate a consistent PRD filename from title and ID
 ///
@@ -594,6 +611,70 @@ impl RalphPrd {
     pub fn progress(&self) -> (usize, usize) {
         let passed = self.stories.iter().filter(|s| s.passes).count();
         (passed, self.stories.len())
+    }
+
+    /// Get the next available story using the specified strategy (US-4.2)
+    ///
+    /// This method selects the next story to assign based on the assignment strategy:
+    /// - Priority: Selects highest priority (lowest priority number)
+    /// - MinimalConflict: Selects story with lowest overlap with in-progress work
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    /// * `strategy` - The assignment strategy to use (Priority or MinimalConflict)
+    /// * `estimated_files_map` - Map of story_id -> Vec<estimated_files> for conflict scoring
+    pub fn next_available_story_with_strategy(
+        &self,
+        assigned_story_ids: &[String],
+        strategy: AssignmentStrategy,
+        estimated_files_map: &HashMap<String, Vec<String>>,
+    ) -> Option<&RalphStory> {
+        let available = self.available_stories(assigned_story_ids);
+        if available.is_empty() {
+            return None;
+        }
+
+        match strategy {
+            AssignmentStrategy::Priority => {
+                // Priority strategy: return highest priority available story
+                available.first().copied()
+            }
+            AssignmentStrategy::MinimalConflict => {
+                // MinimalConflict strategy: return story with lowest file overlap
+                available
+                    .into_iter()
+                    .min_by_key(|story| self.score_story_by_conflict(&story.id, estimated_files_map))
+            }
+        }
+    }
+
+    /// Score a story by its file conflict potential (US-4.2)
+    ///
+    /// Lower scores are better. Returns the number of files that would conflict
+    /// with in-progress work if this story were assigned.
+    ///
+    /// # Arguments
+    /// * `story_id` - The story ID to score
+    /// * `estimated_files_map` - Map of story_id -> Vec<estimated_files>
+    fn score_story_by_conflict(&self, story_id: &str, estimated_files_map: &HashMap<String, Vec<String>>) -> usize {
+        let story_files = match estimated_files_map.get(story_id) {
+            Some(files) => files,
+            None => return 0, // No estimated files = no conflict
+        };
+
+        // Count conflicts: how many files are used by other assigned stories
+        let mut conflict_count = 0;
+        for (other_story_id, other_files) in estimated_files_map {
+            if other_story_id != story_id {
+                for file in story_files {
+                    if other_files.contains(file) {
+                        conflict_count += 1;
+                    }
+                }
+            }
+        }
+
+        conflict_count
     }
 
     // =========================================================================
@@ -1889,5 +1970,195 @@ mod tests {
         let assigned: Vec<String> = vec![];
         let available = prd.available_stories(&assigned);
         assert_eq!(available.len(), 2); // US-4 and US-5
+    }
+
+    // =========================================================================
+    // Assignment Strategy Tests (US-4.2)
+    // =========================================================================
+
+    #[test]
+    fn test_assignment_strategy_default() {
+        let strategy = AssignmentStrategy::default();
+        assert_eq!(strategy, AssignmentStrategy::Priority);
+    }
+
+    #[test]
+    fn test_next_available_story_with_priority_strategy() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let mut s1 = RalphStory::new("US-1", "First", "A");
+        s1.priority = 50;
+
+        let mut s2 = RalphStory::new("US-2", "Second", "B");
+        s2.priority = 100;
+
+        let mut s3 = RalphStory::new("US-3", "Third", "C");
+        s3.priority = 25; // Highest priority
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        let assigned: Vec<String> = vec![];
+        let estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Priority strategy should pick US-3 (priority 25)
+        let next = prd.next_available_story_with_strategy(
+            &assigned,
+            AssignmentStrategy::Priority,
+            &estimated_files,
+        );
+        assert_eq!(next.unwrap().id, "US-3");
+    }
+
+    #[test]
+    fn test_next_available_story_with_minimal_conflict_strategy() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let mut s1 = RalphStory::new("US-1", "Frontend", "A");
+        s1.priority = 100;
+
+        let mut s2 = RalphStory::new("US-2", "Backend", "B");
+        s2.priority = 100;
+
+        let mut s3 = RalphStory::new("US-3", "Config", "C");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // Build estimated files map showing in-progress work
+        // "In-progress" assignments are represented by having files in the map
+        // US-2 (in progress) has 3 files
+        // US-3 (in progress) has 2 files
+        // US-1 (candidate) needs files:
+        //   - overlaps 2 files with US-2 (high conflict)
+        //   - overlaps 1 file with US-3 (lower conflict)
+        // Total conflicts for US-1: 3
+        //
+        // Let's make US-2 have 5 files so it has more conflicts with US-1
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // These are "in-progress" assignments (already assigned to other agents)
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/components/Card.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/uiStore.ts".to_string(),
+                "src/stores/sessionStore.ts".to_string(),
+            ],
+        );
+        estimated_files.insert(
+            "US-3".to_string(),
+            vec!["config.json".to_string(), "server/src/models.rs".to_string()],
+        );
+
+        // US-1 (candidate story) has these files:
+        // overlaps with US-2: Button.tsx, Card.tsx (2 conflicts)
+        // overlaps with US-3: none (0 conflicts)
+        // Total: 2 conflicts
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/components/Card.tsx".to_string(),
+                "src/pages/Home.tsx".to_string(),
+            ],
+        );
+
+        let assigned: Vec<String> = vec![];
+
+        // MinimalConflict strategy should pick US-3 (0 conflicts is minimal)
+        let next = prd.next_available_story_with_strategy(
+            &assigned,
+            AssignmentStrategy::MinimalConflict,
+            &estimated_files,
+        );
+        assert_eq!(next.unwrap().id, "US-3");
+    }
+
+    #[test]
+    fn test_score_story_by_conflict() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        let s2 = RalphStory::new("US-2", "Story 2", "B");
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        // Create a map where US-1 has 3 overlapping files with US-2
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/store.ts".to_string(),
+            ],
+        );
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/store.ts".to_string(),
+                "server/src/auth.rs".to_string(),
+            ],
+        );
+
+        // Score US-1 against US-2's files
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 3); // 3 files overlap
+
+        // Score US-2 against US-1's files
+        let score = prd.score_story_by_conflict("US-2", &estimated_files);
+        assert_eq!(score, 3); // 3 files overlap
+    }
+
+    #[test]
+    fn test_score_story_no_overlap() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        let s2 = RalphStory::new("US-2", "Story 2", "B");
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        // Create a map where stories have no overlapping files
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec!["src/components/Button.tsx".to_string()],
+        );
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec!["server/src/auth.rs".to_string()],
+        );
+
+        // Score should be 0 (no overlap)
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 0);
+
+        let score = prd.score_story_by_conflict("US-2", &estimated_files);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_score_story_no_estimated_files() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        prd.add_story(s1);
+
+        let estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Score should be 0 when no estimated files
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 0);
     }
 }

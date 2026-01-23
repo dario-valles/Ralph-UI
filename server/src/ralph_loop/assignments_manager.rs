@@ -643,6 +643,24 @@ impl AssignmentsManager {
 
         Ok(assignment_clone)
     }
+
+    /// Build a map of story_id -> estimated_files for conflict scoring (US-4.2)
+    ///
+    /// This method collects all active assignments and their estimated files
+    /// into a HashMap for use with conflict-minimizing assignment strategy.
+    ///
+    /// # Returns
+    /// HashMap where keys are story IDs and values are vectors of estimated files
+    pub fn get_active_assignment_files(&self) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+        let file = self.read()?;
+        let mut map = std::collections::HashMap::new();
+
+        for assignment in file.active_assignments() {
+            map.insert(assignment.story_id.clone(), assignment.estimated_files.clone());
+        }
+
+        Ok(map)
+    }
 }
 
 #[cfg(test)]
@@ -1368,6 +1386,69 @@ mod tests {
 
         assert_eq!(assignment.story_id, "US-5.1-LOW-PRIORITY");
         assert!(manager.is_story_assigned("US-5.1-LOW-PRIORITY").unwrap());
+    }
+
+    #[test]
+    fn test_get_active_assignment_files() {
+        // US-4.2: Get active assignments with files for conflict scoring
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Create assignments with files
+        manager
+            .assign_story_with_files(
+                "agent-1",
+                AgentType::Claude,
+                "US-1.1",
+                vec!["src/components/Button.tsx".to_string(), "src/lib/api.ts".to_string()],
+            )
+            .unwrap();
+
+        manager
+            .assign_story_with_files(
+                "agent-2",
+                AgentType::Opencode,
+                "US-1.2",
+                vec!["server/src/commands/auth.rs".to_string()],
+            )
+            .unwrap();
+
+        // Get the file map
+        let map = manager.get_active_assignment_files().unwrap();
+
+        // Verify all assignments are in the map
+        assert_eq!(map.len(), 2);
+        assert_eq!(map["US-1.1"].len(), 2);
+        assert_eq!(map["US-1.2"].len(), 1);
+        assert!(map["US-1.1"].contains(&"src/components/Button.tsx".to_string()));
+        assert!(map["US-1.2"].contains(&"server/src/commands/auth.rs".to_string()));
+    }
+
+    #[test]
+    fn test_get_active_assignment_files_excludes_completed() {
+        // US-4.2: Completed assignments should not be in the map
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Create and complete an assignment
+        manager
+            .assign_story_with_files(
+                "agent-1",
+                AgentType::Claude,
+                "US-1.1",
+                vec!["src/components/Button.tsx".to_string()],
+            )
+            .unwrap();
+
+        manager
+            .complete_story("US-1.1")
+            .unwrap();
+
+        // Map should be empty
+        let map = manager.get_active_assignment_files().unwrap();
+        assert_eq!(map.len(), 0);
     }
 }
 
