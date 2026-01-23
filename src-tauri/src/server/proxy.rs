@@ -449,6 +449,15 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_unit!(commands::projects::delete_project(project_id))
         }
 
+        "list_directory" => {
+            let path: Option<String> = get_opt_arg(&args, "path")?;
+            route_sync!(commands::projects::list_directory(path))
+        }
+
+        "get_home_directory" => {
+            route_sync!(commands::projects::get_home_directory())
+        }
+
         // =====================================================================
         // Git Commands (use state.git_state)
         // =====================================================================

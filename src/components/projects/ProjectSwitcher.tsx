@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   FolderOpen,
   ChevronDown,
@@ -16,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { isTauri } from '@/lib/tauri-check'
+import { RemoteFolderBrowser } from './RemoteFolderBrowser'
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
@@ -27,8 +27,7 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
   const [isOpen, setIsOpen] = useState(false)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [showPathInput, setShowPathInput] = useState(false)
-  const [newProjectPath, setNewProjectPath] = useState('')
+  const [showBrowser, setShowBrowser] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -81,22 +80,24 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
         console.error('Failed to open folder dialog:', error)
       }
     } else {
-      // Show path input in browser mode
-      setShowPathInput(true)
+      // Show folder browser in browser mode
+      setShowBrowser(true)
     }
   }
 
-  const handleAddProjectPath = async () => {
-    if (!newProjectPath.trim()) return
+  const handleBrowserSelect = async (path: string) => {
     try {
-      const project = await registerProject(newProjectPath.trim())
+      const project = await registerProject(path)
       setActiveProject(project.id)
-      setShowPathInput(false)
-      setNewProjectPath('')
+      setShowBrowser(false)
       setIsOpen(false)
     } catch (error) {
       console.error('Failed to register project:', error)
     }
+  }
+
+  const handleBrowserCancel = () => {
+    setShowBrowser(false)
   }
 
   const handleSelectProject = (project: Project) => {
@@ -208,46 +209,15 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden min-w-[300px]">
-          {/* Add Project Button / Path Input */}
-          {showPathInput ? (
-            <div className="p-3 border-b space-y-2">
-              <div className="text-sm font-medium">Enter project path</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={newProjectPath}
-                  onChange={(e) => setNewProjectPath(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddProjectPath()
-                    if (e.key === 'Escape') {
-                      setShowPathInput(false)
-                      setNewProjectPath('')
-                    }
-                  }}
-                  placeholder="/path/to/project"
-                  className="h-9 text-sm flex-1 min-w-[200px]"
-                  autoFocus
-                />
-                <Button variant="default" size="sm" className="h-9 px-3" onClick={handleAddProjectPath}>
-                  <Check className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 px-2"
-                  onClick={() => {
-                    setShowPathInput(false)
-                    setNewProjectPath('')
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Enter the absolute path to your project folder on the server
-              </div>
-            </div>
+        <div
+          className={cn(
+            'absolute left-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden',
+            showBrowser ? 'min-w-[400px]' : 'min-w-[300px]'
+          )}
+        >
+          {/* Folder Browser or Add Button */}
+          {showBrowser ? (
+            <RemoteFolderBrowser onSelect={handleBrowserSelect} onCancel={handleBrowserCancel} />
           ) : (
             <button
               onClick={handleSelectFolder}
@@ -258,6 +228,8 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
             </button>
           )}
 
+          {/* Project list - hidden when browser is shown */}
+          {!showBrowser && (
           <div className="max-h-64 overflow-y-auto">
             {/* Favorites Section */}
             {favoriteProjects.length > 0 && (
@@ -320,6 +292,7 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>

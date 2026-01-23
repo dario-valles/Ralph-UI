@@ -3,7 +3,82 @@
 // Uses file-based storage in ~/.ralph-ui/projects.json (global registry)
 
 use crate::file_storage::projects::{self as file_projects, ApiProject};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// Directory entry for remote folder browsing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectoryEntry {
+    pub name: String,
+    pub path: String,
+    pub is_directory: bool,
+    pub is_hidden: bool,
+}
+
+/// List directory contents for remote folder browsing
+/// Only returns directories (not files) for project selection
+#[tauri::command]
+pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, String> {
+    // Default to home directory if no path provided
+    let dir_path = match path {
+        Some(p) if !p.is_empty() => std::path::PathBuf::from(p),
+        _ => dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())?,
+    };
+
+    // Check if path exists and is a directory
+    if !dir_path.exists() {
+        return Err(format!("Path does not exist: {}", dir_path.display()));
+    }
+    if !dir_path.is_dir() {
+        return Err(format!("Path is not a directory: {}", dir_path.display()));
+    }
+
+    // Read directory entries
+    let entries = std::fs::read_dir(&dir_path)
+        .map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    let mut results: Vec<DirectoryEntry> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+
+            // Only include directories
+            if !path.is_dir() {
+                return None;
+            }
+
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_hidden = name.starts_with('.');
+
+            Some(DirectoryEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+                is_directory: true,
+                is_hidden,
+            })
+        })
+        .collect();
+
+    // Sort: non-hidden first, then alphabetically
+    results.sort_by(|a, b| {
+        match (a.is_hidden, b.is_hidden) {
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
+
+    Ok(results)
+}
+
+/// Get the home directory path
+#[tauri::command]
+pub fn get_home_directory() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Could not determine home directory".to_string())
+}
 
 /// Register (or get existing) project from a folder path
 /// Also imports any sessions from the project's .ralph-ui/sessions/ directory

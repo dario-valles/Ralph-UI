@@ -384,6 +384,8 @@ pub fn run() {
             commands::set_project_favorite,
             commands::touch_project,
             commands::delete_project,
+            commands::list_directory,
+            commands::get_home_directory,
             // Mission Control commands
             commands::get_activity_feed,
             commands::get_global_stats,
