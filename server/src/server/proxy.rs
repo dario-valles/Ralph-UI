@@ -767,6 +767,15 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        "export_ralph_learnings" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::export_ralph_learnings(
+                project_path,
+                prd_name
+            ))
+        }
+
         "list_ralph_loop_executions" => {
             // For server mode, return empty list (would need different tracking)
             serde_json::to_value(Vec::<String>::new()).map_err(|e| e.to_string())

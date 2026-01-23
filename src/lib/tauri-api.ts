@@ -651,6 +651,11 @@ export const ralphLoopApi = {
   ): Promise<boolean> => {
     return await invoke('delete_ralph_learning', { projectPath, prdName, learningId })
   },
+
+  /** Export learnings to markdown (US-6.3: Learning Analytics) */
+  exportLearnings: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('export_ralph_learnings', { projectPath, prdName })
+  },
 }
 
 // Import GSD types

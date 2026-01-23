@@ -370,6 +370,10 @@ export function LearningsPanel({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Search and export
+  const [searchQuery, setSearchQuery] = useState('')
+  const [exporting, setExporting] = useState(false)
+
   const loadLearnings = useCallback(async () => {
     try {
       setLoading(true)
@@ -437,8 +441,42 @@ export function LearningsPanel({
     }
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const markdown = await ralphLoopApi.exportLearnings(projectPath, prdName)
+      // Create blob and download
+      const blob = new Blob([markdown], { type: 'text/markdown' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${prdName}-learnings.md`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Learnings exported', 'Learnings exported to markdown file')
+    } catch (err) {
+      toast.error('Export failed', err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Filter learnings by search query
+  const filteredEntries = learningsFile?.entries.filter((learning) => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      learning.content.toLowerCase().includes(query) ||
+      learning.learningType.toLowerCase().includes(query) ||
+      learning.codeExample?.toLowerCase().includes(query) ||
+      learning.storyId?.toLowerCase().includes(query)
+    )
+  }) ?? []
+
   // Group learnings by type
-  const learningsByType = learningsFile?.entries.reduce(
+  const learningsByType = filteredEntries.reduce(
     (acc, learning) => {
       const type = learning.learningType
       if (!acc[type]) {
@@ -457,31 +495,61 @@ export function LearningsPanel({
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <BookOpen className="h-4 w-4" />
-              Learnings
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {learningsFile?.entries.length ?? 0} total ({manualCount} manual, {agentCount} agent)
-            </CardDescription>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BookOpen className="h-4 w-4" />
+                Learnings
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {learningsFile?.entries.length ?? 0} total ({manualCount} manual, {agentCount} agent)
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting || !learningsFile?.entries.length}
+                className="h-8"
+                title="Export learnings to markdown"
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-1" />
+                )}
+                Export
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleAddClick} className="h-8">
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loadLearnings}
+                disabled={loading}
+                className="h-8 w-8 p-0"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleAddClick} className="h-8">
-              <Plus className="h-4 w-4 mr-1" />
-              Add
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadLearnings}
-              disabled={loading}
-              className="h-8 w-8 p-0"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
+
+          {/* Search input */}
+          {learningsFile && learningsFile.entries.length > 0 && (
+            <div>
+              <input
+                type="text"
+                placeholder="Search learnings..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+              />
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="pt-0">

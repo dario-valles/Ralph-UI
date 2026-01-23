@@ -706,6 +706,18 @@ pub fn delete_ralph_learning(
     Ok(true)
 }
 
+/// Export learnings to markdown (US-6.3: Learning Analytics)
+///
+/// Exports all learnings in a PRD to a markdown-formatted string for documentation.
+/// Includes learning type grouping, syntax highlighting, and metadata.
+pub fn export_ralph_learnings(
+    project_path: String,
+    prd_name: String,
+) -> Result<String, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.export_markdown()
+}
+
 /// Heartbeat interval in seconds (30 seconds)
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
