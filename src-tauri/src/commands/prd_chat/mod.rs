@@ -2,12 +2,14 @@
 //
 // This module is organized into submodules:
 // - types: Request/response types for the API
-// - (commands remain in mod.rs for now)
+// - agent_executor: Unified chat agent execution with trait-based event emission
 //
 // Storage: Chat sessions are stored in {project}/.ralph-ui/chat/{id}.json
 
+pub mod agent_executor;
 mod types;
 
+pub use agent_executor::{build_agent_command, generate_session_title, ChatEventEmitter};
 pub use types::*;
 
 use crate::file_storage::chat_ops;
@@ -205,16 +207,17 @@ pub async fn send_prd_chat_message(
     // Parse agent type
     let agent_type = parse_agent_type(&session.agent_type)?;
 
-    // Execute CLI agent and get response with streaming
-    let response_content = execute_chat_agent(
-        &app_handle,
+    // Execute CLI agent and get response with streaming using the unified executor
+    let emitter = agent_executor::TauriEmitter::new(&app_handle);
+    let response_content = agent_executor::execute_chat_agent(
+        &emitter,
         &request.session_id,
         agent_type,
         &prompt,
-        session.project_path.as_deref()
+        session.project_path.as_deref(),
     )
-        .await
-        .map_err(|e| format!("Agent execution failed: {}", e))?;
+    .await
+    .map_err(|e| format!("Agent execution failed: {}", e))?;
 
     // Second phase: store response and parse structured output
     let response_now = chrono::Utc::now().to_rfc3339();
@@ -2054,164 +2057,8 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
     )
 }
 
-/// Default timeout for agent execution (25 minutes - 5x multiplier for longer agent operations)
-const AGENT_TIMEOUT_SECS: u64 = 1500;
-
-async fn execute_chat_agent(
-    app_handle: &tauri::AppHandle,
-    session_id: &str,
-    agent_type: AgentType,
-    prompt: &str,
-    working_dir: Option<&str>,
-) -> Result<String, String> {
-    use crate::events::{emit_prd_chat_chunk, PrdChatChunkPayload};
-    use std::process::Stdio;
-    use tokio::io::{AsyncBufReadExt, BufReader};
-    use tokio::process::Command;
-    use tokio::time::{timeout, Duration};
-
-    let (program, args) = match agent_type {
-        AgentType::Claude => {
-            // Use claude CLI in print mode for single response
-            // --dangerously-skip-permissions allows file writes for plan documents
-            ("claude", vec![
-                "-p".to_string(),
-                "--dangerously-skip-permissions".to_string(),
-                prompt.to_string(),
-            ])
-        }
-        AgentType::Opencode => {
-            // Use opencode CLI
-            ("opencode", vec!["run".to_string(), prompt.to_string()])
-        }
-        AgentType::Cursor => {
-            // Use cursor agent CLI
-            ("cursor-agent", vec!["--prompt".to_string(), prompt.to_string()])
-        }
-        AgentType::Codex => {
-            // Use codex CLI
-            ("codex", vec!["--prompt".to_string(), prompt.to_string()])
-        }
-        AgentType::Qwen => {
-            // Use qwen CLI
-            ("qwen", vec!["--prompt".to_string(), prompt.to_string()])
-        }
-        AgentType::Droid => {
-            // Use droid CLI
-            ("droid", vec!["chat".to_string(), "--prompt".to_string(), prompt.to_string()])
-        }
-    };
-
-    let mut cmd = Command::new(program);
-    cmd.args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    if let Some(dir) = working_dir {
-        cmd.current_dir(dir);
-    }
-
-    // Spawn the process instead of waiting for full output
-    let mut child = cmd.spawn()
-        .map_err(|e| format!("Failed to spawn {}: {}", program, e))?;
-
-    // Take ownership of stdout for streaming
-    let stdout = child.stdout.take()
-        .ok_or_else(|| "Failed to capture stdout".to_string())?;
-
-    // Create async buffered reader for line-by-line streaming
-    let mut reader = BufReader::new(stdout).lines();
-    let mut accumulated = String::new();
-
-    // Stream lines with overall timeout
-    let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
-        while let Some(line) = reader.next_line().await.map_err(|e| format!("Read error: {}", e))? {
-            // Add line to accumulated response
-            if !accumulated.is_empty() {
-                accumulated.push('\n');
-            }
-            accumulated.push_str(&line);
-
-            // Emit streaming chunk event to frontend
-            let _ = emit_prd_chat_chunk(
-                app_handle,
-                PrdChatChunkPayload {
-                    session_id: session_id.to_string(),
-                    content: line,
-                },
-            );
-        }
-        Ok::<(), String>(())
-    }).await;
-
-    // Handle streaming timeout
-    if let Err(_) = stream_result {
-        // Try to kill the hung process
-        let _ = child.kill().await;
-        return Err(format!(
-            "Agent timed out after {} seconds. The process may have hung or be unresponsive.",
-            AGENT_TIMEOUT_SECS
-        ));
-    }
-
-    // Check for streaming errors
-    stream_result.unwrap()?;
-
-    // Wait for process to complete and check exit status
-    let status = child.wait().await
-        .map_err(|e| format!("Failed to wait for process: {}", e))?;
-
-    if !status.success() {
-        // Check for common interrupt signals
-        if let Some(code) = status.code() {
-            if code == 130 || code == 137 || code == 143 {
-                return Err("Agent process was interrupted (SIGINT/SIGTERM)".to_string());
-            }
-        }
-        // If we got some output before failure, return it with a warning
-        if !accumulated.is_empty() {
-            return Ok(accumulated.trim().to_string());
-        }
-        return Err(format!("Agent returned error (exit code: {:?})", status.code()));
-    }
-
-    // Clean up response (remove any trailing whitespace)
-    Ok(accumulated.trim().to_string())
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/// Generate a session title from the first user message and PRD type
-fn generate_session_title(first_message: &str, prd_type: Option<&str>) -> String {
-    // Extract a meaningful title from the first message
-    let message_title = first_message
-        .lines()
-        .next()
-        .unwrap_or(first_message)
-        .trim();
-
-    // Truncate to 50 characters and add ellipsis if needed
-    let truncated = if message_title.len() > 50 {
-        format!("{}...", &message_title[..47])
-    } else {
-        message_title.to_string()
-    };
-
-    // If too short, use PRD type as fallback
-    if truncated.len() < 5 {
-        match prd_type {
-            Some("new_feature") => "New Feature PRD".to_string(),
-            Some("bug_fix") => "Bug Fix PRD".to_string(),
-            Some("refactoring") => "Refactoring PRD".to_string(),
-            Some("api_integration") => "API Integration PRD".to_string(),
-            _ => "PRD Chat".to_string(),
-        }
-    } else {
-        truncated
-    }
-}
+// Note: execute_chat_agent and generate_session_title have been moved to
+// the agent_executor module for sharing between Tauri and server modes.
 
 // ============================================================================
 // Tests

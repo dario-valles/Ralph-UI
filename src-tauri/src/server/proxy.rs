@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 // Re-export types needed for proxy commands
-use crate::ralph_loop::RalphConfig;
 use crate::commands::ralph_loop::RalphStoryInput;
+use crate::ralph_loop::RalphConfig;
 
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
@@ -60,258 +60,67 @@ impl IntoResponse for InvokeError {
     }
 }
 
-/// Server-compatible version of send_prd_chat_message that uses EventBroadcaster
-/// instead of Tauri's app_handle for streaming events.
-async fn send_prd_chat_message_server(
-    request: crate::commands::prd_chat::SendMessageRequest,
-    broadcaster: &Arc<EventBroadcaster>,
-) -> Result<crate::commands::prd_chat::SendMessageResponse, String> {
-    use crate::file_storage::chat_ops;
-    use crate::models::{AgentType, ChatMessage, MessageRole};
-    use crate::parsers::structured_output;
-    use std::process::Stdio;
-    use tokio::io::{AsyncBufReadExt, BufReader};
-    use tokio::process::Command;
-    use tokio::time::{timeout, Duration};
-    use uuid::Uuid;
+// =============================================================================
+// Argument Extraction Helpers
+// =============================================================================
 
-    const AGENT_TIMEOUT_SECS: u64 = 1500;
-
-    let project_path_obj = Path::new(&request.project_path);
-
-    // Get session
-    let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
-        .map_err(|e| format!("Session not found: {}", e))?;
-
-    let now = chrono::Utc::now().to_rfc3339();
-
-    // Store user message
-    let user_message = ChatMessage {
-        id: Uuid::new_v4().to_string(),
-        session_id: request.session_id.clone(),
-        role: MessageRole::User,
-        content: request.content.clone(),
-        created_at: now.clone(),
-    };
-
-    chat_ops::create_chat_message(project_path_obj, &user_message)
-        .map_err(|e| format!("Failed to store user message: {}", e))?;
-
-    // Get chat history for context
-    let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
-        .map_err(|e| format!("Failed to get chat history: {}", e))?;
-
-    // Build prompt (simplified version - uses chat context)
-    let prompt = build_server_chat_prompt(&session, &history, &request.content);
-
-    // Parse agent type
-    let agent_type: AgentType = session
-        .agent_type
-        .parse()
-        .map_err(|e| format!("Invalid agent type: {}", e))?;
-
-    // Build command args based on agent type
-    let (program, args) = match agent_type {
-        AgentType::Claude => (
-            "claude",
-            vec![
-                "-p".to_string(),
-                "--dangerously-skip-permissions".to_string(),
-                prompt.clone(),
-            ],
-        ),
-        AgentType::Opencode => ("opencode", vec!["run".to_string(), prompt.clone()]),
-        AgentType::Cursor => (
-            "cursor-agent",
-            vec!["--prompt".to_string(), prompt.clone()],
-        ),
-        AgentType::Codex => ("codex", vec!["--prompt".to_string(), prompt.clone()]),
-        AgentType::Qwen => ("qwen", vec!["--prompt".to_string(), prompt.clone()]),
-        AgentType::Droid => (
-            "droid",
-            vec!["chat".to_string(), "--prompt".to_string(), prompt.clone()],
-        ),
-    };
-
-    // Execute agent
-    let mut cmd = Command::new(program);
-    cmd.args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    if let Some(ref dir) = session.project_path {
-        cmd.current_dir(dir);
-    }
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to spawn {}: {}", program, e))?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Failed to capture stdout".to_string())?;
-
-    let mut reader = BufReader::new(stdout).lines();
-    let mut accumulated = String::new();
-
-    let session_id_clone = request.session_id.clone();
-    let broadcaster_clone = broadcaster.clone();
-
-    // Stream lines with timeout
-    let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
-        while let Some(line) = reader
-            .next_line()
-            .await
-            .map_err(|e| format!("Read error: {}", e))?
-        {
-            if !accumulated.is_empty() {
-                accumulated.push('\n');
-            }
-            accumulated.push_str(&line);
-
-            // Emit streaming chunk via WebSocket broadcaster
-            // Use same event name as Tauri for consistency
-            broadcaster_clone.broadcast(
-                "prd:chat_chunk",
-                serde_json::json!({
-                    "sessionId": session_id_clone,
-                    "content": line,
-                }),
-            );
-        }
-        Ok::<(), String>(())
-    })
-    .await;
-
-    if stream_result.is_err() {
-        let _ = child.kill().await;
-        return Err(format!(
-            "Agent timed out after {} seconds",
-            AGENT_TIMEOUT_SECS
-        ));
-    }
-
-    stream_result
-        .unwrap()
-        .map_err(|e| format!("Streaming error: {}", e))?;
-
-    // Wait for process to complete
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| format!("Failed to wait for process: {}", e))?;
-
-    if !status.success() && accumulated.is_empty() {
-        return Err(format!("Agent process failed with status: {}", status));
-    }
-
-    let response_content = accumulated;
-
-    // Store assistant message
-    let response_now = chrono::Utc::now().to_rfc3339();
-    let assistant_message = ChatMessage {
-        id: Uuid::new_v4().to_string(),
-        session_id: request.session_id.clone(),
-        role: MessageRole::Assistant,
-        content: response_content.clone(),
-        created_at: response_now.clone(),
-    };
-
-    chat_ops::create_chat_message(project_path_obj, &assistant_message)
-        .map_err(|e| format!("Failed to store assistant message: {}", e))?;
-
-    // Update session timestamp
-    chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
-        .map_err(|e| format!("Failed to update session: {}", e))?;
-
-    // Auto-generate title if not set
-    if session.title.is_none() {
-        let title = generate_session_title_server(&request.content, session.prd_type.as_deref());
-        chat_ops::update_chat_session_title(project_path_obj, &request.session_id, &title).ok();
-    }
-
-    // Handle structured mode
-    if session.structured_mode {
-        let new_items = structured_output::extract_items(&response_content);
-        if !new_items.is_empty() {
-            let mut structure: crate::models::ExtractedPRDStructure = session
-                .extracted_structure
-                .as_ref()
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or_default();
-
-            structured_output::merge_items(&mut structure, new_items);
-
-            let structure_json = serde_json::to_string(&structure)
-                .map_err(|e| format!("Failed to serialize structure: {}", e))?;
-            chat_ops::update_chat_session_extracted_structure(
-                project_path_obj,
-                &request.session_id,
-                Some(&structure_json),
-            )
-            .map_err(|e| format!("Failed to update structure: {}", e))?;
-        }
-    }
-
-    Ok(crate::commands::prd_chat::SendMessageResponse {
-        user_message,
-        assistant_message,
-    })
+/// Extract a required argument from JSON args
+fn get_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<T, String> {
+    serde_json::from_value(
+        args.get(name)
+            .ok_or_else(|| format!("Missing argument: {}", name))?
+            .clone(),
+    )
+    .map_err(|e| format!("Invalid argument {}: {}", name, e))
 }
 
-/// Build a chat prompt for server mode (simplified version)
-fn build_server_chat_prompt(
-    session: &crate::models::ChatSession,
-    history: &[crate::models::ChatMessage],
-    user_message: &str,
-) -> String {
-    let mut prompt = String::new();
-
-    // Add system context
-    prompt.push_str("You are a helpful AI assistant helping to create a PRD (Product Requirements Document).\n\n");
-
-    if let Some(ref prd_type) = session.prd_type {
-        prompt.push_str(&format!("PRD Type: {}\n\n", prd_type));
-    }
-
-    // Add conversation history
-    if !history.is_empty() {
-        prompt.push_str("Previous conversation:\n");
-        for msg in history.iter().take(20) {
-            // Limit context
-            let role = match msg.role {
-                crate::models::MessageRole::User => "User",
-                crate::models::MessageRole::Assistant => "Assistant",
-                crate::models::MessageRole::System => "System",
-            };
-            prompt.push_str(&format!("{}: {}\n", role, msg.content));
-        }
-        prompt.push('\n');
-    }
-
-    prompt.push_str(&format!("User: {}\n\nAssistant:", user_message));
-    prompt
+/// Extract an optional argument from JSON args
+fn get_opt_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<Option<T>, String> {
+    args.get(name)
+        .map(|v| serde_json::from_value(v.clone()))
+        .transpose()
+        .map_err(|e| format!("Invalid argument {}: {}", name, e))
 }
 
-/// Generate a session title from the first message (server version)
-fn generate_session_title_server(first_message: &str, prd_type: Option<&str>) -> String {
-    let prefix = prd_type
-        .map(|t| match t {
-            "new_feature" => "Feature: ",
-            "bug_fix" => "Bug Fix: ",
-            "refactoring" => "Refactor: ",
-            "api_integration" => "API: ",
-            "full_new_app" => "New App: ",
-            _ => "",
-        })
-        .unwrap_or("");
+// =============================================================================
+// Command Routing Macros
+// =============================================================================
 
-    let summary: String = first_message.chars().take(50).collect();
-    let summary = summary.split_whitespace().take(6).collect::<Vec<_>>().join(" ");
-
-    format!("{}{}", prefix, summary)
+/// Routes a simple async command: extracts args, calls handler, serializes result
+macro_rules! route_async {
+    ($cmd:expr, $handler:expr) => {{
+        let result = $handler.await?;
+        serde_json::to_value(result).map_err(|e| e.to_string())
+    }};
 }
+
+/// Routes a sync command
+macro_rules! route_sync {
+    ($handler:expr) => {{
+        let result = $handler?;
+        serde_json::to_value(result).map_err(|e| e.to_string())
+    }};
+}
+
+/// Routes a command that returns ()
+macro_rules! route_unit {
+    ($handler:expr) => {{
+        $handler?;
+        Ok(Value::Null)
+    }};
+}
+
+/// Routes an async command that returns ()
+macro_rules! route_unit_async {
+    ($handler:expr) => {{
+        $handler.await?;
+        Ok(Value::Null)
+    }};
+}
+
+// =============================================================================
+// Main Handler
+// =============================================================================
 
 /// Main invoke handler - routes commands to their implementations
 pub async fn invoke_handler(
@@ -344,49 +153,22 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
     use crate::file_storage;
     use crate::models::*;
 
-    // Helper macro to extract args
-    macro_rules! get_arg {
-        ($args:expr, $name:expr, $type:ty) => {
-            serde_json::from_value::<$type>(
-                $args
-                    .get($name)
-                    .ok_or_else(|| format!("Missing argument: {}", $name))?
-                    .clone(),
-            )
-            .map_err(|e| format!("Invalid argument {}: {}", $name, e))?
-        };
-    }
-
-    macro_rules! get_opt_arg {
-        ($args:expr, $name:expr, $type:ty) => {
-            $args
-                .get($name)
-                .map(|v| serde_json::from_value::<$type>(v.clone()))
-                .transpose()
-                .map_err(|e| format!("Invalid argument {}: {}", $name, e))?
-        };
-    }
-
     match cmd {
         // =====================================================================
         // Session Commands
         // =====================================================================
         "create_session" => {
-            let name: String = get_arg!(args, "name", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let config: Option<SessionConfig> = get_opt_arg!(args, "config", SessionConfig);
+            let name: String = get_arg(&args, "name")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let config: Option<SessionConfig> = get_opt_arg(&args, "config")?;
 
-            // For server mode, we call the storage directly
-            let session_config = match config {
-                Some(explicit_config) => explicit_config,
-                None => {
-                    match state.config_state.get_config() {
-                        Ok(ralph_config) => (&ralph_config).into(),
-                        Err(_) => SessionConfig::default(),
-                    }
-                }
-            };
-
+            let session_config = config.unwrap_or_else(|| {
+                state
+                    .config_state
+                    .get_config()
+                    .map(|c| (&c).into())
+                    .unwrap_or_default()
+            });
             session_config.validate()?;
 
             let session = Session {
@@ -402,681 +184,681 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
                 total_tokens: 0,
             };
 
-            let path = Path::new(&project_path);
-            file_storage::sessions::save_session(path, &session)?;
+            file_storage::sessions::save_session(Path::new(&project_path), &session)?;
             serde_json::to_value(session).map_err(|e| e.to_string())
         }
 
         "get_sessions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let sessions = commands::sessions::get_sessions(project_path).await?;
-            serde_json::to_value(sessions).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::sessions::get_sessions(project_path))
         }
 
         "get_session" => {
-            let id: String = get_arg!(args, "id", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session = commands::sessions::get_session(id, project_path).await?;
-            serde_json::to_value(session).map_err(|e| e.to_string())
+            let id: String = get_arg(&args, "id")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::sessions::get_session(id, project_path))
         }
 
         "update_session" => {
-            let session: Session = get_arg!(args, "session", Session);
-            let session = commands::sessions::update_session(session).await?;
-            serde_json::to_value(session).map_err(|e| e.to_string())
+            let session: Session = get_arg(&args, "session")?;
+            route_async!(cmd, commands::sessions::update_session(session))
         }
 
         "delete_session" => {
-            let id: String = get_arg!(args, "id", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::sessions::delete_session(id, project_path).await?;
-            Ok(Value::Null)
+            let id: String = get_arg(&args, "id")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit_async!(commands::sessions::delete_session(id, project_path))
         }
 
         // =====================================================================
         // Task Commands
         // =====================================================================
         "create_task" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let task: Task = get_arg!(args, "task", Task);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let task = commands::tasks::create_task(session_id, task, project_path).await?;
-            serde_json::to_value(task).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let task: Task = get_arg(&args, "task")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::tasks::create_task(session_id, task, project_path)
+            )
         }
 
         "get_task" => {
-            let task_id: String = get_arg!(args, "taskId", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let task = commands::tasks::get_task(task_id, session_id, project_path).await?;
-            serde_json::to_value(task).map_err(|e| e.to_string())
+            let task_id: String = get_arg(&args, "taskId")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::tasks::get_task(task_id, session_id, project_path)
+            )
         }
 
         "get_tasks_for_session" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let tasks = commands::tasks::get_tasks_for_session(session_id, project_path).await?;
-            serde_json::to_value(tasks).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::tasks::get_tasks_for_session(session_id, project_path)
+            )
         }
 
         "update_task" => {
-            let task: Task = get_arg!(args, "task", Task);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let task = commands::tasks::update_task(task, session_id, project_path).await?;
-            serde_json::to_value(task).map_err(|e| e.to_string())
+            let task: Task = get_arg(&args, "task")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::tasks::update_task(task, session_id, project_path)
+            )
         }
 
         "delete_task" => {
-            let task_id: String = get_arg!(args, "taskId", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::tasks::delete_task(task_id, session_id, project_path).await?;
-            Ok(Value::Null)
+            let task_id: String = get_arg(&args, "taskId")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit_async!(commands::tasks::delete_task(task_id, session_id, project_path))
         }
 
         "import_prd" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let content: String = get_arg!(args, "content", String);
-            let format: Option<String> = get_opt_arg!(args, "format", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let tasks =
-                commands::tasks::import_prd(session_id, content, format, project_path).await?;
-            serde_json::to_value(tasks).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let content: String = get_arg(&args, "content")?;
+            let format: Option<String> = get_opt_arg(&args, "format")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::tasks::import_prd(session_id, content, format, project_path)
+            )
         }
 
         // =====================================================================
         // Agent Commands
         // =====================================================================
         "create_agent" => {
-            let agent: Agent = get_arg!(args, "agent", Agent);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::agents::create_agent(agent, project_path)?;
-            Ok(Value::Null)
+            let agent: Agent = get_arg(&args, "agent")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit!(commands::agents::create_agent(agent, project_path))
         }
 
         "get_agent" => {
-            let agent_id: String = get_arg!(args, "agentId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agent = commands::agents::get_agent(agent_id, project_path)?;
-            serde_json::to_value(agent).map_err(|e| e.to_string())
+            let agent_id: String = get_arg(&args, "agentId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::agents::get_agent(agent_id, project_path))
         }
 
         "get_agents_for_session" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agents = commands::agents::get_agents_for_session(session_id, project_path)?;
-            serde_json::to_value(agents).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::agents::get_agents_for_session(
+                session_id,
+                project_path
+            ))
         }
 
         "get_agents_for_task" => {
-            let task_id: String = get_arg!(args, "taskId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agents = commands::agents::get_agents_for_task(task_id, project_path)?;
-            serde_json::to_value(agents).map_err(|e| e.to_string())
+            let task_id: String = get_arg(&args, "taskId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::agents::get_agents_for_task(task_id, project_path))
         }
 
         "get_active_agents" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agents = commands::agents::get_active_agents(session_id, project_path)?;
-            serde_json::to_value(agents).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::agents::get_active_agents(session_id, project_path))
         }
 
         "get_all_active_agents" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agents = commands::agents::get_all_active_agents(project_path)?;
-            serde_json::to_value(agents).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::agents::get_all_active_agents(project_path))
         }
 
         "update_agent_metrics" => {
-            let agent_id: String = get_arg!(args, "agentId", String);
-            let tokens: i32 = get_arg!(args, "tokens", i32);
-            let cost: f64 = get_arg!(args, "cost", f64);
-            let iteration_count: i32 = get_arg!(args, "iterationCount", i32);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::agents::update_agent_metrics(
+            let agent_id: String = get_arg(&args, "agentId")?;
+            let tokens: i32 = get_arg(&args, "tokens")?;
+            let cost: f64 = get_arg(&args, "cost")?;
+            let iteration_count: i32 = get_arg(&args, "iterationCount")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit!(commands::agents::update_agent_metrics(
                 agent_id,
                 tokens,
                 cost,
                 iteration_count,
                 project_path,
-            )?;
-            Ok(Value::Null)
+            ))
         }
 
         "update_agent_process_id" => {
-            let agent_id: String = get_arg!(args, "agentId", String);
-            let process_id: Option<u32> = get_opt_arg!(args, "processId", u32);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::agents::update_agent_process_id(agent_id, process_id, project_path)?;
-            Ok(Value::Null)
+            let agent_id: String = get_arg(&args, "agentId")?;
+            let process_id: Option<u32> = get_opt_arg(&args, "processId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit!(commands::agents::update_agent_process_id(
+                agent_id,
+                process_id,
+                project_path
+            ))
         }
 
         "delete_agent" => {
-            let agent_id: String = get_arg!(args, "agentId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::agents::delete_agent(agent_id, project_path)?;
-            Ok(Value::Null)
+            let agent_id: String = get_arg(&args, "agentId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit!(commands::agents::delete_agent(agent_id, project_path))
         }
 
         // =====================================================================
         // PRD Commands (File-based)
         // =====================================================================
         "scan_prd_files" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let files = commands::prd::scan_prd_files(project_path).await?;
-            serde_json::to_value(files).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::prd::scan_prd_files(project_path))
         }
 
         "get_prd_file" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let file = commands::prd::get_prd_file(project_path, prd_name).await?;
-            serde_json::to_value(file).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_async!(cmd, commands::prd::get_prd_file(project_path, prd_name))
         }
 
         "update_prd_file" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let content: String = get_arg!(args, "content", String);
-            let file = commands::prd::update_prd_file(project_path, prd_name, content).await?;
-            serde_json::to_value(file).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let content: String = get_arg(&args, "content")?;
+            route_async!(
+                cmd,
+                commands::prd::update_prd_file(project_path, prd_name, content)
+            )
         }
 
         "delete_prd_file" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let result = commands::prd::delete_prd_file(project_path, prd_name).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_async!(cmd, commands::prd::delete_prd_file(project_path, prd_name))
         }
 
         // =====================================================================
         // Project Commands
         // =====================================================================
         "register_project" => {
-            let path: String = get_arg!(args, "path", String);
-            let name: Option<String> = get_opt_arg!(args, "name", String);
-            let project = commands::projects::register_project(path, name)?;
-            serde_json::to_value(project).map_err(|e| e.to_string())
+            let path: String = get_arg(&args, "path")?;
+            let name: Option<String> = get_opt_arg(&args, "name")?;
+            route_sync!(commands::projects::register_project(path, name))
         }
 
         "get_project" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            let project = commands::projects::get_project(project_id)?;
-            serde_json::to_value(project).map_err(|e| e.to_string())
+            let project_id: String = get_arg(&args, "projectId")?;
+            route_sync!(commands::projects::get_project(project_id))
         }
 
         "get_project_by_path" => {
-            let path: String = get_arg!(args, "path", String);
-            let project = commands::projects::get_project_by_path(path)?;
-            serde_json::to_value(project).map_err(|e| e.to_string())
+            let path: String = get_arg(&args, "path")?;
+            route_sync!(commands::projects::get_project_by_path(path))
         }
 
-        "get_all_projects" => {
-            let projects = commands::projects::get_all_projects()?;
-            serde_json::to_value(projects).map_err(|e| e.to_string())
-        }
+        "get_all_projects" => route_sync!(commands::projects::get_all_projects()),
 
         "get_recent_projects" => {
-            let limit: Option<i32> = get_opt_arg!(args, "limit", i32);
-            let projects = commands::projects::get_recent_projects(limit)?;
-            serde_json::to_value(projects).map_err(|e| e.to_string())
+            let limit: Option<i32> = get_opt_arg(&args, "limit")?;
+            route_sync!(commands::projects::get_recent_projects(limit))
         }
 
-        "get_favorite_projects" => {
-            let projects = commands::projects::get_favorite_projects()?;
-            serde_json::to_value(projects).map_err(|e| e.to_string())
-        }
+        "get_favorite_projects" => route_sync!(commands::projects::get_favorite_projects()),
 
         "update_project_name" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            let name: String = get_arg!(args, "name", String);
-            commands::projects::update_project_name(project_id, name)?;
-            Ok(Value::Null)
+            let project_id: String = get_arg(&args, "projectId")?;
+            let name: String = get_arg(&args, "name")?;
+            route_unit!(commands::projects::update_project_name(project_id, name))
         }
 
         "toggle_project_favorite" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            let is_favorite = commands::projects::toggle_project_favorite(project_id)?;
-            serde_json::to_value(is_favorite).map_err(|e| e.to_string())
+            let project_id: String = get_arg(&args, "projectId")?;
+            route_sync!(commands::projects::toggle_project_favorite(project_id))
         }
 
         "set_project_favorite" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            let is_favorite: bool = get_arg!(args, "isFavorite", bool);
-            commands::projects::set_project_favorite(project_id, is_favorite)?;
-            Ok(Value::Null)
+            let project_id: String = get_arg(&args, "projectId")?;
+            let is_favorite: bool = get_arg(&args, "isFavorite")?;
+            route_unit!(commands::projects::set_project_favorite(
+                project_id,
+                is_favorite
+            ))
         }
 
         "touch_project" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            commands::projects::touch_project(project_id)?;
-            Ok(Value::Null)
+            let project_id: String = get_arg(&args, "projectId")?;
+            route_unit!(commands::projects::touch_project(project_id))
         }
 
         "delete_project" => {
-            let project_id: String = get_arg!(args, "projectId", String);
-            commands::projects::delete_project(project_id)?;
-            Ok(Value::Null)
+            let project_id: String = get_arg(&args, "projectId")?;
+            route_unit!(commands::projects::delete_project(project_id))
         }
 
         // =====================================================================
-        // Git Commands
-        // Call git operations directly via GitManager
+        // Git Commands (use state.git_state)
         // =====================================================================
         "git_list_branches" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let branches = state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.list_branches()
-            })?;
-            serde_json::to_value(branches).map_err(|e| e.to_string())
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.list_branches()))
         }
 
         "git_get_current_branch" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let branch = state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.get_current_branch()
-            })?;
-            serde_json::to_value(branch).map_err(|e| e.to_string())
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.get_current_branch()))
         }
 
         "git_get_status" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let status = state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.get_status()
-            })?;
-            serde_json::to_value(status).map_err(|e| e.to_string())
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.get_status()))
         }
 
         "git_get_commit_history" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let limit: Option<usize> = get_opt_arg!(args, "limit", usize);
-            let commits = state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.get_commit_history(limit.unwrap_or(50))
-            })?;
-            serde_json::to_value(commits).map_err(|e| e.to_string())
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            let limit: Option<usize> = get_opt_arg(&args, "limit")?;
+            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
+                .get_commit_history(limit.unwrap_or(50))))
         }
 
         "git_is_repository" => {
-            let path: String = get_arg!(args, "path", String);
-            let git_path = Path::new(&path).join(".git");
-            let is_repo = git_path.exists();
+            let path: String = get_arg(&args, "path")?;
+            let is_repo = Path::new(&path).join(".git").exists();
             serde_json::to_value(is_repo).map_err(|e| e.to_string())
         }
 
         "git_create_branch" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let branch_name: String = get_arg!(args, "branchName", String);
-            let force: bool = get_opt_arg!(args, "force", bool).unwrap_or(false);
-            let branch = state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.create_branch(&branch_name, force)
-            })?;
-            serde_json::to_value(branch).map_err(|e| e.to_string())
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            let branch_name: String = get_arg(&args, "branchName")?;
+            let force: bool = get_opt_arg(&args, "force")?.unwrap_or(false);
+            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
+                .create_branch(&branch_name, force)))
         }
 
         "git_checkout_branch" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let branch_name: String = get_arg!(args, "branchName", String);
-            state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.checkout_branch(&branch_name)
-            })?;
-            Ok(Value::Null)
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            let branch_name: String = get_arg(&args, "branchName")?;
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.checkout_branch(&branch_name)))
         }
 
         "git_delete_branch" => {
-            let repo_path: String = get_arg!(args, "repoPath", String);
-            let branch_name: String = get_arg!(args, "branchName", String);
-            state.git_state.with_manager(&repo_path, |mgr| {
-                mgr.delete_branch(&branch_name)
-            })?;
-            Ok(Value::Null)
+            let repo_path: String = get_arg(&args, "repoPath")?;
+            let branch_name: String = get_arg(&args, "branchName")?;
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.delete_branch(&branch_name)))
         }
 
         // =====================================================================
-        // Config Commands
-        // Call ConfigState methods directly
+        // Config Commands (use state.config_state)
         // =====================================================================
-        "get_config" => {
-            let config = state.config_state.get_config()?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
-        }
+        "get_config" => route_sync!(state.config_state.get_config()),
 
         "set_config_project_path" => {
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
             let path = project_path.map(std::path::PathBuf::from);
             state.config_state.set_project_path(path)?;
-            let config = state.config_state.get_config()?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
+            route_sync!(state.config_state.get_config())
         }
 
-        "reload_config" => {
-            let config = state.config_state.get_config()?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
-        }
+        "reload_config" => route_sync!(state.config_state.get_config()),
 
         // =====================================================================
         // Mission Control Commands
         // =====================================================================
         "get_activity_feed" => {
-            let limit: Option<i32> = get_opt_arg!(args, "limit", i32);
-            let offset: Option<i32> = get_opt_arg!(args, "offset", i32);
-            let feed = commands::mission_control::get_activity_feed(limit, offset)?;
-            serde_json::to_value(feed).map_err(|e| e.to_string())
+            let limit: Option<i32> = get_opt_arg(&args, "limit")?;
+            let offset: Option<i32> = get_opt_arg(&args, "offset")?;
+            route_sync!(commands::mission_control::get_activity_feed(limit, offset))
         }
 
-        "get_global_stats" => {
-            let stats = commands::mission_control::get_global_stats()?;
-            serde_json::to_value(stats).map_err(|e| e.to_string())
-        }
+        "get_global_stats" => route_sync!(commands::mission_control::get_global_stats()),
 
         // =====================================================================
         // Ralph Loop Commands
         // =====================================================================
         "get_ralph_prd" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let prd = commands::ralph_loop::get_ralph_prd(project_path, prd_name)?;
-            serde_json::to_value(prd).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_prd(project_path, prd_name))
         }
 
         "get_ralph_prd_status" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let status = commands::ralph_loop::get_ralph_prd_status(project_path, prd_name)?;
-            serde_json::to_value(status).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_prd_status(
+                project_path,
+                prd_name
+            ))
         }
 
         "get_ralph_progress" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let progress = commands::ralph_loop::get_ralph_progress(project_path, prd_name)?;
-            serde_json::to_value(progress).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_progress(
+                project_path,
+                prd_name
+            ))
         }
 
         "get_ralph_progress_summary" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let summary =
-                commands::ralph_loop::get_ralph_progress_summary(project_path, prd_name)?;
-            serde_json::to_value(summary).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_progress_summary(
+                project_path,
+                prd_name
+            ))
         }
 
         "get_ralph_prompt" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let prompt = commands::ralph_loop::get_ralph_prompt(project_path, prd_name)?;
-            serde_json::to_value(prompt).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_prompt(
+                project_path,
+                prd_name
+            ))
         }
 
         "has_ralph_files" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
+            let project_path: String = get_arg(&args, "projectPath")?;
             let has_files = commands::ralph_loop::has_ralph_files(project_path);
             serde_json::to_value(has_files).map_err(|e| e.to_string())
         }
 
         "get_ralph_files" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let files = commands::ralph_loop::get_ralph_files(project_path)?;
-            serde_json::to_value(files).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::ralph_loop::get_ralph_files(project_path))
         }
 
         "get_ralph_config" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let config = commands::ralph_loop::get_ralph_config(project_path)?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::ralph_loop::get_ralph_config(project_path))
         }
 
         "list_ralph_loop_executions" => {
-            // For server mode, we'd need to track this differently
-            // For now, return empty list
-            let executions: Vec<String> = vec![];
-            serde_json::to_value(executions).map_err(|e| e.to_string())
+            // For server mode, return empty list (would need different tracking)
+            serde_json::to_value(Vec::<String>::new()).map_err(|e| e.to_string())
         }
 
         "get_ralph_iteration_history" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let execution_id: String = get_arg!(args, "executionId", String);
-            let history = commands::ralph_loop::get_ralph_iteration_history(project_path, execution_id)?;
-            serde_json::to_value(history).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_iteration_history(
+                project_path,
+                execution_id
+            ))
         }
 
         "get_ralph_iteration_stats" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let execution_id: String = get_arg!(args, "executionId", String);
-            let stats = commands::ralph_loop::get_ralph_iteration_stats(project_path, execution_id)?;
-            serde_json::to_value(stats).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_iteration_stats(
+                project_path,
+                execution_id
+            ))
         }
 
         "check_stale_ralph_executions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let threshold_secs: Option<i64> = get_opt_arg!(args, "thresholdSecs", i64);
-            let stale = commands::ralph_loop::check_stale_ralph_executions(project_path, threshold_secs)?;
-            serde_json::to_value(stale).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let threshold_secs: Option<i64> = get_opt_arg(&args, "thresholdSecs")?;
+            route_sync!(commands::ralph_loop::check_stale_ralph_executions(
+                project_path,
+                threshold_secs
+            ))
         }
 
         "recover_stale_ralph_iterations" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let execution_id: String = get_arg!(args, "executionId", String);
-            let count = commands::ralph_loop::recover_stale_ralph_iterations(project_path, execution_id)?;
-            serde_json::to_value(count).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::recover_stale_ralph_iterations(
+                project_path,
+                execution_id
+            ))
         }
 
         "cleanup_ralph_iteration_history" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let days_to_keep: Option<i64> = get_opt_arg!(args, "daysToKeep", i64);
-            let count = commands::ralph_loop::cleanup_ralph_iteration_history(project_path, days_to_keep)?;
-            serde_json::to_value(count).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let days_to_keep: Option<i64> = get_opt_arg(&args, "daysToKeep")?;
+            route_sync!(commands::ralph_loop::cleanup_ralph_iteration_history(
+                project_path,
+                days_to_keep
+            ))
         }
 
         "init_ralph_prd" => {
-            let request: commands::ralph_loop::InitRalphPrdRequest =
-                get_arg!(args, "request", commands::ralph_loop::InitRalphPrdRequest);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let prd = commands::ralph_loop::init_ralph_prd(request, prd_name)?;
-            serde_json::to_value(prd).map_err(|e| e.to_string())
+            let request: commands::ralph_loop::InitRalphPrdRequest = get_arg(&args, "request")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::init_ralph_prd(request, prd_name))
         }
 
         "set_ralph_prompt" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let content: String = get_arg!(args, "content", String);
-            commands::ralph_loop::set_ralph_prompt(project_path, prd_name, content)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let content: String = get_arg(&args, "content")?;
+            route_unit!(commands::ralph_loop::set_ralph_prompt(
+                project_path,
+                prd_name,
+                content
+            ))
         }
 
         "set_ralph_config" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let config: RalphConfig = get_arg!(args, "config", RalphConfig);
-            commands::ralph_loop::set_ralph_config(project_path, config)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let config: RalphConfig = get_arg(&args, "config")?;
+            route_unit!(commands::ralph_loop::set_ralph_config(project_path, config))
         }
 
         "init_ralph_config" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let config = commands::ralph_loop::init_ralph_config(project_path)?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::ralph_loop::init_ralph_config(project_path))
         }
 
         "update_ralph_config" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let max_iterations: Option<u32> = get_opt_arg!(args, "maxIterations", u32);
-            let max_cost: Option<f64> = get_opt_arg!(args, "maxCost", f64);
-            let agent: Option<String> = get_opt_arg!(args, "agent", String);
-            let model: Option<String> = get_opt_arg!(args, "model", String);
-            let test_command: Option<String> = get_opt_arg!(args, "testCommand", String);
-            let lint_command: Option<String> = get_opt_arg!(args, "lintCommand", String);
-            let build_command: Option<String> = get_opt_arg!(args, "buildCommand", String);
-            let config = commands::ralph_loop::update_ralph_config(
-                project_path, max_iterations, max_cost, agent, model, test_command, lint_command, build_command
-            )?;
-            serde_json::to_value(config).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let max_iterations: Option<u32> = get_opt_arg(&args, "maxIterations")?;
+            let max_cost: Option<f64> = get_opt_arg(&args, "maxCost")?;
+            let agent: Option<String> = get_opt_arg(&args, "agent")?;
+            let model: Option<String> = get_opt_arg(&args, "model")?;
+            let test_command: Option<String> = get_opt_arg(&args, "testCommand")?;
+            let lint_command: Option<String> = get_opt_arg(&args, "lintCommand")?;
+            let build_command: Option<String> = get_opt_arg(&args, "buildCommand")?;
+            route_sync!(commands::ralph_loop::update_ralph_config(
+                project_path,
+                max_iterations,
+                max_cost,
+                agent,
+                model,
+                test_command,
+                lint_command,
+                build_command
+            ))
         }
 
         "add_ralph_story" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let story: RalphStoryInput = get_arg!(args, "story", RalphStoryInput);
-            commands::ralph_loop::add_ralph_story(project_path, prd_name, story)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story: RalphStoryInput = get_arg(&args, "story")?;
+            route_unit!(commands::ralph_loop::add_ralph_story(
+                project_path,
+                prd_name,
+                story
+            ))
         }
 
         "remove_ralph_story" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let story_id: String = get_arg!(args, "storyId", String);
-            let removed = commands::ralph_loop::remove_ralph_story(project_path, prd_name, story_id)?;
-            serde_json::to_value(removed).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story_id: String = get_arg(&args, "storyId")?;
+            route_sync!(commands::ralph_loop::remove_ralph_story(
+                project_path,
+                prd_name,
+                story_id
+            ))
         }
 
         "mark_ralph_story_passing" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let story_id: String = get_arg!(args, "storyId", String);
-            let result = commands::ralph_loop::mark_ralph_story_passing(project_path, prd_name, story_id)?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story_id: String = get_arg(&args, "storyId")?;
+            route_sync!(commands::ralph_loop::mark_ralph_story_passing(
+                project_path,
+                prd_name,
+                story_id
+            ))
         }
 
         "mark_ralph_story_failing" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let story_id: String = get_arg!(args, "storyId", String);
-            let result = commands::ralph_loop::mark_ralph_story_failing(project_path, prd_name, story_id)?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story_id: String = get_arg(&args, "storyId")?;
+            route_sync!(commands::ralph_loop::mark_ralph_story_failing(
+                project_path,
+                prd_name,
+                story_id
+            ))
         }
 
         "add_ralph_progress_note" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let iteration: u32 = get_arg!(args, "iteration", u32);
-            let note: String = get_arg!(args, "note", String);
-            commands::ralph_loop::add_ralph_progress_note(project_path, prd_name, iteration, note)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let iteration: u32 = get_arg(&args, "iteration")?;
+            let note: String = get_arg(&args, "note")?;
+            route_unit!(commands::ralph_loop::add_ralph_progress_note(
+                project_path,
+                prd_name,
+                iteration,
+                note
+            ))
         }
 
         "clear_ralph_progress" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            commands::ralph_loop::clear_ralph_progress(project_path, prd_name)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_unit!(commands::ralph_loop::clear_ralph_progress(
+                project_path,
+                prd_name
+            ))
         }
 
         "convert_prd_file_to_ralph" => {
             let request: commands::ralph_loop::ConvertPrdFileToRalphRequest =
-                get_arg!(args, "request", commands::ralph_loop::ConvertPrdFileToRalphRequest);
-            let prd = commands::ralph_loop::convert_prd_file_to_ralph(request)?;
-            serde_json::to_value(prd).map_err(|e| e.to_string())
+                get_arg(&args, "request")?;
+            route_sync!(commands::ralph_loop::convert_prd_file_to_ralph(request))
         }
 
         "cleanup_ralph_worktree" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let worktree_path: String = get_arg!(args, "worktreePath", String);
-            let delete_directory: Option<bool> = get_opt_arg!(args, "deleteDirectory", bool);
-            commands::ralph_loop::cleanup_ralph_worktree(project_path, worktree_path, delete_directory)?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let worktree_path: String = get_arg(&args, "worktreePath")?;
+            let delete_directory: Option<bool> = get_opt_arg(&args, "deleteDirectory")?;
+            route_unit!(commands::ralph_loop::cleanup_ralph_worktree(
+                project_path,
+                worktree_path,
+                delete_directory
+            ))
         }
 
         "list_ralph_worktrees" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let worktrees = commands::ralph_loop::list_ralph_worktrees(project_path)?;
-            serde_json::to_value(worktrees).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_sync!(commands::ralph_loop::list_ralph_worktrees(project_path))
         }
 
         "get_all_ralph_iterations" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let execution_id: Option<String> = get_opt_arg!(args, "executionId", String);
-            let outcome_filter: Option<String> = get_opt_arg!(args, "outcomeFilter", String);
-            let limit: Option<u32> = get_opt_arg!(args, "limit", u32);
-            let iterations = commands::ralph_loop::get_all_ralph_iterations(
-                project_path, execution_id, outcome_filter, limit
-            )?;
-            serde_json::to_value(iterations).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let execution_id: Option<String> = get_opt_arg(&args, "executionId")?;
+            let outcome_filter: Option<String> = get_opt_arg(&args, "outcomeFilter")?;
+            let limit: Option<u32> = get_opt_arg(&args, "limit")?;
+            route_sync!(commands::ralph_loop::get_all_ralph_iterations(
+                project_path,
+                execution_id,
+                outcome_filter,
+                limit
+            ))
         }
 
         "delete_ralph_iteration_history" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let execution_id: String = get_arg!(args, "executionId", String);
-            let count = commands::ralph_loop::delete_ralph_iteration_history(project_path, execution_id)?;
-            serde_json::to_value(count).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::delete_ralph_iteration_history(
+                project_path,
+                execution_id
+            ))
         }
 
         "regenerate_ralph_prd_acceptance" => {
             let request: commands::ralph_loop::RegenerateAcceptanceRequest =
-                get_arg!(args, "request", commands::ralph_loop::RegenerateAcceptanceRequest);
-            let prd = commands::ralph_loop::regenerate_ralph_prd_acceptance(request)?;
-            serde_json::to_value(prd).map_err(|e| e.to_string())
+                get_arg(&args, "request")?;
+            route_sync!(commands::ralph_loop::regenerate_ralph_prd_acceptance(
+                request
+            ))
         }
 
-        // Ralph Loop execution commands (require server state)
-        "start_ralph_loop" => {
-            // Ralph loop execution requires Tauri State and AppHandle
-            // For now, return an error indicating this feature is not available in browser mode
-            return Err("Ralph loop execution is not yet supported in browser mode. Use the desktop app.".to_string());
-        }
-
-        "stop_ralph_loop" => {
-            // Ralph loop stop requires access to running orchestrator state
-            // which is not yet implemented for server mode
-            return Err("Ralph loop stop is not yet supported in browser mode. Use the desktop app.".to_string());
+        // Ralph Loop execution commands (not available in browser mode)
+        "start_ralph_loop" | "stop_ralph_loop" => {
+            Err("Ralph loop execution is not supported in browser mode. Use the desktop app.".to_string())
         }
 
         "get_ralph_loop_state" => {
-            let execution_id: String = get_arg!(args, "executionId", String);
-            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
-                return serde_json::to_value(snapshot.state).map_err(|e| e.to_string());
+            let execution_id: String = get_arg(&args, "executionId")?;
+            match state.ralph_loop_state.get_snapshot(&execution_id) {
+                Some(s) => serde_json::to_value(s.state).map_err(|e| e.to_string()),
+                None => Err(format!("Execution {} not found", execution_id)),
             }
-            Err(format!("Execution {} not found", execution_id))
         }
 
         "get_ralph_loop_metrics" => {
-            let execution_id: String = get_arg!(args, "executionId", String);
-            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
-                return serde_json::to_value(snapshot.metrics).map_err(|e| e.to_string());
+            let execution_id: String = get_arg(&args, "executionId")?;
+            match state.ralph_loop_state.get_snapshot(&execution_id) {
+                Some(s) => serde_json::to_value(s.metrics).map_err(|e| e.to_string()),
+                None => Err(format!("Execution {} not found", execution_id)),
             }
-            Err(format!("Execution {} not found", execution_id))
         }
 
         "get_ralph_loop_current_agent" => {
-            let execution_id: String = get_arg!(args, "executionId", String);
-            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
-                return serde_json::to_value(snapshot.current_agent_id).map_err(|e| e.to_string());
+            let execution_id: String = get_arg(&args, "executionId")?;
+            match state.ralph_loop_state.get_snapshot(&execution_id) {
+                Some(s) => serde_json::to_value(s.current_agent_id).map_err(|e| e.to_string()),
+                None => Err(format!("Execution {} not found", execution_id)),
             }
-            Err(format!("Execution {} not found", execution_id))
         }
 
         "get_ralph_loop_worktree_path" => {
-            let execution_id: String = get_arg!(args, "executionId", String);
-            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
-                return serde_json::to_value(snapshot.worktree_path).map_err(|e| e.to_string());
+            let execution_id: String = get_arg(&args, "executionId")?;
+            match state.ralph_loop_state.get_snapshot(&execution_id) {
+                Some(s) => serde_json::to_value(s.worktree_path).map_err(|e| e.to_string()),
+                None => Err(format!("Execution {} not found", execution_id)),
             }
-            Err(format!("Execution {} not found", execution_id))
         }
 
         "get_ralph_loop_snapshot" => {
-            let execution_id: String = get_arg!(args, "executionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            // Try in-memory snapshot first - extract serializable fields
+            let execution_id: String = get_arg(&args, "executionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+
+            // Try in-memory snapshot first
             if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
-                let json_snapshot = serde_json::json!({
+                return Ok(serde_json::json!({
                     "state": snapshot.state,
                     "metrics": snapshot.metrics,
                     "worktreePath": snapshot.worktree_path,
                     "currentAgentId": snapshot.current_agent_id,
-                });
-                return Ok(json_snapshot);
+                }));
             }
+
             // Fall back to file-based snapshot
             let path = std::path::Path::new(&project_path)
                 .join(".ralph-ui")
                 .join("iterations")
                 .join(format!("{}_snapshot.json", execution_id));
+
             if path.exists() {
                 let content = std::fs::read_to_string(&path)
                     .map_err(|e| format!("Failed to read snapshot: {}", e))?;
-                let snapshot: serde_json::Value = serde_json::from_str(&content)
-                    .map_err(|e| format!("Failed to parse snapshot: {}", e))?;
-                return Ok(snapshot);
+                return serde_json::from_str(&content)
+                    .map_err(|e| format!("Failed to parse snapshot: {}", e));
             }
+
             Err(format!("Execution {} not found", execution_id))
         }
 
@@ -1084,59 +866,67 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         // Template Commands
         // =====================================================================
         "list_templates" => {
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
-            let templates = commands::templates::list_templates(project_path).await?;
-            serde_json::to_value(templates).map_err(|e| e.to_string())
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::templates::list_templates(project_path))
         }
 
         "list_builtin_templates" => {
-            let templates = commands::templates::list_builtin_templates().await?;
-            serde_json::to_value(templates).map_err(|e| e.to_string())
+            route_async!(cmd, commands::templates::list_builtin_templates())
         }
 
         "get_template_content" => {
-            let name: String = get_arg!(args, "name", String);
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
-            let content = commands::templates::get_template_content(name, project_path).await?;
-            serde_json::to_value(content).map_err(|e| e.to_string())
+            let name: String = get_arg(&args, "name")?;
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::templates::get_template_content(name, project_path)
+            )
         }
 
         "save_template" => {
-            let name: String = get_arg!(args, "name", String);
-            let content: String = get_arg!(args, "content", String);
-            let scope: String = get_arg!(args, "scope", String);
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
-            commands::templates::save_template(name, content, scope, project_path).await?;
-            Ok(Value::Null)
+            let name: String = get_arg(&args, "name")?;
+            let content: String = get_arg(&args, "content")?;
+            let scope: String = get_arg(&args, "scope")?;
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
+            route_unit_async!(commands::templates::save_template(
+                name,
+                content,
+                scope,
+                project_path
+            ))
         }
 
         "delete_template" => {
-            let name: String = get_arg!(args, "name", String);
-            let scope: String = get_arg!(args, "scope", String);
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
-            commands::templates::delete_template(name, scope, project_path).await?;
-            Ok(Value::Null)
+            let name: String = get_arg(&args, "name")?;
+            let scope: String = get_arg(&args, "scope")?;
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
+            route_unit_async!(commands::templates::delete_template(
+                name,
+                scope,
+                project_path
+            ))
         }
 
         "preview_template" => {
-            let content: String = get_arg!(args, "content", String);
-            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
-            let result = commands::templates::preview_template(content, project_path).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let content: String = get_arg(&args, "content")?;
+            let project_path: Option<String> = get_opt_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::templates::preview_template(content, project_path)
+            )
         }
 
         // =====================================================================
         // Model Discovery Commands
-        // Call ModelCache directly
         // =====================================================================
         "get_available_models" => {
-            let agent_type: AgentType = get_arg!(args, "agentType", AgentType);
+            let agent_type: AgentType = get_arg(&args, "agentType")?;
             let models = state.model_cache_state.cache.get_or_fetch(agent_type);
             serde_json::to_value(models).map_err(|e| e.to_string())
         }
 
         "refresh_models" => {
-            let agent_type: Option<AgentType> = get_opt_arg!(args, "agentType", AgentType);
+            let agent_type: Option<AgentType> = get_opt_arg(&args, "agentType")?;
             state.model_cache_state.cache.invalidate(agent_type);
             Ok(Value::Null)
         }
@@ -1145,52 +935,54 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         // Recovery Commands
         // =====================================================================
         "check_stale_sessions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let stale = commands::recovery::check_stale_sessions(project_path).await?;
-            serde_json::to_value(stale).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::recovery::check_stale_sessions(project_path))
         }
 
         "recover_stale_session" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let result = commands::recovery::recover_stale_session(session_id, project_path).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::recovery::recover_stale_session(session_id, project_path)
+            )
         }
 
         "recover_all_stale_sessions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let results = commands::recovery::recover_all_stale_sessions(project_path).await?;
-            serde_json::to_value(results).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::recovery::recover_all_stale_sessions(project_path)
+            )
         }
 
         // =====================================================================
         // GSD Workflow Commands
         // =====================================================================
         "start_gsd_session" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let chat_session_id: String = get_arg!(args, "chatSessionId", String);
-            let state_result = commands::gsd::start_gsd_session(project_path, chat_session_id).await?;
-            serde_json::to_value(state_result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let chat_session_id: String = get_arg(&args, "chatSessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::start_gsd_session(project_path, chat_session_id)
+            )
         }
 
         "get_gsd_state" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let state_result = commands::gsd::get_gsd_state(project_path, session_id).await?;
-            serde_json::to_value(state_result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(cmd, commands::gsd::get_gsd_state(project_path, session_id))
         }
 
         "list_gsd_sessions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let sessions = commands::gsd::list_gsd_sessions(project_path).await?;
-            serde_json::to_value(sessions).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::gsd::list_gsd_sessions(project_path))
         }
 
         "delete_gsd_session" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            commands::gsd::delete_gsd_session(project_path, session_id).await?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_unit_async!(commands::gsd::delete_gsd_session(project_path, session_id))
         }
 
         "get_available_research_agents" => {
@@ -1199,267 +991,321 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         }
 
         "update_gsd_phase" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let phase: crate::gsd::state::GsdPhase = get_arg!(args, "phase", crate::gsd::state::GsdPhase);
-            let state_result = commands::gsd::update_gsd_phase(project_path, session_id, phase).await?;
-            serde_json::to_value(state_result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let phase: crate::gsd::state::GsdPhase = get_arg(&args, "phase")?;
+            route_async!(
+                cmd,
+                commands::gsd::update_gsd_phase(project_path, session_id, phase)
+            )
         }
 
         "update_questioning_context" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let context: crate::gsd::state::QuestioningContext = get_arg!(args, "context", crate::gsd::state::QuestioningContext);
-            let state_result = commands::gsd::update_questioning_context(project_path, session_id, context).await?;
-            serde_json::to_value(state_result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let context: crate::gsd::state::QuestioningContext = get_arg(&args, "context")?;
+            route_async!(
+                cmd,
+                commands::gsd::update_questioning_context(project_path, session_id, context)
+            )
         }
 
         "generate_project_document" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let doc = commands::gsd::generate_project_document(project_path, session_id).await?;
-            serde_json::to_value(doc).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::generate_project_document(project_path, session_id)
+            )
         }
 
         "start_research" => {
-            // Research requires AppHandle for progress events
-            // For now, return an error indicating this feature needs the desktop app
-            return Err("Research with streaming progress is not yet supported in browser mode. Use the desktop app.".to_string());
+            Err("Research with streaming progress is not supported in browser mode. Use the desktop app.".to_string())
         }
 
         "get_research_results" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let results = commands::gsd::get_research_results(project_path, session_id).await?;
-            serde_json::to_value(results).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::get_research_results(project_path, session_id)
+            )
         }
 
         "synthesize_research_cmd" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let synthesis = commands::gsd::synthesize_research_cmd(project_path, session_id).await?;
-            serde_json::to_value(synthesis).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::synthesize_research_cmd(project_path, session_id)
+            )
         }
 
         "generate_requirements_from_research" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let requirements = commands::gsd::generate_requirements_from_research(project_path, session_id).await?;
-            serde_json::to_value(requirements).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::generate_requirements_from_research(project_path, session_id)
+            )
         }
 
         "scope_requirements" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let selections: crate::gsd::requirements::ScopeSelection = get_arg!(args, "selections", crate::gsd::requirements::ScopeSelection);
-            let requirements = commands::gsd::scope_requirements(project_path, session_id, selections).await?;
-            serde_json::to_value(requirements).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let selections: crate::gsd::requirements::ScopeSelection = get_arg(&args, "selections")?;
+            route_async!(
+                cmd,
+                commands::gsd::scope_requirements(project_path, session_id, selections)
+            )
         }
 
         "validate_requirements" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let result = commands::gsd::validate_requirements(project_path, session_id).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::validate_requirements(project_path, session_id)
+            )
         }
 
         "add_requirement" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let category: String = get_arg!(args, "category", String);
-            let title: String = get_arg!(args, "title", String);
-            let description: String = get_arg!(args, "description", String);
-            let requirements = commands::gsd::add_requirement(project_path, session_id, category, title, description).await?;
-            serde_json::to_value(requirements).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let category: String = get_arg(&args, "category")?;
+            let title: String = get_arg(&args, "title")?;
+            let description: String = get_arg(&args, "description")?;
+            route_async!(
+                cmd,
+                commands::gsd::add_requirement(
+                    project_path,
+                    session_id,
+                    category,
+                    title,
+                    description
+                )
+            )
         }
 
         "save_requirements" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let requirements: crate::gsd::requirements::RequirementsDoc = get_arg!(args, "requirements", crate::gsd::requirements::RequirementsDoc);
-            commands::gsd::save_requirements(project_path, session_id, requirements).await?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let requirements: crate::gsd::requirements::RequirementsDoc =
+                get_arg(&args, "requirements")?;
+            route_unit_async!(commands::gsd::save_requirements(
+                project_path,
+                session_id,
+                requirements
+            ))
         }
 
         "load_requirements" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let requirements = commands::gsd::load_requirements(project_path, session_id).await?;
-            serde_json::to_value(requirements).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::load_requirements(project_path, session_id)
+            )
         }
 
         "create_roadmap" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let roadmap = commands::gsd::create_roadmap(project_path, session_id).await?;
-            serde_json::to_value(roadmap).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(cmd, commands::gsd::create_roadmap(project_path, session_id))
         }
 
         "load_roadmap" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let roadmap = commands::gsd::load_roadmap(project_path, session_id).await?;
-            serde_json::to_value(roadmap).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(cmd, commands::gsd::load_roadmap(project_path, session_id))
         }
 
         "verify_gsd_plans" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let result = commands::gsd::verify_gsd_plans(project_path, session_id).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::verify_gsd_plans(project_path, session_id)
+            )
         }
 
         "get_verification_history" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let history = commands::gsd::get_verification_history(project_path, session_id).await?;
-            serde_json::to_value(history).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::get_verification_history(project_path, session_id)
+            )
         }
 
         "clear_verification_history" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            commands::gsd::clear_verification_history(project_path, session_id).await?;
-            Ok(Value::Null)
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_unit_async!(commands::gsd::clear_verification_history(
+                project_path,
+                session_id
+            ))
         }
 
         "export_gsd_to_ralph" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let prd_name: String = get_arg!(args, "prdName", String);
-            let branch: String = get_arg!(args, "branch", String);
-            let include_v2: Option<bool> = get_opt_arg!(args, "includeV2", bool);
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let branch: String = get_arg(&args, "branch")?;
+            let include_v2: Option<bool> = get_opt_arg(&args, "includeV2")?;
             let execution_config: Option<crate::ralph_loop::PrdExecutionConfig> =
-                get_opt_arg!(args, "executionConfig", crate::ralph_loop::PrdExecutionConfig);
-            let prd = commands::gsd::export_gsd_to_ralph(
-                project_path, session_id, prd_name, branch, include_v2, execution_config
-            ).await?;
-            serde_json::to_value(prd).map_err(|e| e.to_string())
+                get_opt_arg(&args, "executionConfig")?;
+            route_async!(
+                cmd,
+                commands::gsd::export_gsd_to_ralph(
+                    project_path,
+                    session_id,
+                    prd_name,
+                    branch,
+                    include_v2,
+                    execution_config
+                )
+            )
         }
 
         "save_planning_file" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let file_type: String = get_arg!(args, "fileType", String);
-            let content: String = get_arg!(args, "content", String);
-            let path = commands::gsd::save_planning_file(project_path, session_id, file_type, content).await?;
-            serde_json::to_value(path).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let file_type: String = get_arg(&args, "fileType")?;
+            let content: String = get_arg(&args, "content")?;
+            route_async!(
+                cmd,
+                commands::gsd::save_planning_file(project_path, session_id, file_type, content)
+            )
         }
 
         "read_gsd_planning_file" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let file_type: String = get_arg!(args, "fileType", String);
-            let content = commands::gsd::read_gsd_planning_file(project_path, session_id, file_type).await?;
-            serde_json::to_value(content).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let file_type: String = get_arg(&args, "fileType")?;
+            route_async!(
+                cmd,
+                commands::gsd::read_gsd_planning_file(project_path, session_id, file_type)
+            )
         }
 
         // =====================================================================
         // PRD Chat Commands
         // =====================================================================
         "start_prd_chat_session" => {
-            let request: commands::prd_chat::StartChatSessionRequest =
-                get_arg!(args, "request", commands::prd_chat::StartChatSessionRequest);
-            let session = commands::prd_chat::start_prd_chat_session(request).await?;
-            serde_json::to_value(session).map_err(|e| e.to_string())
+            let request: commands::prd_chat::StartChatSessionRequest = get_arg(&args, "request")?;
+            route_async!(cmd, commands::prd_chat::start_prd_chat_session(request))
         }
 
         "send_prd_chat_message" => {
-            let request: commands::prd_chat::SendMessageRequest =
-                get_arg!(args, "request", commands::prd_chat::SendMessageRequest);
+            let request: commands::prd_chat::SendMessageRequest = get_arg(&args, "request")?;
             // Use server-compatible version with EventBroadcaster for streaming
             let response = send_prd_chat_message_server(request, &state.broadcaster).await?;
             serde_json::to_value(response).map_err(|e| e.to_string())
         }
 
         "list_prd_chat_sessions" => {
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let sessions = commands::prd_chat::list_prd_chat_sessions(project_path).await?;
-            serde_json::to_value(sessions).map_err(|e| e.to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::prd_chat::list_prd_chat_sessions(project_path))
         }
 
         "get_prd_chat_history" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let history = commands::prd_chat::get_prd_chat_history(session_id, project_path).await?;
-            serde_json::to_value(history).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::get_prd_chat_history(session_id, project_path)
+            )
         }
 
         "delete_prd_chat_session" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::prd_chat::delete_prd_chat_session(session_id, project_path).await?;
-            Ok(Value::Null)
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit_async!(commands::prd_chat::delete_prd_chat_session(
+                session_id,
+                project_path
+            ))
         }
 
         "update_prd_chat_agent" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let agent_type: String = get_arg!(args, "agentType", String);
-            commands::prd_chat::update_prd_chat_agent(session_id, project_path, agent_type).await?;
-            Ok(Value::Null)
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let agent_type: String = get_arg(&args, "agentType")?;
+            route_unit_async!(commands::prd_chat::update_prd_chat_agent(
+                session_id,
+                project_path,
+                agent_type
+            ))
         }
 
         "assess_prd_quality" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let assessment = commands::prd_chat::assess_prd_quality(session_id, project_path).await?;
-            serde_json::to_value(assessment).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::assess_prd_quality(session_id, project_path)
+            )
         }
 
         "preview_prd_extraction" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let content = commands::prd_chat::preview_prd_extraction(session_id, project_path).await?;
-            serde_json::to_value(content).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::preview_prd_extraction(session_id, project_path)
+            )
         }
 
         "check_agent_availability" => {
-            let agent_type: String = get_arg!(args, "agentType", String);
-            let result = commands::prd_chat::check_agent_availability(agent_type).await?;
-            serde_json::to_value(result).map_err(|e| e.to_string())
+            let agent_type: String = get_arg(&args, "agentType")?;
+            route_async!(cmd, commands::prd_chat::check_agent_availability(agent_type))
         }
 
         "get_guided_questions" => {
-            let prd_type: String = get_arg!(args, "prdType", String);
-            let questions = commands::prd_chat::get_guided_questions(prd_type).await?;
-            serde_json::to_value(questions).map_err(|e| e.to_string())
+            let prd_type: String = get_arg(&args, "prdType")?;
+            route_async!(cmd, commands::prd_chat::get_guided_questions(prd_type))
         }
 
         "set_structured_mode" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let enabled: bool = get_arg!(args, "enabled", bool);
-            commands::prd_chat::set_structured_mode(session_id, project_path, enabled).await?;
-            Ok(Value::Null)
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let enabled: bool = get_arg(&args, "enabled")?;
+            route_unit_async!(commands::prd_chat::set_structured_mode(
+                session_id,
+                project_path,
+                enabled
+            ))
         }
 
         "clear_extracted_structure" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            commands::prd_chat::clear_extracted_structure(session_id, project_path).await?;
-            Ok(Value::Null)
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_unit_async!(commands::prd_chat::clear_extracted_structure(
+                session_id,
+                project_path
+            ))
         }
 
         "get_prd_plan_content" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
-            let content = commands::prd_chat::get_prd_plan_content(session_id, project_path).await?;
-            serde_json::to_value(content).map_err(|e| e.to_string())
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::get_prd_plan_content(session_id, project_path)
+            )
         }
 
-        // File watching for browser mode (polling-based)
+        // File watching for browser mode
         "start_watching_prd_file" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
-            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
 
-            // Get the session to determine the file path
             let session = crate::file_storage::chat_ops::get_chat_session(
                 Path::new(&project_path),
                 &session_id,
-            ).map_err(|e| format!("Failed to get session: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to get session: {}", e))?;
 
-            // Generate the plan file path
             let file_path = crate::watchers::get_prd_plan_file_path(
                 &project_path,
                 &session_id,
@@ -1467,23 +1313,179 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
                 session.prd_id.as_deref(),
             );
 
-            // Start watching the file
             let response = state.file_watcher.watch_file(&session_id, file_path);
             serde_json::to_value(response).map_err(|e| e.to_string())
         }
 
         "stop_watching_prd_file" => {
-            let session_id: String = get_arg!(args, "sessionId", String);
+            let session_id: String = get_arg(&args, "sessionId")?;
             let stopped = state.file_watcher.unwatch_file(&session_id);
             serde_json::to_value(stopped).map_err(|e| e.to_string())
         }
 
         // =====================================================================
-        // Default: Unknown command
+        // Unknown command
         // =====================================================================
         _ => Err(format!("Unknown command: {}", cmd)),
     }
 }
+
+// =============================================================================
+// Server-specific PRD Chat Implementation
+// =============================================================================
+
+/// Server-compatible version of send_prd_chat_message that uses EventBroadcaster
+/// instead of Tauri's app_handle for streaming events.
+///
+/// Uses the shared agent_executor module for unified chat agent execution.
+async fn send_prd_chat_message_server(
+    request: crate::commands::prd_chat::SendMessageRequest,
+    broadcaster: &Arc<EventBroadcaster>,
+) -> Result<crate::commands::prd_chat::SendMessageResponse, String> {
+    use crate::commands::prd_chat::agent_executor::{
+        execute_chat_agent, generate_session_title, BroadcastEmitter,
+    };
+    use crate::file_storage::chat_ops;
+    use crate::models::{AgentType, ChatMessage, MessageRole};
+    use crate::parsers::structured_output;
+    use uuid::Uuid;
+
+    let project_path_obj = Path::new(&request.project_path);
+
+    // Get session
+    let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Store user message
+    let user_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::User,
+        content: request.content.clone(),
+        created_at: now.clone(),
+    };
+
+    chat_ops::create_chat_message(project_path_obj, &user_message)
+        .map_err(|e| format!("Failed to store user message: {}", e))?;
+
+    // Get chat history for context
+    let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
+        .map_err(|e| format!("Failed to get chat history: {}", e))?;
+
+    // Build prompt using the server helper
+    let prompt = build_server_chat_prompt(&session, &history, &request.content);
+
+    // Parse agent type
+    let agent_type: AgentType = session
+        .agent_type
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {}", e))?;
+
+    // Execute agent using the shared executor with BroadcastEmitter
+    let emitter = BroadcastEmitter::new(broadcaster.clone());
+    let response_content = execute_chat_agent(
+        &emitter,
+        &request.session_id,
+        agent_type,
+        &prompt,
+        session.project_path.as_deref(),
+    )
+    .await
+    .map_err(|e| format!("Agent execution failed: {}", e))?;
+
+    // Store assistant message
+    let response_now = chrono::Utc::now().to_rfc3339();
+    let assistant_message = ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        session_id: request.session_id.clone(),
+        role: MessageRole::Assistant,
+        content: response_content.clone(),
+        created_at: response_now.clone(),
+    };
+
+    chat_ops::create_chat_message(project_path_obj, &assistant_message)
+        .map_err(|e| format!("Failed to store assistant message: {}", e))?;
+
+    // Update session timestamp
+    chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
+        .map_err(|e| format!("Failed to update session: {}", e))?;
+
+    // Auto-generate title if not set
+    if session.title.is_none() {
+        let title = generate_session_title(&request.content, session.prd_type.as_deref());
+        chat_ops::update_chat_session_title(project_path_obj, &request.session_id, &title).ok();
+    }
+
+    // Handle structured mode
+    if session.structured_mode {
+        let new_items = structured_output::extract_items(&response_content);
+        if !new_items.is_empty() {
+            let mut structure: crate::models::ExtractedPRDStructure = session
+                .extracted_structure
+                .as_ref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+
+            structured_output::merge_items(&mut structure, new_items);
+
+            let structure_json = serde_json::to_string(&structure)
+                .map_err(|e| format!("Failed to serialize structure: {}", e))?;
+            chat_ops::update_chat_session_extracted_structure(
+                project_path_obj,
+                &request.session_id,
+                Some(&structure_json),
+            )
+            .map_err(|e| format!("Failed to update structure: {}", e))?;
+        }
+    }
+
+    Ok(crate::commands::prd_chat::SendMessageResponse {
+        user_message,
+        assistant_message,
+    })
+}
+
+/// Build a chat prompt for server mode
+fn build_server_chat_prompt(
+    session: &crate::models::ChatSession,
+    history: &[crate::models::ChatMessage],
+    user_message: &str,
+) -> String {
+    use crate::models::MessageRole;
+
+    let mut prompt = String::from(
+        "You are a helpful AI assistant helping to create a PRD (Product Requirements Document).\n\n",
+    );
+
+    if let Some(ref prd_type) = session.prd_type {
+        prompt.push_str(&format!("PRD Type: {}\n\n", prd_type));
+    }
+
+    // Add conversation history (limited to last 20 messages)
+    if !history.is_empty() {
+        prompt.push_str("Previous conversation:\n");
+        for msg in history.iter().take(20) {
+            let role = match msg.role {
+                MessageRole::User => "User",
+                MessageRole::Assistant => "Assistant",
+                MessageRole::System => "System",
+            };
+            prompt.push_str(&format!("{}: {}\n", role, msg.content));
+        }
+        prompt.push('\n');
+    }
+
+    prompt.push_str(&format!("User: {}\n\nAssistant:", user_message));
+    prompt
+}
+
+// Note: generate_session_title has been moved to the shared agent_executor module.
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -1509,4 +1511,32 @@ mod tests {
         assert!(json.contains("\"count\":5"));
         assert!(!json.contains("error"));
     }
+
+    #[test]
+    fn test_get_arg_success() {
+        let args = serde_json::json!({"name": "test", "count": 42});
+        let name: String = get_arg(&args, "name").unwrap();
+        let count: i32 = get_arg(&args, "count").unwrap();
+        assert_eq!(name, "test");
+        assert_eq!(count, 42);
+    }
+
+    #[test]
+    fn test_get_arg_missing() {
+        let args = serde_json::json!({"name": "test"});
+        let result: Result<i32, String> = get_arg(&args, "missing");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing argument"));
+    }
+
+    #[test]
+    fn test_get_opt_arg() {
+        let args = serde_json::json!({"name": "test"});
+        let name: Option<String> = get_opt_arg(&args, "name").unwrap();
+        let missing: Option<String> = get_opt_arg(&args, "missing").unwrap();
+        assert_eq!(name, Some("test".to_string()));
+        assert_eq!(missing, None);
+    }
+
+    // Note: generate_session_title tests are now in agent_executor module
 }
