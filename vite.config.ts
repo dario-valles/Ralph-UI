@@ -22,6 +22,8 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
+    host: '0.0.0.0', // Bind to all interfaces for Tailscale access
+    allowedHosts: ['localhost', 'mac', '.ts.net', '.local'], // Allow Tailscale and local access
     watch: {
       // Ignore backend and data directories
       ignored: [
