@@ -12,7 +12,7 @@ mod types;
 pub use agent_executor::{build_agent_command, generate_session_title, ChatEventEmitter};
 pub use types::*;
 
-use crate::file_storage::chat_ops;
+use crate::file_storage::{attachments, chat_ops};
 use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{
     AgentType, ChatMessage, ChatSession, ExtractedPRDContent, ExtractedPRDStructure,
@@ -198,6 +198,26 @@ pub async fn send_prd_chat_message(
     chat_ops::create_chat_message(project_path_obj, &user_message)
         .map_err(|e| format!("Failed to store user message: {}", e))?;
 
+    // Save attachments to disk if present and get their file paths
+    let attachment_paths: Vec<String> = if let Some(ref attachments_list) = request.attachments {
+        if !attachments_list.is_empty() {
+            let paths = attachments::save_message_attachments(
+                project_path_obj,
+                &user_message.id,
+                attachments_list,
+            )
+            .map_err(|e| format!("Failed to save attachments: {}", e))?;
+
+            paths.into_iter()
+                .filter_map(|p| p.to_str().map(String::from))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
     // Get chat history for context
     let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))?;
@@ -205,9 +225,9 @@ pub async fn send_prd_chat_message(
     // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
     let prompt = match get_gsd_phase(&session) {
         Some(GsdPhase::DeepQuestioning) => {
-            build_deep_questioning_prompt(&session, &history, &request.content)
+            build_deep_questioning_prompt(&session, &history, &request.content, &attachment_paths)
         }
-        _ => build_prd_chat_prompt(&session, &history, &request.content),
+        _ => build_prd_chat_prompt(&session, &history, &request.content, &attachment_paths),
     };
 
     // Parse agent type
@@ -1867,6 +1887,7 @@ fn build_deep_questioning_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
     current_message: &str,
+    attachment_paths: &[String],
 ) -> String {
     let mut prompt = String::new();
 
@@ -1950,6 +1971,16 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
         prompt.push_str("=== End History ===\n\n");
     }
 
+    // Add attachment references if present
+    if !attachment_paths.is_empty() {
+        prompt.push_str("\n=== Attached Images ===\n");
+        prompt.push_str("The user has attached the following images. You can view them using the Read tool:\n");
+        for path in attachment_paths {
+            prompt.push_str(&format!("- {}\n", path));
+        }
+        prompt.push_str("=== End Attached Images ===\n\n");
+    }
+
     prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
     prompt
 }
@@ -1958,6 +1989,7 @@ fn build_prd_chat_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
     current_message: &str,
+    attachment_paths: &[String],
 ) -> String {
     let mut prompt = String::new();
 
@@ -2051,6 +2083,16 @@ fn build_prd_chat_prompt(
             prompt.push_str(&format!("{}: {}\n\n", role_label, msg.content));
         }
         prompt.push_str("=== End History ===\n\n");
+    }
+
+    // Add attachment references if present
+    if !attachment_paths.is_empty() {
+        prompt.push_str("\n=== Attached Images ===\n");
+        prompt.push_str("The user has attached the following images. You can view them using the Read tool:\n");
+        for path in attachment_paths {
+            prompt.push_str(&format!("- {}\n", path));
+        }
+        prompt.push_str("=== End Attached Images ===\n\n");
     }
 
     // Current user message
@@ -2170,7 +2212,7 @@ mod tests {
         let session = make_test_session("test");
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app");
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[]);
 
         assert!(prompt.contains("expert product manager"));
         assert!(prompt.contains("Create a PRD for a todo app"));
@@ -2201,7 +2243,7 @@ mod tests {
             },
         ];
 
-        let prompt = build_prd_chat_prompt(&session, &history, "Add a due date feature");
+        let prompt = build_prd_chat_prompt(&session, &history, "Add a due date feature", &[]);
 
         assert!(prompt.contains("Project path: /my/project"));
         assert!(prompt.contains("Conversation History"));
@@ -2545,7 +2587,7 @@ mod tests {
         session.structured_mode = true;
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create epics for an auth system");
+        let prompt = build_prd_chat_prompt(&session, &history, "Create epics for an auth system", &[]);
 
         // Should include structured output instructions
         assert!(prompt.contains("STRUCTURED OUTPUT MODE"));
@@ -2563,7 +2605,7 @@ mod tests {
         let session = make_test_session("test"); // structured_mode: false
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD");
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[]);
 
         // Should NOT include structured output instructions
         assert!(!prompt.contains("STRUCTURED OUTPUT MODE"));

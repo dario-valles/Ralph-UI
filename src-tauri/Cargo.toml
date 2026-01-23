@@ -99,6 +99,7 @@ portable-pty = { version = "0.8", optional = true }
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "env"] }
+base64 = "0.22.1"
 
 # Signal handling for graceful shutdown
 [target.'cfg(unix)'.dependencies]

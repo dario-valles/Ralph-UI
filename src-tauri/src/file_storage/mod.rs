@@ -19,6 +19,7 @@
 //! - `templates/` - User-defined PRD templates
 
 pub mod agents;
+pub mod attachments;
 pub mod chat;
 pub mod chat_ops;
 pub mod index;
@@ -110,6 +111,7 @@ pub fn init_ralph_ui_dir(project_path: &Path) -> FileResult<PathBuf> {
 *.tmp
 agents/
 executions/
+attachments/
 "#;
         fs::write(&gitignore_path, gitignore_content)
             .map_err(|e| format!("Failed to write .gitignore: {}", e))?;

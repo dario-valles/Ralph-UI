@@ -226,11 +226,20 @@ pub fn chat_file_exists(project_path: &Path, chat_id: &str) -> bool {
     get_chat_file_path(project_path, chat_id).exists()
 }
 
-/// Delete a chat file
+/// Delete a chat file and its associated attachments
 pub fn delete_chat_file(project_path: &Path, chat_id: &str) -> FileResult<()> {
     let file_path = get_chat_file_path(project_path, chat_id);
 
+    // First, read the chat file to get message IDs for attachment cleanup
     if file_path.exists() {
+        // Try to read and delete attachments, but don't fail if we can't
+        if let Ok(chat_file) = read_chat_file(project_path, chat_id) {
+            let message_ids: Vec<String> = chat_file.messages.iter().map(|m| m.id.clone()).collect();
+            if let Err(e) = super::attachments::delete_chat_attachments(project_path, &message_ids) {
+                log::warn!("Failed to delete chat attachments: {}", e);
+            }
+        }
+
         fs::remove_file(&file_path)
             .map_err(|e| format!("Failed to delete chat file: {}", e))?;
         log::info!("Deleted chat file: {:?}", file_path);
