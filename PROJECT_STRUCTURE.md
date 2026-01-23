@@ -52,14 +52,14 @@ Ralph-UI/
 │   ├── tests/                  # Backend integration tests
 │   ├── Cargo.toml              # Rust dependencies
 │   └── tauri.conf.json         # Tauri configuration
-├── e2e/                        # End-to-end tests (Playwright)
+├── e2e/                        # Markdown E2E tests (LLM-executed via /e2e skill)
 ├── public/                     # Static assets
 ├── package.json                # Node.js dependencies
 ├── tsconfig.json               # TypeScript configuration
 ├── tailwind.config.js          # Tailwind CSS configuration
 ├── vite.config.ts              # Vite build configuration
 ├── vitest.config.ts            # Vitest test configuration
-├── playwright.config.ts        # Playwright E2E configuration
+├── .claude/skills/e2e-runner/  # E2E test runner skill
 └── eslint.config.js            # ESLint configuration
 ```
 
@@ -207,24 +207,37 @@ Multi-agent orchestration:
 # Unit tests (Frontend)
 bun test
 
-# E2E tests (Playwright)
-bun run e2e
+# E2E tests (Claude Code skill)
+/e2e                    # All tests
+/e2e functional         # Functional tests only
+/e2e workflow           # Workflow tests only
+/e2e responsive         # Responsive tests only
 
 # Backend tests (Rust)
 cd src-tauri && cargo test
 ```
 
-### E2E Test Files
+### E2E Test Files (Markdown)
 
-- `app.spec.ts` - Basic app functionality
-- `agent-workflows.spec.ts` - Agent lifecycle tests
-- `git-operations.spec.ts` - Git workflow tests
-- `parallel-execution.spec.ts` - Multi-agent tests
-- `session-management.spec.ts` - Session tests
-- `task-management.spec.ts` - Task operation tests
-- `error-scenarios.spec.ts` - Error handling tests
-- `accessibility.spec.ts` - WCAG compliance tests
-- `performance.spec.ts` - Performance tests
+Located in `e2e/`, these markdown tests are executed by the `/e2e` Claude Code skill:
+
+**Functional (`e2e/functional/`):**
+- `01-app-basics.md` - Basic app functionality
+- `02-session-management.md` - Session CRUD and templates
+- `03-task-management.md` - Task operations
+- `04-agent-workflows.md` - Agent lifecycle tests
+- `05-git-operations.md` - Git workflow tests
+
+**Workflow (`e2e/workflow/`):**
+- `01-gsd-workflow.md` - GSD 8-phase workflow
+- `02-session-lifecycle.md` - Full session lifecycle
+- `03-ralph-loop-workflow.md` - Ralph Loop execution
+- `04-prd-creation-workflow.md` - PRD creation workflow
+
+**Responsive (`e2e/responsive/`):**
+- `01-mobile-layout.md` - Mobile viewport (375x667)
+- `02-tablet-layout.md` - Tablet viewport (768x1024)
+- `03-desktop-layout.md` - Desktop viewport (1920x1080)
 
 ## Build System
 

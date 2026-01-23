@@ -22,8 +22,8 @@ bun run server:build           # Build server binary only
 bun run test                   # Unit tests (Vitest) - NOTE: use "bun run test", not "bun test"
 bun run test:run               # Run tests once
 bun run test:coverage          # With coverage report
-bun run e2e                    # E2E tests (Playwright)
 cd src-tauri && cargo test     # Rust backend tests (650+ tests)
+/e2e                           # E2E tests via Claude Code skill
 
 # Code Quality
 bun run lint                   # ESLint (strict, 0 warnings allowed)
@@ -292,6 +292,25 @@ All file operations use atomic writes (temp file + rename) for safety.
 ## Testing
 
 - **Unit tests**: Vitest with jsdom, 386+ tests, 80% coverage targets
-- **E2E tests**: Playwright (Chromium), 240+ tests
+- **E2E tests**: Markdown-based tests in `e2e/` executed via `/e2e` skill with browser automation
 - **Backend tests**: cargo test, 650+ tests
 - **Accessibility**: jest-axe integration with WCAG 2.1 AA coverage
+
+### E2E Tests
+
+E2E tests are written in markdown format and executed via the `/e2e` Claude Code skill:
+
+```bash
+/e2e                                    # Run all tests
+/e2e functional                         # Run functional tests only
+/e2e workflow                           # Run workflow tests only
+/e2e responsive                         # Run responsive tests only
+/e2e functional/01-app-basics.md        # Run specific test file
+```
+
+Test files are organized in:
+- `e2e/functional/` - Core feature tests (sessions, tasks, agents, git)
+- `e2e/workflow/` - End-to-end workflow tests (GSD, Ralph Loop, PRD)
+- `e2e/responsive/` - Viewport-specific tests (mobile, tablet, desktop)
+
+See `e2e/README.md` for test format and writing guidelines.

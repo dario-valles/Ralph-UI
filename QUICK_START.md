@@ -94,13 +94,16 @@ bun run test
 
 Runs unit tests across all stores and components.
 
-### E2E Tests (Playwright)
+### E2E Tests (Claude Code Skill)
 
 ```bash
-bun run e2e
+/e2e                           # Run all tests
+/e2e functional                # Run functional tests only
+/e2e workflow                  # Run workflow tests only
+/e2e responsive                # Run responsive tests only
 ```
 
-Runs 240+ end-to-end tests.
+Markdown-based E2E tests executed via Claude Code skill with browser automation. See `e2e/README.md` for details.
 
 ### Backend Tests (Rust)
 
@@ -142,7 +145,7 @@ Ralph-UI/
 │   │   ├── ralph_loop/     # Ralph Loop execution
 │   │   └── server/         # HTTP/WebSocket server
 │   └── Cargo.toml          # Rust dependencies
-├── e2e/                    # Playwright E2E tests
+├── e2e/                    # Markdown E2E tests (LLM-executed)
 └── package.json            # Node dependencies
 ```
 
@@ -201,7 +204,7 @@ sudo apt install libwebkit2gtk-4.1-dev
 | `bun run tauri dev` | Start development server |
 | `bun run tauri build` | Build for production |
 | `bun run test` | Run unit tests |
-| `bun run e2e` | Run E2E tests |
+| `/e2e` | Run E2E tests (Claude Code skill) |
 | `bun run lint` | Run ESLint |
 | `bun run format` | Format with Prettier |
 | `bun run server` | Start HTTP/WebSocket server |

@@ -44,7 +44,7 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 **Development:**
 - Bun for fast package management
 - Vite for blazing-fast builds
-- Vitest + Playwright for testing
+- Vitest for unit testing, markdown E2E tests with LLM browser automation
 
 ---
 
