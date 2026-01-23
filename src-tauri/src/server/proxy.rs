@@ -16,6 +16,10 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
 
+// Re-export types needed for proxy commands
+use crate::ralph_loop::RalphConfig;
+use crate::commands::ralph_loop::RalphStoryInput;
+
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
 pub struct InvokeRequest {
@@ -864,6 +868,217 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             serde_json::to_value(count).map_err(|e| e.to_string())
         }
 
+        "init_ralph_prd" => {
+            let request: commands::ralph_loop::InitRalphPrdRequest =
+                get_arg!(args, "request", commands::ralph_loop::InitRalphPrdRequest);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let prd = commands::ralph_loop::init_ralph_prd(request, prd_name)?;
+            serde_json::to_value(prd).map_err(|e| e.to_string())
+        }
+
+        "set_ralph_prompt" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let content: String = get_arg!(args, "content", String);
+            commands::ralph_loop::set_ralph_prompt(project_path, prd_name, content)?;
+            Ok(Value::Null)
+        }
+
+        "set_ralph_config" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let config: RalphConfig = get_arg!(args, "config", RalphConfig);
+            commands::ralph_loop::set_ralph_config(project_path, config)?;
+            Ok(Value::Null)
+        }
+
+        "init_ralph_config" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let config = commands::ralph_loop::init_ralph_config(project_path)?;
+            serde_json::to_value(config).map_err(|e| e.to_string())
+        }
+
+        "update_ralph_config" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let max_iterations: Option<u32> = get_opt_arg!(args, "maxIterations", u32);
+            let max_cost: Option<f64> = get_opt_arg!(args, "maxCost", f64);
+            let agent: Option<String> = get_opt_arg!(args, "agent", String);
+            let model: Option<String> = get_opt_arg!(args, "model", String);
+            let test_command: Option<String> = get_opt_arg!(args, "testCommand", String);
+            let lint_command: Option<String> = get_opt_arg!(args, "lintCommand", String);
+            let build_command: Option<String> = get_opt_arg!(args, "buildCommand", String);
+            let config = commands::ralph_loop::update_ralph_config(
+                project_path, max_iterations, max_cost, agent, model, test_command, lint_command, build_command
+            )?;
+            serde_json::to_value(config).map_err(|e| e.to_string())
+        }
+
+        "add_ralph_story" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let story: RalphStoryInput = get_arg!(args, "story", RalphStoryInput);
+            commands::ralph_loop::add_ralph_story(project_path, prd_name, story)?;
+            Ok(Value::Null)
+        }
+
+        "remove_ralph_story" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let story_id: String = get_arg!(args, "storyId", String);
+            let removed = commands::ralph_loop::remove_ralph_story(project_path, prd_name, story_id)?;
+            serde_json::to_value(removed).map_err(|e| e.to_string())
+        }
+
+        "mark_ralph_story_passing" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let story_id: String = get_arg!(args, "storyId", String);
+            let result = commands::ralph_loop::mark_ralph_story_passing(project_path, prd_name, story_id)?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
+        "mark_ralph_story_failing" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let story_id: String = get_arg!(args, "storyId", String);
+            let result = commands::ralph_loop::mark_ralph_story_failing(project_path, prd_name, story_id)?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
+        "add_ralph_progress_note" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let iteration: u32 = get_arg!(args, "iteration", u32);
+            let note: String = get_arg!(args, "note", String);
+            commands::ralph_loop::add_ralph_progress_note(project_path, prd_name, iteration, note)?;
+            Ok(Value::Null)
+        }
+
+        "clear_ralph_progress" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            commands::ralph_loop::clear_ralph_progress(project_path, prd_name)?;
+            Ok(Value::Null)
+        }
+
+        "convert_prd_file_to_ralph" => {
+            let request: commands::ralph_loop::ConvertPrdFileToRalphRequest =
+                get_arg!(args, "request", commands::ralph_loop::ConvertPrdFileToRalphRequest);
+            let prd = commands::ralph_loop::convert_prd_file_to_ralph(request)?;
+            serde_json::to_value(prd).map_err(|e| e.to_string())
+        }
+
+        "cleanup_ralph_worktree" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let worktree_path: String = get_arg!(args, "worktreePath", String);
+            let delete_directory: Option<bool> = get_opt_arg!(args, "deleteDirectory", bool);
+            commands::ralph_loop::cleanup_ralph_worktree(project_path, worktree_path, delete_directory)?;
+            Ok(Value::Null)
+        }
+
+        "list_ralph_worktrees" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let worktrees = commands::ralph_loop::list_ralph_worktrees(project_path)?;
+            serde_json::to_value(worktrees).map_err(|e| e.to_string())
+        }
+
+        "get_all_ralph_iterations" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let execution_id: Option<String> = get_opt_arg!(args, "executionId", String);
+            let outcome_filter: Option<String> = get_opt_arg!(args, "outcomeFilter", String);
+            let limit: Option<u32> = get_opt_arg!(args, "limit", u32);
+            let iterations = commands::ralph_loop::get_all_ralph_iterations(
+                project_path, execution_id, outcome_filter, limit
+            )?;
+            serde_json::to_value(iterations).map_err(|e| e.to_string())
+        }
+
+        "delete_ralph_iteration_history" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let execution_id: String = get_arg!(args, "executionId", String);
+            let count = commands::ralph_loop::delete_ralph_iteration_history(project_path, execution_id)?;
+            serde_json::to_value(count).map_err(|e| e.to_string())
+        }
+
+        "regenerate_ralph_prd_acceptance" => {
+            let request: commands::ralph_loop::RegenerateAcceptanceRequest =
+                get_arg!(args, "request", commands::ralph_loop::RegenerateAcceptanceRequest);
+            let prd = commands::ralph_loop::regenerate_ralph_prd_acceptance(request)?;
+            serde_json::to_value(prd).map_err(|e| e.to_string())
+        }
+
+        // Ralph Loop execution commands (require server state)
+        "start_ralph_loop" => {
+            // Ralph loop execution requires Tauri State and AppHandle
+            // For now, return an error indicating this feature is not available in browser mode
+            return Err("Ralph loop execution is not yet supported in browser mode. Use the desktop app.".to_string());
+        }
+
+        "stop_ralph_loop" => {
+            // Ralph loop stop requires access to running orchestrator state
+            // which is not yet implemented for server mode
+            return Err("Ralph loop stop is not yet supported in browser mode. Use the desktop app.".to_string());
+        }
+
+        "get_ralph_loop_state" => {
+            let execution_id: String = get_arg!(args, "executionId", String);
+            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
+                return serde_json::to_value(snapshot.state).map_err(|e| e.to_string());
+            }
+            Err(format!("Execution {} not found", execution_id))
+        }
+
+        "get_ralph_loop_metrics" => {
+            let execution_id: String = get_arg!(args, "executionId", String);
+            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
+                return serde_json::to_value(snapshot.metrics).map_err(|e| e.to_string());
+            }
+            Err(format!("Execution {} not found", execution_id))
+        }
+
+        "get_ralph_loop_current_agent" => {
+            let execution_id: String = get_arg!(args, "executionId", String);
+            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
+                return serde_json::to_value(snapshot.current_agent_id).map_err(|e| e.to_string());
+            }
+            Err(format!("Execution {} not found", execution_id))
+        }
+
+        "get_ralph_loop_worktree_path" => {
+            let execution_id: String = get_arg!(args, "executionId", String);
+            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
+                return serde_json::to_value(snapshot.worktree_path).map_err(|e| e.to_string());
+            }
+            Err(format!("Execution {} not found", execution_id))
+        }
+
+        "get_ralph_loop_snapshot" => {
+            let execution_id: String = get_arg!(args, "executionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+            // Try in-memory snapshot first - extract serializable fields
+            if let Some(snapshot) = state.ralph_loop_state.get_snapshot(&execution_id) {
+                let json_snapshot = serde_json::json!({
+                    "state": snapshot.state,
+                    "metrics": snapshot.metrics,
+                    "worktreePath": snapshot.worktree_path,
+                    "currentAgentId": snapshot.current_agent_id,
+                });
+                return Ok(json_snapshot);
+            }
+            // Fall back to file-based snapshot
+            let path = std::path::Path::new(&project_path)
+                .join(".ralph-ui")
+                .join("iterations")
+                .join(format!("{}_snapshot.json", execution_id));
+            if path.exists() {
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("Failed to read snapshot: {}", e))?;
+                let snapshot: serde_json::Value = serde_json::from_str(&content)
+                    .map_err(|e| format!("Failed to parse snapshot: {}", e))?;
+                return Ok(snapshot);
+            }
+            Err(format!("Execution {} not found", execution_id))
+        }
+
         // =====================================================================
         // Template Commands
         // =====================================================================
@@ -900,6 +1115,13 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
             commands::templates::delete_template(name, scope, project_path).await?;
             Ok(Value::Null)
+        }
+
+        "preview_template" => {
+            let content: String = get_arg!(args, "content", String);
+            let project_path: Option<String> = get_opt_arg!(args, "projectPath", String);
+            let result = commands::templates::preview_template(content, project_path).await?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
         }
 
         // =====================================================================
@@ -973,6 +1195,162 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         "get_available_research_agents" => {
             let agents = commands::gsd::get_available_research_agents();
             serde_json::to_value(agents).map_err(|e| e.to_string())
+        }
+
+        "update_gsd_phase" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let phase: crate::gsd::state::GsdPhase = get_arg!(args, "phase", crate::gsd::state::GsdPhase);
+            let state_result = commands::gsd::update_gsd_phase(project_path, session_id, phase).await?;
+            serde_json::to_value(state_result).map_err(|e| e.to_string())
+        }
+
+        "update_questioning_context" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let context: crate::gsd::state::QuestioningContext = get_arg!(args, "context", crate::gsd::state::QuestioningContext);
+            let state_result = commands::gsd::update_questioning_context(project_path, session_id, context).await?;
+            serde_json::to_value(state_result).map_err(|e| e.to_string())
+        }
+
+        "generate_project_document" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let doc = commands::gsd::generate_project_document(project_path, session_id).await?;
+            serde_json::to_value(doc).map_err(|e| e.to_string())
+        }
+
+        "start_research" => {
+            // Research requires AppHandle for progress events
+            // For now, return an error indicating this feature needs the desktop app
+            return Err("Research with streaming progress is not yet supported in browser mode. Use the desktop app.".to_string());
+        }
+
+        "get_research_results" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let results = commands::gsd::get_research_results(project_path, session_id).await?;
+            serde_json::to_value(results).map_err(|e| e.to_string())
+        }
+
+        "synthesize_research_cmd" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let synthesis = commands::gsd::synthesize_research_cmd(project_path, session_id).await?;
+            serde_json::to_value(synthesis).map_err(|e| e.to_string())
+        }
+
+        "generate_requirements_from_research" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let requirements = commands::gsd::generate_requirements_from_research(project_path, session_id).await?;
+            serde_json::to_value(requirements).map_err(|e| e.to_string())
+        }
+
+        "scope_requirements" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let selections: crate::gsd::requirements::ScopeSelection = get_arg!(args, "selections", crate::gsd::requirements::ScopeSelection);
+            let requirements = commands::gsd::scope_requirements(project_path, session_id, selections).await?;
+            serde_json::to_value(requirements).map_err(|e| e.to_string())
+        }
+
+        "validate_requirements" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let result = commands::gsd::validate_requirements(project_path, session_id).await?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
+        "add_requirement" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let category: String = get_arg!(args, "category", String);
+            let title: String = get_arg!(args, "title", String);
+            let description: String = get_arg!(args, "description", String);
+            let requirements = commands::gsd::add_requirement(project_path, session_id, category, title, description).await?;
+            serde_json::to_value(requirements).map_err(|e| e.to_string())
+        }
+
+        "save_requirements" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let requirements: crate::gsd::requirements::RequirementsDoc = get_arg!(args, "requirements", crate::gsd::requirements::RequirementsDoc);
+            commands::gsd::save_requirements(project_path, session_id, requirements).await?;
+            Ok(Value::Null)
+        }
+
+        "load_requirements" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let requirements = commands::gsd::load_requirements(project_path, session_id).await?;
+            serde_json::to_value(requirements).map_err(|e| e.to_string())
+        }
+
+        "create_roadmap" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let roadmap = commands::gsd::create_roadmap(project_path, session_id).await?;
+            serde_json::to_value(roadmap).map_err(|e| e.to_string())
+        }
+
+        "load_roadmap" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let roadmap = commands::gsd::load_roadmap(project_path, session_id).await?;
+            serde_json::to_value(roadmap).map_err(|e| e.to_string())
+        }
+
+        "verify_gsd_plans" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let result = commands::gsd::verify_gsd_plans(project_path, session_id).await?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
+        "get_verification_history" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let history = commands::gsd::get_verification_history(project_path, session_id).await?;
+            serde_json::to_value(history).map_err(|e| e.to_string())
+        }
+
+        "clear_verification_history" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            commands::gsd::clear_verification_history(project_path, session_id).await?;
+            Ok(Value::Null)
+        }
+
+        "export_gsd_to_ralph" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let prd_name: String = get_arg!(args, "prdName", String);
+            let branch: String = get_arg!(args, "branch", String);
+            let include_v2: Option<bool> = get_opt_arg!(args, "includeV2", bool);
+            let execution_config: Option<crate::ralph_loop::PrdExecutionConfig> =
+                get_opt_arg!(args, "executionConfig", crate::ralph_loop::PrdExecutionConfig);
+            let prd = commands::gsd::export_gsd_to_ralph(
+                project_path, session_id, prd_name, branch, include_v2, execution_config
+            ).await?;
+            serde_json::to_value(prd).map_err(|e| e.to_string())
+        }
+
+        "save_planning_file" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let file_type: String = get_arg!(args, "fileType", String);
+            let content: String = get_arg!(args, "content", String);
+            let path = commands::gsd::save_planning_file(project_path, session_id, file_type, content).await?;
+            serde_json::to_value(path).map_err(|e| e.to_string())
+        }
+
+        "read_gsd_planning_file" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let file_type: String = get_arg!(args, "fileType", String);
+            let content = commands::gsd::read_gsd_planning_file(project_path, session_id, file_type).await?;
+            serde_json::to_value(content).map_err(|e| e.to_string())
         }
 
         // =====================================================================
