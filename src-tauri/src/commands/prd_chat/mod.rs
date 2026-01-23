@@ -11,6 +11,7 @@ mod types;
 pub use types::*;
 
 use crate::file_storage::chat_ops;
+use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{
     AgentType, ChatMessage, ChatSession, ExtractedPRDContent, ExtractedPRDStructure,
     GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
@@ -193,8 +194,13 @@ pub async fn send_prd_chat_message(
     let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))?;
 
-    // Build prompt with PRD context
-    let prompt = build_prd_chat_prompt(&session, &history, &request.content);
+    // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
+    let prompt = match get_gsd_phase(&session) {
+        Some(GsdPhase::DeepQuestioning) => {
+            build_deep_questioning_prompt(&session, &history, &request.content)
+        }
+        _ => build_prd_chat_prompt(&session, &history, &request.content),
+    };
 
     // Parse agent type
     let agent_type = parse_agent_type(&session.agent_type)?;
@@ -1804,6 +1810,119 @@ fn extract_out_of_scope(content: &str) -> Vec<String> {
 
     out_of_scope.truncate(10);
     out_of_scope
+}
+
+/// Get the current GSD phase from a chat session
+fn get_gsd_phase(session: &ChatSession) -> Option<GsdPhase> {
+    if !session.gsd_mode {
+        return None;
+    }
+    session.gsd_state.as_ref().and_then(|state_json| {
+        serde_json::from_str::<GsdWorkflowState>(state_json)
+            .ok()
+            .map(|state| state.current_phase)
+    })
+}
+
+/// Extract questioning context from GSD state
+fn get_questioning_context(session: &ChatSession) -> Option<QuestioningContext> {
+    session.gsd_state.as_ref().and_then(|state_json| {
+        serde_json::from_str::<GsdWorkflowState>(state_json)
+            .ok()
+            .map(|state| state.questioning_context)
+    })
+}
+
+/// Build prompt for Deep Questioning phase - focuses on discovery, not PRD creation
+fn build_deep_questioning_prompt(
+    session: &ChatSession,
+    history: &[ChatMessage],
+    current_message: &str,
+) -> String {
+    let mut prompt = String::new();
+
+    // Discovery coach persona - NOT a PRD writer
+    prompt.push_str(r#"You are a friendly product discovery coach helping someone clarify their project idea.
+
+YOUR ROLE:
+- Ask thoughtful, probing questions to understand what they want to build
+- Help them articulate their ideas more concretely and specifically
+- Extract key information about: What (the core idea), Why (motivation/problem), Who (target users), and Done (success criteria)
+- Stay conversational, curious, and encouraging
+- One question at a time - don't overwhelm them
+
+WHAT YOU MUST NOT DO:
+- Do NOT create PRD documents, files, or structured outputs
+- Do NOT write user stories, epics, or acceptance criteria yet
+- Do NOT break things into tasks or features yet
+- Do NOT write to any files
+- This is the DISCOVERY phase - we're just understanding the idea through conversation
+
+PROBING QUESTION EXAMPLES:
+- "Can you describe the main action or workflow a user would take?"
+- "What problem does the user have RIGHT NOW that this solves?"
+- "Can you describe a specific person who would use this?"
+- "What would a user be able to accomplish that they couldn't before?"
+- "What does the MVP look like? What's the smallest thing you could ship?"
+
+When the user shares their idea, acknowledge it warmly, then ask a follow-up question to help them think more concretely about one aspect they haven't fully explained yet.
+
+"#);
+
+    // Add context status if available
+    if let Some(context) = get_questioning_context(session) {
+        prompt.push_str("CURRENT CONTEXT STATUS:\n");
+        prompt.push_str(&format!(
+            "- What: {}\n",
+            if context.what.is_some() {
+                "filled"
+            } else {
+                "needs input"
+            }
+        ));
+        prompt.push_str(&format!(
+            "- Why: {}\n",
+            if context.why.is_some() {
+                "filled"
+            } else {
+                "needs input"
+            }
+        ));
+        prompt.push_str(&format!(
+            "- Who: {}\n",
+            if context.who.is_some() {
+                "filled"
+            } else {
+                "needs input"
+            }
+        ));
+        prompt.push_str(&format!(
+            "- Done: {}\n\n",
+            if context.done.is_some() {
+                "filled"
+            } else {
+                "needs input"
+            }
+        ));
+        prompt.push_str("Focus your questions on the items that still need input.\n\n");
+    }
+
+    // Include conversation history
+    if !history.is_empty() {
+        prompt.push_str("=== Conversation History ===\n\n");
+        for msg in history {
+            let role_label = match msg.role {
+                MessageRole::User => "User",
+                MessageRole::Assistant => "Assistant",
+                MessageRole::System => "System",
+            };
+            prompt.push_str(&format!("{}: {}\n\n", role_label, msg.content));
+        }
+        prompt.push_str("=== End History ===\n\n");
+    }
+
+    prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
+    prompt
 }
 
 fn build_prd_chat_prompt(

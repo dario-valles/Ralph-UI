@@ -81,6 +81,35 @@ const result = await invoke<T>('command_name', { args })
 - Shared components in `src/components/shared/` (EmptyState, StatCard)
 - Layout components in `src/components/layout/`
 
+### Prompt Templates
+**IMPORTANT**: When creating new prompts for AI agents, always add them to the template system so they can be edited by users.
+
+**Template System Architecture:**
+- **Builtin templates**: Hardcoded in `src-tauri/src/templates/builtin.rs` (read-only defaults)
+- **Project templates**: `{project}/.ralph-ui/templates/{name}.tera` (project-specific overrides)
+- **Global templates**: `~/.ralph-ui/templates/{name}.tera` (user-wide overrides)
+- **Resolution order**: Project → Global → Builtin (first found wins)
+
+**Adding a New Prompt Template:**
+1. Add the default template to `src-tauri/src/templates/builtin.rs`
+2. Register it in the `BUILTIN_TEMPLATES` array
+3. Add TypeScript types if needed in `src/types/index.ts`
+4. The template will automatically appear in Settings → Templates for user editing
+
+**Template Engine:** Uses [Tera](https://tera.netlify.app/) syntax (similar to Jinja2):
+```tera
+You are working on: {{ task.title }}
+
+{% if acceptance_criteria | length > 0 %}
+## Acceptance Criteria
+{% for criterion in acceptance_criteria %}
+- {{ criterion }}
+{% endfor %}
+{% endif %}
+```
+
+**GSD/Chat Prompts:** Currently use `GsdCustomPrompts` in config (`src-tauri/src/gsd/config.rs`) with fields for `deep_questioning`, `architecture`, `codebase`, `best_practices`, `risks`. These should eventually migrate to the template system.
+
 ### Navigation Context Pattern
 **IMPORTANT**: When navigating between pages, always set the appropriate Zustand store context before navigating. Many pages require `currentSession` or `activeProject` to be set:
 

@@ -248,6 +248,22 @@ export interface RequirementsValidationResult {
 }
 
 /**
+ * Custom prompts for GSD workflow phases
+ */
+export interface GsdCustomPrompts {
+  /** Custom prompt for deep questioning phase (discovery coach) */
+  deepQuestioning?: string
+  /** Custom prompt for architecture research */
+  architecture?: string
+  /** Custom prompt for codebase analysis */
+  codebase?: string
+  /** Custom prompt for best practices research */
+  bestPractices?: string
+  /** Custom prompt for risks research */
+  risks?: string
+}
+
+/**
  * Configuration for the GSD workflow
  */
 export interface GsdConfig {
@@ -265,6 +281,8 @@ export interface GsdConfig {
   minContextItems: number
   /** Whether to include codebase analysis in research */
   includeCodebaseAnalysis: boolean
+  /** Custom prompts for GSD workflow phases */
+  customPrompts?: GsdCustomPrompts
 }
 
 /**

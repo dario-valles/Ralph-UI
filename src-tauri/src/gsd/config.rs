@@ -63,10 +63,12 @@ pub fn all_agent_type_strings() -> Vec<&'static str> {
     AgentType::all().iter().map(|t| t.as_str()).collect()
 }
 
-/// Custom prompts for research agents
+/// Custom prompts for GSD workflow phases
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GsdCustomPrompts {
+    /// Custom prompt for deep questioning phase (discovery coach)
+    pub deep_questioning: Option<String>,
     /// Custom prompt for architecture research
     pub architecture: Option<String>,
     /// Custom prompt for codebase analysis
