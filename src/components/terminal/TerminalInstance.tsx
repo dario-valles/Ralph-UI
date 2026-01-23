@@ -1,11 +1,20 @@
 // Terminal instance component - wraps xterm.js with PTY connection
+// Supports both Tauri desktop mode (native PTY) and browser mode (WebSocket PTY)
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { spawnTerminal, killTerminal, writeToTerminal, resizeTerminal, decodeTerminalData } from '@/lib/terminal-api'
+import {
+  spawnTerminalAsync,
+  killTerminal,
+  writeToTerminal,
+  resizeTerminal,
+  decodeTerminalData,
+  isPtyAvailable,
+  type UnifiedPty,
+} from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import '@xterm/xterm/css/xterm.css'
 
@@ -20,14 +29,19 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const webglAddonRef = useRef<WebglAddon | null>(null)
+  const ptyRef = useRef<UnifiedPty | null>(null)
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
 
+  // Check PTY availability synchronously (before any effects run)
+  const [ptyAvailable] = useState(() => isPtyAvailable())
+
   // Initialize terminal
-  const initTerminal = useCallback(() => {
-    if (!containerRef.current || isInitializedRef.current) return
+  useEffect(() => {
+    if (!containerRef.current || isInitializedRef.current || !ptyAvailable) return
 
     isInitializedRef.current = true
+    let mounted = true
 
     // Create xterm instance
     const terminal = new Terminal({
@@ -91,60 +105,71 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
     // Fit terminal to container
     fitAddon.fit()
 
-    // Spawn PTY process with initial dimensions
-    try {
-      const cols = terminal.cols || 80
-      const rows = terminal.rows || 24
-      const pty = spawnTerminal(terminalId, { cwd }, cols, rows)
+    // Spawn PTY process with initial dimensions (async)
+    const cols = terminal.cols || 80
+    const rows = terminal.rows || 24
 
-      // Wire PTY output to xterm
-      pty.onData((data: unknown) => {
-        try {
-          if (typeof data === 'string') {
-            terminal.write(data)
-          } else if (data instanceof Uint8Array) {
-            terminal.write(decodeTerminalData(data))
-          } else if (Array.isArray(data)) {
-            // Data comes as number array from Tauri
-            terminal.write(decodeTerminalData(new Uint8Array(data)))
-          } else {
-            console.warn('Unknown PTY data type:', typeof data, data)
+    spawnTerminalAsync(terminalId, { cwd }, cols, rows)
+      .then((pty) => {
+        if (!mounted) {
+          pty?.kill()
+          return
+        }
+
+        if (!pty) {
+          terminal.write('\x1b[31mFailed to spawn terminal: PTY not available\x1b[0m\r\n')
+          return
+        }
+
+        ptyRef.current = pty
+
+        // Wire PTY output to xterm
+        pty.onData((data: unknown) => {
+          try {
+            if (typeof data === 'string') {
+              terminal.write(data)
+            } else if (data instanceof Uint8Array) {
+              terminal.write(decodeTerminalData(data))
+            } else if (Array.isArray(data)) {
+              // Data comes as number array from Tauri
+              terminal.write(decodeTerminalData(new Uint8Array(data)))
+            } else {
+              console.warn('Unknown PTY data type:', typeof data, data)
+            }
+          } catch (err) {
+            console.error('Error processing PTY data:', err)
           }
-        } catch (err) {
-          console.error('Error processing PTY data:', err)
+        })
+
+        // Wire xterm input to PTY
+        terminal.onData((data: string) => {
+          writeToTerminal(terminalId, data)
+        })
+
+        // Handle terminal resize
+        terminal.onResize(({ cols, rows }) => {
+          resizeTerminal(terminalId, cols, rows)
+        })
+
+        // Listen for title changes
+        terminal.onTitleChange((title) => {
+          updateTerminalTitle(terminalId, title)
+        })
+
+        // Handle PTY exit
+        pty.onExit(({ exitCode }: { exitCode: number }) => {
+          terminal.write(`\r\n\x1b[90mProcess exited with code ${exitCode}\x1b[0m\r\n`)
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to spawn PTY:', error)
+        if (mounted) {
+          terminal.write(`\x1b[31mFailed to spawn terminal: ${error}\x1b[0m\r\n`)
         }
       })
 
-      // Wire xterm input to PTY
-      terminal.onData((data: string) => {
-        writeToTerminal(terminalId, data)
-      })
-
-      // Handle terminal resize
-      terminal.onResize(({ cols, rows }) => {
-        resizeTerminal(terminalId, cols, rows)
-      })
-
-      // Listen for title changes
-      terminal.onTitleChange((title) => {
-        updateTerminalTitle(terminalId, title)
-      })
-
-      // Handle PTY exit
-      pty.onExit(({ exitCode }: { exitCode: number }) => {
-        terminal.write(`\r\n\x1b[90mProcess exited with code ${exitCode}\x1b[0m\r\n`)
-      })
-    } catch (error) {
-      console.error('Failed to spawn PTY:', error)
-      terminal.write(`\x1b[31mFailed to spawn terminal: ${error}\x1b[0m\r\n`)
-    }
-  }, [terminalId, cwd, updateTerminalTitle])
-
-  // Initialize on mount
-  useEffect(() => {
-    initTerminal()
-
     return () => {
+      mounted = false
       // Cleanup on unmount
       if (terminalRef.current) {
         terminalRef.current.dispose()
@@ -157,7 +182,7 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       killTerminal(terminalId)
       isInitializedRef.current = false
     }
-  }, [initTerminal, terminalId])
+  }, [terminalId, cwd, updateTerminalTitle, ptyAvailable])
 
   // Handle container resize
   useEffect(() => {
@@ -197,6 +222,23 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       return () => clearTimeout(timer)
     }
   }, [isActive])
+
+  // Show error state if PTY unavailable
+  if (!ptyAvailable) {
+    return (
+      <div
+        className="w-full h-full bg-[#1a1a1a] flex items-center justify-center"
+        style={{ display: isActive ? 'flex' : 'none' }}
+      >
+        <div className="text-center p-4 max-w-md">
+          <div className="text-red-400 text-lg mb-2">Terminal Unavailable</div>
+          <div className="text-zinc-400 text-sm">
+            Terminal is not available. Connect to a Ralph UI server in browser mode or use the desktop app.
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

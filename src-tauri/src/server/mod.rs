@@ -7,6 +7,7 @@ mod auth;
 mod events;
 mod file_watcher;
 mod proxy;
+mod pty;
 mod state;
 
 pub use auth::{generate_auth_token, AuthLayer};
@@ -35,9 +36,11 @@ pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<
     // Build the router
     // Layer order: cors (outer) -> auth -> handler
     // This ensures CORS preflight requests are handled before auth check
+    // Note: /ws/pty handles its own auth via query param (WebSocket limitation)
     let app = Router::new()
         .route("/api/invoke", post(proxy::invoke_handler))
         .route("/ws/events", get(events::ws_handler))
+        .route("/ws/pty/:terminal_id", get(pty::pty_ws_handler))
         .route("/health", get(health_handler))
         .route("/", get(index_handler))
         .layer(AuthLayer::new(state.auth_token.clone()))
@@ -57,9 +60,10 @@ pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<
     println!("║  Auth Token: {}  ║", state.auth_token);
     println!("║                                                               ║");
     println!("║  Endpoints:                                                   ║");
-    println!("║    POST /api/invoke  - Command proxy                         ║");
-    println!("║    GET  /ws/events   - WebSocket events                      ║");
-    println!("║    GET  /health      - Health check                          ║");
+    println!("║    POST /api/invoke      - Command proxy                     ║");
+    println!("║    GET  /ws/events       - WebSocket events                  ║");
+    println!("║    GET  /ws/pty/:id      - WebSocket PTY terminal            ║");
+    println!("║    GET  /health          - Health check                      ║");
     println!("║                                                               ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 

@@ -9,7 +9,7 @@ edition = "2021"
 
 [features]
 default = []
-server = ["axum", "tower", "tower-http", "tokio-tungstenite", "futures-util"]
+server = ["axum", "tower", "tower-http", "tokio-tungstenite", "futures-util", "portable-pty"]
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
@@ -95,6 +95,7 @@ tower = { version = "0.4", optional = true }
 tower-http = { version = "0.5", features = ["cors"], optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 futures-util = { version = "0.3", optional = true }
+portable-pty = { version = "0.8", optional = true }
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "env"] }
