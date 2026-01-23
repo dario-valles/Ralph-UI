@@ -1,7 +1,101 @@
 // Utility functions
 
 use chrono::Utc;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
+
+// =============================================================================
+// Path Helpers - Reduce boilerplate for project_path: String conversions
+// =============================================================================
+
+/// Convert a project path string to a Path reference.
+///
+/// This is a simple helper that reduces the `Path::new(&project_path)` boilerplate
+/// found throughout the command handlers.
+///
+/// # Example
+/// ```ignore
+/// use crate::utils::as_path;
+///
+/// // Instead of: let path = Path::new(&project_path);
+/// let path = as_path(&project_path);
+/// ```
+#[inline]
+pub fn as_path(project_path: &str) -> &Path {
+    Path::new(project_path)
+}
+
+/// Get the .ralph-ui directory path for a project.
+///
+/// # Example
+/// ```ignore
+/// use crate::utils::ralph_ui_dir;
+///
+/// // Instead of: Path::new(&project_path).join(".ralph-ui")
+/// let dir = ralph_ui_dir(&project_path);
+/// ```
+#[inline]
+pub fn ralph_ui_dir(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui")
+}
+
+/// Get the .ralph-ui/prds directory path for a project.
+///
+/// # Example
+/// ```ignore
+/// use crate::utils::prds_dir;
+///
+/// // Instead of: Path::new(&project_path).join(".ralph-ui").join("prds")
+/// let dir = prds_dir(&project_path);
+/// ```
+#[inline]
+pub fn prds_dir(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui").join("prds")
+}
+
+/// Get the .ralph-ui/sessions directory path for a project.
+#[inline]
+#[allow(dead_code)]
+pub fn sessions_dir(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui").join("sessions")
+}
+
+/// Get the .ralph-ui/planning directory path for a project.
+#[inline]
+#[allow(dead_code)]
+pub fn planning_dir(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui").join("planning")
+}
+
+/// Get the .ralph-ui/templates directory path for a project.
+#[inline]
+#[allow(dead_code)]
+pub fn templates_dir(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui").join("templates")
+}
+
+/// Get the .ralph-ui/config.yaml path for a project.
+#[inline]
+pub fn config_path(project_path: &str) -> PathBuf {
+    Path::new(project_path).join(".ralph-ui").join("config.yaml")
+}
+
+/// Convert a project path string to a PathBuf (owned).
+///
+/// Use this when you need an owned PathBuf, e.g., when passing to functions
+/// that take `&PathBuf` or when storing the path.
+///
+/// # Example
+/// ```ignore
+/// use crate::utils::to_path_buf;
+///
+/// // Instead of: PathBuf::from(&project_path)
+/// let path_buf = to_path_buf(&project_path);
+/// ```
+#[inline]
+pub fn to_path_buf(project_path: &str) -> PathBuf {
+    PathBuf::from(project_path)
+}
 
 /// Extension trait for Result that provides convenient error context methods.
 /// Converts any error to a String with a descriptive message prefix.
@@ -126,5 +220,67 @@ mod tests {
     fn test_format_cost() {
         let cost = format_cost(1_000_000, 3.0);
         assert_eq!(cost, 3.0);
+    }
+
+    #[test]
+    fn test_as_path() {
+        let project_path = "/home/user/project";
+        let path = as_path(project_path);
+        assert_eq!(path, Path::new("/home/user/project"));
+    }
+
+    #[test]
+    fn test_ralph_ui_dir() {
+        let project_path = "/home/user/project";
+        let dir = ralph_ui_dir(project_path);
+        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui"));
+    }
+
+    #[test]
+    fn test_prds_dir() {
+        let project_path = "/home/user/project";
+        let dir = prds_dir(project_path);
+        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui/prds"));
+    }
+
+    #[test]
+    fn test_sessions_dir() {
+        let project_path = "/home/user/project";
+        let dir = sessions_dir(project_path);
+        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui/sessions"));
+    }
+
+    #[test]
+    fn test_planning_dir() {
+        let project_path = "/home/user/project";
+        let dir = planning_dir(project_path);
+        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui/planning"));
+    }
+
+    #[test]
+    fn test_templates_dir() {
+        let project_path = "/home/user/project";
+        let dir = templates_dir(project_path);
+        assert_eq!(
+            dir,
+            PathBuf::from("/home/user/project/.ralph-ui/templates")
+        );
+    }
+
+    #[test]
+    fn test_config_path() {
+        let project_path = "/home/user/project";
+        let path = config_path(project_path);
+        assert_eq!(
+            path,
+            PathBuf::from("/home/user/project/.ralph-ui/config.yaml")
+        );
+    }
+
+    #[test]
+    fn test_to_path_buf() {
+        let project_path = "/home/user/project";
+        let path_buf = to_path_buf(project_path);
+        assert_eq!(path_buf, PathBuf::from("/home/user/project"));
     }
 }

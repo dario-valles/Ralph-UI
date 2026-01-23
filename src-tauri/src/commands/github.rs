@@ -3,6 +3,7 @@ use crate::github::{
     CreatePRRequest, GitHubClient, Issue, PullRequest,
 };
 use crate::ralph_loop::RalphPrd;
+use crate::utils::as_path;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -157,7 +158,7 @@ pub async fn github_import_issues_to_prd(
     );
 
     // Load existing PRD or create a new one
-    let project_dir = Path::new(&project_path);
+    let project_dir = as_path(&project_path);
     let mut prd = match load_prd_file(project_dir, &prd_name) {
         Ok(prd) => prd,
         Err(_) => {

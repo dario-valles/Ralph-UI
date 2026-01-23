@@ -5,6 +5,7 @@ use crate::commands::config::ConfigState;
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::file_storage::sessions as session_storage;
 use crate::models::{Session, SessionConfig, SessionStatus};
+use crate::utils::as_path;
 use chrono::Utc;
 use std::path::Path;
 use tauri::State;
@@ -102,7 +103,7 @@ pub async fn create_session(
         total_tokens: 0,
     };
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Pause any other active sessions in the same project
     pause_other_sessions_in_project(path, &session.id)?;
@@ -130,8 +131,7 @@ fn pause_other_sessions_in_project(project_path: &Path, except_session_id: &str)
 pub async fn get_sessions(
     project_path: String,
 ) -> Result<Vec<Session>, String> {
-    let path = Path::new(&project_path);
-    session_storage::list_sessions(path)
+    session_storage::list_sessions(as_path(&project_path))
 }
 
 #[tauri::command]
@@ -139,16 +139,14 @@ pub async fn get_session(
     id: String,
     project_path: String,
 ) -> Result<Session, String> {
-    let path = Path::new(&project_path);
-    session_storage::read_session(path, &id)
+    session_storage::read_session(as_path(&project_path), &id)
 }
 
 #[tauri::command]
 pub async fn update_session(
     session: Session,
 ) -> Result<Session, String> {
-    let path = Path::new(&session.project_path);
-    session_storage::save_session(path, &session)?;
+    session_storage::save_session(as_path(&session.project_path), &session)?;
     Ok(session)
 }
 
@@ -157,8 +155,7 @@ pub async fn delete_session(
     id: String,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
-    session_storage::delete_session(path, &id)
+    session_storage::delete_session(as_path(&project_path), &id)
 }
 
 #[tauri::command]
@@ -168,7 +165,7 @@ pub async fn update_session_status(
     status: SessionStatus,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Get the current session to capture the old status
     let current_session = session_storage::read_session(path, &session_id)?;

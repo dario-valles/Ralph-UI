@@ -5,10 +5,9 @@ use crate::session::{
     lock::{find_stale_locks, remove_stale_lock, LockInfo, SessionLock},
     recovery::SessionRecovery,
 };
-use crate::utils::ResultExt;
+use crate::utils::{as_path, ResultExt};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 /// Stale session info for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +45,7 @@ pub struct RecoveryResult {
 pub async fn check_stale_sessions(
     project_path: String,
 ) -> Result<Vec<StaleLockInfo>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     find_stale_locks(path)
         .map(|locks| locks.into_iter().map(StaleLockInfo::from).collect())
@@ -59,7 +58,7 @@ pub async fn recover_stale_session(
     project_path: String,
     session_id: String,
 ) -> Result<RecoveryResult, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let recovery = SessionRecovery::new(path);
 
     match recovery.recover_session(&session_id) {
@@ -86,7 +85,7 @@ pub async fn recover_stale_session(
 pub async fn recover_all_stale_sessions(
     project_path: String,
 ) -> Result<Vec<RecoveryResult>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let recovery = SessionRecovery::new(path);
     let stale_sessions = recovery
         .detect_stale_sessions()
@@ -124,7 +123,7 @@ pub async fn acquire_session_lock(
     project_path: String,
     session_id: String,
 ) -> Result<bool, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Create lock directory if needed
     let lock_dir = path.join(".ralph-ui");
@@ -170,7 +169,7 @@ pub async fn release_session_lock(
     project_path: String,
     session_id: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let lock = SessionLock::new(path, &session_id);
 
     // Check if we own the lock (current PID)
@@ -191,7 +190,7 @@ pub async fn get_session_lock_info(
     project_path: String,
     session_id: String,
 ) -> Result<Option<StaleLockInfo>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let lock = SessionLock::new(path, &session_id);
 
     match lock.get_lock_info() {
@@ -212,7 +211,7 @@ pub async fn refresh_session_lock(
     project_path: String,
     session_id: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Create lock info and write directly
     let lock_dir = path.join(".ralph-ui");

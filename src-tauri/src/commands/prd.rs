@@ -3,6 +3,7 @@
 // All PRD operations now use file-based storage in .ralph-ui/prds/
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// A PRD file found in the .ralph-ui/prds/ directory
 #[derive(Debug, Serialize, Deserialize)]
@@ -95,10 +96,10 @@ fn read_prd_file_at_path(
 /// Scan .ralph-ui/prds/ directory for PRD markdown files
 #[tauri::command]
 pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String> {
+    use crate::utils::prds_dir;
     use std::fs;
-    use std::path::Path;
 
-    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
 
     if !prds_dir.exists() {
         return Ok(vec![]);
@@ -140,9 +141,9 @@ pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String
 /// Get a PRD file by name from .ralph-ui/prds/
 #[tauri::command]
 pub async fn get_prd_file(project_path: String, prd_name: String) -> Result<PRDFile, String> {
-    use std::path::Path;
+    use crate::utils::prds_dir;
 
-    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
     let file_path = prds_dir.join(format!("{}.md", prd_name));
 
     if !file_path.exists() {
@@ -159,10 +160,10 @@ pub async fn update_prd_file(
     prd_name: String,
     content: String,
 ) -> Result<PRDFile, String> {
+    use crate::utils::prds_dir;
     use std::fs;
-    use std::path::Path;
 
-    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
     let file_path = prds_dir.join(format!("{}.md", prd_name));
 
     if !file_path.exists() {
@@ -197,10 +198,10 @@ pub async fn delete_prd_file(
     project_path: String,
     prd_name: String,
 ) -> Result<DeletePrdResult, String> {
+    use crate::utils::prds_dir;
     use std::fs;
-    use std::path::Path;
 
-    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
     let mut deleted_files = Vec::new();
     let mut removed_worktrees = Vec::new();
     let mut deleted_branches = Vec::new();

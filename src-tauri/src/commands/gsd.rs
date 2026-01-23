@@ -20,8 +20,8 @@ use crate::gsd::{
     verification::{verify_plans, VerificationResult},
 };
 use crate::models::AgentType;
+use crate::utils::as_path;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use tauri::AppHandle;
 
 /// Helper trait for serialization errors
@@ -42,7 +42,7 @@ pub async fn start_gsd_session(
     project_path: String,
     chat_session_id: String,
 ) -> Result<GsdWorkflowState, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Initialize planning directory
     init_planning_session(path, &chat_session_id)?;
@@ -63,7 +63,7 @@ pub async fn get_gsd_state(
     project_path: String,
     session_id: String,
 ) -> Result<Option<GsdWorkflowState>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     match load_workflow_state(path, &session_id) {
         Ok(state) => Ok(Some(state)),
@@ -78,7 +78,7 @@ pub async fn update_gsd_phase(
     session_id: String,
     phase: GsdPhase,
 ) -> Result<GsdWorkflowState, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let mut state = load_workflow_state(path, &session_id)?;
     state.current_phase = phase;
@@ -96,7 +96,7 @@ pub async fn update_questioning_context(
     session_id: String,
     context: QuestioningContext,
 ) -> Result<GsdWorkflowState, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let mut state = load_workflow_state(path, &session_id)?;
     state.questioning_context = context;
@@ -113,7 +113,7 @@ pub async fn generate_project_document(
     project_path: String,
     session_id: String,
 ) -> Result<String, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load the current state to get questioning context
     let state = load_workflow_state(path, &session_id)?;
@@ -150,7 +150,7 @@ pub async fn start_research(
     context: String,
     agent_type: Option<String>,
 ) -> Result<ResearchStatus, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Build config with optional agent type override
     let mut config = GsdConfig::default();
@@ -190,7 +190,7 @@ pub async fn get_research_results(
     project_path: String,
     session_id: String,
 ) -> Result<Vec<ResearchResult>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Read research files and construct results
     let research_dir = crate::gsd::planning_storage::get_research_dir(path, &session_id);
@@ -237,7 +237,7 @@ pub async fn synthesize_research_cmd(
     project_path: String,
     session_id: String,
 ) -> Result<ResearchSynthesis, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     synthesize_research(path, &session_id)
 }
 
@@ -249,7 +249,7 @@ pub async fn generate_requirements_from_research(
 ) -> Result<RequirementsDoc, String> {
     use crate::gsd::requirements::generate_requirements_from_research as gen_reqs;
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Try to load synthesis first, fall back to individual research files
     let synthesis_content = read_planning_file(path, &session_id, PlanningFile::Summary)
@@ -287,7 +287,7 @@ pub async fn scope_requirements(
     session_id: String,
     selections: ScopeSelection,
 ) -> Result<RequirementsDoc, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load existing requirements
     let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
@@ -316,7 +316,7 @@ pub async fn validate_requirements(
 ) -> Result<RequirementsValidationResult, String> {
     use crate::gsd::requirements::{calculate_quality_score, validate_requirements_doc};
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load requirements
     let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
@@ -353,7 +353,7 @@ pub async fn save_requirements(
     session_id: String,
     requirements: RequirementsDoc,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let content = requirements.serialize_to_json("requirements")?;
     write_planning_file(path, &session_id, PlanningFile::Requirements, &content)?;
@@ -371,7 +371,7 @@ pub async fn load_requirements(
     project_path: String,
     session_id: String,
 ) -> Result<Option<RequirementsDoc>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     match read_planning_file(path, &session_id, PlanningFile::Requirements) {
         Ok(content) => {
@@ -389,7 +389,7 @@ pub async fn create_roadmap(
     project_path: String,
     session_id: String,
 ) -> Result<RoadmapDoc, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load requirements
     let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
@@ -416,7 +416,7 @@ pub async fn load_roadmap(
     project_path: String,
     session_id: String,
 ) -> Result<Option<RoadmapDoc>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Try to load JSON first
     match read_planning_file(path, &session_id, PlanningFile::Roadmap) {
@@ -439,7 +439,7 @@ pub async fn verify_gsd_plans(
 ) -> Result<VerificationIterationResult, String> {
     use crate::gsd::verification::VerificationHistory;
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load requirements
     let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
@@ -510,7 +510,7 @@ pub async fn get_verification_history(
 ) -> Result<Option<crate::gsd::verification::VerificationHistory>, String> {
     use crate::gsd::verification::VerificationHistory;
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let history_file = PlanningFile::Research("verification_history.json".to_string());
     match read_planning_file(path, &session_id, history_file) {
@@ -529,7 +529,7 @@ pub async fn clear_verification_history(
     project_path: String,
     session_id: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let history_file = PlanningFile::Research("verification_history.json".to_string());
     let empty_history = crate::gsd::verification::VerificationHistory::new();
     let content = empty_history.serialize_to_json("verification history")?;
@@ -547,7 +547,7 @@ pub async fn export_gsd_to_ralph(
     include_v2: Option<bool>,
     execution_config: Option<crate::ralph_loop::PrdExecutionConfig>,
 ) -> Result<ConversionResult, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Load requirements
     let req_content = read_planning_file(path, &session_id, PlanningFile::Requirements)?;
@@ -660,7 +660,7 @@ pub async fn save_planning_file(
     file_type: String,
     content: String,
 ) -> Result<String, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let file = match file_type.as_str() {
         "project" => PlanningFile::Project,
@@ -683,7 +683,7 @@ pub async fn read_gsd_planning_file(
     session_id: String,
     file_type: String,
 ) -> Result<Option<String>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let file = match file_type.as_str() {
         "project" => PlanningFile::Project,
@@ -704,14 +704,14 @@ pub async fn read_gsd_planning_file(
 /// List all planning sessions for a project
 #[tauri::command]
 pub async fn list_gsd_sessions(project_path: String) -> Result<Vec<PlanningSessionInfo>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     list_planning_sessions(path)
 }
 
 /// Delete a planning session
 #[tauri::command]
 pub async fn delete_gsd_session(project_path: String, session_id: String) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     delete_planning_session(path, &session_id)
 }
 
@@ -726,7 +726,7 @@ pub async fn add_requirement(
 ) -> Result<Requirement, String> {
     use crate::gsd::config::RequirementCategory;
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Parse category string to enum
     let category_enum = match category.to_lowercase().as_str() {

@@ -5,7 +5,7 @@ use crate::events::{emit_task_status_changed, TaskStatusChangedPayload};
 use crate::file_storage::sessions as session_storage;
 use crate::models::{Task, TaskStatus};
 use crate::session::{ProgressStatus, ProgressTracker};
-use std::path::Path;
+use crate::utils::as_path;
 use uuid::Uuid;
 
 /// Convert TaskStatus to ProgressStatus for progress file tracking
@@ -24,8 +24,7 @@ pub async fn create_task(
     task: Task,
     project_path: String,
 ) -> Result<Task, String> {
-    let path = Path::new(&project_path);
-    session_storage::create_task(path, &session_id, &task)?;
+    session_storage::create_task(as_path(&project_path), &session_id, &task)?;
     Ok(task)
 }
 
@@ -35,8 +34,7 @@ pub async fn get_task(
     session_id: String,
     project_path: String,
 ) -> Result<Task, String> {
-    let path = Path::new(&project_path);
-    session_storage::get_task(path, &session_id, &task_id)
+    session_storage::get_task(as_path(&project_path), &session_id, &task_id)
 }
 
 #[tauri::command]
@@ -44,8 +42,7 @@ pub async fn get_tasks_for_session(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<Task>, String> {
-    let path = Path::new(&project_path);
-    session_storage::get_tasks(path, &session_id)
+    session_storage::get_tasks(as_path(&project_path), &session_id)
 }
 
 #[tauri::command]
@@ -54,8 +51,7 @@ pub async fn update_task(
     session_id: String,
     project_path: String,
 ) -> Result<Task, String> {
-    let path = Path::new(&project_path);
-    session_storage::update_task(path, &session_id, &task)?;
+    session_storage::update_task(as_path(&project_path), &session_id, &task)?;
     Ok(task)
 }
 
@@ -65,8 +61,7 @@ pub async fn delete_task(
     session_id: String,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
-    session_storage::delete_task(path, &session_id, &task_id)
+    session_storage::delete_task(as_path(&project_path), &session_id, &task_id)
 }
 
 #[tauri::command]
@@ -77,7 +72,7 @@ pub async fn update_task_status(
     session_id: String,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Get the current task to validate the transition
     let current_task = session_storage::get_task(path, &session_id, &task_id)?;
@@ -125,7 +120,7 @@ pub async fn import_prd(
 ) -> Result<Vec<Task>, String> {
     use crate::parsers::{parse_prd, parse_prd_auto, PRDFormat};
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Parse the PRD
     let prd = if let Some(fmt) = format {

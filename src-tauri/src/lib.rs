@@ -24,10 +24,10 @@ pub mod server;
 // Re-export models for use in commands
 pub use models::*;
 
-use std::path::Path;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::mpsc;
+use utils::as_path;
 
 /// State for rate limit event forwarding to the frontend
 pub struct RateLimitEventState {
@@ -497,7 +497,7 @@ fn perform_auto_recovery() {
     let mut total_recovered = 0;
 
     for project_path in project_paths {
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Skip if path doesn't exist (project may have been moved/deleted)
         if !path.exists() {
@@ -544,7 +544,7 @@ fn recover_stale_ralph_executions(project_path: &str) {
     // Default threshold: 2 minutes (heartbeat interval is 30 seconds)
     const STALE_THRESHOLD_SECS: i64 = 120;
 
-    let path = Path::new(project_path);
+    let path = as_path(project_path);
     let stale_executions = match file_storage::iterations::get_stale_executions(path, STALE_THRESHOLD_SECS) {
         Ok(executions) => executions,
         Err(e) => {

@@ -10,6 +10,7 @@ use crate::ralph_loop::{
     RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
     RalphStory, RetryConfig, SnapshotStore,
 };
+use crate::utils::{as_path, prds_dir, ralph_ui_dir, to_path_buf};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -296,7 +297,7 @@ fn find_newest_prd(project_path: &std::path::Path, prd_name: &str) -> Result<Ral
 /// data is shown after app restart even if a worktree execution is ongoing.
 #[tauri::command]
 pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd, String> {
-    find_newest_prd(&PathBuf::from(&project_path), &prd_name)
+    find_newest_prd(&to_path_buf(&project_path), &prd_name)
 }
 
 /// Get the status of the Ralph PRD
@@ -306,7 +307,7 @@ pub fn get_ralph_prd(project_path: String, prd_name: String) -> Result<RalphPrd,
 /// status is shown after app restart even if a worktree execution is ongoing.
 #[tauri::command]
 pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<PrdStatus, String> {
-    let project_path_buf = PathBuf::from(&project_path);
+    let project_path_buf = to_path_buf(&project_path);
     let prd = find_newest_prd(&project_path_buf, &prd_name)?;
     let executor = PrdExecutor::new(&project_path_buf, &prd_name);
     Ok(executor.get_status(&prd))
@@ -315,21 +316,21 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
 /// Mark a story as passing in the PRD
 #[tauri::command]
 pub fn mark_ralph_story_passing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
+    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.mark_story_passing(&story_id)
 }
 
 /// Mark a story as failing in the PRD
 #[tauri::command]
 pub fn mark_ralph_story_failing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
+    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.mark_story_failing(&story_id)
 }
 
 /// Add a story to the PRD
 #[tauri::command]
 pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStoryInput) -> Result<(), String> {
-    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
+    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
 
     let mut ralph_story = RalphStory::new(&story.id, &story.title, &story.acceptance);
     ralph_story.description = story.description;
@@ -344,49 +345,49 @@ pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStory
 /// Remove a story from the PRD
 #[tauri::command]
 pub fn remove_ralph_story(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&PathBuf::from(&project_path), &prd_name);
+    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
     executor.remove_story(&story_id)
 }
 
 /// Get progress.txt content
 #[tauri::command]
 pub fn get_ralph_progress(project_path: String, prd_name: String) -> Result<String, String> {
-    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
+    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.read_raw()
 }
 
 /// Get progress summary
 #[tauri::command]
 pub fn get_ralph_progress_summary(project_path: String, prd_name: String) -> Result<ProgressSummary, String> {
-    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
+    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.get_summary()
 }
 
 /// Add a note to progress.txt
 #[tauri::command]
 pub fn add_ralph_progress_note(project_path: String, prd_name: String, iteration: u32, note: String) -> Result<(), String> {
-    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
+    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.add_note(iteration, &note)
 }
 
 /// Clear progress.txt and reinitialize
 #[tauri::command]
 pub fn clear_ralph_progress(project_path: String, prd_name: String) -> Result<(), String> {
-    let tracker = ProgressTracker::new(&PathBuf::from(&project_path), &prd_name);
+    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
     tracker.clear()
 }
 
 /// Get the prompt.md content
 #[tauri::command]
 pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
-    let builder = PromptBuilder::new(&PathBuf::from(&project_path), &prd_name);
+    let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
     builder.read_prompt()
 }
 
 /// Update the prompt.md content
 #[tauri::command]
 pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
-    let builder = PromptBuilder::new(&PathBuf::from(&project_path), &prd_name);
+    let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
     builder.write_prompt(&content)
 }
 
@@ -1216,7 +1217,7 @@ pub fn convert_prd_file_to_ralph(
 /// Check if a project has Ralph loop files
 #[tauri::command]
 pub fn has_ralph_files(project_path: String) -> bool {
-    let prds_dir = PathBuf::from(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
 
     // Check if any .json files exist in the prds directory
     if prds_dir.exists() {
@@ -1236,7 +1237,7 @@ pub fn has_ralph_files(project_path: String) -> bool {
 /// Get all Ralph files for a project
 #[tauri::command]
 pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
-    let prds_dir = PathBuf::from(&project_path).join(".ralph-ui").join("prds");
+    let prds_dir = prds_dir(&project_path);
 
     // Check new .ralph-ui/prds/ directory for any PRD JSON files
     let mut has_prd = false;
@@ -1270,7 +1271,7 @@ pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
     }
 
     // Config is at .ralph-ui/config.yaml
-    let config_path = PathBuf::from(&project_path).join(".ralph-ui").join("config.yaml");
+    let config_path = crate::utils::config_path(&project_path);
 
     Ok(RalphFiles {
         has_prd,
@@ -1310,7 +1311,7 @@ pub struct RalphFiles {
 pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
+    let config_manager = ConfigManager::new(&to_path_buf(&project_path));
     config_manager.read()
 }
 
@@ -1319,7 +1320,7 @@ pub fn get_ralph_config(project_path: String) -> Result<RalphConfig, String> {
 pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(), String> {
     use crate::ralph_loop::ConfigManager;
 
-    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
+    let config_manager = ConfigManager::new(&to_path_buf(&project_path));
     config_manager.write(&config)
 }
 
@@ -1328,11 +1329,11 @@ pub fn set_ralph_config(project_path: String, config: RalphConfig) -> Result<(),
 pub fn init_ralph_config(project_path: String) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let ralph_ui_dir = PathBuf::from(&project_path).join(".ralph-ui");
-    std::fs::create_dir_all(&ralph_ui_dir)
+    let ralph_ui_path = ralph_ui_dir(&project_path);
+    std::fs::create_dir_all(&ralph_ui_path)
         .map_err(|e| format!("Failed to create .ralph-ui directory: {}", e))?;
 
-    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
+    let config_manager = ConfigManager::new(&to_path_buf(&project_path));
     config_manager.initialize()
 }
 
@@ -1350,7 +1351,7 @@ pub fn update_ralph_config(
 ) -> Result<RalphConfig, String> {
     use crate::ralph_loop::ConfigManager;
 
-    let config_manager = ConfigManager::new(&PathBuf::from(&project_path));
+    let config_manager = ConfigManager::new(&to_path_buf(&project_path));
 
     config_manager.update(|config| {
         if let Some(v) = max_iterations {
@@ -1391,7 +1392,7 @@ pub fn get_ralph_iteration_history(
     project_path: String,
     execution_id: String,
 ) -> Result<Vec<IterationRecord>, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     iteration_storage::get_iterations_for_execution(path, &execution_id)
         .map_err(|e| format!("Failed to get iteration history: {}", e))
 }
@@ -1402,7 +1403,7 @@ pub fn get_ralph_iteration_stats(
     project_path: String,
     execution_id: String,
 ) -> Result<IterationStats, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     iteration_storage::get_execution_stats(path, &execution_id)
         .map_err(|e| format!("Failed to get iteration stats: {}", e))
 }
@@ -1415,7 +1416,7 @@ pub fn get_all_ralph_iterations(
     outcome_filter: Option<String>,
     limit: Option<u32>,
 ) -> Result<Vec<IterationRecord>, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let outcome = outcome_filter.and_then(|s| match s.as_str() {
         "success" => Some(IterationOutcome::Success),
@@ -1432,7 +1433,7 @@ pub fn get_all_ralph_iterations(
 /// Save an iteration record (used by orchestrator)
 #[tauri::command]
 pub fn save_ralph_iteration(project_path: String, record: IterationRecord) -> Result<(), String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     iteration_storage::insert_iteration(path, &record)
         .map_err(|e| format!("Failed to save iteration: {}", e))
 }
@@ -1448,7 +1449,7 @@ pub fn update_ralph_iteration(
     completed_at: String,
     error_message: Option<String>,
 ) -> Result<(), String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let outcome_enum = match outcome.as_str() {
         "success" => IterationOutcome::Success,
@@ -1478,7 +1479,7 @@ pub fn save_ralph_execution_state(
     project_path: String,
     snapshot: ExecutionStateSnapshot,
 ) -> Result<(), String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     iteration_storage::save_execution_state(path, &snapshot)
         .map_err(|e| format!("Failed to save execution state: {}", e))
 }
@@ -1486,7 +1487,7 @@ pub fn save_ralph_execution_state(
 /// Update heartbeat for an execution
 #[tauri::command]
 pub fn update_ralph_heartbeat(project_path: String, execution_id: String) -> Result<(), String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     let heartbeat = chrono::Utc::now().to_rfc3339();
     iteration_storage::update_heartbeat(path, &execution_id, &heartbeat)
         .map_err(|e| format!("Failed to update heartbeat: {}", e))?;
@@ -1499,7 +1500,7 @@ pub fn get_ralph_execution_state(
     project_path: String,
     execution_id: String,
 ) -> Result<Option<ExecutionStateSnapshot>, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     iteration_storage::get_execution_state(path, &execution_id)
         .map_err(|e| format!("Failed to get execution state: {}", e))
 }
@@ -1510,7 +1511,7 @@ pub fn check_stale_ralph_executions(
     project_path: String,
     threshold_secs: Option<i64>,
 ) -> Result<Vec<ExecutionStateSnapshot>, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     let threshold = threshold_secs.unwrap_or(120); // Default 2 minutes
     iteration_storage::get_stale_executions(path, threshold)
         .map_err(|e| format!("Failed to check stale executions: {}", e))
@@ -1522,7 +1523,7 @@ pub fn recover_stale_ralph_iterations(
     project_path: String,
     execution_id: String,
 ) -> Result<u32, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     let completed_at = chrono::Utc::now().to_rfc3339();
 
     let count = iteration_storage::mark_interrupted_iterations(path, &execution_id, &completed_at)
@@ -1541,7 +1542,7 @@ pub fn delete_ralph_iteration_history(
     project_path: String,
     execution_id: String,
 ) -> Result<u32, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
 
     let count = iteration_storage::delete_iterations_for_execution(path, &execution_id)
         .map_err(|e| format!("Failed to delete iterations: {}", e))?;
@@ -1575,7 +1576,7 @@ pub async fn get_ralph_loop_snapshot(
     execution_id: String,
     ralph_state: State<'_, RalphLoopManagerState>,
 ) -> Result<RalphLoopSnapshot, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Get in-memory snapshot
     let snapshot = ralph_state.get_snapshot(&execution_id);
@@ -1624,7 +1625,7 @@ pub fn cleanup_ralph_iteration_history(
     project_path: String,
     days_to_keep: Option<i64>,
 ) -> Result<u32, String> {
-    let path = std::path::Path::new(&project_path);
+    let path = as_path(&project_path);
     let days = days_to_keep.unwrap_or(30); // Default: keep 30 days
     let threshold_time = chrono::Utc::now() - chrono::Duration::days(days);
 

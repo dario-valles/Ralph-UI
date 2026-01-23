@@ -5,6 +5,7 @@
 
 use super::events::EventBroadcaster;
 use super::ServerAppState;
+use crate::utils::as_path;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -201,7 +202,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
                 total_tokens: 0,
             };
 
-            file_storage::sessions::save_session(Path::new(&project_path), &session)?;
+            file_storage::sessions::save_session(as_path(&project_path), &session)?;
             serde_json::to_value(session).map_err(|e| e.to_string())
         }
 
@@ -837,8 +838,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             }
 
             // Fall back to file-based snapshot
-            let path = std::path::Path::new(&project_path)
-                .join(".ralph-ui")
+            let path = crate::utils::ralph_ui_dir(&project_path)
                 .join("iterations")
                 .join(format!("{}_snapshot.json", execution_id));
 
@@ -1291,7 +1291,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let project_path: String = get_arg(&args, "projectPath")?;
 
             let session = crate::file_storage::chat_ops::get_chat_session(
-                Path::new(&project_path),
+                as_path(&project_path),
                 &session_id,
             )
             .map_err(|e| format!("Failed to get session: {}", e))?;

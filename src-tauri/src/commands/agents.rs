@@ -4,14 +4,14 @@
 use crate::events::{emit_agent_status_changed, AgentStatusChangedPayload};
 use crate::file_storage::agents as agent_storage;
 use crate::models::{Agent, AgentStatus, LogEntry};
+use crate::utils::as_path;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use sysinfo::{Pid, System};
 
 /// Create a new agent
 #[tauri::command]
 pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::save_agent_state(path, &agent)?;
     Ok(())
 }
@@ -19,7 +19,7 @@ pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {
 /// Get an agent by ID
 #[tauri::command]
 pub fn get_agent(agent_id: String, project_path: String) -> Result<Option<Agent>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     match agent_storage::read_agent_with_logs(path, &agent_id) {
         Ok(agent) => Ok(Some(agent)),
         Err(_) => Ok(None),
@@ -32,7 +32,7 @@ pub fn get_agents_for_session(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::list_agents_for_session(path, &session_id)
 }
 
@@ -42,7 +42,7 @@ pub fn get_agents_for_task(
     task_id: String,
     project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let agent_ids = agent_storage::list_agent_ids(path)?;
     let mut agents = Vec::new();
 
@@ -63,7 +63,7 @@ pub fn get_active_agents(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<Agent>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     let agents = agent_storage::list_agents_for_session(path, &session_id)?;
     Ok(agents
         .into_iter()
@@ -74,7 +74,7 @@ pub fn get_active_agents(
 /// Get ALL active agents across all sessions (for Mission Control dashboard)
 #[tauri::command]
 pub fn get_all_active_agents(project_path: String) -> Result<Vec<Agent>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::get_all_active_agents(path)
 }
 
@@ -86,7 +86,7 @@ pub fn update_agent_status(
     status: AgentStatus,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Get the current agent to capture old status and session_id
     let agent = agent_storage::read_agent_with_logs(path, &agent_id)
@@ -123,7 +123,7 @@ pub fn update_agent_metrics(
     iteration_count: i32,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::update_agent_metrics(path, &agent_id, tokens, cost, iteration_count)
 }
 
@@ -134,14 +134,14 @@ pub fn update_agent_process_id(
     process_id: Option<u32>,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::update_agent_process_id(path, &agent_id, process_id)
 }
 
 /// Delete an agent
 #[tauri::command]
 pub fn delete_agent(agent_id: String, project_path: String) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::delete_agent_files(path, &agent_id)
 }
 
@@ -152,7 +152,7 @@ pub fn add_agent_log(
     log: LogEntry,
     project_path: String,
 ) -> Result<(), String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::append_agent_log(path, &agent_id, &log)
 }
 
@@ -162,7 +162,7 @@ pub fn get_agent_logs(
     agent_id: String,
     project_path: String,
 ) -> Result<Vec<LogEntry>, String> {
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
     agent_storage::read_agent_logs(path, &agent_id)
 }
 
@@ -186,7 +186,7 @@ pub fn cleanup_stale_agents(
 ) -> Result<Vec<StaleAgentCleanupResult>, String> {
     log::info!("[Agents] cleanup_stale_agents called");
 
-    let path = Path::new(&project_path);
+    let path = as_path(&project_path);
 
     // Get all active agents
     let active_agents = agent_storage::get_all_active_agents(path)?;

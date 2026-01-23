@@ -19,9 +19,9 @@ use crate::models::{
     GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
 };
 use crate::parsers::structured_output;
+use crate::utils::as_path;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
 
@@ -82,7 +82,7 @@ pub async fn start_prd_chat_session(
     };
 
     // Initialize .ralph-ui directory and save session to file
-    let project_path_obj = Path::new(project_path);
+    let project_path_obj = as_path(project_path);
     crate::file_storage::init_ralph_ui_dir(project_path_obj)
         .map_err(|e| format!("Failed to initialize .ralph-ui directory: {}", e))?;
 
@@ -172,7 +172,7 @@ pub async fn send_prd_chat_message(
     request: SendMessageRequest,
 ) -> Result<SendMessageResponse, String> {
     // Get project_path from request (required for file storage)
-    let project_path_obj = Path::new(&request.project_path);
+    let project_path_obj = as_path(&request.project_path);
 
     // First phase: read data and store user message
     let session = chat_ops::get_chat_session(project_path_obj, &request.session_id)
@@ -281,7 +281,7 @@ pub async fn get_prd_chat_history(
     session_id: String,
     project_path: String,
 ) -> Result<Vec<ChatMessage>, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     chat_ops::get_messages_by_session(project_path_obj, &session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))
@@ -292,7 +292,7 @@ pub async fn get_prd_chat_history(
 pub async fn list_prd_chat_sessions(
     project_path: String,
 ) -> Result<Vec<ChatSession>, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     chat_ops::list_chat_sessions(project_path_obj)
         .map_err(|e| format!("Failed to list chat sessions: {}", e))
@@ -304,7 +304,7 @@ pub async fn delete_prd_chat_session(
     session_id: String,
     project_path: String,
 ) -> Result<(), String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     // Delete session (messages are embedded in the file)
     chat_ops::delete_chat_session(project_path_obj, &session_id)
@@ -318,7 +318,7 @@ pub async fn assess_prd_quality(
     session_id: String,
     project_path: String,
 ) -> Result<QualityAssessment, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     // Get session from file storage
     let session = chat_ops::get_chat_session(project_path_obj, &session_id)
@@ -378,7 +378,7 @@ pub async fn preview_prd_extraction(
     session_id: String,
     project_path: String,
 ) -> Result<ExtractedPRDContent, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     // Get all messages from file storage
     let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
@@ -444,7 +444,7 @@ pub async fn get_extracted_structure(
     session_id: String,
     project_path: String,
 ) -> Result<ExtractedPRDStructure, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     let session = chat_ops::get_chat_session(project_path_obj, &session_id)
         .map_err(|e| format!("Session not found: {}", e))?;
@@ -465,7 +465,7 @@ pub async fn set_structured_mode(
     project_path: String,
     enabled: bool,
 ) -> Result<(), String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     chat_ops::update_chat_session_structured_mode(project_path_obj, &session_id, enabled)
         .map_err(|e| format!("Failed to update structured mode: {}", e))?;
@@ -479,7 +479,7 @@ pub async fn clear_extracted_structure(
     session_id: String,
     project_path: String,
 ) -> Result<(), String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     chat_ops::update_chat_session_extracted_structure(project_path_obj, &session_id, None)
         .map_err(|e| format!("Failed to clear structure: {}", e))?;
@@ -494,7 +494,7 @@ pub async fn update_prd_chat_agent(
     project_path: String,
     agent_type: String,
 ) -> Result<(), String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     chat_ops::update_chat_session_agent(project_path_obj, &session_id, &agent_type)
         .map_err(|e| format!("Failed to update agent type: {}", e))?;
@@ -523,7 +523,7 @@ pub async fn start_watching_prd_file(
     project_path: String,
     watcher_state: State<'_, crate::PrdFileWatcherState>,
 ) -> Result<WatchFileResponse, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     // Get the session to determine the title for file naming
     let session = chat_ops::get_chat_session(project_path_obj, &session_id)
@@ -576,7 +576,7 @@ pub async fn get_prd_plan_content(
     session_id: String,
     project_path: String,
 ) -> Result<Option<String>, String> {
-    let project_path_obj = Path::new(&project_path);
+    let project_path_obj = as_path(&project_path);
 
     // Get the session to determine the title for file naming
     let session = chat_ops::get_chat_session(project_path_obj, &session_id)

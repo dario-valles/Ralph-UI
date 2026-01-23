@@ -5,7 +5,7 @@ use crate::file_storage::agents as agent_storage;
 use crate::file_storage::projects as project_storage;
 use crate::file_storage::sessions as session_storage;
 use crate::models::{ActivityEvent, ActivityEventType, SessionStatus, TaskStatus};
-use std::path::Path;
+use crate::utils::as_path;
 
 /// Get activity feed for Mission Control dashboard
 /// Aggregates events from tasks and sessions across all projects
@@ -22,7 +22,7 @@ pub fn get_activity_feed(
     let projects = project_storage::get_all_projects().unwrap_or_default();
 
     for project in projects {
-        let project_path = Path::new(&project.path);
+        let project_path = as_path(&project.path);
         if !project_path.exists() {
             continue;
         }
@@ -117,7 +117,7 @@ pub fn get_global_stats() -> Result<GlobalStats, String> {
     let today = chrono::Utc::now().date_naive();
 
     for project in projects {
-        let project_path = Path::new(&project.path);
+        let project_path = as_path(&project.path);
         if !project_path.exists() {
             continue;
         }
@@ -275,7 +275,7 @@ mod tests {
     fn test_get_global_stats_empty_project() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Empty project should have no active agents or tasks
         let active_agents = agent_storage::get_all_active_agents(path).unwrap();
@@ -289,7 +289,7 @@ mod tests {
     fn test_get_global_stats_with_active_agents() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create agents with different statuses
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Thinking, 0.05);
@@ -312,7 +312,7 @@ mod tests {
     fn test_get_global_stats_with_tasks_in_progress() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create session with tasks
         let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
@@ -339,7 +339,7 @@ mod tests {
     fn test_get_global_stats_active_projects() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create sessions with different statuses
         let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
@@ -366,7 +366,7 @@ mod tests {
     fn test_get_activity_feed_empty_project() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Empty project should have no events
         let sessions = session_storage::list_sessions(path).unwrap();
@@ -377,7 +377,7 @@ mod tests {
     fn test_get_activity_feed_with_task_events() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create session with tasks
         let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
@@ -403,7 +403,7 @@ mod tests {
     fn test_get_activity_feed_with_session_events() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create multiple sessions
         let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
@@ -440,7 +440,7 @@ mod tests {
     fn test_get_all_active_agents_in_project() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create agents with different statuses
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Thinking, 0.05);
@@ -465,7 +465,7 @@ mod tests {
     fn test_get_all_active_agents_empty() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         let active_agents = agent_storage::get_all_active_agents(path).unwrap();
         assert_eq!(active_agents.len(), 0);
@@ -475,7 +475,7 @@ mod tests {
     fn test_get_all_active_agents_all_idle() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = setup_test_project(&temp_dir);
-        let path = Path::new(&project_path);
+        let path = as_path(&project_path);
 
         // Create only idle agents
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Idle, 0.0);
