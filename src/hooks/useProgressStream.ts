@@ -57,6 +57,49 @@ export interface RalphIterationCompletedEvent {
 }
 
 /**
+ * Loop completed event payload (when all stories pass)
+ */
+export interface RalphLoopCompletedEvent {
+  executionId: string
+  prdName: string
+  totalIterations: number
+  completedStories: number
+  totalStories: number
+  durationSecs: number
+  totalCost: number
+  timestamp: string
+}
+
+/**
+ * Type of error that occurred in the Ralph Loop
+ */
+export type RalphLoopErrorType =
+  | 'agent_crash'
+  | 'parse_error'
+  | 'git_conflict'
+  | 'rate_limit'
+  | 'max_iterations'
+  | 'max_cost'
+  | 'timeout'
+  | 'unknown'
+
+/**
+ * Loop error event payload
+ */
+export interface RalphLoopErrorEvent {
+  executionId: string
+  prdName: string
+  errorType: RalphLoopErrorType
+  message: string
+  iteration: number
+  timestamp: string
+  /** Number of stories remaining (for max_iterations error) */
+  storiesRemaining?: number
+  /** Total number of stories (for max_iterations error) */
+  totalStories?: number
+}
+
+/**
  * Combined progress state
  */
 export interface RalphProgressState {
@@ -66,6 +109,10 @@ export interface RalphProgressState {
   iterationStarted: RalphIterationStartedEvent | null
   /** Last iteration completed event */
   iterationCompleted: RalphIterationCompletedEvent | null
+  /** Last loop completed event (when all stories pass) */
+  loopCompleted: RalphLoopCompletedEvent | null
+  /** Last loop error event */
+  loopError: RalphLoopErrorEvent | null
   /** Whether we're connected to events */
   isConnected: boolean
 }
@@ -84,12 +131,16 @@ export function useProgressStream(
   const [progress, setProgress] = useState<RalphProgressEvent | null>(null)
   const [iterationStarted, setIterationStarted] = useState<RalphIterationStartedEvent | null>(null)
   const [iterationCompleted, setIterationCompleted] = useState<RalphIterationCompletedEvent | null>(null)
+  const [loopCompleted, setLoopCompleted] = useState<RalphLoopCompletedEvent | null>(null)
+  const [loopError, setLoopError] = useState<RalphLoopErrorEvent | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
   const reset = useCallback(() => {
     setProgress(null)
     setIterationStarted(null)
     setIterationCompleted(null)
+    setLoopCompleted(null)
+    setLoopError(null)
   }, [])
 
   useEffect(() => {
@@ -131,6 +182,30 @@ export function useProgressStream(
         )
         unlisteners.push(unlistenCompleted)
 
+        // Listen to loop completed events (when all stories pass)
+        const unlistenLoopCompleted = await listen<RalphLoopCompletedEvent>(
+          'ralph:loop_completed',
+          (event) => {
+            const payload = event.payload
+            if (executionId && payload.executionId !== executionId) return
+            if (prdName && payload.prdName !== prdName) return
+            setLoopCompleted(payload)
+          }
+        )
+        unlisteners.push(unlistenLoopCompleted)
+
+        // Listen to loop error events
+        const unlistenLoopError = await listen<RalphLoopErrorEvent>(
+          'ralph:loop_error',
+          (event) => {
+            const payload = event.payload
+            if (executionId && payload.executionId !== executionId) return
+            if (prdName && payload.prdName !== prdName) return
+            setLoopError(payload)
+          }
+        )
+        unlisteners.push(unlistenLoopError)
+
         setIsConnected(true)
       } catch (error) {
         console.error('[useProgressStream] Failed to setup listeners:', error)
@@ -150,6 +225,8 @@ export function useProgressStream(
     progress,
     iterationStarted,
     iterationCompleted,
+    loopCompleted,
+    loopError,
     isConnected,
     reset,
   }
@@ -207,5 +284,30 @@ export function getPhaseColor(phase: RalphPhase): string {
       return 'text-red-600'
     default:
       return 'text-gray-500'
+  }
+}
+
+/**
+ * Get a human-readable label for a Ralph error type
+ */
+export function getErrorTypeLabel(errorType: RalphLoopErrorType): string {
+  switch (errorType) {
+    case 'agent_crash':
+      return 'Agent Crash'
+    case 'parse_error':
+      return 'Parse Error'
+    case 'git_conflict':
+      return 'Git Conflict'
+    case 'rate_limit':
+      return 'Rate Limit'
+    case 'max_iterations':
+      return 'Max Iterations'
+    case 'max_cost':
+      return 'Max Cost'
+    case 'timeout':
+      return 'Timeout'
+    case 'unknown':
+    default:
+      return 'Error'
   }
 }

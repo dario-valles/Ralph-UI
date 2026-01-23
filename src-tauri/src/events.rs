@@ -26,6 +26,8 @@ pub const EVENT_SUBAGENT_FAILED: &str = "subagent:failed";
 pub const EVENT_RALPH_PROGRESS: &str = "ralph:progress";
 pub const EVENT_RALPH_ITERATION_STARTED: &str = "ralph:iteration_started";
 pub const EVENT_RALPH_ITERATION_COMPLETED: &str = "ralph:iteration_completed";
+pub const EVENT_RALPH_LOOP_COMPLETED: &str = "ralph:loop_completed";
+pub const EVENT_RALPH_LOOP_ERROR: &str = "ralph:loop_error";
 
 // Tool call events (for collapsible tool call display)
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
@@ -442,6 +444,96 @@ pub fn emit_ralph_iteration_completed(
     app_handle
         .emit(EVENT_RALPH_ITERATION_COMPLETED, payload)
         .with_context("Failed to emit Ralph iteration completed event")
+}
+
+/// Payload for Ralph Loop completion events (when all stories pass)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphLoopCompletedPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name (session name)
+    pub prd_name: String,
+    /// Total iterations taken to complete
+    pub total_iterations: u32,
+    /// Total stories completed
+    pub completed_stories: u32,
+    /// Total stories in PRD
+    pub total_stories: u32,
+    /// Total duration in seconds
+    pub duration_secs: f64,
+    /// Total cost in dollars
+    pub total_cost: f64,
+    /// Timestamp of completion
+    pub timestamp: String,
+}
+
+/// Emit a Ralph Loop completion event (when all stories pass)
+/// This triggers a desktop notification on the frontend
+pub fn emit_ralph_loop_completed(
+    app_handle: &tauri::AppHandle,
+    payload: RalphLoopCompletedPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_LOOP_COMPLETED, payload)
+        .with_context("Failed to emit Ralph loop completed event")
+}
+
+/// Type of error that occurred in the Ralph Loop
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RalphLoopErrorType {
+    /// Agent crashed or exited with non-zero code
+    AgentCrash,
+    /// Failed to parse PRD or other files
+    ParseError,
+    /// Git merge conflict detected
+    GitConflict,
+    /// Rate limit hit
+    RateLimit,
+    /// Maximum iterations reached
+    MaxIterations,
+    /// Maximum cost exceeded
+    MaxCost,
+    /// Agent timed out
+    Timeout,
+    /// Generic/unknown error
+    Unknown,
+}
+
+/// Payload for Ralph Loop error events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RalphLoopErrorPayload {
+    /// Execution ID
+    pub execution_id: String,
+    /// PRD name (session name)
+    pub prd_name: String,
+    /// Type of error
+    pub error_type: RalphLoopErrorType,
+    /// Error message (truncated to 200 chars for notification)
+    pub message: String,
+    /// Current iteration when error occurred
+    pub iteration: u32,
+    /// Timestamp of error
+    pub timestamp: String,
+    /// Number of stories remaining (for max_iterations error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stories_remaining: Option<u32>,
+    /// Total number of stories (for max_iterations error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_stories: Option<u32>,
+}
+
+/// Emit a Ralph Loop error event
+/// This triggers a desktop error notification
+pub fn emit_ralph_loop_error(
+    app_handle: &tauri::AppHandle,
+    payload: RalphLoopErrorPayload,
+) -> Result<(), String> {
+    app_handle
+        .emit(EVENT_RALPH_LOOP_ERROR, payload)
+        .with_context("Failed to emit Ralph loop error event")
 }
 
 // ============================================================================

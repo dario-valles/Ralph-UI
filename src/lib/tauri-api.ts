@@ -448,6 +448,7 @@ export const ralphLoopApi = {
     runTests?: boolean
     runLint?: boolean
     useWorktree?: boolean
+    templateName?: string // US-014: Template selection in execution
   }): Promise<RalphPrd> => {
     return await invoke('convert_prd_file_to_ralph', { request })
   },
@@ -772,5 +773,50 @@ export const gsdApi = {
   /** Get list of available CLI agents for research */
   getAvailableAgents: async (): Promise<AgentType[]> => {
     return await invoke('get_available_research_agents')
+  },
+}
+
+// Import TemplateInfo and TemplatePreviewResult types
+import type { TemplateInfo, TemplatePreviewResult } from '@/types'
+
+// Template Editor API (US-012, US-013)
+export const templateApi = {
+  /** List all available templates (project, global, builtin) */
+  list: async (projectPath?: string): Promise<TemplateInfo[]> => {
+    return await invoke('list_templates', { projectPath })
+  },
+
+  /** Get template content by name */
+  getContent: async (name: string, projectPath?: string): Promise<string> => {
+    return await invoke('get_template_content', { name, projectPath })
+  },
+
+  /** Save a template to project or global scope */
+  save: async (
+    name: string,
+    content: string,
+    scope: 'project' | 'global',
+    projectPath?: string
+  ): Promise<void> => {
+    return await invoke('save_template', { name, content, scope, projectPath })
+  },
+
+  /** Delete a template from project or global scope */
+  delete: async (
+    name: string,
+    scope: 'project' | 'global',
+    projectPath?: string
+  ): Promise<void> => {
+    return await invoke('delete_template', { name, scope, projectPath })
+  },
+
+  /** List builtin template names */
+  listBuiltin: async (): Promise<string[]> => {
+    return await invoke('list_builtin_templates')
+  },
+
+  /** Preview a template with sample context (US-013) */
+  preview: async (content: string, projectPath?: string): Promise<TemplatePreviewResult> => {
+    return await invoke('preview_template', { content, projectPath })
   },
 }

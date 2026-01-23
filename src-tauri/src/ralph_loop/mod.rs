@@ -85,6 +85,9 @@ pub struct RalphLoopConfig {
     ///
     /// PRD files are stored at `.ralph-ui/prds/{prd_name}.json`
     pub prd_name: String,
+    /// Template name to use for prompt generation (US-014)
+    /// If None, uses the default hardcoded prompt
+    pub template_name: Option<String>,
 }
 
 impl Default for RalphLoopConfig {
@@ -105,6 +108,7 @@ impl Default for RalphLoopConfig {
             fallback_config: None,
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
             prd_name: String::new(), // Must be set before use
+            template_name: None, // Use default prompt
         }
     }
 }

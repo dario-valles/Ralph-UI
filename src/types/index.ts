@@ -385,6 +385,32 @@ export interface RenderRequest {
   customVars?: Record<string, string>
 }
 
+// Template Preview Types (US-013)
+export interface TemplatePreviewResult {
+  success: boolean
+  output: string | null
+  error: string | null
+  errorLine: number | null
+  variablesUsed: string[]
+  variablesUnused: string[]
+  sampleContext: SampleContext
+}
+
+export interface SampleContext {
+  taskTitle: string
+  taskDescription: string
+  acceptanceCriteria: string[]
+  dependencies: string[]
+  prdContent: string
+  recentProgress: string
+  codebasePatterns: string
+  prdCompletedCount: number
+  prdTotalCount: number
+  selectionReason: string
+  currentDate: string
+  timestamp: string
+}
+
 // ============================================================================
 // Recovery Types
 // ============================================================================
@@ -806,6 +832,57 @@ export interface RalphLoopStatusEvent {
   worktreePath?: string
   /** Branch name for this execution */
   branch?: string
+}
+
+/** Payload for Ralph loop completion events (when all stories pass) */
+export interface RalphLoopCompletedPayload {
+  /** Execution ID */
+  executionId: string
+  /** PRD name (session name) */
+  prdName: string
+  /** Total iterations taken to complete */
+  totalIterations: number
+  /** Total stories completed */
+  completedStories: number
+  /** Total stories in PRD */
+  totalStories: number
+  /** Total duration in seconds */
+  durationSecs: number
+  /** Total cost in dollars */
+  totalCost: number
+  /** Timestamp of completion */
+  timestamp: string
+}
+
+/** Type of error that occurred in the Ralph Loop */
+export type RalphLoopErrorType =
+  | 'agent_crash'
+  | 'parse_error'
+  | 'git_conflict'
+  | 'rate_limit'
+  | 'max_iterations'
+  | 'max_cost'
+  | 'timeout'
+  | 'unknown'
+
+/** Payload for Ralph loop error events */
+export interface RalphLoopErrorPayload {
+  /** Execution ID */
+  executionId: string
+  /** PRD name (session name) */
+  prdName: string
+  /** Type of error */
+  errorType: RalphLoopErrorType
+  /** Error message (truncated to 200 chars for notification) */
+  message: string
+  /** Current iteration when error occurred */
+  iteration: number
+  /** Timestamp of error */
+  timestamp: string
+  /** Number of stories remaining (for max_iterations error) */
+  storiesRemaining?: number
+  /** Total number of stories (for max_iterations error) */
+  totalStories?: number
 }
 
 /** Progress entry type */

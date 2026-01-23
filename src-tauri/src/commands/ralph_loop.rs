@@ -89,6 +89,8 @@ pub struct StartRalphLoopRequest {
     ///
     /// PRD files are stored at `.ralph-ui/prds/{prd_name}.json`
     pub prd_name: String,
+    /// Template name to use for prompt generation (US-014)
+    pub template_name: Option<String>,
 }
 
 /// Response from starting a Ralph loop
@@ -182,6 +184,8 @@ pub struct ConvertPrdFileToRalphRequest {
     pub run_lint: Option<bool>,
     /// Whether to use a worktree for isolation
     pub use_worktree: Option<bool>,
+    /// Template name to use for prompt generation (US-014)
+    pub template_name: Option<String>,
 }
 
 /// Initialize a Ralph PRD at .ralph-ui/prds/{prd_name}.json
@@ -450,6 +454,7 @@ pub async fn start_ralph_loop(
     agent_manager_state: State<'_, crate::AgentManagerState>,
     db: State<'_, Mutex<Database>>,
     config_state: State<'_, ConfigState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Parse agent type
     let agent_type = match request.agent_type.to_lowercase().as_str() {
@@ -545,6 +550,7 @@ pub async fn start_ralph_loop(
         fallback_config,
         agent_timeout_secs: request.agent_timeout_secs.unwrap_or(0), // No timeout by default
         prd_name: request.prd_name.clone(),
+        template_name: request.template_name,
     };
 
     // Create orchestrator
@@ -674,6 +680,8 @@ pub async fn start_ralph_loop(
     // Clone for main loop task
     let execution_id_for_loop = execution_id.clone();
     let db_path_for_loop = db_path.clone();
+    let prd_name_for_loop = request.prd_name.clone();
+    let app_handle_for_loop = app_handle.clone();
 
     tauri::async_runtime::spawn(async move {
         log::info!("[RalphLoop] Background task started for {}", execution_id_for_loop);
@@ -709,9 +717,136 @@ pub async fn start_ralph_loop(
                     metrics.total_iterations,
                     metrics.total_cost
                 );
+
+                // Check orchestrator state to determine if this was a success or a "soft" failure
+                let final_state = orchestrator.state().clone();
+
+                match &final_state {
+                    RalphLoopExecutionState::Completed { .. } => {
+                        // True success - all stories passed
+                        // Emit loop completed event for frontend notification handling
+                        let payload = crate::events::RalphLoopCompletedPayload {
+                            execution_id: execution_id_for_loop.clone(),
+                            prd_name: prd_name_for_loop.clone(),
+                            total_iterations: metrics.total_iterations,
+                            completed_stories: metrics.stories_completed,
+                            total_stories: metrics.stories_completed + metrics.stories_remaining,
+                            duration_secs: metrics.total_duration_secs,
+                            total_cost: metrics.total_cost,
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                        };
+
+                        // Emit event to frontend
+                        if let Err(e) = crate::events::emit_ralph_loop_completed(&app_handle_for_loop, payload) {
+                            log::warn!("[RalphLoop] Failed to emit loop completed event: {}", e);
+                        }
+
+                        // Send desktop notification
+                        send_loop_completion_notification(
+                            &app_handle_for_loop,
+                            &prd_name_for_loop,
+                            metrics.total_iterations,
+                            metrics.stories_completed,
+                            metrics.total_duration_secs,
+                        );
+                    }
+                    RalphLoopExecutionState::Failed { iteration, reason } => {
+                        // Loop ended due to a failure condition (max iterations, max cost, etc.)
+                        let error_type = if reason.contains("Max iterations") {
+                            crate::events::RalphLoopErrorType::MaxIterations
+                        } else if reason.contains("Max cost") {
+                            crate::events::RalphLoopErrorType::MaxCost
+                        } else {
+                            crate::events::RalphLoopErrorType::Unknown
+                        };
+
+                        // Include stories info for max_iterations errors
+                        let (stories_remaining, total_stories) = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+                            (
+                                Some(metrics.stories_remaining),
+                                Some(metrics.stories_completed + metrics.stories_remaining),
+                            )
+                        } else {
+                            (None, None)
+                        };
+
+                        send_error_notification(
+                            &app_handle_for_loop,
+                            &execution_id_for_loop,
+                            &prd_name_for_loop,
+                            error_type,
+                            reason,
+                            *iteration,
+                            stories_remaining,
+                            total_stories,
+                        );
+                    }
+                    RalphLoopExecutionState::Cancelled { iteration } => {
+                        // Loop was cancelled by user - no notification needed
+                        log::info!(
+                            "[RalphLoop] Loop {} was cancelled at iteration {}",
+                            execution_id_for_loop,
+                            iteration
+                        );
+                    }
+                    _ => {
+                        // Unexpected state - send completion notification anyway
+                        log::warn!(
+                            "[RalphLoop] Loop {} ended with unexpected state: {:?}",
+                            execution_id_for_loop,
+                            final_state
+                        );
+                    }
+                }
             }
             Err(e) => {
                 log::error!("[RalphLoop] Loop {} failed: {}", execution_id_for_loop, e);
+
+                // Get metrics from orchestrator
+                let metrics = orchestrator.metrics();
+                let iteration = metrics.total_iterations;
+
+                // Classify the error and send appropriate notification
+                let error_str = e.to_lowercase();
+                let error_type = if error_str.contains("rate limit") || error_str.contains("429") || error_str.contains("too many requests") {
+                    crate::events::RalphLoopErrorType::RateLimit
+                } else if error_str.contains("max iterations") {
+                    crate::events::RalphLoopErrorType::MaxIterations
+                } else if error_str.contains("max cost") {
+                    crate::events::RalphLoopErrorType::MaxCost
+                } else if error_str.contains("timeout") || error_str.contains("timed out") {
+                    crate::events::RalphLoopErrorType::Timeout
+                } else if error_str.contains("parse") || error_str.contains("json") || error_str.contains("deserialize") {
+                    crate::events::RalphLoopErrorType::ParseError
+                } else if error_str.contains("conflict") || error_str.contains("merge") {
+                    crate::events::RalphLoopErrorType::GitConflict
+                } else if error_str.contains("agent") || error_str.contains("exit") || error_str.contains("spawn") || error_str.contains("crash") {
+                    crate::events::RalphLoopErrorType::AgentCrash
+                } else {
+                    crate::events::RalphLoopErrorType::Unknown
+                };
+
+                // Include stories info for max_iterations errors
+                let (stories_remaining, total_stories) = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+                    (
+                        Some(metrics.stories_remaining),
+                        Some(metrics.stories_completed + metrics.stories_remaining),
+                    )
+                } else {
+                    (None, None)
+                };
+
+                // Send error notification
+                send_error_notification(
+                    &app_handle_for_loop,
+                    &execution_id_for_loop,
+                    &prd_name_for_loop,
+                    error_type,
+                    &e,
+                    iteration,
+                    stories_remaining,
+                    total_stories,
+                );
             }
         }
     });
@@ -1139,6 +1274,7 @@ pub fn convert_prd_file_to_ralph(
         max_cost: request.max_cost,
         model: request.model,
         prd_name: request.prd_name,
+        template_name: request.template_name,
         ..Default::default()
     };
     prompt_builder.generate_prompt(&loop_config)?;
@@ -1804,4 +1940,166 @@ pub fn regenerate_ralph_prd_acceptance(
     );
 
     Ok(prd)
+}
+
+// =============================================================================
+// Desktop Notification Helpers
+// =============================================================================
+
+/// Format duration in a human-readable way
+fn format_duration(secs: f64) -> String {
+    let total_secs = secs as u64;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+
+    if hours > 0 {
+        format!("{}h {}m", hours, minutes)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, seconds)
+    } else {
+        format!("{}s", seconds)
+    }
+}
+
+/// Send a desktop notification when a Ralph loop completes successfully
+fn send_loop_completion_notification(
+    app_handle: &tauri::AppHandle,
+    prd_name: &str,
+    total_iterations: u32,
+    completed_stories: u32,
+    duration_secs: f64,
+) {
+    use tauri_plugin_notification::NotificationExt;
+
+    // Format the notification body
+    let duration_str = format_duration(duration_secs);
+    let body = format!(
+        "{} stories completed in {} iterations\nDuration: {}",
+        completed_stories, total_iterations, duration_str
+    );
+
+    // Send the desktop notification
+    match app_handle
+        .notification()
+        .builder()
+        .title(&format!("Ralph Loop Complete: {}", prd_name))
+        .body(&body)
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[RalphLoop] Desktop notification sent for loop completion: {}", prd_name);
+        }
+        Err(e) => {
+            log::warn!("[RalphLoop] Failed to send desktop notification: {}", e);
+        }
+    }
+}
+
+/// Send a desktop notification when a Ralph loop encounters an error
+fn send_error_notification(
+    app_handle: &tauri::AppHandle,
+    execution_id: &str,
+    prd_name: &str,
+    error_type: crate::events::RalphLoopErrorType,
+    message: &str,
+    iteration: u32,
+    stories_remaining: Option<u32>,
+    total_stories: Option<u32>,
+) {
+    use tauri_plugin_notification::NotificationExt;
+
+    // Truncate message to 200 chars for notification display
+    let truncated_message = if message.len() > 200 {
+        format!("{}...", &message[..197])
+    } else {
+        message.to_string()
+    };
+
+    // Get error type label for title
+    let error_label = match error_type {
+        crate::events::RalphLoopErrorType::AgentCrash => "Agent Crash",
+        crate::events::RalphLoopErrorType::ParseError => "Parse Error",
+        crate::events::RalphLoopErrorType::GitConflict => "Git Conflict",
+        crate::events::RalphLoopErrorType::RateLimit => "Rate Limit",
+        crate::events::RalphLoopErrorType::MaxIterations => "Max Iterations",
+        crate::events::RalphLoopErrorType::MaxCost => "Max Cost",
+        crate::events::RalphLoopErrorType::Timeout => "Timeout",
+        crate::events::RalphLoopErrorType::Unknown => "Error",
+    };
+
+    // Format notification body - include stories remaining for max iterations
+    let body = if error_type == crate::events::RalphLoopErrorType::MaxIterations {
+        if let (Some(remaining), Some(total)) = (stories_remaining, total_stories) {
+            format!(
+                "{}: {} stories remaining of {}\nIteration: {}",
+                prd_name, remaining, total, iteration
+            )
+        } else {
+            format!(
+                "{}: {}\nIteration: {}",
+                prd_name, truncated_message, iteration
+            )
+        }
+    } else {
+        format!(
+            "{}: {}\nIteration: {}",
+            prd_name, truncated_message, iteration
+        )
+    };
+
+    // Emit event for frontend
+    let payload = crate::events::RalphLoopErrorPayload {
+        execution_id: execution_id.to_string(),
+        prd_name: prd_name.to_string(),
+        error_type: error_type.clone(),
+        message: truncated_message.clone(),
+        iteration,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        stories_remaining,
+        total_stories,
+    };
+
+    if let Err(e) = crate::events::emit_ralph_loop_error(app_handle, payload) {
+        log::warn!("[RalphLoop] Failed to emit error event: {}", e);
+    }
+
+    // Send the desktop notification
+    match app_handle
+        .notification()
+        .builder()
+        .title(&format!("Ralph Loop {}: {}", error_label, prd_name))
+        .body(&body)
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[RalphLoop] Error notification sent: {} - {}", error_label, prd_name);
+        }
+        Err(e) => {
+            log::warn!("[RalphLoop] Failed to send error notification: {}", e);
+        }
+    }
+}
+
+/// Send a test notification to verify notification settings (US-005)
+#[tauri::command]
+pub fn send_test_notification(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+
+    match app_handle
+        .notification()
+        .builder()
+        .title("Ralph UI Test Notification")
+        .body("If you can see this, notifications are working! Ralph says hi.")
+        .show()
+    {
+        Ok(_) => {
+            log::info!("[Notification] Test notification sent successfully");
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("[Notification] Failed to send test notification: {}", e);
+            Err(format!("Failed to send test notification: {}", e))
+        }
+    }
 }

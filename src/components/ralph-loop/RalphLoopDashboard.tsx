@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,10 @@ import {
   GitMerge,
   FileDiff,
   Code2,
+  GitFork,
+  PanelTopClose,
+  PanelTop,
+  GripHorizontal,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import { gitApi, type CommitInfo, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
@@ -46,7 +50,9 @@ import {
 import { UnifiedTerminalView } from '@/components/terminal/UnifiedTerminalView'
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { AgentTree } from '@/components/ralph-loop/AgentTree'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
 import { ralphLoopApi } from '@/lib/tauri-api'
@@ -106,6 +112,55 @@ export function RalphLoopDashboard({
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([])
   const [mergeLoading, setMergeLoading] = useState(false)
   const [detectedWorktreePath, setDetectedWorktreePath] = useState<string | null>(null)
+
+  // Tree view settings (persists across dashboard reopens)
+  const {
+    isTreeVisible,
+    panelHeight,
+    toggleTreeView,
+    setPanelHeight,
+  } = useTreeViewSettings()
+
+  // Resizable panel state
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isDraggingRef = useRef(false)
+
+  // Handle resize drag
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  // Set up global mouse listeners for resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return
+
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const relativeY = e.clientY - containerRect.top
+      const percentage = (relativeY / containerRect.height) * 100
+
+      setPanelHeight(percentage)
+    }
+
+    const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [setPanelHeight])
 
   // Local state for config overrides - consolidated into single object
   interface ConfigOverrides {
@@ -1012,12 +1067,63 @@ export function RalphLoopDashboard({
 
           <TabsContent value="terminal" className="p-0 mt-0">
             {currentAgentId && activeExecutionId ? (
-              <div className="h-[400px]">
-                <UnifiedTerminalView
-                  key={`unified-${activeExecutionId}`}
-                  agentId={currentAgentId}
-                  className="h-full"
-                />
+              <div className="flex flex-col h-[500px]" ref={containerRef}>
+                {/* Tree View Toggle Header */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <GitFork className="h-4 w-4" />
+                    <span>Subagent Tree</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={toggleTreeView}
+                    title={isTreeVisible ? 'Hide tree view' : 'Show tree view'}
+                    data-testid="toggle-tree-view"
+                  >
+                    {isTreeVisible ? (
+                      <PanelTopClose className="h-4 w-4" />
+                    ) : (
+                      <PanelTop className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+
+                {/* Agent Tree - Hierarchical Subagent Visualization (Collapsible) */}
+                {isTreeVisible && (
+                  <>
+                    <div
+                      style={{ height: `${panelHeight}%` }}
+                      className="min-h-[100px] overflow-hidden"
+                      data-testid="tree-panel"
+                    >
+                      <AgentTree
+                        agentId={currentAgentId}
+                        maxHeight="100%"
+                        className="p-2 h-full"
+                      />
+                    </div>
+
+                    {/* Resize Handle */}
+                    <div
+                      className="h-2 border-y bg-muted/50 hover:bg-muted cursor-row-resize flex items-center justify-center group"
+                      onMouseDown={handleResizeStart}
+                      data-testid="resize-handle"
+                    >
+                      <GripHorizontal className="h-3 w-3 text-muted-foreground group-hover:text-foreground" />
+                    </div>
+                  </>
+                )}
+
+                {/* Terminal Output */}
+                <div className="flex-1 min-h-0">
+                  <UnifiedTerminalView
+                    key={`unified-${activeExecutionId}`}
+                    agentId={currentAgentId}
+                    className="h-full"
+                  />
+                </div>
               </div>
             ) : (
               <div className="h-[400px] bg-zinc-950 flex items-center justify-center">

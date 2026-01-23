@@ -79,3 +79,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Animation for new subagent node highlight */
+@keyframes highlight-fade {
+  0% {
+    background-color: hsl(217 91% 60% / 0.3);
+    box-shadow: 0 0 8px 2px hsl(217 91% 60% / 0.4);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.animate-highlight-fade {
+  animation: highlight-fade 2s ease-out forwards;
+}

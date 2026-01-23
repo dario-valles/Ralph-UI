@@ -260,6 +260,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::get_sessions,
@@ -359,6 +360,9 @@ pub fn run() {
             commands::render_template,
             commands::render_task_prompt,
             commands::get_template_content,
+            commands::save_template,
+            commands::delete_template,
+            commands::preview_template,
             // Recovery commands
             commands::check_stale_sessions,
             commands::recover_stale_session,
@@ -457,6 +461,8 @@ pub fn run() {
             commands::get_ralph_loop_snapshot,
             commands::cleanup_ralph_iteration_history,
             commands::regenerate_ralph_prd_acceptance,
+            // Notification commands (US-005)
+            commands::send_test_notification,
             // GSD workflow commands
             commands::start_gsd_session,
             commands::get_gsd_state,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
@@ -12,13 +12,61 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, RefreshCw, Repeat, GitBranch } from 'lucide-react'
-import { ralphLoopApi } from '@/lib/tauri-api'
-import type { AgentType, PRDFile } from '@/types'
+import { Loader2, RefreshCw, Repeat, GitBranch, FileCode } from 'lucide-react'
+import { ralphLoopApi, templateApi } from '@/lib/tauri-api'
+import { isTauri } from '@/lib/tauri-check'
+import type { AgentType, PRDFile, TemplateInfo } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { usePRDExecutionConfig } from '@/hooks/usePRDExecutionConfig'
 import { getModelName } from '@/lib/model-api'
 import { Input } from '@/components/ui/input'
+
+// LocalStorage key for last-used template per project
+const LAST_TEMPLATE_KEY = 'ralph-ui-last-template'
+
+interface LastTemplateStorage {
+  [projectPath: string]: string // projectPath -> templateName
+}
+
+/** Get last-used template for a project from localStorage */
+function getLastUsedTemplate(projectPath: string): string | null {
+  try {
+    const stored = localStorage.getItem(LAST_TEMPLATE_KEY)
+    if (stored) {
+      const data: LastTemplateStorage = JSON.parse(stored)
+      return data[projectPath] || null
+    }
+  } catch {
+    // Ignore JSON parse errors
+  }
+  return null
+}
+
+/** Save last-used template for a project to localStorage */
+function setLastUsedTemplate(projectPath: string, templateName: string): void {
+  try {
+    const stored = localStorage.getItem(LAST_TEMPLATE_KEY)
+    const data: LastTemplateStorage = stored ? JSON.parse(stored) : {}
+    data[projectPath] = templateName
+    localStorage.setItem(LAST_TEMPLATE_KEY, JSON.stringify(data))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+/** Format template source for display */
+function formatTemplateSource(source: TemplateInfo['source']): string {
+  switch (source) {
+    case 'project':
+      return 'project'
+    case 'global':
+      return 'global'
+    case 'builtin':
+      return 'builtin'
+    default:
+      return source
+  }
+}
 
 interface PRDFileExecutionDialogProps {
   file: PRDFile | null
@@ -37,6 +85,11 @@ export function PRDFileExecutionDialog({
   const [executing, setExecuting] = useState(false)
   const [useWorktree, setUseWorktree] = useState(true)
   const [maxCost, setMaxCost] = useState<string>('')
+
+  // Template selection state (US-014)
+  const [templates, setTemplates] = useState<TemplateInfo[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('')
 
   // Load available models dynamically
   const [initialAgentType] = useState<AgentType>('claude')
@@ -60,6 +113,39 @@ export function PRDFileExecutionDialog({
     refresh: currentRefreshModels,
   } = useAvailableModels(config.agentType)
 
+  // Load templates when dialog opens (US-014)
+  const loadTemplates = useCallback(async () => {
+    if (!isTauri || !file?.projectPath) return
+
+    setTemplatesLoading(true)
+    try {
+      const loadedTemplates = await templateApi.list(file.projectPath)
+      setTemplates(loadedTemplates)
+
+      // Set initial template selection:
+      // 1. Last-used template for this project
+      // 2. First template in list (usually default/builtin)
+      const lastUsed = getLastUsedTemplate(file.projectPath)
+      if (lastUsed && loadedTemplates.some((t) => t.name === lastUsed)) {
+        setSelectedTemplate(lastUsed)
+      } else if (loadedTemplates.length > 0) {
+        // Default to first template (usually 'task_prompt' builtin)
+        setSelectedTemplate(loadedTemplates[0].name)
+      }
+    } catch (err) {
+      console.error('[PRD Execution] Failed to load templates:', err)
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }, [file?.projectPath])
+
+  // Load templates when dialog opens
+  useEffect(() => {
+    if (open && file?.projectPath) {
+      loadTemplates()
+    }
+  }, [open, file?.projectPath, loadTemplates])
+
   async function handleExecute(): Promise<void> {
     if (!file) {
       console.error('[Ralph Loop] No file provided')
@@ -71,6 +157,11 @@ export function PRDFileExecutionDialog({
       // Extract prdName from file.id (e.g., "file:new-feature-prd-abc123" -> "new-feature-prd-abc123")
       const prdName = file.id.replace('file:', '')
       const branch = `ralph-${prdName.slice(0, 30)}`
+
+      // Save last-used template for this project
+      if (selectedTemplate) {
+        setLastUsedTemplate(file.projectPath, selectedTemplate)
+      }
 
       // Convert file PRD to Ralph format
       await ralphLoopApi.convertPrdFileToRalph({
@@ -84,6 +175,7 @@ export function PRDFileExecutionDialog({
         runTests: config.runTests,
         runLint: config.runLint,
         useWorktree,
+        templateName: selectedTemplate || undefined,
       })
 
       onOpenChange(false)
@@ -102,6 +194,9 @@ export function PRDFileExecutionDialog({
   const displayModels = currentModels.length > 0 ? currentModels : models
   const displayModelsLoading = currentModelsLoading || modelsLoading
   const displayRefreshModels = currentModels.length > 0 ? currentRefreshModels : refreshModels
+
+  // Get selected template info for display
+  const selectedTemplateInfo = templates.find((t) => t.name === selectedTemplate)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -160,6 +255,38 @@ export function PRDFileExecutionDialog({
                 )}
               </Select>
             </div>
+          </div>
+
+          {/* Template Selection (US-014) */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FileCode className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="template">Prompt Template</Label>
+            </div>
+            <Select
+              id="template"
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
+              disabled={templatesLoading}
+              data-testid="template-select"
+            >
+              {templatesLoading ? (
+                <option>Loading templates...</option>
+              ) : templates.length === 0 ? (
+                <option value="">No templates available</option>
+              ) : (
+                templates.map((t) => (
+                  <option key={`${t.source}-${t.name}`} value={t.name}>
+                    {t.name} ({formatTemplateSource(t.source)})
+                  </option>
+                ))
+              )}
+            </Select>
+            {selectedTemplateInfo && (
+              <p className="text-xs text-muted-foreground">
+                {selectedTemplateInfo.description || `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
+              </p>
+            )}
           </div>
 
           {/* Max Iterations and Max Cost */}
@@ -251,6 +378,7 @@ export function PRDFileExecutionDialog({
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               <li>• Agent: {config.agentType}</li>
               <li>• Model: {getModelName(displayModels, config.model || '')}</li>
+              <li>• Template: {selectedTemplate || 'default'}{selectedTemplateInfo ? ` (${formatTemplateSource(selectedTemplateInfo.source)})` : ''}</li>
               <li>• Max iterations: {config.maxIterations}</li>
               <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
               <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>

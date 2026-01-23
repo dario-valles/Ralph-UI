@@ -12,6 +12,13 @@ import { ToastContainer } from './components/ui/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/tauri-api'
+import { useRalphLoopNotifications } from './hooks/useRalphLoopNotifications'
+
+/** Component that mounts global notification listeners inside the router */
+function GlobalNotificationListener(): null {
+  useRalphLoopNotifications()
+  return null
+}
 
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects)
@@ -55,6 +62,7 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <GlobalNotificationListener />
         <Routes>
           <Route path="/" element={<AppLayout />}>
             <Route index element={<MissionControlPage />} />
