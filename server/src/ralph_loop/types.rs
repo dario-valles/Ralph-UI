@@ -533,6 +533,48 @@ impl RalphPrd {
             .min_by_key(|s| s.priority)
     }
 
+    /// Get the next available story for assignment (US-2.1: Multiple Agents on Same PRD)
+    ///
+    /// This method returns the highest priority story that:
+    /// - Is not completed (passes == false)
+    /// - Has all dependencies satisfied
+    /// - Is NOT already assigned to another agent
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    pub fn next_available_story(&self, assigned_story_ids: &[String]) -> Option<&RalphStory> {
+        self.stories
+            .iter()
+            .filter(|s| {
+                !s.passes
+                    && s.dependencies_satisfied(&self.stories)
+                    && !assigned_story_ids.contains(&s.id)
+            })
+            .min_by_key(|s| s.priority)
+    }
+
+    /// Get all available stories for assignment (US-2.1)
+    ///
+    /// Returns all stories that are available for assignment, sorted by priority.
+    /// A story is available if it's not completed, not assigned, and has satisfied dependencies.
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    pub fn available_stories(&self, assigned_story_ids: &[String]) -> Vec<&RalphStory> {
+        let mut available: Vec<&RalphStory> = self
+            .stories
+            .iter()
+            .filter(|s| {
+                !s.passes
+                    && s.dependencies_satisfied(&self.stories)
+                    && !assigned_story_ids.contains(&s.id)
+            })
+            .collect();
+
+        available.sort_by_key(|s| s.priority);
+        available
+    }
+
     /// Mark a story as passing
     pub fn mark_story_passing(&mut self, story_id: &str) -> bool {
         if let Some(story) = self.stories.iter_mut().find(|s| s.id == story_id) {
@@ -1610,5 +1652,242 @@ mod tests {
         assert!(config.agent_type.is_none());
         assert!(config.model.is_none());
         assert!(config.max_cost.is_none());
+    }
+
+    // =========================================================================
+    // US-2.1: Multiple Agents on Same PRD Tests
+    // =========================================================================
+
+    #[test]
+    fn test_next_available_story_excludes_assigned() {
+        // US-2.1: System assigns different stories to each agent
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "First story", "Acceptance 1");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Second story", "Acceptance 2");
+        s2.priority = 100;
+        let mut s3 = RalphStory::new("US-1.3", "Third story", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // With no assignments, first story is returned
+        let assigned: Vec<String> = vec![];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.1");
+
+        // With US-1.1 assigned, US-1.2 is returned
+        let assigned = vec!["US-1.1".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+
+        // With US-1.1 and US-1.2 assigned, US-1.3 is returned
+        let assigned = vec!["US-1.1".to_string(), "US-1.2".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3");
+
+        // With all assigned, no story available
+        let assigned = vec![
+            "US-1.1".to_string(),
+            "US-1.2".to_string(),
+            "US-1.3".to_string(),
+        ];
+        assert!(prd.next_available_story(&assigned).is_none());
+    }
+
+    #[test]
+    fn test_next_available_story_respects_dependencies() {
+        // US-2.1: Assignment respects story dependencies
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "First story", "Acceptance 1");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Second story", "Acceptance 2");
+        s2.priority = 100;
+        s2.dependencies = vec!["US-1.1".to_string()]; // Depends on US-1.1
+        let mut s3 = RalphStory::new("US-1.3", "Third story", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // US-1.1 is assigned to agent 1
+        let assigned = vec!["US-1.1".to_string()];
+
+        // US-1.2 depends on US-1.1 (not passed yet), so US-1.3 should be returned
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3"); // Not US-1.2 because dependency not satisfied
+
+        // After US-1.1 passes, US-1.2 becomes available
+        prd.mark_story_passing("US-1.1");
+        let assigned: Vec<String> = vec![]; // Agent 1 finished
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+    }
+
+    #[test]
+    fn test_next_available_story_respects_priority() {
+        // US-2.1: System assigns by priority
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Low priority", "Acceptance 1");
+        s1.priority = 200;
+        let mut s2 = RalphStory::new("US-1.2", "High priority", "Acceptance 2");
+        s2.priority = 50;
+        let mut s3 = RalphStory::new("US-1.3", "Medium priority", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // High priority (US-1.2) should be returned first
+        let assigned: Vec<String> = vec![];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+
+        // With US-1.2 assigned, medium priority (US-1.3) should be next
+        let assigned = vec!["US-1.2".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3");
+    }
+
+    #[test]
+    fn test_available_stories_returns_all_unassigned() {
+        // US-2.1: Can get all available stories
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.priority = 50;
+        let mut s3 = RalphStory::new("US-1.3", "Story 3", "A");
+        s3.priority = 150;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // All available, sorted by priority
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 3);
+        assert_eq!(available[0].id, "US-1.2"); // Priority 50
+        assert_eq!(available[1].id, "US-1.1"); // Priority 100
+        assert_eq!(available[2].id, "US-1.3"); // Priority 150
+
+        // With one assigned
+        let assigned = vec!["US-1.2".to_string()];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2);
+        assert!(!available.iter().any(|s| s.id == "US-1.2"));
+    }
+
+    #[test]
+    fn test_available_stories_excludes_completed() {
+        // US-2.1: Completed stories are not available
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.passes = true; // Already completed
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.passes = false;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.2");
+    }
+
+    #[test]
+    fn test_available_stories_excludes_blocked() {
+        // US-2.1: Blocked stories (unsatisfied dependencies) are not available
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.passes = false;
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.passes = false;
+        s2.dependencies = vec!["US-1.1".to_string()]; // Blocked
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.1");
+
+        // After US-1.1 passes, US-1.2 becomes available
+        prd.mark_story_passing("US-1.1");
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.2");
+    }
+
+    #[test]
+    fn test_multi_agent_scenario() {
+        // US-2.1: Full multi-agent scenario
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        // 5 stories with various dependencies
+        let mut s1 = RalphStory::new("US-1", "Foundation", "A");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-2", "Feature A", "A");
+        s2.priority = 100;
+        s2.dependencies = vec!["US-1".to_string()];
+        let mut s3 = RalphStory::new("US-3", "Feature B", "A");
+        s3.priority = 100;
+        s3.dependencies = vec!["US-1".to_string()];
+        let mut s4 = RalphStory::new("US-4", "Integration", "A");
+        s4.priority = 100;
+        s4.dependencies = vec!["US-2".to_string(), "US-3".to_string()];
+        let mut s5 = RalphStory::new("US-5", "Independent", "A");
+        s5.priority = 200; // Lower priority
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+        prd.add_story(s4);
+        prd.add_story(s5);
+
+        // Initially: US-1 and US-5 are available (others blocked by deps)
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2);
+
+        // Agent 1 takes US-1 (higher priority)
+        let assigned = vec!["US-1".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-5"); // Only US-5 left that's not blocked
+
+        // Agent 1 completes US-1
+        prd.mark_story_passing("US-1");
+
+        // Now US-2 and US-3 are unblocked
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 3); // US-2, US-3, US-5 (US-4 still blocked)
+
+        // Agent 1 takes US-2, Agent 2 takes US-3
+        let assigned = vec!["US-2".to_string(), "US-3".to_string()];
+        let next = prd.next_available_story(&assigned);
+        assert_eq!(next.unwrap().id, "US-5"); // Only US-5 available (US-4 blocked)
+
+        // Both agents complete their work
+        prd.mark_story_passing("US-2");
+        prd.mark_story_passing("US-3");
+
+        // Now US-4 is available
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2); // US-4 and US-5
     }
 }

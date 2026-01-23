@@ -317,6 +317,83 @@ impl AssignmentsManager {
         let file = self.read()?;
         Ok(file.active_assignments().into_iter().cloned().collect())
     }
+
+    /// Get the IDs of all stories currently assigned to active agents
+    pub fn get_assigned_story_ids(&self) -> Result<Vec<String>, String> {
+        let file = self.read()?;
+        Ok(file
+            .active_assignments()
+            .iter()
+            .map(|a| a.story_id.clone())
+            .collect())
+    }
+
+    /// Check if a story is currently assigned to any active agent
+    pub fn is_story_assigned(&self, story_id: &str) -> Result<bool, String> {
+        let file = self.read()?;
+        Ok(file.is_story_assigned(story_id))
+    }
+
+    /// Assign a story to an agent (US-2.1: Multiple Agents on Same PRD)
+    ///
+    /// This method ensures no two agents are assigned the same story.
+    /// Returns Ok(assignment) if successful, Err if story is already assigned.
+    pub fn assign_story_to_agent(
+        &self,
+        agent_id: &str,
+        agent_type: AgentType,
+        story_id: &str,
+    ) -> Result<Assignment, String> {
+        let mut file = self.read()?;
+
+        // Check if story is already assigned (US-2.1: No two agents assigned same story)
+        if file.is_story_assigned(story_id) {
+            return Err(format!(
+                "Story {} is already assigned to another agent",
+                story_id
+            ));
+        }
+
+        // Create and add the assignment
+        let assignment = Assignment::new(agent_id, agent_type, story_id);
+        let assignment_clone = assignment.clone();
+        file.add_assignment(assignment);
+        self.write(&file)?;
+
+        Ok(assignment_clone)
+    }
+
+    /// Release a story assignment back to the pool
+    ///
+    /// This marks the assignment as released, allowing another agent to pick it up.
+    pub fn release_story(&self, story_id: &str) -> Result<(), String> {
+        let mut file = self.read()?;
+
+        for assignment in &mut file.assignments {
+            if assignment.story_id == story_id && assignment.is_active() {
+                assignment.release();
+            }
+        }
+        file.last_updated = chrono::Utc::now().to_rfc3339();
+
+        self.write(&file)
+    }
+
+    /// Mark an agent's story as failed
+    ///
+    /// This marks the assignment as failed with an error message.
+    pub fn fail_story(&self, story_id: &str, error: &str) -> Result<(), String> {
+        let mut file = self.read()?;
+
+        for assignment in &mut file.assignments {
+            if assignment.story_id == story_id && assignment.is_active() {
+                assignment.mark_failed(error);
+            }
+        }
+        file.last_updated = chrono::Utc::now().to_rfc3339();
+
+        self.write(&file)
+    }
 }
 
 #[cfg(test)]
@@ -490,5 +567,173 @@ mod tests {
         let parsed: AssignmentsFile = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.assignments.len(), 1);
         assert_eq!(parsed.assignments[0].story_id, "US-1.1");
+    }
+
+    // =========================================================================
+    // US-2.1: Multiple Agents on Same PRD Tests
+    // =========================================================================
+
+    #[test]
+    fn test_assign_story_to_agent() {
+        // US-2.1: System assigns different stories to each agent
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign first story to agent 1
+        let assignment = manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        assert_eq!(assignment.agent_id, "agent-1");
+        assert_eq!(assignment.story_id, "US-1.1");
+        assert!(assignment.is_active());
+
+        // Verify story is assigned
+        assert!(manager.is_story_assigned("US-1.1").unwrap());
+        assert!(!manager.is_story_assigned("US-1.2").unwrap());
+    }
+
+    #[test]
+    fn test_no_duplicate_story_assignment() {
+        // US-2.1: No two agents are assigned the same story
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign US-1.1 to agent 1
+        manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+
+        // Try to assign the same story to agent 2 - should fail
+        let result = manager.assign_story_to_agent("agent-2", AgentType::Opencode, "US-1.1");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("already assigned to another agent"));
+    }
+
+    #[test]
+    fn test_multiple_agents_different_stories() {
+        // US-2.1: System assigns different stories to each agent
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign different stories to different agents
+        let a1 = manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        let a2 = manager
+            .assign_story_to_agent("agent-2", AgentType::Opencode, "US-1.2")
+            .unwrap();
+        let a3 = manager
+            .assign_story_to_agent("agent-3", AgentType::Cursor, "US-1.3")
+            .unwrap();
+
+        assert_eq!(a1.story_id, "US-1.1");
+        assert_eq!(a2.story_id, "US-1.2");
+        assert_eq!(a3.story_id, "US-1.3");
+
+        // Verify all are active
+        let active = manager.get_active_assignments().unwrap();
+        assert_eq!(active.len(), 3);
+
+        // Verify assigned story IDs
+        let assigned_ids = manager.get_assigned_story_ids().unwrap();
+        assert!(assigned_ids.contains(&"US-1.1".to_string()));
+        assert!(assigned_ids.contains(&"US-1.2".to_string()));
+        assert!(assigned_ids.contains(&"US-1.3".to_string()));
+    }
+
+    #[test]
+    fn test_release_story_allows_reassignment() {
+        // US-2.1: Released assignments can be reassigned
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign and then release
+        manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        manager.release_story("US-1.1").unwrap();
+
+        // Story should no longer be assigned
+        assert!(!manager.is_story_assigned("US-1.1").unwrap());
+
+        // Another agent can now take it
+        let new_assignment = manager
+            .assign_story_to_agent("agent-2", AgentType::Opencode, "US-1.1")
+            .unwrap();
+        assert_eq!(new_assignment.agent_id, "agent-2");
+    }
+
+    #[test]
+    fn test_failed_story_not_active() {
+        // US-2.1: Failed assignments are not active
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign and then fail
+        manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        manager.fail_story("US-1.1", "Agent crashed").unwrap();
+
+        // Story should no longer be actively assigned
+        assert!(!manager.is_story_assigned("US-1.1").unwrap());
+
+        // Another agent can take it
+        let result = manager.assign_story_to_agent("agent-2", AgentType::Opencode, "US-1.1");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_completed_story_not_reassignable() {
+        // US-2.1: Completed assignments stay completed
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Assign and complete
+        manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        manager.complete_story("US-1.1").unwrap();
+
+        // Story should not be active (completed is different from active)
+        assert!(!manager.is_story_assigned("US-1.1").unwrap());
+
+        // But completing a story doesn't mean another agent should work on it
+        // The PRD.passes flag determines if work is needed
+        let completed = manager.get_completed_story_ids().unwrap();
+        assert!(completed.contains(&"US-1.1".to_string()));
+    }
+
+    #[test]
+    fn test_get_assigned_story_ids() {
+        // US-2.1: Can get list of assigned stories
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Initially empty
+        let assigned = manager.get_assigned_story_ids().unwrap();
+        assert!(assigned.is_empty());
+
+        // Add assignments
+        manager
+            .assign_story_to_agent("agent-1", AgentType::Claude, "US-1.1")
+            .unwrap();
+        manager
+            .assign_story_to_agent("agent-2", AgentType::Opencode, "US-2.1")
+            .unwrap();
+
+        let assigned = manager.get_assigned_story_ids().unwrap();
+        assert_eq!(assigned.len(), 2);
+        assert!(assigned.contains(&"US-1.1".to_string()));
+        assert!(assigned.contains(&"US-2.1".to_string()));
     }
 }
