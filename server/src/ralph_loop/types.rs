@@ -61,6 +61,29 @@ impl Default for ConflictResolution {
     }
 }
 
+/// Execution mode for Ralph loop (US-5.2)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    /// Single agent execution (default)
+    SingleAgent,
+    /// Hierarchical team execution with primary and assistants
+    Hierarchical {
+        /// Agent type/model tier for primary agent (e.g., "claude-opus-4-5")
+        primary_model: String,
+        /// Agent type/model tier for assistants (e.g., "claude-sonnet-4-5")
+        assistant_models: Vec<String>,
+        /// Whether primary agent reviews completed work before merge
+        requires_primary_review: bool,
+    },
+}
+
+impl Default for ExecutionMode {
+    fn default() -> Self {
+        Self::SingleAgent
+    }
+}
+
 /// Generate a consistent PRD filename from title and ID
 ///
 /// Format: `{sanitized-title}-{8-char-id}`
@@ -134,6 +157,42 @@ pub struct RalphStory {
     /// Optional estimated effort (S/M/L/XL)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+
+    /// Subtasks created by primary agent (US-5.2 hierarchical teams)
+    /// These are smaller units of work that can be assigned to assistants
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtasks: Vec<RalphSubtask>,
+
+    /// Whether this story requires primary agent review before merge (US-5.2)
+    #[serde(default)]
+    pub requires_primary_review: bool,
+}
+
+/// A subtask created by the primary agent (US-5.2)
+///
+/// Primary agents can break stories into subtasks and assign them to assistants.
+/// This enables parallel work while maintaining hierarchical oversight.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RalphSubtask {
+    /// Unique identifier for the subtask (e.g., "US-1.1-ST-1")
+    pub id: String,
+
+    /// Title of the subtask
+    pub title: String,
+
+    /// Description of what needs to be done
+    pub description: String,
+
+    /// Whether this subtask is completed
+    pub passes: bool,
+
+    /// Optional ID of the assistant agent assigned to this subtask
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_to: Option<String>,
+
+    /// Agent type of the assistant (e.g., "claude-sonnet-4-5")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_agent_model: Option<String>,
 }
 
 fn default_priority() -> u32 {
@@ -153,6 +212,8 @@ impl RalphStory {
             dependencies: Vec::new(),
             tags: Vec::new(),
             effort: None,
+            subtasks: Vec::new(),
+            requires_primary_review: false,
         }
     }
 
@@ -165,6 +226,34 @@ impl RalphStory {
                 .map(|s| s.passes)
                 .unwrap_or(false)
         })
+    }
+
+    /// Check if all subtasks are completed (US-5.2)
+    pub fn all_subtasks_complete(&self) -> bool {
+        if self.subtasks.is_empty() {
+            return true;
+        }
+        self.subtasks.iter().all(|st| st.passes)
+    }
+}
+
+impl RalphSubtask {
+    /// Create a new subtask
+    pub fn new(id: impl Into<String>, title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            description: description.into(),
+            passes: false,
+            assigned_to: None,
+            assigned_agent_model: None,
+        }
+    }
+
+    /// Assign this subtask to an agent
+    pub fn assign_to(&mut self, agent_id: impl Into<String>, agent_model: impl Into<String>) {
+        self.assigned_to = Some(agent_id.into());
+        self.assigned_agent_model = Some(agent_model.into());
     }
 }
 
@@ -237,6 +326,10 @@ pub struct PrdExecutionConfig {
     /// Target branch for merges (US-5.1) - defaults to main
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_target_branch: Option<String>,
+
+    /// Execution mode for hierarchical teams (US-5.2)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_mode: Option<ExecutionMode>,
 }
 
 impl Default for PrdExecutionConfig {
@@ -257,6 +350,7 @@ impl Default for PrdExecutionConfig {
             merge_interval: None,
             conflict_resolution: None,
             merge_target_branch: None,
+            execution_mode: None,
         }
     }
 }
@@ -308,6 +402,7 @@ impl PrdExecutionConfig {
             || self.merge_interval.is_some()
             || self.conflict_resolution.is_some()
             || self.merge_target_branch.is_some()
+            || self.execution_mode.is_some()
     }
 }
 
@@ -1740,6 +1835,7 @@ mod tests {
             merge_interval: None,
             conflict_resolution: None,
             merge_target_branch: None,
+            execution_mode: None,
         });
 
         let json = serde_json::to_string_pretty(&prd).unwrap();

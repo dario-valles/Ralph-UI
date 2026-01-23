@@ -96,6 +96,8 @@ pub fn issue_to_story(issue: &Issue, options: &IssueImportOptions) -> RalphStory
         dependencies: Vec::new(),
         tags,
         effort,
+        subtasks: Vec::new(),
+        requires_primary_review: false,
     }
 }
 

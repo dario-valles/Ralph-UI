@@ -13,6 +13,7 @@ mod brief_builder;
 mod completion;
 mod config;
 pub mod fallback_orchestrator;
+mod hierarchical_team_manager;
 mod learnings_manager;
 mod merge_manager;
 mod prd_executor;
@@ -26,6 +27,9 @@ pub use brief_builder::*;
 pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
+pub use hierarchical_team_manager::{
+    HierarchicalSubtaskAssignment, HierarchicalTeamAssignment, HierarchicalTeamManager, PrimaryReview,
+};
 pub use learnings_manager::*;
 pub use merge_manager::{MergeConfig, MergeManager, MergeAttemptResult};
 pub use prd_executor::*;
