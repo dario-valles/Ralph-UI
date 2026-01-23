@@ -59,6 +59,7 @@ import { CommitCard } from '@/components/ralph-loop/CommitCard'
 import { AssignmentsPanel } from '@/components/ralph-loop/AssignmentsPanel'
 import { LearningsPanel } from '@/components/ralph-loop/LearningsPanel'
 import { BriefViewer } from '@/components/ralph-loop/BriefViewer'
+import { LearningAnalyticsCard } from '@/components/ralph-loop/LearningAnalyticsCard'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -984,6 +985,9 @@ export function RalphLoopDashboard({
           )}
         </CardContent>
       </Card>
+
+      {/* Learning Analytics */}
+      <LearningAnalyticsCard projectPath={projectPath} prdName={prdName} />
 
       {/* Tabs for Stories, Progress, Terminal */}
       <Card>

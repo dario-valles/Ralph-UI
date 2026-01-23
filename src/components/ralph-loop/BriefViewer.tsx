@@ -127,7 +127,7 @@ export function BriefViewer({
     try {
       const briefs = await ralphLoopApi.getHistoricalBriefs(projectPath, prdName)
       setHistoricalBriefs(briefs)
-    } catch (err) {
+    } catch {
       // Silently fail - historical briefs might not exist yet
       setHistoricalBriefs([])
     }
