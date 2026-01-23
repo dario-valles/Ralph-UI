@@ -1,7 +1,7 @@
 // Hook for PRD chat event listeners
 // Consolidates prd:file_updated and prd:chat_chunk event handling
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { subscribeEvent } from '@/lib/events-client'
 
 interface PRDFileUpdatedPayload {
@@ -30,6 +30,53 @@ interface UsePRDChatEventsReturn {
 }
 
 /**
+ * Reusable hook for subscribing to server-sent events with session filtering.
+ * Handles async setup, cleanup, and session ID validation.
+ *
+ * @param eventName - The event name to subscribe to
+ * @param sessionId - Session ID to filter events (subscription skipped if undefined)
+ * @param handler - Callback to handle matching events
+ * @param deps - Additional dependencies for the effect
+ */
+function useEventSubscription<T extends { sessionId: string }>(
+  eventName: string,
+  sessionId: string | undefined,
+  handler: (payload: T) => void,
+  deps: React.DependencyList = []
+): void {
+  // Use ref to avoid handler in deps (prevents re-subscriptions on handler changes)
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+
+  useEffect(() => {
+    if (!sessionId) return
+
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      try {
+        unlisten = await subscribeEvent<T>(eventName, (payload) => {
+          if (payload.sessionId === sessionId) {
+            handlerRef.current(payload)
+          }
+        })
+      } catch (err) {
+        console.warn(`Failed to set up ${eventName} event listener:`, err)
+      }
+    }
+
+    setupListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventName, sessionId, ...deps])
+}
+
+/**
  * Hook to listen for PRD chat events from the server backend
  *
  * Listens for:
@@ -49,61 +96,19 @@ export function usePRDChatEvents({
     setStreamingContent('')
   }, [])
 
-  // Listen for PRD file update events from the backend
-  useEffect(() => {
-    if (!sessionId) return
-
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      try {
-        unlisten = await subscribeEvent<PRDFileUpdatedPayload>('prd:file_updated', (payload) => {
-          // Only update if the event is for the current session
-          if (payload.sessionId === sessionId) {
-            onPlanUpdated(payload.content, payload.path)
-          }
-        })
-      } catch (err) {
-        console.warn('Failed to set up PRD file event listener:', err)
-      }
-    }
-
-    setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [sessionId, onPlanUpdated])
+  // Listen for PRD file update events
+  useEventSubscription<PRDFileUpdatedPayload>(
+    'prd:file_updated',
+    sessionId,
+    (payload) => onPlanUpdated(payload.content, payload.path)
+  )
 
   // Listen for PRD chat streaming chunk events
-  useEffect(() => {
-    if (!sessionId) return
-
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      try {
-        unlisten = await subscribeEvent<PRDChatChunkPayload>('prd:chat_chunk', (payload) => {
-          // Only update if the event is for the current session
-          if (payload.sessionId === sessionId) {
-            setStreamingContent((prev) => prev + payload.content + '\n')
-          }
-        })
-      } catch (err) {
-        console.warn('Failed to set up PRD chat chunk event listener:', err)
-      }
-    }
-
-    setupListener()
-
-    return () => {
-      if (unlisten) {
-        unlisten()
-      }
-    }
-  }, [sessionId])
+  useEventSubscription<PRDChatChunkPayload>(
+    'prd:chat_chunk',
+    sessionId,
+    (payload) => setStreamingContent((prev) => prev + payload.content + '\n')
+  )
 
   return {
     streamingContent,

@@ -16,6 +16,52 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Create a PrdExecutor from project path and PRD name strings.
+/// Reduces repetitive `PrdExecutor::new(&to_path_buf(&project_path), &prd_name)` pattern.
+#[inline]
+fn prd_executor(project_path: &str, prd_name: &str) -> PrdExecutor {
+    PrdExecutor::new(&to_path_buf(project_path), prd_name)
+}
+
+/// Create a ProgressTracker from project path and PRD name strings.
+#[inline]
+fn progress_tracker(project_path: &str, prd_name: &str) -> ProgressTracker {
+    ProgressTracker::new(&to_path_buf(project_path), prd_name)
+}
+
+/// Create a PromptBuilder from project path and PRD name strings.
+#[inline]
+fn prompt_builder(project_path: &str, prd_name: &str) -> PromptBuilder {
+    PromptBuilder::new(&to_path_buf(project_path), prd_name)
+}
+
+/// Resolve a configuration value with fallback chain.
+/// Tries request value first, then PRD config, then global config, then default.
+#[inline]
+fn resolve_config<T>(
+    request_val: Option<T>,
+    prd_val: Option<T>,
+    global_val: Option<T>,
+    default: T,
+) -> T {
+    request_val.or(prd_val).or(global_val).unwrap_or(default)
+}
+
+/// Resolve an optional configuration value with fallback chain.
+/// Like resolve_config but returns Option<T> instead of T.
+#[inline]
+fn resolve_config_opt<T>(
+    request_val: Option<T>,
+    prd_val: Option<T>,
+    global_val: Option<T>,
+) -> Option<T> {
+    request_val.or(prd_val).or(global_val)
+}
+
 /// State for managing active Ralph loop executions (Application state)
 pub struct RalphLoopManagerState {
     /// Active executions by execution ID
@@ -337,20 +383,16 @@ pub fn get_ralph_prd_status(project_path: String, prd_name: String) -> Result<Pr
 
 /// Mark a story as passing in the PRD
 pub fn mark_ralph_story_passing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
-    executor.mark_story_passing(&story_id)
+    prd_executor(&project_path, &prd_name).mark_story_passing(&story_id)
 }
 
 /// Mark a story as failing in the PRD
 pub fn mark_ralph_story_failing(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
-    executor.mark_story_failing(&story_id)
+    prd_executor(&project_path, &prd_name).mark_story_failing(&story_id)
 }
 
 /// Add a story to the PRD
 pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStoryInput) -> Result<(), String> {
-    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
-
     let mut ralph_story = RalphStory::new(&story.id, &story.title, &story.acceptance);
     ralph_story.description = story.description;
     ralph_story.priority = story.priority.unwrap_or(100);
@@ -358,49 +400,42 @@ pub fn add_ralph_story(project_path: String, prd_name: String, story: RalphStory
     ralph_story.tags = story.tags.unwrap_or_default();
     ralph_story.effort = story.effort;
 
-    executor.add_story(ralph_story)
+    prd_executor(&project_path, &prd_name).add_story(ralph_story)
 }
 
 /// Remove a story from the PRD
 pub fn remove_ralph_story(project_path: String, prd_name: String, story_id: String) -> Result<bool, String> {
-    let executor = PrdExecutor::new(&to_path_buf(&project_path), &prd_name);
-    executor.remove_story(&story_id)
+    prd_executor(&project_path, &prd_name).remove_story(&story_id)
 }
 
 /// Get progress.txt content
 pub fn get_ralph_progress(project_path: String, prd_name: String) -> Result<String, String> {
-    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
-    tracker.read_raw()
+    progress_tracker(&project_path, &prd_name).read_raw()
 }
 
 /// Get progress summary
 pub fn get_ralph_progress_summary(project_path: String, prd_name: String) -> Result<ProgressSummary, String> {
-    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
-    tracker.get_summary()
+    progress_tracker(&project_path, &prd_name).get_summary()
 }
 
 /// Add a note to progress.txt
 pub fn add_ralph_progress_note(project_path: String, prd_name: String, iteration: u32, note: String) -> Result<(), String> {
-    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
-    tracker.add_note(iteration, &note)
+    progress_tracker(&project_path, &prd_name).add_note(iteration, &note)
 }
 
 /// Clear progress.txt and reinitialize
 pub fn clear_ralph_progress(project_path: String, prd_name: String) -> Result<(), String> {
-    let tracker = ProgressTracker::new(&to_path_buf(&project_path), &prd_name);
-    tracker.clear()
+    progress_tracker(&project_path, &prd_name).clear()
 }
 
 /// Get the prompt.md content
 pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
-    let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
-    builder.read_prompt()
+    prompt_builder(&project_path, &prd_name).read_prompt()
 }
 
 /// Update the prompt.md content
 pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
-    let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
-    builder.write_prompt(&content)
+    prompt_builder(&project_path, &prd_name).write_prompt(&content)
 }
 
 /// Heartbeat interval in seconds (30 seconds)
@@ -448,39 +483,59 @@ pub async fn start_ralph_loop(
         _ => return Err(format!("Unknown agent type: {}", request.agent_type)),
     };
 
-    // Log final resolved config values with their sources
-    let resolved_model = request.model.clone()
-        .or_else(|| prd_config.and_then(|c| c.model.clone()))
-        .or_else(|| user_config.as_ref().and_then(|c| c.execution.model.clone()));
+    // Resolve config values using precedence: request > PRD stored config > global config > default
+    let resolved_model = resolve_config_opt(
+        request.model.clone(),
+        prd_config.and_then(|c| c.model.clone()),
+        user_config.as_ref().and_then(|c| c.execution.model.clone()),
+    );
 
-    let resolved_max_iterations = request.max_iterations
-        .or_else(|| prd_config.and_then(|c| c.max_iterations))
-        .or_else(|| user_config.as_ref().map(|c| c.execution.max_iterations as u32))
-        .unwrap_or(50);
+    let resolved_max_iterations = resolve_config(
+        request.max_iterations,
+        prd_config.and_then(|c| c.max_iterations),
+        user_config.as_ref().map(|c| c.execution.max_iterations as u32),
+        50,
+    );
 
-    let resolved_max_cost = request.max_cost
-        .or_else(|| prd_config.and_then(|c| c.max_cost));
+    let resolved_max_cost = resolve_config_opt(
+        request.max_cost,
+        prd_config.and_then(|c| c.max_cost),
+        None, // No global config for max_cost
+    );
 
-    let resolved_run_tests = request.run_tests
-        .or_else(|| prd_config.and_then(|c| c.run_tests))
-        .or_else(|| user_config.as_ref().map(|c| c.validation.run_tests))
-        .unwrap_or(true);
+    let resolved_run_tests = resolve_config(
+        request.run_tests,
+        prd_config.and_then(|c| c.run_tests),
+        user_config.as_ref().map(|c| c.validation.run_tests),
+        true,
+    );
 
-    let resolved_run_lint = request.run_lint
-        .or_else(|| prd_config.and_then(|c| c.run_lint))
-        .or_else(|| user_config.as_ref().map(|c| c.validation.run_lint))
-        .unwrap_or(true);
+    let resolved_run_lint = resolve_config(
+        request.run_lint,
+        prd_config.and_then(|c| c.run_lint),
+        user_config.as_ref().map(|c| c.validation.run_lint),
+        true,
+    );
 
-    let resolved_use_worktree = request.use_worktree
-        .or_else(|| prd_config.and_then(|c| c.use_worktree))
-        .unwrap_or(true);
+    let resolved_use_worktree = resolve_config(
+        request.use_worktree,
+        prd_config.and_then(|c| c.use_worktree),
+        None, // No global config for use_worktree
+        true,
+    );
 
-    let resolved_agent_timeout = request.agent_timeout_secs
-        .or_else(|| prd_config.and_then(|c| c.agent_timeout_secs))
-        .unwrap_or(0);
+    let resolved_agent_timeout = resolve_config(
+        request.agent_timeout_secs,
+        prd_config.and_then(|c| c.agent_timeout_secs),
+        None, // No global config for agent_timeout
+        0,
+    );
 
-    let resolved_template = request.template_name.clone()
-        .or_else(|| prd_config.and_then(|c| c.template_name.clone()));
+    let resolved_template = resolve_config_opt(
+        request.template_name.clone(),
+        prd_config.and_then(|c| c.template_name.clone()),
+        None, // No global config for template
+    );
 
     log::info!(
         "[start_ralph_loop] Resolved config: agent={:?}, model={:?}, max_iterations={}, max_cost={:?}, run_tests={}, run_lint={}, use_worktree={}, agent_timeout={}",

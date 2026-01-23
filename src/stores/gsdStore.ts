@@ -129,7 +129,26 @@ interface GsdActions {
  */
 export const useGsdStore = create<GsdState & GsdActions>()(
   devtools(
-    (set, get) => ({
+    (set, get) => {
+      // Helper to update workflow state with automatic timestamp
+      const updateWorkflowState = (
+        updates: Partial<GsdWorkflowState> | ((state: GsdWorkflowState) => Partial<GsdWorkflowState>)
+      ): boolean => {
+        const { workflowState } = get()
+        if (!workflowState) return false
+
+        const resolvedUpdates = typeof updates === 'function' ? updates(workflowState) : updates
+        set({
+          workflowState: {
+            ...workflowState,
+            ...resolvedUpdates,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+        return true
+      }
+
+      return {
       // Initial state
       workflowState: null,
       currentProjectPath: null,
@@ -200,23 +219,11 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         const nextPhase = getNextPhase(workflowState.currentPhase)
         if (!nextPhase) {
           // Mark as complete
-          set({
-            workflowState: {
-              ...workflowState,
-              isComplete: true,
-              updatedAt: new Date().toISOString(),
-            },
-          })
+          updateWorkflowState({ isComplete: true })
           return null
         }
 
-        set({
-          workflowState: {
-            ...workflowState,
-            currentPhase: nextPhase,
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        updateWorkflowState({ currentPhase: nextPhase })
         return nextPhase
       },
 
@@ -227,44 +234,22 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         const prevPhase = getPreviousPhase(workflowState.currentPhase)
         if (!prevPhase) return null
 
-        set({
-          workflowState: {
-            ...workflowState,
-            currentPhase: prevPhase,
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        updateWorkflowState({ currentPhase: prevPhase })
         return prevPhase
       },
 
       setPhase: (phase: GsdPhase) => {
-        const { workflowState } = get()
-        if (!workflowState) return
-
-        set({
-          workflowState: {
-            ...workflowState,
-            currentPhase: phase,
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        updateWorkflowState({ currentPhase: phase })
       },
 
       // Questioning context
       updateQuestioningContext: (context: Partial<QuestioningContext>) => {
-        const { workflowState } = get()
-        if (!workflowState) return
-
-        set({
-          workflowState: {
-            ...workflowState,
-            questioningContext: {
-              ...workflowState.questioningContext,
-              ...context,
-            },
-            updatedAt: new Date().toISOString(),
+        updateWorkflowState((state) => ({
+          questioningContext: {
+            ...state.questioningContext,
+            ...context,
           },
-        })
+        }))
       },
 
       setQuestioningContextItem: (
@@ -276,19 +261,12 @@ export const useGsdStore = create<GsdState & GsdActions>()(
       },
 
       addContextNote: (note: string) => {
-        const { workflowState } = get()
-        if (!workflowState) return
-
-        set({
-          workflowState: {
-            ...workflowState,
-            questioningContext: {
-              ...workflowState.questioningContext,
-              notes: [...workflowState.questioningContext.notes, note],
-            },
-            updatedAt: new Date().toISOString(),
+        updateWorkflowState((state) => ({
+          questioningContext: {
+            ...state.questioningContext,
+            notes: [...state.questioningContext.notes, note],
           },
-        })
+        }))
       },
 
       // Research
@@ -297,16 +275,12 @@ export const useGsdStore = create<GsdState & GsdActions>()(
         if (!workflowState) return
 
         // Mark all as running
-        set({
-          workflowState: {
-            ...workflowState,
-            researchStatus: {
-              architecture: { running: true, complete: false },
-              codebase: { running: true, complete: false },
-              bestPractices: { running: true, complete: false },
-              risks: { running: true, complete: false },
-            },
-            updatedAt: new Date().toISOString(),
+        updateWorkflowState({
+          researchStatus: {
+            architecture: { running: true, complete: false },
+            codebase: { running: true, complete: false },
+            bestPractices: { running: true, complete: false },
+            risks: { running: true, complete: false },
           },
         })
 
@@ -317,29 +291,14 @@ export const useGsdStore = create<GsdState & GsdActions>()(
             context,
             agentType || selectedResearchAgent || undefined
           )
-          set({
-            workflowState: {
-              ...get().workflowState!,
-              researchStatus: status,
-              updatedAt: new Date().toISOString(),
-            },
-          })
+          updateWorkflowState({ researchStatus: status })
         } catch (error) {
           set({ error: errorToString(error) })
         }
       },
 
       updateResearchStatus: (status: ResearchStatus) => {
-        const { workflowState } = get()
-        if (!workflowState) return
-
-        set({
-          workflowState: {
-            ...workflowState,
-            researchStatus: status,
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        updateWorkflowState({ researchStatus: status })
       },
 
       setResearchResults: (results: ResearchResult[]) => {
@@ -487,16 +446,9 @@ export const useGsdStore = create<GsdState & GsdActions>()(
 
       // Decisions
       recordDecision: (decision: GsdDecision) => {
-        const { workflowState } = get()
-        if (!workflowState) return
-
-        set({
-          workflowState: {
-            ...workflowState,
-            decisions: [...workflowState.decisions, decision],
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        updateWorkflowState((state) => ({
+          decisions: [...state.decisions, decision],
+        }))
       },
 
       // Error handling
@@ -536,7 +488,7 @@ export const useGsdStore = create<GsdState & GsdActions>()(
           set({ error: errorToString(error), planningSessions: [] })
         }
       },
-    }),
+    }},
     { name: 'gsd-store' }
   )
 )

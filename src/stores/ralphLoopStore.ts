@@ -42,8 +42,8 @@ interface RalphLoopStore extends AsyncState {
 
   // Actions - PRD Management
   setProjectPath: (path: string | null, prdName: string | null) => void
-  loadPrd: (projectPath: string, prdName: string) => Promise<void>
-  loadPrdStatus: (projectPath: string, prdName: string) => Promise<void>
+  loadPrd: (projectPath: string, prdName: string, silent?: boolean) => Promise<void>
+  loadPrdStatus: (projectPath: string, prdName: string, silent?: boolean) => Promise<void>
   initPrd: (request: InitRalphPrdRequest) => Promise<RalphPrd | undefined>
   markStoryPassing: (storyId: string) => Promise<boolean>
   markStoryFailing: (storyId: string) => Promise<boolean>
@@ -52,7 +52,7 @@ interface RalphLoopStore extends AsyncState {
 
   // Actions - Progress Management
   loadProgress: (projectPath: string, prdName: string) => Promise<void>
-  loadProgressSummary: (projectPath: string, prdName: string) => Promise<void>
+  loadProgressSummary: (projectPath: string, prdName: string, silent?: boolean) => Promise<void>
   addProgressNote: (iteration: number, note: string) => Promise<void>
   clearProgress: () => Promise<void>
 
@@ -66,9 +66,6 @@ interface RalphLoopStore extends AsyncState {
   loadLoopState: (silent?: boolean) => Promise<void>
   loadLoopMetrics: (silent?: boolean) => Promise<void>
   loadIterationHistory: (silent?: boolean) => Promise<void>
-  loadPrdStatusSilent: (projectPath: string, prdName: string) => Promise<void>
-  loadPrdSilent: (projectPath: string, prdName: string) => Promise<void>
-  loadProgressSummarySilent: (projectPath: string, prdName: string) => Promise<void>
   /** Load consolidated snapshot (state, metrics, history) in a single IPC call */
   loadSnapshot: (silent?: boolean) => Promise<void>
   listExecutions: () => Promise<void>
@@ -148,19 +145,19 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   },
 
   // Load PRD from .ralph-ui/prds/{prdName}.json
-  loadPrd: async (projectPath: string, prdName: string) => {
+  loadPrd: async (projectPath: string, prdName: string, silent?: boolean) => {
     await asyncAction(set, async () => {
       const prd = await ralphLoopApi.getPrd(projectPath, prdName)
       return { prd, currentProjectPath: projectPath, currentPrdName: prdName }
-    })
+    }, { silent })
   },
 
   // Load PRD status
-  loadPrdStatus: async (projectPath: string, prdName: string) => {
+  loadPrdStatus: async (projectPath: string, prdName: string, silent?: boolean) => {
     await asyncAction(set, async () => {
       const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
       return { prdStatus }
-    })
+    }, { silent })
   },
 
   // Initialize a new Ralph PRD (legacy - creates in .ralph/ format)
@@ -263,11 +260,11 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   },
 
   // Load progress summary
-  loadProgressSummary: async (projectPath: string, prdName: string) => {
+  loadProgressSummary: async (projectPath: string, prdName: string, silent?: boolean) => {
     await asyncAction(set, async () => {
       const progressSummary = await ralphLoopApi.getProgressSummary(projectPath, prdName)
       return { progressSummary }
-    })
+    }, { silent })
   },
 
   // Add a note to progress.txt
@@ -403,42 +400,6 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
         return { iterationHistory: iterationHistory ?? [] }
       },
       { silent }
-    )
-  },
-
-  // Load PRD status silently (for background polling)
-  loadPrdStatusSilent: async (projectPath: string, prdName: string) => {
-    await asyncAction(
-      set,
-      async () => {
-        const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
-        return { prdStatus }
-      },
-      { silent: true }
-    )
-  },
-
-  // Load PRD silently (for background polling)
-  loadPrdSilent: async (projectPath: string, prdName: string) => {
-    await asyncAction(
-      set,
-      async () => {
-        const prd = await ralphLoopApi.getPrd(projectPath, prdName)
-        return { prd }
-      },
-      { silent: true }
-    )
-  },
-
-  // Load progress summary silently (for background polling)
-  loadProgressSummarySilent: async (projectPath: string, prdName: string) => {
-    await asyncAction(
-      set,
-      async () => {
-        const progressSummary = await ralphLoopApi.getProgressSummary(projectPath, prdName)
-        return { progressSummary }
-      },
-      { silent: true }
     )
   },
 

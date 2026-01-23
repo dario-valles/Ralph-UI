@@ -89,7 +89,6 @@ export function RalphLoopDashboard({
     setProjectPath,
     loadPrd,
     loadPrdStatus,
-    loadPrdStatusSilent,
     loadProgress,
     loadProgressSummary,
     loadConfig,
@@ -102,8 +101,6 @@ export function RalphLoopDashboard({
     markStoryFailing,
     refreshAll,
     checkForActiveExecution,
-    loadPrdSilent,
-    loadProgressSummarySilent,
   } = useRalphLoopStore()
 
   const [activeTab, setActiveTab] = useState('stories')
@@ -352,11 +349,11 @@ export function RalphLoopDashboard({
       // Consolidated API: state + metrics + agentId + worktreePath + iterationHistory in 1 call
       loadSnapshot(true) // silent
       // Reload PRD to get updated story.passes values
-      loadPrdSilent(pollPath, prdName)
+      loadPrd(pollPath, prdName, true)
       // Reload prdStatus to get updated passed/total counts
-      loadPrdStatusSilent(pollPath, prdName)
+      loadPrdStatus(pollPath, prdName, true)
       // Reload progress summary to get updated learnings count
-      loadProgressSummarySilent(pollPath, prdName)
+      loadProgressSummary(pollPath, prdName, true)
     }
 
     const interval = setInterval(poll, 2000)
@@ -367,10 +364,9 @@ export function RalphLoopDashboard({
   }, [
     activeExecutionId,
     loadSnapshot,
+    loadPrd,
     loadPrdStatus,
-    loadPrdStatusSilent,
-    loadPrdSilent,
-    loadProgressSummarySilent,
+    loadProgressSummary,
     loadCommits,
     effectiveDataPath,
     prdName,

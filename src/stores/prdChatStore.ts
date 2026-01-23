@@ -59,7 +59,17 @@ interface PRDChatStore extends AsyncState {
   updatePlanContent: (content: string, path: string) => void
 }
 
-export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
+export const usePRDChatStore = create<PRDChatStore>((set, get) => {
+  // Helper to get required session with project path, returns null if not available
+  const getSessionWithPath = (): { session: ChatSession; projectPath: string } | null => {
+    const { currentSession } = get()
+    if (!currentSession || !currentSession.projectPath) {
+      return null
+    }
+    return { session: currentSession, projectPath: currentSession.projectPath }
+  }
+
+  return {
   // Initial state
   sessions: [],
   currentSession: null,
@@ -113,15 +123,15 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   },
 
   updateSessionAgent: async (agentType: string) => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) return
+    const ctx = getSessionWithPath()
+    if (!ctx) return
 
     try {
-      await prdChatApi.updateSessionAgent(currentSession.id, currentSession.projectPath, agentType)
+      await prdChatApi.updateSessionAgent(ctx.session.id, ctx.projectPath, agentType)
 
       set((state) => ({
         currentSession: state.currentSession ? { ...state.currentSession, agentType } : null,
-        sessions: state.sessions.map((s) => s.id === currentSession.id ? { ...s, agentType } : s)
+        sessions: state.sessions.map((s) => s.id === ctx.session.id ? { ...s, agentType } : s)
       }))
     } catch (error) {
       set({ error: errorToString(error) })
@@ -223,13 +233,13 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Load message history for a session
   loadHistory: async (sessionId: string) => {
-    const { currentSession } = get()
-    if (!currentSession?.projectPath) {
+    const ctx = getSessionWithPath()
+    if (!ctx) {
       set({ error: 'No project path available' })
       return
     }
     await asyncAction(set, async () => {
-      const messages = await prdChatApi.getHistory(sessionId, currentSession.projectPath!)
+      const messages = await prdChatApi.getHistory(sessionId, ctx.projectPath)
       return { messages }
     })
   },
@@ -312,14 +322,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Assess quality of current session
   assessQuality: async () => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) {
-      return null
-    }
+    const ctx = getSessionWithPath()
+    if (!ctx) return null
 
     set({ loading: true, error: null })
     try {
-      const assessment = await prdChatApi.assessQuality(currentSession.id, currentSession.projectPath)
+      const assessment = await prdChatApi.assessQuality(ctx.session.id, ctx.projectPath)
       set({ qualityAssessment: assessment, loading: false })
       return assessment
     } catch (error) {
@@ -340,14 +348,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Preview extraction before export
   previewExtraction: async () => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) {
-      return null
-    }
+    const ctx = getSessionWithPath()
+    if (!ctx) return null
 
     set({ loading: true, error: null })
     try {
-      const content = await prdChatApi.previewExtraction(currentSession.id, currentSession.projectPath)
+      const content = await prdChatApi.previewExtraction(ctx.session.id, ctx.projectPath)
       set({ extractedContent: content, loading: false })
       return content
     } catch (error) {
@@ -358,20 +364,18 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Set structured output mode for current session
   setStructuredMode: async (enabled: boolean) => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) {
-      return
-    }
+    const ctx = getSessionWithPath()
+    if (!ctx) return
 
     try {
-      await prdChatApi.setStructuredMode(currentSession.id, currentSession.projectPath, enabled)
+      await prdChatApi.setStructuredMode(ctx.session.id, ctx.projectPath, enabled)
       // Update local state
       set((state) => {
         const updatedSession = state.currentSession
           ? { ...state.currentSession, structuredMode: enabled }
           : null
         const updatedSessions = state.sessions.map((s) =>
-          s.id === currentSession.id ? { ...s, structuredMode: enabled } : s
+          s.id === ctx.session.id ? { ...s, structuredMode: enabled } : s
         )
         return {
           currentSession: updatedSession,
@@ -385,13 +389,11 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Clear extracted structure for current session
   clearExtractedStructure: async () => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) {
-      return
-    }
+    const ctx = getSessionWithPath()
+    if (!ctx) return
 
     try {
-      await prdChatApi.clearExtractedStructure(currentSession.id, currentSession.projectPath)
+      await prdChatApi.clearExtractedStructure(ctx.session.id, ctx.projectPath)
     } catch (error) {
       set({ error: errorToString(error) })
     }
@@ -399,13 +401,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
 
   // Start watching the PRD plan file for the current session
   startWatchingPlanFile: async () => {
-    const { currentSession, isWatchingPlan } = get()
-    if (!currentSession || !currentSession.projectPath || isWatchingPlan) {
-      return
-    }
+    const { isWatchingPlan } = get()
+    const ctx = getSessionWithPath()
+    if (!ctx || isWatchingPlan) return
 
     try {
-      const result = await prdChatApi.startWatchingPlanFile(currentSession.id, currentSession.projectPath)
+      const result = await prdChatApi.startWatchingPlanFile(ctx.session.id, ctx.projectPath)
       if (result.success) {
         set({
           isWatchingPlan: true,
@@ -453,4 +454,4 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       watchedPlanPath: path,
     })
   },
-}))
+}})
