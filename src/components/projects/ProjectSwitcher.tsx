@@ -15,7 +15,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-dialog'
+import { isTauri } from '@/lib/tauri-check'
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
@@ -27,6 +27,8 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
   const [isOpen, setIsOpen] = useState(false)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [showPathInput, setShowPathInput] = useState(false)
+  const [newProjectPath, setNewProjectPath] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -61,19 +63,39 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
   }, [isOpen])
 
   const handleSelectFolder = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Folder',
-      })
-      if (selected && typeof selected === 'string') {
-        const project = await registerProject(selected)
-        setActiveProject(project.id)
-        setIsOpen(false)
+    if (isTauri) {
+      // Use native file dialog in Tauri desktop mode
+      try {
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: 'Select Project Folder',
+        })
+        if (selected && typeof selected === 'string') {
+          const project = await registerProject(selected)
+          setActiveProject(project.id)
+          setIsOpen(false)
+        }
+      } catch (error) {
+        console.error('Failed to open folder dialog:', error)
       }
+    } else {
+      // Show path input in browser mode
+      setShowPathInput(true)
+    }
+  }
+
+  const handleAddProjectPath = async () => {
+    if (!newProjectPath.trim()) return
+    try {
+      const project = await registerProject(newProjectPath.trim())
+      setActiveProject(project.id)
+      setShowPathInput(false)
+      setNewProjectPath('')
+      setIsOpen(false)
     } catch (error) {
-      console.error('Failed to open folder dialog:', error)
+      console.error('Failed to register project:', error)
     }
   }
 
@@ -187,14 +209,47 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
       {/* Dropdown */}
       {isOpen && (
         <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden">
-          {/* Add Project Button */}
-          <button
-            onClick={handleSelectFolder}
-            className="flex items-center w-full gap-2 px-3 py-2 hover:bg-accent transition-colors border-b"
-          >
-            <Plus className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Add Project Folder</span>
-          </button>
+          {/* Add Project Button / Path Input */}
+          {showPathInput ? (
+            <div className="flex items-center gap-2 px-3 py-2 border-b">
+              <Input
+                value={newProjectPath}
+                onChange={(e) => setNewProjectPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddProjectPath()
+                  if (e.key === 'Escape') {
+                    setShowPathInput(false)
+                    setNewProjectPath('')
+                  }
+                }}
+                placeholder="/path/to/project"
+                className="h-8 text-sm flex-1"
+                autoFocus
+              />
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddProjectPath}>
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  setShowPathInput(false)
+                  setNewProjectPath('')
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={handleSelectFolder}
+              className="flex items-center w-full gap-2 px-3 py-2 hover:bg-accent transition-colors border-b"
+            >
+              <Plus className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Add Project Folder</span>
+            </button>
+          )}
 
           <div className="max-h-64 overflow-y-auto">
             {/* Favorites Section */}
