@@ -60,7 +60,7 @@ export function RalphLoopPage(): React.JSX.Element {
   // No project selected
   if (!selectedProjectPath) {
     return (
-      <div className="container py-6">
+      <div className="px-3 py-2">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Ralph Wiggum Loop</h1>
           <p className="text-muted-foreground">
@@ -112,7 +112,7 @@ export function RalphLoopPage(): React.JSX.Element {
       projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
 
     return (
-      <div className="container py-6">
+      <div className="px-3 py-2">
         <div className="mb-6 flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -157,7 +157,7 @@ export function RalphLoopPage(): React.JSX.Element {
   // If we have PRDs but none selected, show the selection list
   if (!selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 0) {
     return (
-      <div className="container py-6">
+      <div className="px-3 py-2">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
@@ -210,12 +210,13 @@ export function RalphLoopPage(): React.JSX.Element {
   }
 
   return (
-    <div className="container py-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="px-3 py-2 h-full flex flex-col min-h-0">
+      <div className="mb-2 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
+            className="h-8 px-2"
             onClick={() => {
               // If going back from dashboard, go to list if multiple PRDs exist
               if (selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1) {
@@ -228,48 +229,32 @@ export function RalphLoopPage(): React.JSX.Element {
               }
             }}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className="mr-1 h-4 w-4" />
             Back
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Ralph Wiggum Loop</h1>
-            <p className="text-muted-foreground">{projectName}</p>
-          </div>
+          <h1 className="text-lg font-semibold">Ralph Wiggum Loop</h1>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* PRD selector (if inside dashboard) */}
-          {selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1 && (
-            <Select
-              className="w-[200px]"
-              value={selectedPrdName}
-              onChange={(e) => handlePrdChange(e.target.value)}
-            >
-              {ralphFiles.prdNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-          )}
-
-          {/* Project selector */}
+        {/* PRD selector (if multiple PRDs exist) */}
+        {selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1 && (
           <Select
             className="w-[200px]"
-            value={selectedProjectPath || ''}
-            onChange={(e) => handleProjectChange(e.target.value)}
+            value={selectedPrdName}
+            onChange={(e) => handlePrdChange(e.target.value)}
           >
-            {projects.map((project) => (
-              <option key={project.id} value={project.path}>
-                {project.name}
+            {ralphFiles.prdNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
           </Select>
-        </div>
+        )}
       </div>
 
       {selectedPrdName ? (
-        <RalphLoopDashboard projectPath={selectedProjectPath} prdName={selectedPrdName} />
+        <div className="flex-1 min-h-0">
+          <RalphLoopDashboard projectPath={selectedProjectPath} prdName={selectedPrdName} />
+        </div>
       ) : (
         <Card className="p-8">
           <div className="text-center text-muted-foreground">

@@ -101,6 +101,8 @@ export function RalphLoopDashboard({
     markStoryFailing,
     refreshAll,
     checkForActiveExecution,
+    loadPrdSilent,
+    loadProgressSummarySilent,
   } = useRalphLoopStore()
 
   const [activeTab, setActiveTab] = useState('stories')
@@ -347,7 +349,12 @@ export function RalphLoopDashboard({
 
       // Consolidated API: state + metrics + agentId + worktreePath + iterationHistory in 1 call
       loadSnapshot(true) // silent
+      // Reload PRD to get updated story.passes values
+      loadPrdSilent(pollPath, prdName)
+      // Reload prdStatus to get updated passed/total counts
       loadPrdStatusSilent(pollPath, prdName)
+      // Reload progress summary to get updated learnings count
+      loadProgressSummarySilent(pollPath, prdName)
     }
 
     const interval = setInterval(poll, 2000)
@@ -360,6 +367,8 @@ export function RalphLoopDashboard({
     loadSnapshot,
     loadPrdStatus,
     loadPrdStatusSilent,
+    loadPrdSilent,
+    loadProgressSummarySilent,
     loadCommits,
     effectiveDataPath,
     prdName,
@@ -646,44 +655,44 @@ export function RalphLoopDashboard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full min-h-0 gap-2">
       {/* Header with PRD info and controls */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <CardTitle className="text-lg sm:text-xl truncate">{prd.title}</CardTitle>
-              <CardDescription className="mt-1 text-xs sm:text-sm">
+      <Card className="flex-shrink-0 max-h-[50vh] overflow-y-auto">
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base truncate">{prd.title}</CardTitle>
+                <Badge
+                  variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
+                  className="text-xs flex-shrink-0"
+                >
+                  <stateDisplay.icon className={`mr-1 h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
+                  {stateDisplay.label}
+                </Badge>
+              </div>
+              <CardDescription className="text-xs">
                 Branch: {prd.branch} | {prd.stories.length} stories
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Badge
-                variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
-                className="text-xs"
-              >
-                <stateDisplay.icon className={`mr-1 h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
-                {stateDisplay.label}
-              </Badge>
-            </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0 px-4 pb-2">
           {/* Progress bar */}
           {prdStatus && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
                   {prdStatus.passed} of {prdStatus.total} stories passing
                 </span>
                 <span>{Math.round(prdStatus.progressPercent || 0)}%</span>
               </div>
-              <Progress value={prdStatus.progressPercent || 0} className="h-2" />
+              <Progress value={prdStatus.progressPercent || 0} className="h-1.5" />
             </div>
           )}
 
           {/* Configuration */}
-          <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="mt-4">
+          <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="mt-3">
             <CollapsibleTrigger asChild>
               <Button variant="outline" size="sm" className="w-full justify-between">
                 <span className="flex items-center gap-2">
@@ -837,7 +846,7 @@ export function RalphLoopDashboard({
           </Collapsible>
 
           {/* Controls */}
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-3">
             {isRunning ? (
               <Button variant="destructive" onClick={handleStopLoop} disabled={loading}>
                 <StopCircle className="mr-2 h-4 w-4" />
@@ -861,23 +870,23 @@ export function RalphLoopDashboard({
 
           {/* Worktree Info - shown when worktree exists (active or detected) */}
           {effectiveWorktreePath && (
-            <div className="mt-4 p-3 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <GitBranch className="h-4 w-4 text-green-500 flex-shrink-0" />
+            <div className="mt-3 p-2 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <GitBranch className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
                   <div className="min-w-0">
-                    <span className="text-sm font-medium">
+                    <span className="text-xs font-medium">
                       {worktreePath ? 'Worktree Isolation Active' : 'Worktree Available'}
                     </span>
                     <p
-                      className="text-xs text-muted-foreground font-mono truncate"
+                      className="text-[10px] text-muted-foreground font-mono truncate"
                       title={effectiveWorktreePath}
                     >
                       {effectiveWorktreePath}
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
@@ -939,26 +948,26 @@ export function RalphLoopDashboard({
 
           {/* Metrics */}
           {executionMetrics && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
+            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t">
               <div className="text-center">
-                <div className="text-2xl font-bold">{executionMetrics.totalIterations ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Iterations</div>
+                <div className="text-lg font-semibold">{executionMetrics.totalIterations ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground">Iterations</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">{executionMetrics.storiesCompleted ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Completed</div>
+                <div className="text-lg font-semibold">{executionMetrics.storiesCompleted ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground">Completed</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">
+                <div className="text-lg font-semibold">
                   {(executionMetrics.totalTokens ?? 0).toLocaleString()}
                 </div>
-                <div className="text-xs text-muted-foreground">Tokens</div>
+                <div className="text-[10px] text-muted-foreground">Tokens</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold">
+                <div className="text-lg font-semibold">
                   ${(executionMetrics.totalCost ?? 0).toFixed(2)}
                 </div>
-                <div className="text-xs text-muted-foreground">Cost</div>
+                <div className="text-[10px] text-muted-foreground">Cost</div>
               </div>
             </div>
           )}
@@ -966,65 +975,66 @@ export function RalphLoopDashboard({
       </Card>
 
       {/* Tabs for Stories, Progress, Terminal */}
-      <Card>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="flex items-center justify-between border-b px-1">
+      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full min-h-0">
+          <div className="flex items-center justify-between border-b px-2 flex-shrink-0">
             <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent">
               <TabsTrigger
                 value="stories"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
               >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                 Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
               </TabsTrigger>
               <TabsTrigger
                 value="progress"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
               >
-                <BookOpen className="mr-2 h-4 w-4" />
-                Progress ({progressSummary?.learningsCount ?? 0} learnings)
+                <BookOpen className="mr-1.5 h-3.5 w-3.5" />
+                Progress ({progressSummary?.learningsCount ?? 0})
               </TabsTrigger>
               <TabsTrigger
                 value="terminal"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
               >
-                <Terminal className="mr-2 h-4 w-4" />
+                <Terminal className="mr-1.5 h-3.5 w-3.5" />
                 Terminal
               </TabsTrigger>
               <TabsTrigger
                 value="commits"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
               >
-                <GitCommit className="mr-2 h-4 w-4" />
+                <GitCommit className="mr-1.5 h-3.5 w-3.5" />
                 Commits
               </TabsTrigger>
               <TabsTrigger
                 value="history"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
               >
-                <Clock className="mr-2 h-4 w-4" />
+                <Clock className="mr-1.5 h-3.5 w-3.5" />
                 History ({iterationHistory?.length ?? 0})
               </TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
               size="sm"
+              className="h-7 text-xs"
               onClick={handleRegenerateStories}
               disabled={regeneratingStories || isRunning}
               title="Use AI to extract properly formatted user stories from PRD"
             >
               {regeneratingStories ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Sparkles className="mr-1 h-4 w-4" />
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
               )}
               Regenerate
             </Button>
           </div>
 
-          <TabsContent value="stories" className="p-0 mt-0">
-            <div className="max-h-[400px] overflow-y-auto">
-              <div className="p-3 space-y-2">
+          <TabsContent value="stories" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-2 space-y-1.5">
                 {prd.stories.map((story) => (
                   <StoryCard
                     key={story.id}
@@ -1037,15 +1047,15 @@ export function RalphLoopDashboard({
             </div>
           </TabsContent>
 
-          <TabsContent value="progress" className="p-0 mt-0">
-            <div className="max-h-[400px] overflow-y-auto p-3">
+          <TabsContent value="progress" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto p-3">
               <ProgressViewer content={progress} />
             </div>
           </TabsContent>
 
-          <TabsContent value="terminal" className="p-0 mt-0">
+          <TabsContent value="terminal" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
             {currentAgentId && activeExecutionId ? (
-              <div className="flex flex-col h-[500px]" ref={containerRef}>
+              <div className="flex flex-col h-full" ref={containerRef}>
                 {/* Tree View Toggle Header */}
                 <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1104,7 +1114,7 @@ export function RalphLoopDashboard({
                 </div>
               </div>
             ) : (
-              <div className="h-[400px] bg-zinc-950 flex items-center justify-center">
+              <div className="h-full min-h-[200px] bg-zinc-950 flex items-center justify-center">
                 <div className="text-center">
                   <Terminal className="h-12 w-12 text-zinc-600 mx-auto mb-2" />
                   <p className="text-zinc-500">No active agent</p>
@@ -1116,8 +1126,8 @@ export function RalphLoopDashboard({
             )}
           </TabsContent>
 
-          <TabsContent value="commits" className="p-0 mt-0">
-            <div className="max-h-[400px] overflow-y-auto">
+          <TabsContent value="commits" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
               <div className="p-4 space-y-2">
                 {commits.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1134,8 +1144,8 @@ export function RalphLoopDashboard({
             </div>
           </TabsContent>
 
-          <TabsContent value="history" className="p-0 mt-0">
-            <div className="max-h-[400px] overflow-y-auto p-4">
+          <TabsContent value="history" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto p-4">
               <IterationHistoryView iterations={iterationHistory ?? []} />
             </div>
           </TabsContent>
