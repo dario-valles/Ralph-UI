@@ -144,6 +144,53 @@ impl Default for SessionConfig {
     }
 }
 
+impl SessionConfig {
+    /// Validate the configuration values
+    /// Returns Ok(()) if valid, or Err with a descriptive error message
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_parallel <= 0 {
+            return Err("max_parallel must be greater than 0".to_string());
+        }
+        if self.max_iterations <= 0 {
+            return Err("max_iterations must be greater than 0".to_string());
+        }
+        if self.max_retries < 0 {
+            return Err("max_retries cannot be negative".to_string());
+        }
+        Ok(())
+    }
+}
+
+/// Convert RalphConfig to SessionConfig
+/// This allows sessions to inherit settings from the global/project configuration
+impl From<&crate::config::RalphConfig> for SessionConfig {
+    fn from(config: &crate::config::RalphConfig) -> Self {
+        // Parse agent_type string to AgentType enum, defaulting to Claude if parsing fails
+        let agent_type = config
+            .execution
+            .agent_type
+            .parse::<AgentType>()
+            .unwrap_or_else(|_| {
+                log::warn!(
+                    "Unknown agent type '{}' in config, defaulting to Claude",
+                    config.execution.agent_type
+                );
+                AgentType::Claude
+            });
+
+        SessionConfig {
+            max_parallel: config.execution.max_parallel,
+            max_iterations: config.execution.max_iterations,
+            max_retries: config.execution.max_retries,
+            agent_type,
+            auto_create_prs: config.git.auto_create_prs,
+            draft_prs: config.git.draft_prs,
+            run_tests: config.validation.run_tests,
+            run_lint: config.validation.run_lint,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
@@ -364,5 +411,94 @@ impl ExtractedPRDStructure {
             + self.user_stories.len()
             + self.tasks.len()
             + self.acceptance_criteria.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::RalphConfig;
+
+    #[test]
+    fn test_session_config_from_ralph_config() {
+        let mut ralph_config = RalphConfig::default();
+        ralph_config.execution.max_parallel = 5;
+        ralph_config.execution.max_iterations = 15;
+        ralph_config.execution.max_retries = 2;
+        ralph_config.execution.agent_type = "cursor".to_string();
+        ralph_config.git.auto_create_prs = false;
+        ralph_config.git.draft_prs = true;
+        ralph_config.validation.run_tests = false;
+        ralph_config.validation.run_lint = false;
+
+        let session_config: SessionConfig = (&ralph_config).into();
+
+        assert_eq!(session_config.max_parallel, 5);
+        assert_eq!(session_config.max_iterations, 15);
+        assert_eq!(session_config.max_retries, 2);
+        assert_eq!(session_config.agent_type, AgentType::Cursor);
+        assert!(!session_config.auto_create_prs);
+        assert!(session_config.draft_prs);
+        assert!(!session_config.run_tests);
+        assert!(!session_config.run_lint);
+    }
+
+    #[test]
+    fn test_session_config_from_ralph_config_unknown_agent_type() {
+        let mut ralph_config = RalphConfig::default();
+        ralph_config.execution.agent_type = "unknown_agent".to_string();
+
+        let session_config: SessionConfig = (&ralph_config).into();
+
+        // Should default to Claude for unknown agent types
+        assert_eq!(session_config.agent_type, AgentType::Claude);
+    }
+
+    #[test]
+    fn test_session_config_validate_success() {
+        let config = SessionConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_session_config_validate_max_parallel_zero() {
+        let mut config = SessionConfig::default();
+        config.max_parallel = 0;
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max_parallel"));
+    }
+
+    #[test]
+    fn test_session_config_validate_max_parallel_negative() {
+        let mut config = SessionConfig::default();
+        config.max_parallel = -1;
+        let result = config.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_session_config_validate_max_iterations_zero() {
+        let mut config = SessionConfig::default();
+        config.max_iterations = 0;
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max_iterations"));
+    }
+
+    #[test]
+    fn test_session_config_validate_max_retries_negative() {
+        let mut config = SessionConfig::default();
+        config.max_retries = -1;
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("max_retries"));
+    }
+
+    #[test]
+    fn test_session_config_validate_max_retries_zero_allowed() {
+        let mut config = SessionConfig::default();
+        config.max_retries = 0;
+        assert!(config.validate().is_ok());
     }
 }

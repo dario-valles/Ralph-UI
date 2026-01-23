@@ -1,5 +1,6 @@
 // Session-related Tauri commands
 
+use crate::commands::config::ConfigState;
 use crate::database::{self, Database};
 use crate::events::{emit_session_status_changed, SessionStatusChangedPayload};
 use crate::models::{Session, SessionConfig, SessionStatus};
@@ -9,12 +10,86 @@ use chrono::Utc;
 use tauri::State;
 use uuid::Uuid;
 
+/// Create a new session with optional configuration.
+///
+/// # Parameters
+/// - `name`: The session name
+/// - `project_path`: Path to the project directory
+/// - `config`: Optional session configuration. If not provided, inherits from the current
+///   merged configuration (global + project config). If the merged config is unavailable,
+///   defaults are used.
+///
+/// # Config Inheritance
+/// When `config` is `None`, the session config is derived from:
+/// 1. Project-level config (`.ralph-ui/config.toml`) if it exists
+/// 2. Global config (`~/.config/ralph-ui/config.toml`) if it exists
+/// 3. Built-in defaults if no config files exist
+///
+/// # Validation
+/// - `max_parallel` must be greater than 0
+/// - `max_iterations` must be greater than 0
+/// - `max_retries` must be non-negative (>= 0)
 #[tauri::command]
 pub async fn create_session(
     name: String,
     project_path: String,
+    config: Option<SessionConfig>,
     db: State<'_, std::sync::Mutex<Database>>,
+    config_state: State<'_, ConfigState>,
 ) -> Result<Session, String> {
+    // Determine the session config: use explicit config, or inherit from ConfigState
+    let session_config = match config {
+        Some(explicit_config) => {
+            log::info!(
+                "[create_session] Using explicit config: max_parallel={}, max_iterations={}, max_retries={}, agent_type={:?}",
+                explicit_config.max_parallel,
+                explicit_config.max_iterations,
+                explicit_config.max_retries,
+                explicit_config.agent_type
+            );
+            explicit_config
+        }
+        None => {
+            // Inherit from current merged configuration
+            match config_state.get_config() {
+                Ok(ralph_config) => {
+                    let inherited: SessionConfig = (&ralph_config).into();
+                    log::info!(
+                        "[create_session] Inheriting config from RalphConfig: max_parallel={}, max_iterations={}, max_retries={}, agent_type={:?}",
+                        inherited.max_parallel,
+                        inherited.max_iterations,
+                        inherited.max_retries,
+                        inherited.agent_type
+                    );
+                    inherited
+                }
+                Err(e) => {
+                    // Gracefully fall back to defaults if config loading fails
+                    log::warn!(
+                        "[create_session] Failed to load config, using defaults: {}",
+                        e
+                    );
+                    SessionConfig::default()
+                }
+            }
+        }
+    };
+
+    // Validate the config
+    session_config.validate()?;
+
+    log::info!(
+        "[create_session] Final session config: max_parallel={}, max_iterations={}, max_retries={}, agent_type={:?}, auto_create_prs={}, draft_prs={}, run_tests={}, run_lint={}",
+        session_config.max_parallel,
+        session_config.max_iterations,
+        session_config.max_retries,
+        session_config.agent_type,
+        session_config.auto_create_prs,
+        session_config.draft_prs,
+        session_config.run_tests,
+        session_config.run_lint
+    );
+
     let session = Session {
         id: Uuid::new_v4().to_string(),
         name,
@@ -22,7 +97,7 @@ pub async fn create_session(
         created_at: Utc::now(),
         last_resumed_at: None,
         status: SessionStatus::Active,
-        config: SessionConfig::default(),
+        config: session_config,
         tasks: vec![],
         total_cost: 0.0,
         total_tokens: 0,
