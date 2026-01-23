@@ -983,43 +983,43 @@ export function RalphLoopDashboard({
       {/* Tabs for Stories, Progress, Terminal */}
       <Card>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="flex items-center justify-between border-b">
-            <TabsList className="justify-start rounded-none h-auto p-0 border-b-0">
+          <div className="flex items-center justify-between border-b px-1">
+            <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent">
               <TabsTrigger
                 value="stories"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
                 Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
               </TabsTrigger>
-            <TabsTrigger
-              value="progress"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-            >
-              <BookOpen className="mr-2 h-4 w-4" />
-              Progress ({progressSummary?.learningsCount ?? 0} learnings)
-            </TabsTrigger>
-            <TabsTrigger
-              value="terminal"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-            >
-              <Terminal className="mr-2 h-4 w-4" />
-              Terminal
-            </TabsTrigger>
-            <TabsTrigger
-              value="commits"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-            >
-              <GitCommit className="mr-2 h-4 w-4" />
-              Commits
-            </TabsTrigger>
-            <TabsTrigger
-              value="history"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-            >
-              <Clock className="mr-2 h-4 w-4" />
-              History ({iterationHistory.length})
-            </TabsTrigger>
+              <TabsTrigger
+                value="progress"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <BookOpen className="mr-2 h-4 w-4" />
+                Progress ({progressSummary?.learningsCount ?? 0} learnings)
+              </TabsTrigger>
+              <TabsTrigger
+                value="terminal"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <Terminal className="mr-2 h-4 w-4" />
+                Terminal
+              </TabsTrigger>
+              <TabsTrigger
+                value="commits"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <GitCommit className="mr-2 h-4 w-4" />
+                Commits
+              </TabsTrigger>
+              <TabsTrigger
+                value="history"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                History ({iterationHistory.length})
+              </TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1027,20 +1027,19 @@ export function RalphLoopDashboard({
               onClick={handleRegenerateStories}
               disabled={regeneratingStories || isRunning}
               title="Use AI to extract properly formatted user stories from PRD"
-              className="mr-2"
             >
               {regeneratingStories ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="mr-1 h-4 w-4" />
               )}
-              Regenerate Stories
+              Regenerate
             </Button>
           </div>
 
           <TabsContent value="stories" className="p-0 mt-0">
-            <ScrollArea className="h-[360px]">
-              <div className="p-4 space-y-2">
+            <div className="max-h-[400px] overflow-y-auto">
+              <div className="p-3 space-y-2">
                 {prd.stories.map((story) => (
                   <StoryCard
                     key={story.id}
@@ -1050,15 +1049,13 @@ export function RalphLoopDashboard({
                   />
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="progress" className="p-0 mt-0">
-            <ScrollArea className="h-[400px]">
-              <div className="p-4">
-                <ProgressViewer content={progress} />
-              </div>
-            </ScrollArea>
+            <div className="max-h-[400px] overflow-y-auto p-3">
+              <ProgressViewer content={progress} />
+            </div>
           </TabsContent>
 
           <TabsContent value="terminal" className="p-0 mt-0">
@@ -1135,7 +1132,7 @@ export function RalphLoopDashboard({
           </TabsContent>
 
           <TabsContent value="commits" className="p-0 mt-0">
-            <ScrollArea className="h-[400px]">
+            <div className="max-h-[400px] overflow-y-auto">
               <div className="p-4 space-y-2">
                 {commits.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1149,15 +1146,13 @@ export function RalphLoopDashboard({
                   commits.map((commit) => <CommitCard key={commit.id} commit={commit} />)
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="history" className="p-0 mt-0">
-            <ScrollArea className="h-[400px]">
-              <div className="p-4">
-                <IterationHistoryView iterations={iterationHistory} />
-              </div>
-            </ScrollArea>
+            <div className="max-h-[400px] overflow-y-auto p-4">
+              <IterationHistoryView iterations={iterationHistory} />
+            </div>
           </TabsContent>
         </Tabs>
       </Card>
