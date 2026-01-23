@@ -24,19 +24,22 @@ use tower_http::cors::{Any, CorsLayer};
 /// Run the HTTP/WebSocket server
 pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<(), String> {
     // Build CORS layer - permissive for development
+    // Must be the outermost layer to handle preflight OPTIONS requests before auth
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
     // Build the router
+    // Layer order: cors (outer) -> auth -> handler
+    // This ensures CORS preflight requests are handled before auth check
     let app = Router::new()
         .route("/api/invoke", post(proxy::invoke_handler))
         .route("/ws/events", get(events::ws_handler))
         .route("/health", get(health_handler))
         .route("/", get(index_handler))
-        .layer(cors)
         .layer(AuthLayer::new(state.auth_token.clone()))
+        .layer(cors)
         .with_state(state.clone());
 
     let addr: SocketAddr = format!("{}:{}", bind, port)

@@ -5,7 +5,7 @@
 use axum::{
     body::Body,
     extract::Request,
-    http::{header::AUTHORIZATION, StatusCode},
+    http::{header::AUTHORIZATION, Method, StatusCode},
     response::Response,
 };
 use std::sync::Arc;
@@ -67,6 +67,12 @@ where
 
         Box::pin(async move {
             let path = req.uri().path();
+            let method = req.method().clone();
+
+            // Skip auth for CORS preflight OPTIONS requests
+            if method == Method::OPTIONS {
+                return inner.call(req).await;
+            }
 
             // Skip auth for health check, index page, and WebSocket upgrade with token in query
             if path == "/health" || path == "/" {
