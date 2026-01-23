@@ -983,14 +983,15 @@ export function RalphLoopDashboard({
       {/* Tabs for Stories, Progress, Terminal */}
       <Card>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start border-b rounded-none h-auto p-0">
-            <TabsTrigger
-              value="stories"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
-            </TabsTrigger>
+          <div className="flex items-center justify-between border-b">
+            <TabsList className="justify-start rounded-none h-auto p-0 border-b-0">
+              <TabsTrigger
+                value="stories"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
+              </TabsTrigger>
             <TabsTrigger
               value="progress"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary"
@@ -1019,32 +1020,25 @@ export function RalphLoopDashboard({
               <Clock className="mr-2 h-4 w-4" />
               History ({iterationHistory.length})
             </TabsTrigger>
-          </TabsList>
+            </TabsList>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRegenerateStories}
+              disabled={regeneratingStories || isRunning}
+              title="Use AI to extract properly formatted user stories from PRD"
+              className="mr-2"
+            >
+              {regeneratingStories ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              Regenerate Stories
+            </Button>
+          </div>
 
           <TabsContent value="stories" className="p-0 mt-0">
-            <div className="flex items-center justify-between px-4 py-2 border-b">
-              <span className="text-sm text-muted-foreground">
-                {prd.stories.filter(s => s.acceptance === s.title || !s.acceptance).length > 0 && (
-                  <span className="text-amber-600">
-                    Some stories have incomplete acceptance criteria
-                  </span>
-                )}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRegenerateStories}
-                disabled={regeneratingStories || isRunning}
-                title="Use AI to extract properly formatted user stories from PRD"
-              >
-                {regeneratingStories ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                Regenerate Stories
-              </Button>
-            </div>
             <ScrollArea className="h-[360px]">
               <div className="p-4 space-y-2">
                 {prd.stories.map((story) => (
