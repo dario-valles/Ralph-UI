@@ -16,6 +16,34 @@ pub struct SubagentTreeSummary {
     pub fail_count: usize,
 }
 
+/// Build a SubagentTreeSummary from a SubagentTree
+pub fn build_subagent_summary(tree: &SubagentTree) -> SubagentTreeSummary {
+    let spawn_count = tree
+        .events
+        .iter()
+        .filter(|e| e.event_type == SubagentEventType::Spawned)
+        .count();
+    let complete_count = tree
+        .events
+        .iter()
+        .filter(|e| e.event_type == SubagentEventType::Completed)
+        .count();
+    let fail_count = tree
+        .events
+        .iter()
+        .filter(|e| e.event_type == SubagentEventType::Failed)
+        .count();
+
+    SubagentTreeSummary {
+        total_events: tree.events.len(),
+        active_subagents: tree.active.clone(),
+        max_depth: tree.max_depth(),
+        spawn_count,
+        complete_count,
+        fail_count,
+    }
+}
+
 /// Initialize trace parser for an agent
 
 pub async fn init_trace_parser(
@@ -49,34 +77,13 @@ pub async fn get_subagent_tree(
 }
 
 /// Get subagent tree summary
-
 pub async fn get_subagent_summary(
     agent_id: String,
     agent_manager: &AgentManagerState,
 ) -> Result<Option<SubagentTreeSummary>, String> {
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     let tree = manager.get_subagent_tree(&agent_id);
-
-    Ok(tree.map(|t| {
-        let spawn_count = t.events.iter()
-            .filter(|e| e.event_type == SubagentEventType::Spawned)
-            .count();
-        let complete_count = t.events.iter()
-            .filter(|e| e.event_type == SubagentEventType::Completed)
-            .count();
-        let fail_count = t.events.iter()
-            .filter(|e| e.event_type == SubagentEventType::Failed)
-            .count();
-
-        SubagentTreeSummary {
-            total_events: t.events.len(),
-            active_subagents: t.active.clone(),
-            max_depth: t.max_depth(),
-            spawn_count,
-            complete_count,
-            fail_count,
-        }
-    }))
+    Ok(tree.map(|t| build_subagent_summary(&t)))
 }
 
 /// Get all events for a specific subagent

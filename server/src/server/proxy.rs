@@ -102,6 +102,17 @@ where
     }
 }
 
+/// Execute a closure with a locked agent manager, serializing the result
+fn with_agent_manager<T, F>(state: &ServerAppState, f: F) -> Result<Value, String>
+where
+    T: Serialize,
+    F: FnOnce(&crate::agents::AgentManager) -> Result<T, String>,
+{
+    let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
+    let result = f(&manager)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
 // =============================================================================
 // Command Routing Macros
 // =============================================================================
@@ -1297,83 +1308,65 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         // =====================================================================
         "init_trace_parser" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            manager.init_trace_parser(&agent_id);
-            serde_json::to_value(()).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                mgr.init_trace_parser(&agent_id);
+                Ok(())
+            })
         }
 
         "parse_agent_output" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let output: String = get_arg(&args, "output")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            let events = manager.parse_text_output(&agent_id, &output);
-            serde_json::to_value(events).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                Ok(mgr.parse_text_output(&agent_id, &output))
+            })
         }
 
         "get_subagent_tree" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            let tree = manager.get_subagent_tree(&agent_id);
-            serde_json::to_value(tree).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| Ok(mgr.get_subagent_tree(&agent_id)))
         }
 
         "get_subagent_summary" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            let tree = manager.get_subagent_tree(&agent_id);
-            let summary = tree.map(|t| {
-                use crate::agents::SubagentEventType;
-                let spawn_count = t.events.iter()
-                    .filter(|e| e.event_type == SubagentEventType::Spawned)
-                    .count();
-                let complete_count = t.events.iter()
-                    .filter(|e| e.event_type == SubagentEventType::Completed)
-                    .count();
-                let fail_count = t.events.iter()
-                    .filter(|e| e.event_type == SubagentEventType::Failed)
-                    .count();
-                commands::traces::SubagentTreeSummary {
-                    total_events: t.events.len(),
-                    active_subagents: t.active.clone(),
-                    max_depth: t.max_depth(),
-                    spawn_count,
-                    complete_count,
-                    fail_count,
-                }
-            });
-            serde_json::to_value(summary).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                let summary = mgr.get_subagent_tree(&agent_id).map(|t| {
+                    commands::traces::build_subagent_summary(&t)
+                });
+                Ok(summary)
+            })
         }
 
         "get_subagent_events" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let subagent_id: String = get_arg(&args, "subagentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            let tree = manager.get_subagent_tree(&agent_id);
-            let events: Vec<_> = tree
-                .map(|t| t.get_subagent_events(&subagent_id)
-                    .into_iter()
-                    .cloned()
-                    .collect())
-                .unwrap_or_default();
-            serde_json::to_value(events).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                let events: Vec<_> = mgr
+                    .get_subagent_tree(&agent_id)
+                    .map(|t| t.get_subagent_events(&subagent_id).into_iter().cloned().collect())
+                    .unwrap_or_default();
+                Ok(events)
+            })
         }
 
         "clear_trace_data" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            manager.clear_trace_data(&agent_id);
-            serde_json::to_value(()).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                mgr.clear_trace_data(&agent_id);
+                Ok(())
+            })
         }
 
         "is_subagent_active" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let subagent_id: String = get_arg(&args, "subagentId")?;
-            let manager = state.agent_manager.lock().map_err(|e| e.to_string())?;
-            let tree = manager.get_subagent_tree(&agent_id);
-            let is_active = tree
-                .map(|t| t.is_active(&subagent_id))
-                .unwrap_or(false);
-            serde_json::to_value(is_active).map_err(|e| e.to_string())
+            with_agent_manager(state, |mgr| {
+                let is_active = mgr
+                    .get_subagent_tree(&agent_id)
+                    .map(|t| t.is_active(&subagent_id))
+                    .unwrap_or(false);
+                Ok(is_active)
+            })
         }
 
         // =====================================================================
