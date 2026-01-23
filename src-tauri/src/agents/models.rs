@@ -95,6 +95,7 @@ pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
         AgentType::Claude => vec![
             ModelInfo::new("claude-sonnet-4-5", "Claude Sonnet 4.5", "anthropic", true),
             ModelInfo::new("claude-opus-4-5", "Claude Opus 4.5", "anthropic", false),
+            ModelInfo::new("claude-haiku-4-5", "Claude Haiku 4.5", "anthropic", false),
         ],
         AgentType::Cursor => vec![
             ModelInfo::new("claude-sonnet-4-5", "Claude Sonnet 4.5", "anthropic", true),
