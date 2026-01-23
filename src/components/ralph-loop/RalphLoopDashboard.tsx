@@ -27,13 +27,25 @@ import {
   AlertCircle,
   Settings,
   ChevronDown,
-  FolderOpen,
   GitBranch,
+  GitMerge,
+  FileDiff,
+  Code2,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
-import type { CommitInfo } from '@/lib/git-api'
+import { gitApi, type CommitInfo, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
+import { toast } from '@/stores/toastStore'
+import { ConflictResolutionDialog } from '@/components/git/ConflictResolutionDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { UnifiedTerminalView } from '@/components/terminal/UnifiedTerminalView'
 import { IterationHistoryView } from '@/components/ralph-loop/IterationHistoryView'
+import { useTerminalStore } from '@/stores/terminalStore'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
@@ -85,6 +97,15 @@ export function RalphLoopDashboard({
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+
+  // Worktree action states
+  const [diffDialogOpen, setDiffDialogOpen] = useState(false)
+  const [diffInfo, setDiffInfo] = useState<DiffInfo | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  const [conflicts, setConflicts] = useState<ConflictInfo[]>([])
+  const [mergeLoading, setMergeLoading] = useState(false)
+  const [detectedWorktreePath, setDetectedWorktreePath] = useState<string | null>(null)
 
   // Local state for config overrides - consolidated into single object
   interface ConfigOverrides {
@@ -138,19 +159,21 @@ export function RalphLoopDashboard({
   const effectiveDataPath = worktreePath || projectPath
 
   // Load data when project path or prdName changes
+  // Use effectiveDataPath for progress data so it reads from worktree if active
   useEffect(() => {
     if (projectPath) {
       setProjectPath(projectPath, prdName)
-      loadPrd(projectPath, prdName)
-      loadPrdStatus(projectPath, prdName)
-      loadProgress(projectPath, prdName)
-      loadProgressSummary(projectPath, prdName)
+      loadPrd(effectiveDataPath, prdName)
+      loadPrdStatus(effectiveDataPath, prdName)
+      loadProgress(effectiveDataPath, prdName)
+      loadProgressSummary(effectiveDataPath, prdName)
       loadCommits(projectPath)
       loadConfig(projectPath)
     }
   }, [
     projectPath,
     prdName,
+    effectiveDataPath,
     setProjectPath,
     loadPrd,
     loadPrdStatus,
@@ -188,6 +211,54 @@ export function RalphLoopDashboard({
       checkForActiveExecution()
     }
   }, [prd, activeExecutionId, checkForActiveExecution])
+
+  // Detect existing worktrees for this PRD (using metadata or branch matching)
+  useEffect(() => {
+    if (worktreePath) {
+      // Already have worktreePath from active execution
+      return
+    }
+
+    const detectWorktree = async () => {
+      try {
+        // First, check if PRD metadata has the worktree path stored
+        if (prd?.metadata?.lastWorktreePath) {
+          // Verify the worktree still exists
+          const worktrees = await gitApi.listWorktrees(projectPath)
+          const storedPath = prd.metadata.lastWorktreePath
+          const exists = worktrees.some((wt) => wt.path === storedPath)
+          if (exists) {
+            setDetectedWorktreePath(storedPath)
+            return
+          }
+        }
+
+        // Fallback: find worktree by branch matching
+        if (prd?.branch) {
+          const worktrees = await gitApi.listWorktrees(projectPath)
+          const matchingWorktree = worktrees.find((wt) => {
+            if (!wt.branch) return false
+            const branch = wt.branch.replace('refs/heads/', '')
+            return branch === prd.branch || branch.includes(prd.branch)
+          })
+          if (matchingWorktree) {
+            setDetectedWorktreePath(matchingWorktree.path)
+            return
+          }
+        }
+
+        setDetectedWorktreePath(null)
+      } catch {
+        // Ignore errors - worktree detection is best-effort
+        setDetectedWorktreePath(null)
+      }
+    }
+
+    detectWorktree()
+  }, [prd?.branch, prd?.metadata?.lastWorktreePath, projectPath, worktreePath])
+
+  // Effective worktree path: from active execution or detected
+  const effectiveWorktreePath = worktreePath || detectedWorktreePath
 
   // Poll for updates during active execution
   useEffect(() => {
@@ -322,8 +393,149 @@ export function RalphLoopDashboard({
     }
   }
 
+  // Handle viewing diff between worktree and main branch
+  const handleViewDiff = async () => {
+    if (!effectiveWorktreePath || !prd?.branch) return
+    setDiffLoading(true)
+    try {
+      // Get the current branch in the worktree (has commit_id)
+      const currentBranch = await gitApi.getCurrentBranch(effectiveWorktreePath)
+      // Get main branch info from the main project (has commit_id)
+      const branches = await gitApi.listBranches(projectPath)
+      const mainBranch = branches.find((b) => b.name === 'main' || b.name === 'master')
+      if (!mainBranch) {
+        throw new Error('Could not find main/master branch')
+      }
+      // Get diff using commit IDs (not branch names)
+      const diff = await gitApi.getDiff(
+        effectiveWorktreePath,
+        mainBranch.commit_id,
+        currentBranch.commit_id
+      )
+      setDiffInfo(diff)
+      setDiffDialogOpen(true)
+    } catch (err) {
+      console.error('Failed to get diff:', err)
+      toast.error('Failed to get diff', err instanceof Error ? err.message : String(err))
+    } finally {
+      setDiffLoading(false)
+    }
+  }
+
+  // Handle merging worktree branch to main
+  const handleMergeToMain = async () => {
+    if (!effectiveWorktreePath || !prd?.branch) return
+    setMergeLoading(true)
+    try {
+      // Get the current branch in the worktree
+      const currentBranch = await gitApi.getCurrentBranch(effectiveWorktreePath)
+
+      // Check for conflicts first
+      const conflictFiles = await gitApi.checkMergeConflicts(
+        projectPath, // Use main project for merge
+        currentBranch.name,
+        'main'
+      )
+
+      if (conflictFiles.length > 0) {
+        // There are conflicts - attempt merge to get conflict details
+        const mergeResult = await gitApi.mergeBranch(projectPath, currentBranch.name, 'main')
+        if (mergeResult.conflict_files.length > 0) {
+          // Get detailed conflict info for AI resolution
+          const conflictDetails = await gitApi.getConflictDetails(projectPath)
+          setConflicts(conflictDetails)
+          setConflictDialogOpen(true)
+        }
+      } else {
+        // No conflicts - perform merge
+        const mergeResult = await gitApi.mergeBranch(projectPath, currentBranch.name, 'main')
+        if (mergeResult.success) {
+          toast.success(
+            'Merge successful',
+            mergeResult.fast_forward ? 'Fast-forward merge completed' : 'Merge completed'
+          )
+          // Reload commits to show the merge
+          loadCommits(projectPath)
+        } else {
+          toast.error('Merge failed', mergeResult.message)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to merge:', err)
+      toast.error('Merge failed', err instanceof Error ? err.message : String(err))
+    } finally {
+      setMergeLoading(false)
+    }
+  }
+
+  // Handle completing merge after conflicts resolved
+  const handleMergeComplete = async () => {
+    try {
+      // Complete the merge with a commit
+      await gitApi.completeMerge(
+        projectPath,
+        `Merge branch '${prd?.branch}' into main`,
+        'Ralph UI',
+        'ralph-ui@local'
+      )
+      toast.success('Merge completed', 'All conflicts resolved and merged successfully')
+      setConflictDialogOpen(false)
+      loadCommits(projectPath)
+    } catch (err) {
+      console.error('Failed to complete merge:', err)
+      toast.error('Merge failed', err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // Handle opening integrated terminal in worktree directory
+  const { createTerminal: createShellTerminal, setPanelMode } = useTerminalStore()
+
+  const handleOpenTerminal = () => {
+    if (!effectiveWorktreePath) return
+    // Create a new terminal with the worktree path as cwd
+    createShellTerminal(effectiveWorktreePath)
+    // Ensure the terminal panel is visible
+    setPanelMode('panel')
+    toast.success('Terminal opened', `Working directory: ${effectiveWorktreePath}`)
+  }
+
+  // Handle opening code editor in worktree directory
+  const handleOpenInEditor = async () => {
+    if (!effectiveWorktreePath) return
+    try {
+      const { openPath, revealItemInDir } = await import('@tauri-apps/plugin-opener')
+      // Try to open in VS Code or Cursor
+      // VS Code first - on macOS, openWith can be the app name
+      try {
+        await openPath(effectiveWorktreePath, 'Visual Studio Code')
+        return
+      } catch {
+        // VS Code not available
+      }
+      // Try Cursor
+      try {
+        await openPath(effectiveWorktreePath, 'Cursor')
+        return
+      } catch {
+        // Cursor not available
+      }
+      // Fallback: open folder in file explorer
+      await revealItemInDir(effectiveWorktreePath)
+      toast.default('Folder opened', 'Install VS Code or Cursor to open directly in editor')
+    } catch (err) {
+      console.error('Failed to open editor:', err)
+      toast.error('Failed to open editor', 'Could not open worktree in code editor')
+    }
+  }
+
   const getStateDisplay = (state: RalphLoopState | null) => {
-    if (!state) return { label: 'Not Started', color: 'secondary', icon: Circle }
+    // Derive completion state from prdStatus when no active execution
+    if (!state) {
+      if (prdStatus?.allPass) {
+        return { label: 'Completed', color: 'default', icon: CheckCircle2 }
+      }
+      return { label: 'Not Started', color: 'secondary', icon: Circle }
+    }
 
     switch (state.type) {
       case 'idle':
@@ -609,39 +821,76 @@ export function RalphLoopDashboard({
             </Button>
           </div>
 
-          {/* Worktree Info - shown when using worktree isolation */}
-          {worktreePath && (
+          {/* Worktree Info - shown when worktree exists (active or detected) */}
+          {effectiveWorktreePath && (
             <div className="mt-4 p-3 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <GitBranch className="h-4 w-4 text-green-500 flex-shrink-0" />
                   <div className="min-w-0">
-                    <span className="text-sm font-medium">Worktree Isolation Active</span>
+                    <span className="text-sm font-medium">
+                      {worktreePath ? 'Worktree Isolation Active' : 'Worktree Available'}
+                    </span>
                     <p
                       className="text-xs text-muted-foreground font-mono truncate"
-                      title={worktreePath}
+                      title={effectiveWorktreePath}
                     >
-                      {worktreePath}
+                      {effectiveWorktreePath}
                     </p>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    // Open worktree folder in file explorer
-                    try {
-                      const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
-                      await revealItemInDir(worktreePath)
-                    } catch {
-                      // Ignore if it fails (e.g., in browser dev mode)
-                      console.error('Failed to open folder')
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleViewDiff}
+                    disabled={diffLoading}
+                    title="View changes compared to main branch"
+                  >
+                    {diffLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileDiff className="mr-2 h-4 w-4" />
+                    )}
+                    View Diff
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleMergeToMain}
+                    disabled={mergeLoading || !prdStatus?.allPass}
+                    title={
+                      prdStatus?.allPass
+                        ? 'Merge worktree changes to main branch'
+                        : 'Complete all stories before merging'
                     }
-                  }}
-                >
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  Open Folder
-                </Button>
+                  >
+                    {mergeLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <GitMerge className="mr-2 h-4 w-4" />
+                    )}
+                    Merge to Main
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenInEditor}
+                    title="Open worktree in code editor"
+                  >
+                    <Code2 className="mr-2 h-4 w-4" />
+                    Open in Editor
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenTerminal}
+                    title="Open terminal in worktree directory"
+                  >
+                    <Terminal className="mr-2 h-4 w-4" />
+                    Terminal
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -822,6 +1071,89 @@ export function RalphLoopDashboard({
           </CardContent>
         </Card>
       )}
+
+      {/* Diff Dialog */}
+      <Dialog open={diffDialogOpen} onOpenChange={setDiffDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileDiff className="h-5 w-5" />
+              Changes in Worktree
+            </DialogTitle>
+            <DialogDescription>
+              Comparing worktree branch to main branch
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="flex-1 min-h-0">
+            {diffInfo && (
+              <div className="space-y-4 pr-4">
+                {/* Summary Stats */}
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="font-medium">
+                    {diffInfo.files_changed} file{diffInfo.files_changed !== 1 ? 's' : ''} changed
+                  </span>
+                  <span className="text-green-600">+{diffInfo.insertions} insertions</span>
+                  <span className="text-red-600">-{diffInfo.deletions} deletions</span>
+                </div>
+
+                {/* File List */}
+                <div className="space-y-2">
+                  {diffInfo.files.map((file, index) => (
+                    <div
+                      key={index}
+                      className="p-2 rounded border bg-muted/30 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                            file.status === 'added'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : file.status === 'deleted'
+                                ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                          }`}
+                        >
+                          {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : 'M'}
+                        </span>
+                        <span className="font-mono text-sm truncate">
+                          {file.new_path || file.old_path}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs flex-shrink-0">
+                        {file.insertions > 0 && (
+                          <span className="text-green-600">+{file.insertions}</span>
+                        )}
+                        {file.deletions > 0 && (
+                          <span className="text-red-600">-{file.deletions}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {diffInfo.files.length === 0 && (
+                  <div className="text-center text-muted-foreground py-8">
+                    No changes detected
+                  </div>
+                )}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conflict Resolution Dialog */}
+      <ConflictResolutionDialog
+        repoPath={projectPath}
+        conflicts={conflicts}
+        open={conflictDialogOpen}
+        onOpenChange={setConflictDialogOpen}
+        onSuccess={handleMergeComplete}
+        onCancel={() => {
+          setConflictDialogOpen(false)
+          setConflicts([])
+        }}
+      />
     </div>
   )
 }

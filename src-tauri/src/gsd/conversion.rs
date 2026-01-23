@@ -125,6 +125,7 @@ pub fn convert_to_ralph_prd(
             source_chat_id: options.source_chat_id.clone(),
             total_iterations: 0,
             last_execution_id: None,
+            last_worktree_path: None,
         }),
         executions: Vec::new(),
     };

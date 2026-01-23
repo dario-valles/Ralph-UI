@@ -340,6 +340,7 @@ impl ProgressTracker {
 
 /// Summary of progress.txt
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressSummary {
     pub total_entries: usize,
     pub total_iterations: u32,

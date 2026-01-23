@@ -189,6 +189,23 @@ impl PrdExecutor {
         })
     }
 
+    /// Update PRD metadata with a closure (with file locking for concurrent safety)
+    pub fn update_metadata<F>(&self, update_fn: F) -> Result<(), String>
+    where
+        F: FnOnce(&mut super::types::PrdMetadata),
+    {
+        self.with_prd_lock(|prd| {
+            if prd.metadata.is_none() {
+                prd.metadata = Some(super::types::PrdMetadata::default());
+            }
+            if let Some(ref mut metadata) = prd.metadata {
+                update_fn(metadata);
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Ok(())
+        })
+    }
+
     /// Get the status summary of the PRD
     pub fn get_status(&self, prd: &RalphPrd) -> PrdStatus {
         let total = prd.stories.len();
@@ -235,6 +252,7 @@ impl PrdExecutor {
                     source_chat_id: None,
                     total_iterations: 1,
                     last_execution_id: None,
+                    last_worktree_path: None,
                 });
                 1
             };

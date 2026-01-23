@@ -150,6 +150,7 @@ pub struct RalphPrd {
 
 /// Metadata about the PRD
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrdMetadata {
     /// When the PRD was created
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -170,6 +171,10 @@ pub struct PrdMetadata {
     /// Last execution ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_execution_id: Option<String>,
+
+    /// Last worktree path (for finding worktree after execution ends)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_worktree_path: Option<String>,
 }
 
 // ============================================================================
@@ -373,6 +378,7 @@ impl RalphPrd {
                 source_chat_id: None,
                 total_iterations: 0,
                 last_execution_id: None,
+                last_worktree_path: None,
             }),
             executions: Vec::new(),
         }
@@ -497,6 +503,7 @@ impl RalphPrd {
 
 /// Status summary for a PRD
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrdStatus {
     /// Total number of stories
     pub total: usize,

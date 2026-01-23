@@ -1266,6 +1266,14 @@ impl RalphLoopOrchestrator {
         // Store the execution branch (different from the base PRD branch)
         self.config.branch = Some(execution_branch);
 
+        // Save worktree path to PRD metadata in main project (for later detection)
+        let main_executor = PrdExecutor::new(&self.config.project_path, &self.config.prd_name);
+        if let Err(e) = main_executor.update_metadata(|meta| {
+            meta.last_worktree_path = Some(worktree_path.to_string_lossy().to_string());
+        }) {
+            log::warn!("[RalphLoop] Failed to save worktree path to PRD metadata: {}", e);
+        }
+
         Ok(())
     }
 }

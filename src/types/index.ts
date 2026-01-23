@@ -723,6 +723,7 @@ export interface RalphPrdMetadata {
   sourceChatId?: string
   totalIterations: number
   lastExecutionId?: string
+  lastWorktreePath?: string
 }
 
 /** The PRD document stored in .ralph/prd.json */

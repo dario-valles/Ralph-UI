@@ -584,6 +584,7 @@ pub async fn start_ralph_loop(
             updated_at: None,
             source_chat_id: None,
             total_iterations: 0,
+            last_worktree_path: None,
         });
     }
 
