@@ -658,55 +658,55 @@ export function RalphLoopDashboard({
     <div className="flex flex-col h-full min-h-0 gap-2">
       {/* Header with PRD info and controls */}
       <Card className="flex-shrink-0 max-h-[50vh] overflow-y-auto">
-        <CardHeader className="py-3 px-4">
-          <div className="flex items-center justify-between gap-2">
+        <CardHeader className="py-2 sm:py-3 px-3 sm:px-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base truncate">{prd.title}</CardTitle>
+              <div className="flex items-start sm:items-center gap-2 flex-wrap">
+                <CardTitle className="text-sm sm:text-base truncate max-w-[200px] sm:max-w-none">{prd.title}</CardTitle>
                 <Badge
                   variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
-                  className="text-xs flex-shrink-0"
+                  className="text-[10px] sm:text-xs flex-shrink-0"
                 >
-                  <stateDisplay.icon className={`mr-1 h-3 w-3 ${isRunning ? 'animate-spin' : ''}`} />
-                  {stateDisplay.label}
+                  <stateDisplay.icon className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${isRunning ? 'animate-spin' : ''}`} />
+                  <span className="truncate max-w-[100px] sm:max-w-none">{stateDisplay.label}</span>
                 </Badge>
               </div>
-              <CardDescription className="text-xs">
+              <CardDescription className="text-[10px] sm:text-xs mt-0.5">
                 Branch: {prd.branch} | {prd.stories.length} stories
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-0 px-4 pb-2">
+        <CardContent className="pt-0 px-3 sm:px-4 pb-2">
           {/* Progress bar */}
           {prdStatus && (
             <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground">
                 <span>
                   {prdStatus.passed} of {prdStatus.total} stories passing
                 </span>
                 <span>{Math.round(prdStatus.progressPercent || 0)}%</span>
               </div>
-              <Progress value={prdStatus.progressPercent || 0} className="h-1.5" />
+              <Progress value={prdStatus.progressPercent || 0} className="h-1 sm:h-1.5" />
             </div>
           )}
 
           {/* Configuration */}
-          <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="mt-3">
+          <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="mt-2 sm:mt-3">
             <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-between">
-                <span className="flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Loop Configuration
+              <Button variant="outline" size="sm" className="w-full justify-between h-8 sm:h-9 text-xs sm:text-sm">
+                <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">Loop Configuration</span>
                   {config && (
-                    <span className="text-muted-foreground text-xs">
+                    <span className="text-muted-foreground text-[10px] sm:text-xs hidden sm:inline">
                       (max {effectiveMaxIterations} iterations
                       {effectiveMaxCost ? `, $${effectiveMaxCost} limit` : ''})
                     </span>
                   )}
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 transition-transform ${configOpen ? 'rotate-180' : ''}`}
+                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0 transition-transform ${configOpen ? 'rotate-180' : ''}`}
                 />
               </Button>
             </CollapsibleTrigger>
@@ -846,61 +846,63 @@ export function RalphLoopDashboard({
           </Collapsible>
 
           {/* Controls */}
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-2 sm:mt-3">
             {isRunning ? (
-              <Button variant="destructive" onClick={handleStopLoop} disabled={loading}>
-                <StopCircle className="mr-2 h-4 w-4" />
+              <Button variant="destructive" size="sm" onClick={handleStopLoop} disabled={loading} className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none">
+                <StopCircle className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Stop Loop
               </Button>
             ) : (
-              <Button onClick={handleStartLoop} disabled={loading || prdStatus?.allPass}>
+              <Button size="sm" onClick={handleStartLoop} disabled={loading || prdStatus?.allPass} className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none">
                 {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <Play className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 )}
-                {prdStatus?.allPass ? 'All Stories Pass' : 'Start Ralph Loop'}
+                <span className="truncate">{prdStatus?.allPass ? 'All Pass' : 'Start Ralph Loop'}</span>
               </Button>
             )}
-            <Button variant="outline" onClick={() => refreshAll()} disabled={loading}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+            <Button variant="outline" size="sm" onClick={() => refreshAll()} disabled={loading} className="h-8 sm:h-9 text-xs sm:text-sm">
+              <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="ml-1.5 sm:ml-2 hidden sm:inline">Refresh</span>
             </Button>
           </div>
 
           {/* Worktree Info - shown when worktree exists (active or detected) */}
           {effectiveWorktreePath && (
-            <div className="mt-3 p-2 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="mt-2 sm:mt-3 p-2 rounded-md border border-dashed border-green-500/50 bg-green-500/5">
+              <div className="flex flex-col gap-2">
+                {/* Worktree status */}
                 <div className="flex items-center gap-2 min-w-0">
-                  <GitBranch className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <span className="text-xs font-medium">
-                      {worktreePath ? 'Worktree Isolation Active' : 'Worktree Available'}
+                  <GitBranch className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-green-500 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] sm:text-xs font-medium">
+                      {worktreePath ? 'Worktree Active' : 'Worktree Available'}
                     </span>
                     <p
-                      className="text-[10px] text-muted-foreground font-mono truncate"
+                      className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate"
                       title={effectiveWorktreePath}
                     >
                       {effectiveWorktreePath}
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                {/* Action buttons - grid layout on mobile */}
+                <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-1 sm:gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleViewDiff}
                     disabled={diffLoading}
                     title="View changes compared to main branch"
+                    className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                   >
                     {diffLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin sm:mr-1.5" />
                     ) : (
-                      <FileDiff className="mr-2 h-4 w-4" />
+                      <FileDiff className="h-3 w-3 sm:h-3.5 sm:w-3.5 sm:mr-1.5" />
                     )}
-                    <span className="hidden sm:inline">View Diff</span>
-                    <span className="sm:hidden">Diff</span>
+                    <span className="hidden sm:inline">Diff</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -912,34 +914,34 @@ export function RalphLoopDashboard({
                         ? 'Merge worktree changes to main branch'
                         : 'Complete all stories before merging'
                     }
+                    className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                   >
                     {mergeLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin sm:mr-1.5" />
                     ) : (
-                      <GitMerge className="mr-2 h-4 w-4" />
+                      <GitMerge className="h-3 w-3 sm:h-3.5 sm:w-3.5 sm:mr-1.5" />
                     )}
-                    <span className="hidden sm:inline">Merge to Main</span>
-                    <span className="sm:hidden">Merge</span>
+                    <span className="hidden sm:inline">Merge</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleOpenInEditor}
                     title="Open worktree in code editor"
+                    className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                   >
-                    <Code2 className="mr-2 h-4 w-4" />
-                    <span className="hidden sm:inline">Open in Editor</span>
-                    <span className="sm:hidden">Editor</span>
+                    <Code2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Editor</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleOpenTerminal}
                     title="Open terminal in worktree directory"
+                    className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                   >
-                    <Terminal className="mr-2 h-4 w-4" />
-                    <span className="hidden sm:inline">Terminal</span>
-                    <span className="sm:hidden">Term</span>
+                    <Terminal className="h-3 w-3 sm:h-3.5 sm:w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Term</span>
                   </Button>
                 </div>
               </div>
@@ -948,26 +950,30 @@ export function RalphLoopDashboard({
 
           {/* Metrics */}
           {executionMetrics && (
-            <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t">
+            <div className="grid grid-cols-4 gap-1 sm:gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
               <div className="text-center">
-                <div className="text-lg font-semibold">{executionMetrics.totalIterations ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground">Iterations</div>
+                <div className="text-sm sm:text-lg font-semibold">{executionMetrics.totalIterations ?? 0}</div>
+                <div className="text-[8px] sm:text-[10px] text-muted-foreground">Iterations</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-semibold">{executionMetrics.storiesCompleted ?? 0}</div>
-                <div className="text-[10px] text-muted-foreground">Completed</div>
+                <div className="text-sm sm:text-lg font-semibold">{executionMetrics.storiesCompleted ?? 0}</div>
+                <div className="text-[8px] sm:text-[10px] text-muted-foreground">Done</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-semibold">
-                  {(executionMetrics.totalTokens ?? 0).toLocaleString()}
+                <div className="text-sm sm:text-lg font-semibold">
+                  {executionMetrics.totalTokens >= 1000000
+                    ? `${(executionMetrics.totalTokens / 1000000).toFixed(1)}M`
+                    : executionMetrics.totalTokens >= 1000
+                      ? `${(executionMetrics.totalTokens / 1000).toFixed(0)}K`
+                      : executionMetrics.totalTokens ?? 0}
                 </div>
-                <div className="text-[10px] text-muted-foreground">Tokens</div>
+                <div className="text-[8px] sm:text-[10px] text-muted-foreground">Tokens</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-semibold">
+                <div className="text-sm sm:text-lg font-semibold">
                   ${(executionMetrics.totalCost ?? 0).toFixed(2)}
                 </div>
-                <div className="text-[10px] text-muted-foreground">Cost</div>
+                <div className="text-[8px] sm:text-[10px] text-muted-foreground">Cost</div>
               </div>
             </div>
           )}
@@ -977,58 +983,63 @@ export function RalphLoopDashboard({
       {/* Tabs for Stories, Progress, Terminal */}
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full min-h-0">
-          <div className="flex items-center justify-between border-b px-2 flex-shrink-0">
-            <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent">
-              <TabsTrigger
-                value="stories"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
-              >
-                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                Stories ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
-              </TabsTrigger>
-              <TabsTrigger
-                value="progress"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
-              >
-                <BookOpen className="mr-1.5 h-3.5 w-3.5" />
-                Progress ({progressSummary?.learningsCount ?? 0})
-              </TabsTrigger>
-              <TabsTrigger
-                value="terminal"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
-              >
-                <Terminal className="mr-1.5 h-3.5 w-3.5" />
-                Terminal
-              </TabsTrigger>
-              <TabsTrigger
-                value="commits"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
-              >
-                <GitCommit className="mr-1.5 h-3.5 w-3.5" />
-                Commits
-              </TabsTrigger>
-              <TabsTrigger
-                value="history"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-1.5 px-2"
-              >
-                <Clock className="mr-1.5 h-3.5 w-3.5" />
-                History ({iterationHistory?.length ?? 0})
-              </TabsTrigger>
-            </TabsList>
+          <div className="flex items-center justify-between border-b px-1 sm:px-2 flex-shrink-0 gap-1">
+            {/* Horizontally scrollable tabs on mobile */}
+            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+              <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent inline-flex w-max">
+                <TabsTrigger
+                  value="stories"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <CheckCircle2 className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden xs:inline">Stories </span>({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="progress"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <BookOpen className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden xs:inline">Progress </span>({progressSummary?.learningsCount ?? 0})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="terminal"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <Terminal className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  Terminal
+                </TabsTrigger>
+                <TabsTrigger
+                  value="commits"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <GitCommit className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline">Commits</span>
+                  <span className="sm:hidden">Git</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="history"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <Clock className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline">History ({iterationHistory?.length ?? 0})</span>
+                  <span className="sm:hidden">{iterationHistory?.length ?? 0}</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="h-6 sm:h-7 text-[10px] sm:text-xs px-1.5 sm:px-2 flex-shrink-0"
               onClick={handleRegenerateStories}
               disabled={regeneratingStories || isRunning}
               title="Use AI to extract properly formatted user stories from PRD"
             >
               {regeneratingStories ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 animate-spin sm:mr-1" />
               ) : (
-                <Sparkles className="mr-1 h-3.5 w-3.5" />
+                <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5 sm:mr-1" />
               )}
-              Regenerate
+              <span className="hidden sm:inline">Regenerate</span>
             </Button>
           </div>
 

@@ -209,33 +209,37 @@ describe('PRDChatPanel', () => {
     it('renders agent selector dropdown', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      expect(agentSelector).toBeInTheDocument()
+      // There are two agent selectors (mobile and desktop)
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      expect(agentSelectors.length).toBeGreaterThan(0)
     })
 
     it('shows all available agent options', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      expect(agentSelector).toBeInTheDocument()
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      expect(agentSelectors.length).toBeGreaterThan(0)
 
-      // Check for all agent options
-      expect(screen.getByText('Claude')).toBeInTheDocument()
-      expect(screen.getByText('OpenCode')).toBeInTheDocument()
-      expect(screen.getByText('Cursor')).toBeInTheDocument()
+      // Check for all agent options (there will be duplicates due to mobile/desktop)
+      expect(screen.getAllByText('Claude').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('OpenCode').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Cursor').length).toBeGreaterThan(0)
     })
 
     it('displays the currently selected agent', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      expect(agentSelector).toHaveValue('claude')
+      // Use the desktop agent selector (last one) for value check
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      expect(agentSelectors[agentSelectors.length - 1]).toHaveValue('claude')
     })
 
     it('updates session agent when agent is changed', async () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const agentSelector = screen.getByRole('combobox', { name: /agent/i })
+      // Use the desktop agent selector (last one)
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      const agentSelector = agentSelectors[agentSelectors.length - 1]
       fireEvent.change(agentSelector, { target: { value: 'opencode' } })
 
       // Changing agent with a current session should update the session's agent
@@ -252,8 +256,11 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      const agentSelector = screen.getByRole('combobox', { name: /agent/i })
-      expect(agentSelector).toBeDisabled()
+      // All agent selectors should be disabled when streaming
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      agentSelectors.forEach((selector) => {
+        expect(selector).toBeDisabled()
+      })
     })
   })
 
@@ -265,16 +272,17 @@ describe('PRDChatPanel', () => {
     it('renders model selector dropdown', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const modelSelector = screen.getByRole('combobox', { name: /model/i })
-      expect(modelSelector).toBeInTheDocument()
+      // There are two model selectors (mobile and desktop)
+      const modelSelectors = screen.getAllByRole('combobox', { name: /model/i })
+      expect(modelSelectors.length).toBeGreaterThan(0)
     })
 
     it('shows available models for selected agent', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      // For claude agent, should show Claude models
-      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument()
-      expect(screen.getByText('Claude Opus 4.5')).toBeInTheDocument()
+      // For claude agent, should show Claude models (duplicates due to mobile/desktop)
+      expect(screen.getAllByText('Claude Sonnet 4.5').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Claude Opus 4.5').length).toBeGreaterThan(0)
     })
 
     it('disables model selector when streaming', () => {
@@ -285,8 +293,11 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      const modelSelector = screen.getByRole('combobox', { name: /model/i })
-      expect(modelSelector).toBeDisabled()
+      // All model selectors should be disabled when streaming
+      const modelSelectors = screen.getAllByRole('combobox', { name: /model/i })
+      modelSelectors.forEach((selector) => {
+        expect(selector).toBeDisabled()
+      })
     })
   })
 
@@ -639,8 +650,9 @@ describe('PRDChatPanel', () => {
     it('shows create session button', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const createButton = screen.getByRole('button', { name: /new session/i })
-      expect(createButton).toBeInTheDocument()
+      // There are multiple "new session" buttons (mobile and desktop)
+      const createButtons = screen.getAllByRole('button', { name: /new session/i })
+      expect(createButtons.length).toBeGreaterThan(0)
     })
 
     it('calls openTypeSelector when create button is clicked', async () => {
@@ -653,8 +665,9 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      const createButton = screen.getByRole('button', { name: /new session/i })
-      await user.click(createButton)
+      // There are multiple "new session" buttons (mobile and desktop), click the first one
+      const createButtons = screen.getAllByRole('button', { name: /new session/i })
+      await user.click(createButtons[0])
 
       // Verify openTypeSelector was called
       expect(mockOpenTypeSelector).toHaveBeenCalled()
@@ -809,7 +822,9 @@ describe('PRDChatPanel', () => {
     it('has accessible labels for form controls', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      expect(screen.getByRole('combobox', { name: /agent/i })).toBeInTheDocument()
+      // There are two agent selectors (mobile and desktop), so use getAllByRole
+      const agentSelectors = screen.getAllByRole('combobox', { name: /agent/i })
+      expect(agentSelectors.length).toBeGreaterThan(0)
       expect(screen.getByRole('textbox')).toHaveAttribute('aria-label')
     })
 

@@ -166,12 +166,12 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     <div className="space-y-2">
       {/* Error message */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 text-sm text-destructive bg-destructive/10 rounded-md">
-          <span>{error}</span>
+        <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-destructive bg-destructive/10 rounded-md">
+          <span className="flex-1 min-w-0 break-words">{error}</span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-4 w-4 ml-auto"
+            className="h-5 w-5 sm:h-4 sm:w-4 flex-shrink-0"
             onClick={() => setError(null)}
           >
             <X className="h-3 w-3" />
@@ -222,7 +222,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
           type="button"
           variant="ghost"
           size="icon"
-          className="self-end mb-1 ml-1"
+          className="self-end mb-1 ml-1 h-9 w-9 sm:h-8 sm:w-8"
           disabled={disabled || attachments.length >= ATTACHMENT_LIMITS.MAX_COUNT}
           onClick={() => fileInputRef.current?.click()}
           aria-label="Add attachment"
@@ -237,12 +237,12 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste as React.ClipboardEventHandler}
-          placeholder={placeholder || 'Type your message... (Shift+Enter for new line)'}
+          placeholder={placeholder || 'Type your message...'}
           disabled={disabled}
           aria-label="Message input"
           className={cn(
             'flex-1 resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0',
-            'min-h-[40px] max-h-[200px] py-2.5'
+            'min-h-[44px] sm:min-h-[40px] max-h-[150px] sm:max-h-[200px] py-3 sm:py-2.5 text-base sm:text-sm'
           )}
           rows={1}
         />
@@ -251,7 +251,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         <Button
           type="button"
           size="icon"
-          className="self-end mb-1 mr-1"
+          className="self-end mb-1 mr-1 h-9 w-9 sm:h-8 sm:w-8"
           onClick={handleSend}
           disabled={!canSend}
           aria-label="Send message"
@@ -260,8 +260,8 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         </Button>
       </div>
 
-      {/* Helper text */}
-      <p className="text-xs text-muted-foreground">
+      {/* Helper text - hidden on very small screens */}
+      <p className="hidden sm:block text-xs text-muted-foreground">
         Press Enter to send, Shift+Enter for new line. Paste or drop images to attach.
       </p>
 

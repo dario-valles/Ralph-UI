@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from 'react'
 
 /**
  * Hook to detect if a media query matches
@@ -52,4 +52,78 @@ export function useIsDesktop(): boolean {
  */
 export function usePrefersReducedMotion(): boolean {
   return useMediaQuery('(prefers-reduced-motion: reduce)')
+}
+
+/**
+ * Hook to detect scroll direction within a scrollable container
+ * Returns 'up' | 'down' | null based on scroll direction
+ * Uses "sticky" behavior to prevent flickering - direction only changes
+ * when scrolling significantly in the opposite direction.
+ * @param ref - React ref to the scrollable container
+ * @param threshold - Minimum scroll distance to trigger direction change (default: 50px)
+ * @param minScrollPosition - Minimum scroll position before hiding kicks in (default: 100px)
+ */
+export function useScrollDirection(
+  ref: React.RefObject<HTMLElement | null>,
+  threshold: number = 50,
+  minScrollPosition: number = 100
+): 'up' | 'down' | null {
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null)
+  // Track the scroll position where direction last changed (for sticky behavior)
+  const lastDirectionChangePosition = useRef(0)
+  const ticking = useRef(false)
+
+  const updateScrollDirection = useCallback(() => {
+    const element = ref.current
+    if (!element) {
+      ticking.current = false
+      return
+    }
+
+    const scrollTop = element.scrollTop
+
+    // Always show header when near top
+    if (scrollTop < minScrollPosition) {
+      if (scrollDirection !== null) {
+        setScrollDirection(null)
+        lastDirectionChangePosition.current = scrollTop
+      }
+      ticking.current = false
+      return
+    }
+
+    // Calculate distance from last direction change
+    const distanceFromLastChange = scrollTop - lastDirectionChangePosition.current
+
+    // Sticky behavior: only change direction if we've scrolled significantly
+    // in the opposite direction from the last change point
+    if (distanceFromLastChange > threshold && scrollDirection !== 'down') {
+      // Scrolled down significantly - hide header
+      setScrollDirection('down')
+      lastDirectionChangePosition.current = scrollTop
+    } else if (distanceFromLastChange < -threshold && scrollDirection !== 'up') {
+      // Scrolled up significantly - show header
+      setScrollDirection('up')
+      lastDirectionChangePosition.current = scrollTop
+    }
+
+    ticking.current = false
+  }, [ref, threshold, minScrollPosition, scrollDirection])
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+
+    const handleScroll = () => {
+      if (!ticking.current) {
+        window.requestAnimationFrame(updateScrollDirection)
+        ticking.current = true
+      }
+    }
+
+    element.addEventListener('scroll', handleScroll, { passive: true })
+    return () => element.removeEventListener('scroll', handleScroll)
+  }, [ref, updateScrollDirection])
+
+  return scrollDirection
 }

@@ -62,24 +62,24 @@ export function PRDChatHeader({
   onExportToPRD,
 }: PRDChatHeaderProps) {
   return (
-    <CardHeader className="pb-2 border-b px-3">
-      <div className="flex items-center justify-between gap-2">
+    <CardHeader className="pb-2 border-b px-2 sm:px-3">
+      <div className="flex items-center justify-between gap-1 sm:gap-2">
         <div className="min-w-0 flex-shrink">
           <h2 className="sr-only">PRD Chat</h2>
-          <CardTitle className="text-base truncate">
+          <CardTitle className="text-sm sm:text-base truncate">
             {currentSession?.title || 'PRD Chat'}
           </CardTitle>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {/* Agent/Model Selector - Compact */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             <Select
               id="agent-selector"
               aria-label="Agent"
               value={agentType}
               onChange={onAgentChange}
               disabled={streaming}
-              className="w-24 text-xs h-8"
+              className="w-[70px] sm:w-24 text-[10px] sm:text-xs h-7 sm:h-8"
             >
               <option value="claude">Claude</option>
               <option value="opencode">OpenCode</option>
@@ -92,7 +92,7 @@ export function PRDChatHeader({
               value={selectedModel || defaultModelId || ''}
               onChange={(e) => onModelChange(e.target.value)}
               disabled={streaming || modelsLoading}
-              className="w-28 xl:w-36 text-xs h-8"
+              className="w-[80px] sm:w-28 xl:w-36 text-[10px] sm:text-xs h-7 sm:h-8"
             >
               {modelsLoading ? (
                 <option>Loading...</option>
@@ -120,9 +120,9 @@ export function PRDChatHeader({
                   onClick={onTogglePlanSidebar}
                   disabled={streaming}
                   aria-label="Toggle plan sidebar"
-                  className="h-8 w-8 p-0 rounded-md relative"
+                  className="h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-md relative"
                 >
-                  <ScrollText className="h-4 w-4" />
+                  <ScrollText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   {watchedPlanContent && (
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -137,7 +137,7 @@ export function PRDChatHeader({
           {/* Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-1 px-2" disabled={streaming}>
+              <Button variant="outline" size="sm" className="h-7 sm:h-8 gap-0.5 sm:gap-1 px-1.5 sm:px-2" disabled={streaming}>
                 <span className="hidden xl:inline text-xs">Actions</span>
                 <ChevronDown className="h-3 w-3" />
               </Button>

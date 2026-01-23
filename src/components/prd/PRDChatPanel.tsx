@@ -30,7 +30,11 @@ import {
   ScrollText,
   ChevronDown,
   Play,
+  Code,
+  FileText,
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
@@ -48,7 +52,7 @@ import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
-import { useIsMobile } from '@/hooks/useMediaQuery'
+import { useIsMobile, useScrollDirection } from '@/hooks/useMediaQuery'
 import { usePRDChatPanelState } from '@/hooks/usePRDChatPanelState'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
@@ -64,8 +68,12 @@ export function PRDChatPanel() {
   const activeProject = getActiveProject()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
   const prevAgentTypeRef = useRef<string>('')
+
+  // Track scroll direction for mobile header auto-hide
+  const scrollDirection = useScrollDirection(messagesContainerRef, 15)
 
   // Consolidated UI state
   const {
@@ -98,6 +106,8 @@ export function PRDChatPanel() {
 
   // State for PRD execution dialog
   const [executePrdFile, setExecutePrdFile] = useState<PRDFile | null>(null)
+  // State for mobile plan view mode (raw vs rendered)
+  const [showRawMobile, setShowRawMobile] = useState(false)
 
   const {
     sessions,
@@ -453,29 +463,133 @@ export function PRDChatPanel() {
       />
 
       {/* Chat Panel */}
-      <Card className={cn('flex-1 flex flex-col min-w-0')}>
-        {/* Mobile Session Selector */}
-        <div className="lg:hidden px-3 py-2 border-b">
-          <Select
-            id="mobile-session-selector"
-            aria-label="Select session"
-            value={currentSession?.id || ''}
-            onChange={(e) => {
-              const session = sessions.find(s => s.id === e.target.value)
-              if (session) handleSelectSession(session)
-            }}
-            className="w-full text-sm"
-          >
-            <option value="" disabled>Select a session</option>
-            {sessions.map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.title || 'Untitled Session'}
-              </option>
-            ))}
-          </Select>
+      <Card className={cn('flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden')}>
+        {/* Mobile Header - Clean two-row layout with auto-hide on scroll */}
+        <div
+          className={cn(
+            "lg:hidden flex-shrink-0 bg-card border-b transition-all duration-200 ease-in-out overflow-hidden",
+            scrollDirection === 'down' ? "max-h-0 opacity-0 border-b-0" : "max-h-32 opacity-100"
+          )}
+        >
+          {/* Row 1: Session selector with new button */}
+          <div className="px-3 py-2 flex items-center gap-2">
+            <Select
+              id="mobile-session-selector"
+              aria-label="Select session"
+              value={currentSession?.id || ''}
+              onChange={(e) => {
+                const session = sessions.find(s => s.id === e.target.value)
+                if (session) handleSelectSession(session)
+              }}
+              className="flex-1 min-w-0 text-sm h-9 font-medium"
+            >
+              <option value="" disabled>Select session...</option>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.title || 'Untitled Session'}
+                </option>
+              ))}
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCreateSession}
+              className="h-9 w-9 p-0 flex-shrink-0"
+              aria-label="New session"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Row 2: Agent/Model controls and actions */}
+          <div className="px-3 pb-2 flex items-center gap-1.5">
+            {/* Agent & Model group */}
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 flex-1 min-w-0">
+              <Select
+                id="mobile-agent-selector"
+                aria-label="Agent"
+                value={currentSession?.agentType || 'claude'}
+                onChange={handleAgentChange}
+                disabled={streaming}
+                className="w-[72px] text-xs h-7 bg-background border-0 rounded-md"
+              >
+                <option value="claude">Claude</option>
+                <option value="opencode">OpenCode</option>
+                <option value="cursor">Cursor</option>
+              </Select>
+              <div className="w-px h-4 bg-border" />
+              <ModelSelector
+                id="mobile-model-selector"
+                value={selectedModel || defaultModelId || ''}
+                onChange={setUserSelectedModel}
+                models={models}
+                loading={modelsLoading}
+                disabled={streaming}
+                className="flex-1 min-w-0 text-xs h-7 bg-background border-0 rounded-md"
+              />
+            </div>
+
+            {/* Action buttons group */}
+            <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-1">
+              {currentSession?.projectPath && (
+                <Button
+                  variant={isPlanVisible ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={handlePlanToggle}
+                  disabled={streaming}
+                  aria-label="Toggle plan"
+                  className="h-7 w-7 p-0 relative rounded-md"
+                >
+                  <ScrollText className="h-3.5 w-3.5" />
+                  {watchedPlanContent && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                  )}
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-md" disabled={streaming}>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {hasMessages ? (
+                    <>
+                      <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Check Quality
+                        {qualityAssessment && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {qualityAssessment.overall}%
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+                      {watchedPlanPath && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={handleExecutePrd} disabled={loading}>
+                            <Play className="h-4 w-4 mr-2" />
+                            Execute PRD
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground text-xs">Send a message first</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
         </div>
 
-        <CardHeader className="pb-2 border-b px-3">
+        {/* Desktop Header */}
+        <CardHeader className="pb-2 border-b px-3 flex-shrink-0 bg-card hidden lg:block">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-shrink">
               <h2 className="sr-only">PRD Chat</h2>
@@ -582,7 +696,7 @@ export function PRDChatPanel() {
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
+        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative min-h-0">
           {/* Loading Spinner */}
           {loading && (
             <div
@@ -622,56 +736,59 @@ export function PRDChatPanel() {
           ) : (
             <>
               {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-4 min-h-0"
+              >
                 {!currentSession ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <MessageSquare className="h-12 w-12 text-muted-foreground mb-3" />
-                    <h3 className="font-medium mb-1">Create a new session</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
+                  <div className="flex flex-col items-center justify-center h-full text-center px-2">
+                    <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 sm:mb-3" />
+                    <h3 className="font-medium mb-1 text-sm sm:text-base">Create a new session</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
                       Start a conversation to create your PRD
                     </p>
-                    <div className="flex gap-2">
-                      <Button onClick={handleCreateSession} aria-label="New session">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto px-4 sm:px-0">
+                      <Button onClick={handleCreateSession} aria-label="New session" className="w-full sm:w-auto">
                         <Plus className="h-4 w-4 mr-2" />
                         New Session
                       </Button>
-                      <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start">
+                      <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start" className="w-full sm:w-auto">
                         Quick Start
                       </Button>
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <Bot className="h-12 w-12 text-muted-foreground mb-3" />
-                    <h3 className="font-medium mb-1">Start a conversation</h3>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center h-full text-center px-2">
+                    <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 sm:mb-3" />
+                    <h3 className="font-medium mb-1 text-sm sm:text-base">Start a conversation</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       {currentSession.prdType
                         ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
                         : 'Ask the AI to help you create your PRD'}
                     </p>
                     {currentSession.guidedMode && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                         Guided mode is on - AI will ask structured questions
                       </p>
                     )}
-                    <div className="flex flex-wrap gap-2 mt-4 max-w-md justify-center">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4 max-w-xs sm:max-w-md justify-center">
                       <Badge
                         variant="secondary"
-                        className="cursor-pointer hover:bg-secondary/80"
+                        className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                         onClick={() => handleSendMessage('Help me create a PRD')}
                       >
                         Help me create a PRD
                       </Badge>
                       <Badge
                         variant="secondary"
-                        className="cursor-pointer hover:bg-secondary/80"
+                        className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                         onClick={() => handleSendMessage('What should my PRD include?')}
                       >
                         What should my PRD include?
                       </Badge>
                       <Badge
                         variant="secondary"
-                        className="cursor-pointer hover:bg-secondary/80"
+                        className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                         onClick={() => handleSendMessage('PRD best practices')}
                       >
                         PRD best practices
@@ -697,7 +814,7 @@ export function PRDChatPanel() {
               </div>
 
               {/* Input Area */}
-              <div className="border-t p-4">
+              <div className="border-t p-2 sm:p-4 flex-shrink-0 bg-card">
                 <ChatInput
                   onSend={handleSendMessage}
                   disabled={isDisabled}
@@ -725,15 +842,77 @@ export function PRDChatPanel() {
       {/* Plan Document Sheet - Mobile */}
       {currentSession?.projectPath && (
         <Sheet open={mobilePlanSheetOpen} onOpenChange={setMobilePlanSheetOpen}>
-          <SheetContent side="bottom" className="h-[70vh] lg:hidden p-0">
-            <SheetHeader className="px-4 py-3 border-b">
-              <SheetTitle className="text-base">PRD Plan</SheetTitle>
+          <SheetContent side="bottom" className="h-[70vh] lg:hidden p-0 flex flex-col">
+            <SheetHeader className="px-4 py-3 border-b flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="text-base">PRD Plan</SheetTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRawMobile(!showRawMobile)}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {showRawMobile ? (
+                    <>
+                      <FileText className="h-3.5 w-3.5" />
+                      Preview
+                    </>
+                  ) : (
+                    <>
+                      <Code className="h-3.5 w-3.5" />
+                      Raw
+                    </>
+                  )}
+                </Button>
+              </div>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
               {watchedPlanContent ? (
-                <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-                  {watchedPlanContent}
-                </pre>
+                showRawMobile ? (
+                  <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground break-words">
+                    {watchedPlanContent}
+                  </pre>
+                ) : (
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        pre: ({ children }) => (
+                          <pre className="bg-secondary/50 rounded-md p-2 overflow-x-auto text-xs">{children}</pre>
+                        ),
+                        code: ({ children, className }) => {
+                          const isInline = !className
+                          return isInline ? (
+                            <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">{children}</code>
+                          ) : (
+                            <code className={className}>{children}</code>
+                          )
+                        },
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>
+                        ),
+                        h1: ({ children }) => (
+                          <h1 className="text-lg font-bold mt-4 mb-2 pb-1 border-b">{children}</h1>
+                        ),
+                        h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
+                        p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-2 border-primary/50 pl-3 my-2 italic text-muted-foreground">
+                            {children}
+                          </blockquote>
+                        ),
+                        hr: () => <hr className="my-4 border-border" />,
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      }}
+                    >
+                      {watchedPlanContent}
+                    </ReactMarkdown>
+                  </div>
+                )
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">
                   No plan content yet. Start chatting to generate a PRD.

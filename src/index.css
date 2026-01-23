@@ -216,6 +216,14 @@
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
   letter-spacing: -0.025em;
+  font-feature-settings: "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+}
+
+/* Enable ligatures for all monospace/code elements */
+code, pre, .font-mono, [class*="mono"] {
+  font-feature-settings: "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
 }
 
 /* ==========================================================================
@@ -357,4 +365,14 @@ a:focus-visible,
     width: 4px;
     height: 4px;
   }
+}
+
+/* Utility to hide scrollbar while keeping scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

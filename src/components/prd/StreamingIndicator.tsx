@@ -100,7 +100,7 @@ export function StreamingIndicator({
         data-testid="streaming-indicator"
         data-state="timeout"
         className={cn(
-          'flex flex-col gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg mr-8',
+          'flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 bg-destructive/10 border border-destructive/20 rounded-lg mr-2 sm:mr-4 md:mr-8',
           className
         )}
       >
@@ -136,12 +136,12 @@ export function StreamingIndicator({
         data-testid="streaming-indicator"
         data-state="concern"
         className={cn(
-          'flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mr-8',
+          'flex items-start gap-2 sm:gap-3 p-3 sm:p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mr-2 sm:mr-4 md:mr-8',
           className
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-yellow-500/20">
-          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+        <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-yellow-500/20">
+          <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-600 dark:text-yellow-400" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -177,7 +177,7 @@ export function StreamingIndicator({
         data-testid="streaming-indicator"
         data-state="warning"
         className={cn(
-          'flex items-center gap-2 p-4 bg-muted rounded-lg mr-8 animate-pulse',
+          'flex items-center gap-2 p-3 sm:p-4 bg-muted rounded-lg mr-2 sm:mr-4 md:mr-8 animate-pulse',
           className
         )}
       >
@@ -206,18 +206,18 @@ export function StreamingIndicator({
       data-testid="streaming-indicator"
       data-state="normal"
       className={cn(
-        'flex gap-2 p-4 bg-muted rounded-lg mr-8',
+        'flex gap-2 p-3 sm:p-4 bg-muted rounded-lg mr-2 sm:mr-4 md:mr-8',
         !hasContent && 'items-center animate-pulse',
         hasContent && 'items-start',
         className
       )}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-        <Bot className="h-4 w-4" />
+      <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
+        <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       </div>
       {hasContent ? (
         <div className="flex-1 min-w-0">
-          <pre className="text-sm whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed max-h-96 overflow-y-auto">
+          <pre className="text-xs sm:text-sm whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed max-h-64 sm:max-h-96 overflow-y-auto">
             {content}
           </pre>
           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">

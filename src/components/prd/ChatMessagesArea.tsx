@@ -41,19 +41,19 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
   ) {
     if (!currentSession) {
       return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <MessageSquare className="h-12 w-12 text-muted-foreground mb-3" />
-            <h3 className="font-medium mb-1">Create a new session</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+          <div className="flex flex-col items-center justify-center h-full text-center px-2">
+            <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 sm:mb-3" />
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Create a new session</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
               Start a conversation to create your PRD
             </p>
-            <div className="flex gap-2">
-              <Button onClick={onCreateSession} aria-label="New session">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button onClick={onCreateSession} aria-label="New session" className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 New Session
               </Button>
-              <Button variant="outline" onClick={onQuickStart} aria-label="Quick start">
+              <Button variant="outline" onClick={onQuickStart} aria-label="Quick start" className="w-full sm:w-auto">
                 Quick Start
               </Button>
             </div>
@@ -64,38 +64,38 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
 
     if (messages.length === 0) {
       return (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-12 w-12 text-muted-foreground mb-3" />
-            <h3 className="font-medium mb-1">Start a conversation</h3>
-            <p className="text-sm text-muted-foreground">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+          <div className="flex flex-col items-center justify-center h-full text-center px-2">
+            <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-2 sm:mb-3" />
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Start a conversation</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {currentSession.prdType
                 ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
                 : 'Ask the AI to help you create your PRD'}
             </p>
             {currentSession.guidedMode && (
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                 Guided mode is on - AI will ask structured questions
               </p>
             )}
-            <div className="flex flex-wrap gap-2 mt-4 max-w-md justify-center">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4 max-w-xs sm:max-w-md justify-center">
               <Badge
                 variant="secondary"
-                className="cursor-pointer hover:bg-secondary/80"
+                className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                 onClick={() => onSendMessage("Help me create a PRD")}
               >
                 Help me create a PRD
               </Badge>
               <Badge
                 variant="secondary"
-                className="cursor-pointer hover:bg-secondary/80"
+                className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                 onClick={() => onSendMessage("What should my PRD include?")}
               >
                 What should my PRD include?
               </Badge>
               <Badge
                 variant="secondary"
-                className="cursor-pointer hover:bg-secondary/80"
+                className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
                 onClick={() => onSendMessage("PRD best practices")}
               >
                 PRD best practices
@@ -107,7 +107,7 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
     }
 
     return (
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-4">
         {messages.map((message) => (
           <ChatMessageItem key={message.id} message={message} />
         ))}

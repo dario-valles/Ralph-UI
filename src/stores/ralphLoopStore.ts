@@ -516,39 +516,35 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   checkForActiveExecution: async () => {
     // Get the PRD to check for last execution ID
     const prd = get().prd
-    if (!prd?.metadata?.lastExecutionId) {
+    const projectPath = get().currentProjectPath
+    if (!prd?.metadata?.lastExecutionId || !projectPath) {
       return
     }
 
     const lastExecutionId = prd.metadata.lastExecutionId
 
     try {
-      // Get the state of the last execution
-      const executionState = await ralphLoopApi.getLoopState(lastExecutionId)
+      // Use getSnapshot which has file-based fallback (avoids 400 errors when execution not in memory)
+      const snapshot = await ralphLoopApi.getSnapshot(lastExecutionId, projectPath)
 
       // Helper to check if state is active
-      const isActiveState = (state: RalphLoopState): boolean => {
+      const isActiveState = (state: RalphLoopState | null): boolean => {
+        if (!state) return false
         return state.type === 'running' || state.type === 'paused' || state.type === 'retrying'
       }
 
-      if (isActiveState(executionState)) {
+      if (snapshot.state && isActiveState(snapshot.state)) {
         // Execution is still active, resume tracking
-        const [currentAgentId, worktreePath, executionMetrics] = await Promise.all([
-          ralphLoopApi.getCurrentAgentId(lastExecutionId),
-          ralphLoopApi.getWorktreePath(lastExecutionId),
-          ralphLoopApi.getLoopMetrics(lastExecutionId).catch(() => null),
-        ])
-
         set({
           activeExecutionId: lastExecutionId,
-          executionState,
-          currentAgentId,
-          worktreePath,
-          executionMetrics,
+          executionState: snapshot.state,
+          currentAgentId: snapshot.currentAgentId ?? null,
+          worktreePath: snapshot.worktreePath ?? null,
+          executionMetrics: snapshot.metrics ?? null,
         })
       }
     } catch {
-      // Execution doesn't exist anymore, ignore
+      // Execution doesn't exist anymore (not in memory or file), ignore
       console.debug('[RalphLoopStore] Last execution not found:', lastExecutionId)
     }
   },
