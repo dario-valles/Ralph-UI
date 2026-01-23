@@ -204,6 +204,18 @@ export interface PRDFile {
   hasProgress: boolean
 }
 
+/** Result of deleting a PRD file and its related resources */
+export interface DeletePrdResult {
+  /** Files that were deleted */
+  deletedFiles: string[]
+  /** Worktrees that were removed */
+  removedWorktrees: string[]
+  /** Branches that were deleted */
+  deletedBranches: string[]
+  /** Any warnings during deletion */
+  warnings: string[]
+}
+
 /** Result of exporting a PRD chat session */
 export interface ExportResult {
   prd: PRDDocument

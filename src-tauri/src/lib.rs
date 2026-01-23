@@ -283,6 +283,7 @@ pub fn run() {
             commands::scan_prd_files,
             commands::get_prd_file,
             commands::update_prd_file,
+            commands::delete_prd_file,
             commands::list_prd_templates,
             commands::export_prd,
             commands::analyze_prd_quality,

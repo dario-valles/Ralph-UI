@@ -19,6 +19,7 @@ import type {
   IterationStats,
   RalphLoopSnapshot,
   AgentType,
+  DeletePrdResult,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -69,6 +70,11 @@ export const prdApi = {
   /** Update a PRD file's content */
   updateFile: async (projectPath: string, prdName: string, content: string): Promise<PRDFile> => {
     return await invoke('update_prd_file', { projectPath, prdName, content })
+  },
+
+  /** Delete a PRD file and all related resources (JSON, progress, worktrees, branches) */
+  deleteFile: async (projectPath: string, prdName: string): Promise<DeletePrdResult> => {
+    return await invoke('delete_prd_file', { projectPath, prdName })
   },
 }
 

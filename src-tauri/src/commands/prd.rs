@@ -831,3 +831,176 @@ pub async fn update_prd_file(
     // Return updated PRDFile
     get_prd_file(project_path, prd_name).await
 }
+
+/// Result of deleting a PRD file
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePrdResult {
+    /// Files that were deleted
+    pub deleted_files: Vec<String>,
+    /// Worktrees that were removed
+    pub removed_worktrees: Vec<String>,
+    /// Branches that were deleted
+    pub deleted_branches: Vec<String>,
+    /// Any warnings during deletion
+    pub warnings: Vec<String>,
+}
+
+/// Delete a PRD file and all associated resources (JSON, progress, worktrees, branches)
+#[tauri::command]
+pub async fn delete_prd_file(
+    project_path: String,
+    prd_name: String,
+) -> Result<DeletePrdResult, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let prds_dir = Path::new(&project_path).join(".ralph-ui").join("prds");
+    let mut deleted_files = Vec::new();
+    let mut removed_worktrees = Vec::new();
+    let mut deleted_branches = Vec::new();
+    let mut warnings = Vec::new();
+
+    // 1. Read the PRD JSON to get metadata (worktree path, branch name)
+    let json_path = prds_dir.join(format!("{}.json", prd_name));
+    let mut worktree_path_from_metadata: Option<String> = None;
+    let mut branch_name: Option<String> = None;
+
+    if json_path.exists() {
+        if let Ok(json_content) = fs::read_to_string(&json_path) {
+            if let Ok(prd) = serde_json::from_str::<serde_json::Value>(&json_content) {
+                // Extract lastWorktreePath from metadata
+                if let Some(metadata) = prd.get("metadata") {
+                    if let Some(wt_path) = metadata.get("lastWorktreePath").and_then(|v| v.as_str()) {
+                        worktree_path_from_metadata = Some(wt_path.to_string());
+                    }
+                }
+                // Extract branch name
+                if let Some(branch) = prd.get("branch").and_then(|v| v.as_str()) {
+                    branch_name = Some(branch.to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Remove worktree if it exists
+    if let Some(ref wt_path) = worktree_path_from_metadata {
+        let worktree_dir = Path::new(wt_path);
+        if worktree_dir.exists() {
+            // First, try to remove the worktree via git
+            match crate::git::GitManager::new(&project_path) {
+                Ok(git_mgr) => {
+                    if let Err(e) = git_mgr.remove_worktree(wt_path) {
+                        warnings.push(format!("Failed to remove worktree via git: {}. Will try deleting directory.", e));
+                    } else {
+                        removed_worktrees.push(wt_path.clone());
+                    }
+                }
+                Err(e) => {
+                    warnings.push(format!("Failed to open git repo: {}", e));
+                }
+            }
+
+            // Also delete the worktree directory if it still exists
+            if worktree_dir.exists() {
+                if let Err(e) = fs::remove_dir_all(worktree_dir) {
+                    warnings.push(format!("Failed to delete worktree directory: {}", e));
+                } else if !removed_worktrees.contains(wt_path) {
+                    removed_worktrees.push(wt_path.clone());
+                }
+            }
+        }
+    }
+
+    // 3. Try to find and remove worktrees matching the PRD branch name pattern
+    if let Some(ref branch) = branch_name {
+        if let Ok(git_mgr) = crate::git::GitManager::new(&project_path) {
+            // List all worktrees and find ones related to this PRD
+            if let Ok(worktrees) = git_mgr.list_worktrees() {
+                for wt in worktrees {
+                    // Check if worktree branch matches or contains PRD branch
+                    if let Some(ref wt_branch) = wt.branch {
+                        let wt_branch_name = wt_branch.replace("refs/heads/", "");
+                        if wt_branch_name == *branch || wt_branch_name.contains(branch.as_str()) {
+                            // This worktree belongs to this PRD
+                            if let Err(e) = git_mgr.remove_worktree(&wt.path) {
+                                warnings.push(format!("Failed to remove worktree {}: {}", wt.path, e));
+                            } else {
+                                removed_worktrees.push(wt.path.clone());
+                            }
+                            // Also delete the directory
+                            let wt_dir = Path::new(&wt.path);
+                            if wt_dir.exists() {
+                                let _ = fs::remove_dir_all(wt_dir);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Delete the branch if it exists and is not currently checked out
+            if let Ok(branches) = git_mgr.list_branches() {
+                for b in branches {
+                    if b.name == *branch || b.name.contains(branch.as_str()) {
+                        if !b.is_head {
+                            // Try to delete the branch
+                            match git_mgr.delete_branch(&b.name) {
+                                Ok(_) => {
+                                    deleted_branches.push(b.name.clone());
+                                }
+                                Err(e) => {
+                                    warnings.push(format!("Failed to delete branch {}: {}", b.name, e));
+                                }
+                            }
+                        } else {
+                            warnings.push(format!("Cannot delete branch {} - it is currently checked out", b.name));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Delete the PRD files
+    let files_to_delete = vec![
+        prds_dir.join(format!("{}.md", prd_name)),
+        prds_dir.join(format!("{}.json", prd_name)),
+        prds_dir.join(format!("{}-progress.txt", prd_name)),
+        prds_dir.join(format!("{}-prompt.md", prd_name)),
+    ];
+
+    for file_path in files_to_delete {
+        if file_path.exists() {
+            match fs::remove_file(&file_path) {
+                Ok(_) => {
+                    deleted_files.push(file_path.to_string_lossy().to_string());
+                }
+                Err(e) => {
+                    warnings.push(format!("Failed to delete {}: {}", file_path.display(), e));
+                }
+            }
+        }
+    }
+
+    // Check that at least the main .md file was deleted
+    let md_path = prds_dir.join(format!("{}.md", prd_name));
+    if md_path.exists() {
+        return Err(format!("Failed to delete PRD file: {}.md still exists", prd_name));
+    }
+
+    log::info!(
+        "[PRD] Deleted PRD '{}': {} files, {} worktrees, {} branches, {} warnings",
+        prd_name,
+        deleted_files.len(),
+        removed_worktrees.len(),
+        deleted_branches.len(),
+        warnings.len()
+    );
+
+    Ok(DeletePrdResult {
+        deleted_files,
+        removed_worktrees,
+        deleted_branches,
+        warnings,
+    })
+}

@@ -13,6 +13,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Plus,
   Search,
   Edit,
@@ -57,6 +65,7 @@ export function PRDList() {
   const [prdFiles, setPrdFiles] = useState<PRDFile[]>([])
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [executeDialogFile, setExecuteDialogFile] = useState<PRDFile | null>(null)
+  const [deleteConfirmFile, setDeleteConfirmFile] = useState<PRDFile | null>(null)
 
   // Load database PRDs
   useEffect(() => {
@@ -192,6 +201,44 @@ export function PRDList() {
     // Extract prd name from id (e.g., "file:new-feature-prd-abc123" -> "new-feature-prd-abc123")
     const prdName = file.id.replace('file:', '')
     navigate(`/prds/file?project=${encodeURIComponent(file.projectPath)}&name=${encodeURIComponent(prdName)}`)
+  }
+
+  // Delete a file-based PRD and all related resources
+  const handleDeleteFile = async (file: PRDFile) => {
+    setDeleting(file.id)
+    setDeleteConfirmFile(null)
+    try {
+      const prdName = file.id.replace('file:', '')
+      const result = await prdApi.deleteFile(file.projectPath, prdName)
+
+      // Build summary message
+      const parts: string[] = []
+      if (result.deletedFiles.length > 0) {
+        parts.push(`${result.deletedFiles.length} file(s)`)
+      }
+      if (result.removedWorktrees.length > 0) {
+        parts.push(`${result.removedWorktrees.length} worktree(s)`)
+      }
+      if (result.deletedBranches.length > 0) {
+        parts.push(`${result.deletedBranches.length} branch(es)`)
+      }
+
+      const summary = parts.length > 0 ? `Deleted ${parts.join(', ')}` : 'PRD deleted'
+
+      if (result.warnings.length > 0) {
+        toast.default(summary, `Warnings: ${result.warnings.join('; ')}`)
+      } else {
+        toast.success('PRD deleted', summary)
+      }
+
+      // Refresh the file list
+      loadPrdFiles()
+    } catch (err) {
+      console.error('Failed to delete PRD file:', err)
+      toast.error('Failed to delete PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const getQualityBadge = (prd: PRDDocument) => {
@@ -381,6 +428,8 @@ export function PRDList() {
                             file={item.data}
                             onExecute={handleExecuteFile}
                             onEdit={handleEditFile}
+                            onDelete={(f) => setDeleteConfirmFile(f)}
+                            deleting={deleting}
                           />
                         )
                       )}
@@ -421,6 +470,8 @@ export function PRDList() {
                     file={item.data}
                     onExecute={handleExecuteFile}
                     onEdit={handleEditFile}
+                    onDelete={(f) => setDeleteConfirmFile(f)}
+                    deleting={deleting}
                   />
                 )
               )}
@@ -428,6 +479,49 @@ export function PRDList() {
           </Table>
         </Card>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteConfirmFile !== null} onOpenChange={(open) => !open && setDeleteConfirmFile(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete PRD</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteConfirmFile?.title}"?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-2">
+              This will permanently delete:
+            </p>
+            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+              <li>The PRD markdown file (.md)</li>
+              {deleteConfirmFile?.hasRalphJson && <li>The Ralph Loop configuration (.json)</li>}
+              {deleteConfirmFile?.hasProgress && <li>The progress tracking file</li>}
+              <li>Any associated worktrees</li>
+              <li>Any associated git branches</li>
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmFile(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteConfirmFile && handleDeleteFile(deleteConfirmFile)}
+              disabled={deleting !== null}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete PRD'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Execution dialog for file-based PRDs */}
       <PRDFileExecutionDialog
@@ -511,9 +605,12 @@ interface PRDFileTableRowProps {
   file: PRDFile
   onExecute: (file: PRDFile) => void
   onEdit: (file: PRDFile) => void
+  onDelete: (file: PRDFile) => void
+  deleting: string | null
 }
 
-function PRDFileTableRow({ file, onExecute, onEdit }: PRDFileTableRowProps) {
+function PRDFileTableRow({ file, onExecute, onEdit, onDelete, deleting }: PRDFileTableRowProps) {
+  const isDeleting = deleting === file.id
   return (
     <TableRow className="cursor-pointer hover:bg-muted/50">
       <TableCell>
@@ -577,6 +674,19 @@ function PRDFileTableRow({ file, onExecute, onEdit }: PRDFileTableRowProps) {
             title="Execute with Ralph Loop"
           >
             <Play className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(file)}
+            disabled={isDeleting}
+            title="Delete PRD and related resources"
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </TableCell>
