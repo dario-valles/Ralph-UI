@@ -205,6 +205,13 @@ export function PRDChatPanel() {
     sessions,
   ])
 
+  // Auto-select most recent session when currentSession is cleared but sessions exist
+  useEffect(() => {
+    if (initialLoadComplete && !currentSession && sessions.length > 0 && !showTypeSelector) {
+      setCurrentSession(sessions[0])
+    }
+  }, [initialLoadComplete, currentSession, sessions, showTypeSelector, setCurrentSession])
+
   // Load history when session changes
   useEffect(() => {
     if (currentSession && currentSession.id !== prevSessionIdRef.current) {
@@ -372,8 +379,10 @@ export function PRDChatPanel() {
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
-  // Show type selector when creating a new session or when no session is selected
-  if (showTypeSelector || !currentSession) {
+  // Show type selector when:
+  // 1. User explicitly requested it (New Chat button)
+  // 2. No sessions exist AND no current session (first-time user)
+  if (showTypeSelector || (initialLoadComplete && sessions.length === 0 && !currentSession)) {
     return (
       <div className="flex h-full items-center justify-center p-4">
         <PRDTypeSelector

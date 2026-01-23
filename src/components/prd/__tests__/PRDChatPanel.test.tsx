@@ -66,6 +66,39 @@ vi.mock('@/hooks/useAvailableModels', () => ({
   }),
 }))
 
+// Mock usePRDChatPanelState - allows tests to control initialLoadComplete
+const mockUsePRDChatPanelState = vi.fn()
+
+vi.mock('@/hooks/usePRDChatPanelState', () => ({
+  usePRDChatPanelState: () => mockUsePRDChatPanelState(),
+}))
+
+const defaultPanelState = {
+  showTypeSelector: false,
+  showDeleteConfirm: false,
+  sessionToDelete: null,
+  agentError: null,
+  userSelectedModel: '',
+  streamingStartedAt: null,
+  lastMessageContent: null,
+  showPlanSidebar: true,
+  sessionsCollapsed: false,
+  mobilePlanSheetOpen: false,
+  initialLoadComplete: true, // Default to true so tests pass by default
+  openTypeSelector: vi.fn(),
+  closeTypeSelector: vi.fn(),
+  openDeleteConfirm: vi.fn(),
+  closeDeleteConfirm: vi.fn(),
+  setAgentError: vi.fn(),
+  setUserSelectedModel: vi.fn(),
+  startStreaming: vi.fn(),
+  stopStreaming: vi.fn(),
+  setShowPlanSidebar: vi.fn(),
+  setSessionsCollapsed: vi.fn(),
+  setMobilePlanSheetOpen: vi.fn(),
+  setInitialLoadComplete: vi.fn(),
+}
+
 // Sample test data
 const mockMessages: ChatMessage[] = [
   {
@@ -158,6 +191,7 @@ describe('PRDChatPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUsePRDChatStore.mockReturnValue(defaultStoreState)
+    mockUsePRDChatPanelState.mockReturnValue(defaultPanelState)
     // Mock agent availability check to return available
     mockCheckAgentAvailability.mockResolvedValue({
       available: true,
@@ -466,23 +500,25 @@ describe('PRDChatPanel', () => {
   // ============================================================================
 
   describe('No Session State', () => {
-    it('shows PRDTypeSelector when no session is selected', () => {
+    it('shows PRDTypeSelector when no sessions exist', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
+        sessions: [],
         currentSession: null,
         messages: [],
       })
 
       renderWithRouter(<PRDChatPanel />)
 
-      // When no session, show the type selector to create a new one
+      // When no sessions exist, show the type selector to create a new one
       expect(screen.getByRole('button', { name: /Guided Interview/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /GSD Workflow/i })).toBeInTheDocument()
     })
 
-    it('shows workflow options when no session is selected', () => {
+    it('shows workflow options when no sessions exist', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
+        sessions: [],
         currentSession: null,
         messages: [],
       })
@@ -492,9 +528,10 @@ describe('PRDChatPanel', () => {
       expect(screen.getByText(/How would you like to create your PRD/i)).toBeInTheDocument()
     })
 
-    it('does not show chat input when no session', () => {
+    it('does not show chat input when no sessions exist', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
+        sessions: [],
         currentSession: null,
         messages: [],
       })
@@ -604,19 +641,21 @@ describe('PRDChatPanel', () => {
       expect(createButton).toBeInTheDocument()
     })
 
-    it('shows type selector when create button is clicked', async () => {
+    it('calls openTypeSelector when create button is clicked', async () => {
+      const mockOpenTypeSelector = vi.fn()
+      mockUsePRDChatPanelState.mockReturnValue({
+        ...defaultPanelState,
+        openTypeSelector: mockOpenTypeSelector,
+      })
+
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
       const createButton = screen.getByRole('button', { name: /new session/i })
       await user.click(createButton)
 
-      // Should show the workflow mode selector (step 1)
-      await waitFor(() => {
-        expect(screen.getByText(/How would you like to create your PRD/i)).toBeInTheDocument()
-      })
-      expect(screen.getByRole('button', { name: /Guided Interview/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /GSD Workflow/i })).toBeInTheDocument()
+      // Verify openTypeSelector was called
+      expect(mockOpenTypeSelector).toHaveBeenCalled()
     })
 
     it('calls setCurrentSession when session is selected (useEffect handles loadHistory)', async () => {
@@ -641,7 +680,13 @@ describe('PRDChatPanel', () => {
       expect(deleteButtons).toHaveLength(2)
     })
 
-    it('shows confirmation dialog when delete button is clicked and deletes on confirm', async () => {
+    it('calls openDeleteConfirm when delete button is clicked', async () => {
+      const mockOpenDeleteConfirm = vi.fn()
+      mockUsePRDChatPanelState.mockReturnValue({
+        ...defaultPanelState,
+        openDeleteConfirm: mockOpenDeleteConfirm,
+      })
+
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
@@ -649,16 +694,28 @@ describe('PRDChatPanel', () => {
       const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
       await user.click(deleteButtons[0])
 
-      // Confirmation dialog should appear with the dialog title
-      await waitFor(() => {
-        expect(screen.getByText(/Delete Session\?/i)).toBeInTheDocument()
-        expect(screen.getByText(/This will permanently delete/i)).toBeInTheDocument()
+      // Verify openDeleteConfirm was called with the session id
+      expect(mockOpenDeleteConfirm).toHaveBeenCalledWith('session-1')
+    })
+
+    it('shows confirmation dialog and deletes on confirm', async () => {
+      const mockCloseDeleteConfirm = vi.fn()
+      mockUsePRDChatPanelState.mockReturnValue({
+        ...defaultPanelState,
+        showDeleteConfirm: true,
+        sessionToDelete: 'session-1',
+        closeDeleteConfirm: mockCloseDeleteConfirm,
       })
 
-      // Find the confirm button - the one that's not labeled "Cancel"
-      // Get all buttons with "Delete Session" text (there are delete buttons in list + dialog)
+      const user = userEvent.setup()
+      renderWithRouter(<PRDChatPanel />)
+
+      // Confirmation dialog should be visible
+      expect(screen.getByText(/Delete Session\?/i)).toBeInTheDocument()
+      expect(screen.getByText(/This will permanently delete/i)).toBeInTheDocument()
+
+      // Find the confirm button in the dialog
       const allDeleteButtons = screen.getAllByRole('button', { name: /Delete Session/i })
-      // The last one should be the confirmation button in the dialog
       const confirmButton = allDeleteButtons[allDeleteButtons.length - 1]
       await user.click(confirmButton)
 
