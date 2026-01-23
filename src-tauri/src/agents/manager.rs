@@ -53,6 +53,19 @@ pub struct ParsedAgentOutput {
     pub tool_results: Vec<ParsedToolResult>,
 }
 
+/// Truncate a string to approximately max_bytes, ensuring we don't cut in the middle of a UTF-8 character
+pub(crate) fn truncate_string(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Find the last valid char boundary at or before max_bytes
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// Parse agent JSON output and extract human-readable text and tool call data
 /// Supports Claude stream-json format and OpenCode JSON format
 /// Returns formatted text suitable for terminal display along with tool call info
@@ -218,7 +231,7 @@ fn parse_claude_stream_json_with_tools(json: &serde_json::Value, msg_type: &str)
                             });
 
                             let truncated = if content_str.len() > 200 {
-                                format!("{}...", &content_str[..200])
+                                format!("{}...", truncate_string(content_str, 200))
                             } else {
                                 content_str.to_string()
                             };
@@ -306,7 +319,7 @@ fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String 
                             let content_str =
                                 item.get("content").and_then(|c| c.as_str()).unwrap_or("");
                             let truncated = if content_str.len() > 200 {
-                                format!("{}...", &content_str[..200])
+                                format!("{}...", truncate_string(content_str, 200))
                             } else {
                                 content_str.to_string()
                             };
@@ -379,7 +392,7 @@ fn parse_opencode_json(json: &serde_json::Value) -> String {
         "system" => format!("\x1b[36m[System]: {}\x1b[0m", content),
         "tool" => {
             let truncated = if content.len() > 200 {
-                format!("{}...", &content[..200])
+                format!("{}...", truncate_string(&content, 200))
             } else {
                 content
             };

@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::agents::manager::AgentSpawnConfig;
+use crate::agents::manager::{truncate_string, AgentSpawnConfig};
 use crate::agents::models::ModelInfo;
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::plugin::AgentPlugin;
@@ -205,7 +205,7 @@ impl AgentPlugin for ClaudeProvider {
                                     let content_str =
                                         item.get("content").and_then(|c| c.as_str()).unwrap_or("");
                                     let truncated = if content_str.len() > 200 {
-                                        format!("{}...", &content_str[..200])
+                                        format!("{}...", truncate_string(content_str, 200))
                                     } else {
                                         content_str.to_string()
                                     };

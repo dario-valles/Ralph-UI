@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::agents::config::{ConfigField, ConfigFieldType, PluginConfigSchema};
-use crate::agents::manager::AgentSpawnConfig;
+use crate::agents::manager::{truncate_string, AgentSpawnConfig};
 use crate::agents::models::{format_model_name, infer_provider, ModelInfo};
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::plugin::AgentPlugin;
@@ -265,7 +265,7 @@ impl AgentPlugin for OpencodeProvider {
                 "system" => format!("\x1b[36m[System]: {}\x1b[0m", content),
                 "tool" => {
                     let truncated = if content.len() > 200 {
-                        format!("{}...", &content[..200])
+                        format!("{}...", truncate_string(&content, 200))
                     } else {
                         content
                     };
