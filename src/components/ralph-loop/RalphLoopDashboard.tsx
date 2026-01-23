@@ -56,6 +56,7 @@ import { StoryCard } from '@/components/ralph-loop/StoryCard'
 import { ProgressViewer } from '@/components/ralph-loop/ProgressViewer'
 import { CommitCard } from '@/components/ralph-loop/CommitCard'
 import { AssignmentsPanel } from '@/components/ralph-loop/AssignmentsPanel'
+import { LearningsPanel } from '@/components/ralph-loop/LearningsPanel'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -1029,6 +1030,13 @@ export function RalphLoopDashboard({
                 <Users className="mr-2 h-4 w-4" />
                 Agents
               </TabsTrigger>
+              <TabsTrigger
+                value="learnings"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <BookOpen className="mr-2 h-4 w-4" />
+                Learnings
+              </TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1171,6 +1179,16 @@ export function RalphLoopDashboard({
                 prdName={prdName}
                 autoRefresh={!!activeExecutionId}
                 refreshInterval={3000}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="learnings" className="p-0 mt-0">
+            <div className="p-4">
+              <LearningsPanel
+                projectPath={projectPath}
+                prdName={prdName}
+                stories={prd.stories}
               />
             </div>
           </TabsContent>

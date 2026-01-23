@@ -1156,6 +1156,77 @@ export interface AgentFileUse {
 }
 
 // ============================================================================
+// Learnings Types (US-3.3: Manual Learning Entry)
+// ============================================================================
+
+/** Type/category of a learning */
+export type LearningType =
+  | 'architecture'
+  | 'gotcha'
+  | 'pattern'
+  | 'testing'
+  | 'tooling'
+  | 'general'
+
+/** A single learning entry */
+export interface LearningEntry {
+  /** Unique identifier */
+  id: string
+  /** Which iteration this learning was discovered in */
+  iteration: number
+  /** Type/category of the learning */
+  learningType: LearningType
+  /** The learning content (description) */
+  content: string
+  /** Associated story ID (if any) */
+  storyId?: string
+  /** Optional code example */
+  codeExample?: string
+  /** When this learning was recorded */
+  timestamp: string
+  /** Source of this learning (agent or human) */
+  source: string
+}
+
+/** The complete learnings file structure */
+export interface LearningsFile {
+  /** List of all learnings */
+  entries: LearningEntry[]
+  /** When this file was created */
+  createdAt: string
+  /** When this file was last updated */
+  lastUpdated: string
+  /** Total iterations that have contributed learnings */
+  totalIterations: number
+}
+
+/** Input for adding a manual learning */
+export interface AddLearningInput {
+  /** Type/category of the learning */
+  learningType: string
+  /** The learning content (description) */
+  content: string
+  /** Optional code example */
+  codeExample?: string
+  /** Optional associated story ID */
+  storyId?: string
+}
+
+/** Input for updating an existing learning */
+export interface UpdateLearningInput {
+  /** ID of the learning to update */
+  id: string
+  /** Updated type/category (optional) */
+  learningType?: string
+  /** Updated content (optional) */
+  content?: string
+  /** Updated code example (optional, empty string to remove) */
+  codeExample?: string
+  /** Updated story ID (optional, empty string to remove) */
+  storyId?: string
+}
+
+// ============================================================================
 // GSD (Get Stuff Done) Types - Re-export from dedicated files
 // ============================================================================
 

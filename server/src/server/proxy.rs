@@ -633,6 +633,49 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        // US-3.3: Manual Learning Entry
+        "get_ralph_learnings" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_learnings(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "add_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::AddLearningInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::add_ralph_learning(
+                project_path,
+                prd_name,
+                input
+            ))
+        }
+
+        "update_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::UpdateLearningInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::update_ralph_learning(
+                project_path,
+                prd_name,
+                input
+            ))
+        }
+
+        "delete_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let learning_id: String = get_arg(&args, "learningId")?;
+            route_sync!(commands::ralph_loop::delete_ralph_learning(
+                project_path,
+                prd_name,
+                learning_id
+            ))
+        }
+
         "list_ralph_loop_executions" => {
             // For server mode, return empty list (would need different tracking)
             serde_json::to_value(Vec::<String>::new()).map_err(|e| e.to_string())

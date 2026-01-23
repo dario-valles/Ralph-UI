@@ -20,6 +20,10 @@ import type {
   DeletePrdResult,
   AssignmentsFile,
   FileInUse,
+  LearningsFile,
+  LearningEntry,
+  AddLearningInput,
+  UpdateLearningInput,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -556,6 +560,42 @@ export const ralphLoopApi = {
   /** Get files currently in use by active agents */
   getFilesInUse: async (projectPath: string, prdName: string): Promise<FileInUse[]> => {
     return await invoke('get_ralph_files_in_use', { projectPath, prdName })
+  },
+
+  // ============================================================================
+  // Learnings API (US-3.3: Manual Learning Entry)
+  // ============================================================================
+
+  /** Get all learnings for a PRD */
+  getLearnings: async (projectPath: string, prdName: string): Promise<LearningsFile> => {
+    return await invoke('get_ralph_learnings', { projectPath, prdName })
+  },
+
+  /** Add a manual learning entry */
+  addLearning: async (
+    projectPath: string,
+    prdName: string,
+    input: AddLearningInput
+  ): Promise<LearningEntry> => {
+    return await invoke('add_ralph_learning', { projectPath, prdName, input })
+  },
+
+  /** Update an existing learning entry */
+  updateLearning: async (
+    projectPath: string,
+    prdName: string,
+    input: UpdateLearningInput
+  ): Promise<LearningEntry> => {
+    return await invoke('update_ralph_learning', { projectPath, prdName, input })
+  },
+
+  /** Delete a learning entry */
+  deleteLearning: async (
+    projectPath: string,
+    prdName: string,
+    learningId: string
+  ): Promise<boolean> => {
+    return await invoke('delete_ralph_learning', { projectPath, prdName, learningId })
   },
 }
 
