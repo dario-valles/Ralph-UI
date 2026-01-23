@@ -11,7 +11,7 @@
     "server:build": "cd src-tauri && cargo build --features server --release",
     "server": "cd src-tauri && cargo run --features server --release -- --server",
     "server:dev": "cd src-tauri && cargo run --features server -- --server",
-    "server:dev:token": "cd src-tauri && cargo run --features server -- --server --token dev-token-ralph-ui-2024",
+    "server:dev:token": "cd src-tauri && cargo run --features server -- --server --token dev-token-ralph-ui-2026",
     "server:kill": "pkill -f 'ralph-ui.*--server' || true; lsof -ti:3420 | xargs kill -9 2>/dev/null || true",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
