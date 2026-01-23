@@ -5,11 +5,13 @@
 
 mod auth;
 mod events;
+mod file_watcher;
 mod proxy;
 mod state;
 
 pub use auth::{generate_auth_token, AuthLayer};
 pub use events::{EventBroadcaster, ServerEvent};
+pub use file_watcher::{ServerFileWatcher, WatchFileResponse};
 pub use proxy::invoke_handler;
 pub use state::ServerAppState;
 

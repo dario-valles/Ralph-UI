@@ -1,6 +1,7 @@
 //! Server application state shared across handlers
 
 use super::events::EventBroadcaster;
+use super::file_watcher::ServerFileWatcher;
 use crate::agents::AgentManager;
 use crate::commands::config::ConfigState;
 use crate::commands::git::GitState;
@@ -46,6 +47,9 @@ pub struct ServerAppState {
 
     /// Completion event sender
     pub completion_sender: tokio::sync::mpsc::UnboundedSender<crate::agents::AgentCompletionEvent>,
+
+    /// File watcher for PRD plan files
+    pub file_watcher: Arc<ServerFileWatcher>,
 }
 
 impl ServerAppState {
@@ -62,18 +66,22 @@ impl ServerAppState {
         rate_limit_sender: tokio::sync::mpsc::UnboundedSender<crate::agents::RateLimitEvent>,
         completion_sender: tokio::sync::mpsc::UnboundedSender<crate::agents::AgentCompletionEvent>,
     ) -> Self {
+        let broadcaster = Arc::new(EventBroadcaster::new());
+        let file_watcher = Arc::new(ServerFileWatcher::new(broadcaster.clone()));
+
         Self {
             auth_token,
             git_state: Arc::new(git_state),
             config_state: Arc::new(config_state),
             shutdown_state,
             model_cache_state: Arc::new(model_cache_state),
-            broadcaster: Arc::new(EventBroadcaster::new()),
+            broadcaster,
             agent_manager,
             plugin_registry,
             ralph_loop_state: Arc::new(ralph_loop_state),
             rate_limit_sender,
             completion_sender,
+            file_watcher,
         }
     }
 }

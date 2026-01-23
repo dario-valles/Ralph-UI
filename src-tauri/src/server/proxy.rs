@@ -171,8 +171,9 @@ async fn send_prd_chat_message_server(
             accumulated.push_str(&line);
 
             // Emit streaming chunk via WebSocket broadcaster
+            // Use same event name as Tauri for consistency
             broadcaster_clone.broadcast(
-                "prd:chat:chunk",
+                "prd:chat_chunk",
                 serde_json::json!({
                     "sessionId": session_id_clone,
                     "content": line,
@@ -1447,24 +1448,34 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             serde_json::to_value(content).map_err(|e| e.to_string())
         }
 
-        // File watching stubs for browser mode (desktop-only functionality)
-        // These return success but don't actually watch files in server mode
+        // File watching for browser mode (polling-based)
         "start_watching_prd_file" => {
-            // In server mode, file watching is not supported
-            // Return a stub response indicating the feature is unavailable
-            let response = serde_json::json!({
-                "success": false,
-                "path": "",
-                "initial_content": null,
-                "error": "File watching is not available in browser mode"
-            });
-            Ok(response)
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let project_path: String = get_arg!(args, "projectPath", String);
+
+            // Get the session to determine the file path
+            let session = crate::file_storage::chat_ops::get_chat_session(
+                Path::new(&project_path),
+                &session_id,
+            ).map_err(|e| format!("Failed to get session: {}", e))?;
+
+            // Generate the plan file path
+            let file_path = crate::watchers::get_prd_plan_file_path(
+                &project_path,
+                &session_id,
+                session.title.as_deref(),
+                session.prd_id.as_deref(),
+            );
+
+            // Start watching the file
+            let response = state.file_watcher.watch_file(&session_id, file_path);
+            serde_json::to_value(response).map_err(|e| e.to_string())
         }
 
         "stop_watching_prd_file" => {
-            // In server mode, file watching is not supported
-            // Return true to indicate "stopped" (no-op)
-            serde_json::to_value(true).map_err(|e| e.to_string())
+            let session_id: String = get_arg!(args, "sessionId", String);
+            let stopped = state.file_watcher.unwatch_file(&session_id);
+            serde_json::to_value(stopped).map_err(|e| e.to_string())
         }
 
         // =====================================================================
