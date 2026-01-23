@@ -675,6 +675,15 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        "get_ralph_historical_briefs" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_historical_briefs(
+                project_path,
+                prd_name
+            ))
+        }
+
         // US-5.3: Competitive Execution
         "get_ralph_competitive_attempts" => {
             let project_path: String = get_arg(&args, "projectPath")?;

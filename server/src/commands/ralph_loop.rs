@@ -2812,6 +2812,29 @@ pub fn regenerate_ralph_brief(
     get_ralph_brief(project_path, prd_name)
 }
 
+/// Get historical briefs for a PRD (US-6.1: View Current Brief - historical briefs)
+#[derive(serde::Serialize)]
+pub struct HistoricalBrief {
+    pub iteration: u32,
+    pub content: String,
+}
+
+pub fn get_ralph_historical_briefs(
+    project_path: String,
+    prd_name: String,
+) -> Result<Vec<HistoricalBrief>, String> {
+    use crate::ralph_loop::BriefBuilder;
+    use std::path::Path;
+
+    let brief_builder = BriefBuilder::new(Path::new(&project_path), &prd_name);
+    let briefs = brief_builder.list_historical_briefs()?;
+
+    Ok(briefs
+        .into_iter()
+        .map(|(iteration, content)| HistoricalBrief { iteration, content })
+        .collect())
+}
+
 /// Get competitive attempts for a PRD execution (US-5.3)
 pub fn get_ralph_competitive_attempts(
     project_path: String,

@@ -64,9 +64,64 @@ impl BriefBuilder {
             .join(&self.prd_name)
     }
 
-    /// Get the path to BRIEF.md
+    /// Get the path to BRIEF.md (current/latest)
     pub fn brief_path(&self) -> PathBuf {
         self.briefs_dir().join("BRIEF.md")
+    }
+
+    /// Get the path to a historical brief for a specific iteration
+    pub fn brief_path_for_iteration(&self, iteration: u32) -> PathBuf {
+        self.briefs_dir().join(format!("BRIEF-{}.md", iteration))
+    }
+
+    /// List all historical briefs (sorted by iteration number)
+    pub fn list_historical_briefs(&self) -> Result<Vec<(u32, String)>, String> {
+        let briefs_dir = self.briefs_dir();
+
+        if !briefs_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut briefs: Vec<(u32, String)> = Vec::new();
+
+        for entry in std::fs::read_dir(&briefs_dir)
+            .map_err(|e| format!("Failed to read briefs directory: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let path = entry.path();
+
+            if path.is_file() {
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+
+                // Match both BRIEF-N.md and BRIEF.md patterns
+                if filename == "BRIEF.md" {
+                    // Current brief
+                    let content = std::fs::read_to_string(&path)
+                        .map_err(|e| format!("Failed to read brief: {}", e))?;
+                    briefs.push((0, content)); // Iteration 0 = current
+                } else if filename.starts_with("BRIEF-") && filename.ends_with(".md") {
+                    // Historical brief
+                    if let Ok(iteration_str) = filename
+                        .strip_prefix("BRIEF-")
+                        .unwrap_or("")
+                        .strip_suffix(".md")
+                        .unwrap_or("")
+                        .parse::<u32>()
+                    {
+                        let content = std::fs::read_to_string(&path)
+                            .map_err(|e| format!("Failed to read brief: {}", e))?;
+                        briefs.push((iteration_str, content));
+                    }
+                }
+            }
+        }
+
+        // Sort by iteration number (ascending - oldest first)
+        briefs.sort_by_key(|b| b.0);
+        Ok(briefs)
     }
 
     /// Generate BRIEF.md from PRD state and learnings
@@ -88,8 +143,16 @@ impl BriefBuilder {
 
         let brief = self.build_brief_content(prd, learnings, iteration);
 
-        std::fs::write(self.brief_path(), brief)
+        // Save to current BRIEF.md
+        std::fs::write(self.brief_path(), &brief)
             .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
+
+        // Also save to historical brief if iteration is provided
+        if let Some(iter) = iteration {
+            let historical_path = self.brief_path_for_iteration(iter);
+            std::fs::write(&historical_path, &brief)
+                .map_err(|e| format!("Failed to write historical brief: {}", e))?;
+        }
 
         Ok(())
     }
@@ -120,8 +183,16 @@ impl BriefBuilder {
 
         let brief = self.build_brief_content(prd, learnings_ref, iteration);
 
-        std::fs::write(self.brief_path(), brief)
+        // Save to current BRIEF.md
+        std::fs::write(self.brief_path(), &brief)
             .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
+
+        // Also save to historical brief if iteration is provided
+        if let Some(iter) = iteration {
+            let historical_path = self.brief_path_for_iteration(iter);
+            std::fs::write(&historical_path, &brief)
+                .map_err(|e| format!("Failed to write historical brief: {}", e))?;
+        }
 
         Ok(())
     }
@@ -176,8 +247,16 @@ impl BriefBuilder {
             files_in_use.as_ref(),
         );
 
-        std::fs::write(self.brief_path(), brief)
+        // Save to current BRIEF.md
+        std::fs::write(self.brief_path(), &brief)
             .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
+
+        // Also save to historical brief if iteration is provided
+        if let Some(iter) = iteration {
+            let historical_path = self.brief_path_for_iteration(iter);
+            std::fs::write(&historical_path, &brief)
+                .map_err(|e| format!("Failed to write historical brief: {}", e))?;
+        }
 
         Ok(())
     }
@@ -1190,5 +1269,122 @@ mod tests {
 
         assert!(iter3_pos < iter2_pos, "Iteration 3 should appear before iteration 2");
         assert!(iter2_pos < iter1_pos, "Iteration 2 should appear before iteration 1");
+    }
+
+    // =========================================================================
+    // US-6.1: View Current Brief - Historical Briefs
+    // =========================================================================
+
+    #[test]
+    fn test_brief_path_for_iteration() {
+        // Test that iteration-specific paths are generated correctly
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+
+        let path1 = builder.brief_path_for_iteration(1);
+        let path2 = builder.brief_path_for_iteration(5);
+
+        assert!(path1.to_string_lossy().contains("BRIEF-1.md"));
+        assert!(path2.to_string_lossy().contains("BRIEF-5.md"));
+    }
+
+    #[test]
+    fn test_save_brief_with_iteration() {
+        // Test that briefs are saved both to current and historical paths
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        // Save brief for iteration 2
+        builder
+            .generate_brief(&prd, Some("- Test learning"), Some(2))
+            .unwrap();
+
+        // Check both files exist
+        assert!(builder.brief_path().exists(), "Current BRIEF.md should exist");
+        assert!(
+            builder.brief_path_for_iteration(2).exists(),
+            "BRIEF-2.md should exist"
+        );
+
+        // Check contents are identical
+        let current = std::fs::read_to_string(builder.brief_path()).unwrap();
+        let historical = std::fs::read_to_string(builder.brief_path_for_iteration(2)).unwrap();
+        assert_eq!(current, historical, "Current and historical briefs should have same content");
+    }
+
+    #[test]
+    fn test_list_historical_briefs() {
+        // Test that historical briefs are listed and sorted by iteration
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        // Save briefs for iterations 1, 3, 2 (out of order)
+        builder.generate_brief(&prd, None, Some(1)).unwrap();
+        builder.generate_brief(&prd, None, Some(3)).unwrap();
+        builder.generate_brief(&prd, None, Some(2)).unwrap();
+
+        let briefs = builder.list_historical_briefs().unwrap();
+
+        // Should have 4 entries: iteration 0 (current) + 1, 2, 3
+        assert_eq!(briefs.len(), 4, "Should have 4 briefs (0, 1, 2, 3)");
+
+        // Check iteration numbers
+        let iterations: Vec<u32> = briefs.iter().map(|(iter, _)| iter).copied().collect();
+        assert_eq!(iterations, vec![0, 1, 2, 3], "Iterations should be sorted ascending");
+
+        // Check all content is non-empty
+        for (_, content) in briefs {
+            assert!(!content.is_empty(), "Brief content should not be empty");
+            assert!(
+                content.contains("# Agent Task Brief"),
+                "Brief should contain header"
+            );
+        }
+    }
+
+    #[test]
+    fn test_list_historical_briefs_empty() {
+        // Test that listing briefs for non-existent PRD returns empty
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "nonexistent-prd");
+
+        let briefs = builder.list_historical_briefs().unwrap();
+        assert_eq!(briefs.len(), 0, "Should return empty list for non-existent PRD");
+    }
+
+    #[test]
+    fn test_brief_with_learnings_saves_historical() {
+        // Test that generate_brief_with_learnings_manager saves historical versions
+        use crate::ralph_loop::learnings_manager::LearningsManager;
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
+        learnings_manager.initialize().unwrap();
+
+        let prd = create_test_prd();
+
+        // Save for iteration 5
+        builder
+            .generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(5))
+            .unwrap();
+
+        // Both current and historical should exist
+        assert!(builder.brief_path().exists());
+        assert!(builder.brief_path_for_iteration(5).exists());
+
+        // List should include both
+        let briefs = builder.list_historical_briefs().unwrap();
+        let iterations: Vec<u32> = briefs.iter().map(|(iter, _)| iter).copied().collect();
+        assert!(
+            iterations.contains(&0),
+            "Should have iteration 0 (current)"
+        );
+        assert!(
+            iterations.contains(&5),
+            "Should have iteration 5 (historical)"
+        );
     }
 }

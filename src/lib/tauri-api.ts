@@ -608,6 +608,14 @@ export const ralphLoopApi = {
     return await invoke('regenerate_ralph_brief', { projectPath, prdName })
   },
 
+  /** Get historical briefs for a PRD */
+  getHistoricalBriefs: async (
+    projectPath: string,
+    prdName: string
+  ): Promise<Array<{ iteration: number; content: string }>> => {
+    return await invoke('get_ralph_historical_briefs', { projectPath, prdName })
+  },
+
   // ============================================================================
   // Learnings API (US-3.3: Manual Learning Entry)
   // ============================================================================

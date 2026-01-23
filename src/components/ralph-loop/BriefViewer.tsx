@@ -15,6 +15,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   RefreshCw,
   Copy,
   CheckCircle2,
@@ -113,19 +120,45 @@ export function BriefViewer({
   const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [historicalBriefs, setHistoricalBriefs] = useState<Array<{ iteration: number; content: string }>>([])
+  const [selectedIteration, setSelectedIteration] = useState<string>('current')
 
-  const loadBrief = useCallback(async () => {
+  const loadHistoricalBriefs = useCallback(async () => {
+    try {
+      const briefs = await ralphLoopApi.getHistoricalBriefs(projectPath, prdName)
+      setHistoricalBriefs(briefs)
+    } catch (err) {
+      // Silently fail - historical briefs might not exist yet
+      setHistoricalBriefs([])
+    }
+  }, [projectPath, prdName])
+
+  const loadBrief = useCallback(async (iteration?: string) => {
     try {
       setLoading(true)
       setError(null)
-      const content = await ralphLoopApi.getBrief(projectPath, prdName)
+
+      let content: string
+      if (iteration && iteration !== 'current') {
+        // Load historical brief
+        const iterNum = parseInt(iteration)
+        const historical = historicalBriefs.find(b => b.iteration === iterNum)
+        if (historical) {
+          content = historical.content
+        } else {
+          throw new Error('Brief not found')
+        }
+      } else {
+        // Load current brief
+        content = await ralphLoopApi.getBrief(projectPath, prdName)
+      }
       setBriefContent(content)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load brief')
     } finally {
       setLoading(false)
     }
-  }, [projectPath, prdName])
+  }, [projectPath, prdName, historicalBriefs])
 
   const handleRegenerate = useCallback(async () => {
     try {
@@ -157,52 +190,83 @@ export function BriefViewer({
 
   // Initial load
   useEffect(() => {
-    loadBrief()
-  }, [loadBrief])
+    loadHistoricalBriefs()
+    loadBrief('current')
+  }, [loadHistoricalBriefs, loadBrief])
+
+  const handleIterationChange = (value: string) => {
+    setSelectedIteration(value)
+    loadBrief(value)
+  }
 
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Current Brief
-            </CardTitle>
-            <CardDescription className="text-xs">
-              BRIEF.md for {prdName}
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
-              disabled={!briefContent || loading}
-              className="h-8"
-            >
-              {copied ? (
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-              ) : (
-                <Copy className="h-3 w-3 mr-1" />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Brief
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {selectedIteration === 'current'
+                  ? `Current BRIEF.md for ${prdName}`
+                  : `Historical brief (Iteration ${selectedIteration}) for ${prdName}`}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+                disabled={!briefContent || loading}
+                className="h-8"
+              >
+                {copied ? (
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                ) : (
+                  <Copy className="h-3 w-3 mr-1" />
+                )}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+              {selectedIteration === 'current' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={regenerating || loading}
+                  className="h-8"
+                >
+                  {regenerating ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  Regenerate
+                </Button>
               )}
-              {copied ? 'Copied' : 'Copy'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={regenerating || loading}
-              className="h-8"
-            >
-              {regenerating ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3 mr-1" />
-              )}
-              Regenerate
-            </Button>
+            </div>
           </div>
+
+          {historicalBriefs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-muted-foreground">View Brief:</label>
+              <Select value={selectedIteration} onValueChange={handleIterationChange}>
+                <SelectTrigger className="w-40 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">Current (Latest)</SelectItem>
+                  {historicalBriefs.map(brief => (
+                    <SelectItem key={brief.iteration} value={String(brief.iteration)}>
+                      Iteration {brief.iteration}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </CardHeader>
 
