@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File-based planning storage (582 lines)
 
 ### Test Coverage
-- 575+ Rust backend tests
+- 650+ Rust backend tests
 - 80% frontend coverage target
 - 240+ E2E tests (Playwright)
 - WCAG 2.1 AA accessibility coverage

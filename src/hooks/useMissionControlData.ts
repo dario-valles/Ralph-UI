@@ -7,7 +7,6 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import type { Project } from '@/types'
 import { ralphLoopApi } from '@/lib/tauri-api'
-import { isTauri } from '@/lib/tauri-check'
 
 // ============================================================================
 // Types
@@ -57,10 +56,6 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
   // Fetch active executions from backend
   useEffect(() => {
     const fetchExecutions = async () => {
-      if (!isTauri) {
-        setLoading(false)
-        return
-      }
       try {
         const executions = await ralphLoopApi.listExecutions()
         setActiveExecutions(executions)

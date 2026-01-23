@@ -66,12 +66,12 @@ export function MissionControlPage() {
           {/* Ralph Loop Quick Access Card */}
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <Repeat className="h-5 w-5 text-primary" />
                   <CardTitle className="text-lg">Ralph Loop</CardTitle>
                 </div>
-                <Button onClick={() => navigate('/ralph-loop')} size="sm">
+                <Button onClick={() => navigate('/ralph-loop')} size="sm" className="w-fit">
                   Go to Ralph Loop
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>

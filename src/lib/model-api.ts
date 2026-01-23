@@ -1,6 +1,6 @@
 // Model discovery API wrappers
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/invoke'
 import type { AgentType } from '@/types'
 
 /**

@@ -10,19 +10,19 @@ Ralph-UI/
 │   ├── components/             # React components
 │   │   ├── ui/                 # shadcn/ui base components
 │   │   ├── layout/             # Layout (AppLayout, Sidebar, TitleBar)
-│   │   ├── dashboard/          # Dashboard and Sessions pages
-│   │   ├── tasks/              # Task management (TaskList, TaskDetail, PRDImport)
-│   │   ├── agents/             # Agent monitoring (AgentList, AgentDetail, SubagentTree)
+│   │   ├── dashboard/          # Dashboard pages
+│   │   ├── prd/                # PRD management, GSD workflow, AI chat
 │   │   ├── git/                # Git operations (BranchManager, DiffViewer, etc.)
-│   │   ├── prd/                # PRD management and AI chat
-│   │   ├── parallel/           # Parallel execution UI
 │   │   ├── projects/           # Project management (ProjectPicker, ProjectSwitcher)
 │   │   ├── mission-control/    # Mission Control dashboard
 │   │   ├── settings/           # Settings page
-│   │   └── recovery/           # Session recovery components
-│   ├── stores/                 # Zustand state management (7 stores)
+│   │   └── shared/             # Shared components (EmptyState, StatCard)
+│   ├── stores/                 # Zustand state management (8 stores)
 │   ├── hooks/                  # Custom React hooks
 │   ├── lib/                    # Utilities and API wrappers
+│   │   ├── tauri-api.ts        # Main Tauri command wrappers
+│   │   ├── invoke.ts           # Unified invoke for Tauri/browser
+│   │   └── events-client.ts    # Event handling for Tauri/browser
 │   ├── config/                 # Frontend configuration
 │   ├── types/                  # TypeScript type definitions
 │   ├── test/                   # Test setup
@@ -34,12 +34,15 @@ Ralph-UI/
 │   │   ├── main.rs             # Tauri application entry
 │   │   ├── lib.rs              # Library entry point
 │   │   ├── events.rs           # Event system
+│   │   ├── shutdown.rs         # Graceful shutdown handling
 │   │   ├── commands/           # Tauri IPC command handlers
-│   │   ├── database/           # SQLite operations
+│   │   ├── file_storage/       # JSON file storage (.ralph-ui/)
 │   │   ├── models/             # Data models
 │   │   ├── git/                # Git operations (git2-rs)
 │   │   ├── agents/             # Agent process management
-│   │   ├── parallel/           # Parallel execution
+│   │   ├── gsd/                # GSD workflow system
+│   │   ├── ralph_loop/         # Ralph Loop execution
+│   │   ├── server/             # HTTP/WebSocket server mode
 │   │   ├── session/            # Session management
 │   │   ├── parsers/            # PRD parsers (JSON, YAML, Markdown)
 │   │   ├── templates/          # Template system
@@ -87,18 +90,18 @@ Ralph-UI/
 
 ### State Management (`src/stores/`)
 
-Seven Zustand stores:
+Eight Zustand stores:
 
 | Store | Purpose |
 |-------|---------|
-| `sessionStore.ts` | Session lifecycle, configuration |
-| `taskStore.ts` | Task CRUD, filtering, status |
-| `agentStore.ts` | Agent status, logs, monitoring |
-| `prdStore.ts` | PRD management, templates |
+| `gsdStore.ts` | GSD workflow state management |
 | `prdChatStore.ts` | AI chat state for PRD creation |
 | `projectStore.ts` | Multi-project management |
-| `uiStore.ts` | UI state (sidebars, modals) |
+| `ralphLoopStore.ts` | Ralph Loop execution state |
+| `terminalStore.ts` | Terminal/agent output management |
 | `toastStore.ts` | Toast notifications |
+| `toolCallStore.ts` | Tool call tracking for agents |
+| `uiStore.ts` | UI state (sidebars, modals) |
 
 ### Hooks (`src/hooks/`)
 
@@ -125,31 +128,26 @@ Centralized TypeScript definitions:
 
 | Module | Purpose |
 |--------|---------|
-| `sessions.rs` | Session CRUD, resume, export |
-| `tasks.rs` | Task CRUD, filtering, status |
 | `agents.rs` | Agent spawn, monitor, logs |
+| `config.rs` | Configuration management |
 | `git.rs` | Branch, worktree, commit operations |
 | `github.rs` | GitHub API (PRs, Issues) |
+| `gsd.rs` | GSD workflow commands |
 | `prd.rs` | PRD CRUD, templates, execution |
 | `prd_chat.rs` | AI chat for PRD creation |
 | `projects.rs` | Project management |
-| `parallel.rs` | Pool, scheduler, conflict detection |
-| `config.rs` | Configuration management |
-| `recovery.rs` | Session recovery |
+| `ralph_loop.rs` | Ralph Loop execution |
+| `sessions.rs` | Session CRUD, resume, export |
 | `templates.rs` | Template operations |
-| `traces.rs` | Agent trace parsing |
-| `mission_control.rs` | Mission Control data |
 
-### Database (`src-tauri/src/database/`)
+### File Storage (`src-tauri/src/file_storage/`)
 
-SQLite operations:
-- `mod.rs` - Database initialization and migrations
-- `sessions.rs` - Session CRUD
-- `tasks.rs` - Task CRUD
-- `agents.rs` - Agent CRUD and logs
-- `prd.rs` - PRD documents and templates
-- `prd_chat.rs` - PRD chat sessions
-- `projects.rs` - Project management
+JSON file-based storage in `.ralph-ui/`:
+- `mod.rs` - Module exports
+- `chat.rs` - Chat session files
+- `prd.rs` - PRD documents
+- `sessions.rs` - Session files
+- `projects.rs` - Project configuration
 
 ### Models (`src-tauri/src/models/`)
 
@@ -189,10 +187,15 @@ Multi-agent orchestration:
 
 ### Other Backend Modules
 
+- `gsd/` - GSD workflow (questioning, research, requirements, verification)
+- `ralph_loop/` - Ralph Loop execution engine
+- `server/` - HTTP/WebSocket server for browser mode
 - `parsers/` - PRD parsers (JSON, YAML, Markdown)
 - `templates/` - Template engine with @filename resolution
 - `config/` - Configuration loading and merging
 - `github/` - GitHub API client
+- `watchers/` - File system watchers
+- `plugins/` - Plugin system
 - `events.rs` - Event system for real-time updates
 - `shutdown.rs` - Graceful shutdown and signal handling
 
@@ -276,5 +279,5 @@ import './Component.css'
 |----------|---------|
 | [README.md](./README.md) | Project overview |
 | [QUICK_START.md](./QUICK_START.md) | Developer setup |
-| [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | Historical roadmap |
+| [CLAUDE.md](./CLAUDE.md) | Development commands and instructions |
 | [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) | This file |

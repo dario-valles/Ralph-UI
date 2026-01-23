@@ -14,7 +14,6 @@ import { NativeSelect as Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, RefreshCw, Repeat, GitBranch, FileCode } from 'lucide-react'
 import { ralphLoopApi, templateApi } from '@/lib/tauri-api'
-import { isTauri } from '@/lib/tauri-check'
 import type { AgentType, PRDFile, TemplateInfo } from '@/types'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { usePRDExecutionConfig } from '@/hooks/usePRDExecutionConfig'
@@ -115,7 +114,7 @@ export function PRDFileExecutionDialog({
 
   // Load templates when dialog opens (US-014)
   const loadTemplates = useCallback(async () => {
-    if (!isTauri || !file?.projectPath) return
+    if (!file?.projectPath) return
 
     setTemplatesLoading(true)
     try {
@@ -200,16 +199,16 @@ export function PRDFileExecutionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden !grid-rows-[auto_1fr_auto]">
         <DialogHeader>
-          <DialogTitle>Execute PRD: {file?.title}</DialogTitle>
+          <DialogTitle className="pr-8">Execute PRD: {file?.title}</DialogTitle>
           <DialogDescription>
             Configure how the PRD will be executed using the Ralph Loop technique.
             Progress persists in files with a fresh agent each iteration.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4 overflow-y-auto flex-1">
+        <div className="space-y-6 py-4 overflow-y-auto -mr-2 pr-2">
           {/* Agent Type and Model */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -226,34 +225,38 @@ export function PRDFileExecutionDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="model">Model</Label>
+              <Label htmlFor="model">Model</Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  id="model"
+                  value={config.model || ''}
+                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                  disabled={displayModelsLoading}
+                  className="flex-1"
+                >
+                  {displayModelsLoading ? (
+                    <option>Loading models...</option>
+                  ) : displayModels.length === 0 ? (
+                    <option value="">No models available</option>
+                  ) : (
+                    displayModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))
+                  )}
+                </Select>
                 <Button
-                  variant="ghost"
-                  size="sm"
+                  variant="outline"
+                  size="icon"
                   onClick={displayRefreshModels}
                   disabled={displayModelsLoading}
-                  className="h-6 w-6 p-0"
+                  className="h-9 w-9 flex-shrink-0"
+                  title="Refresh models"
                 >
-                  <RefreshCw className={`h-3 w-3 ${displayModelsLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ${displayModelsLoading ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
-              <Select
-                id="model"
-                value={config.model || ''}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                disabled={displayModelsLoading}
-              >
-                {displayModelsLoading ? (
-                  <option>Loading models...</option>
-                ) : (
-                  displayModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))
-                )}
-              </Select>
             </div>
           </div>
 
@@ -389,7 +392,7 @@ export function PRDFileExecutionDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 pt-4 border-t">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

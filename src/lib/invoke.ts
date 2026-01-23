@@ -101,8 +101,25 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   }
 
   try {
-    return JSON.parse(text) as T
-  } catch {
+    const parsed = JSON.parse(text)
+
+    // Server wraps responses in {success: true, data: ...} format
+    // Extract the data field for successful responses
+    if (parsed && typeof parsed === 'object' && 'success' in parsed) {
+      if (!parsed.success) {
+        throw new Error(parsed.error || 'Command failed')
+      }
+      // Return the data field (or undefined for void commands)
+      return parsed.data as T
+    }
+
+    // Fallback: return parsed response directly
+    return parsed as T
+  } catch (e) {
+    // Re-throw if it's our error
+    if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+      throw e
+    }
     // If it's not valid JSON, return as-is (for string responses)
     return text as T
   }

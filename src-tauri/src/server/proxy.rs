@@ -589,6 +589,27 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             serde_json::to_value(stats).map_err(|e| e.to_string())
         }
 
+        "check_stale_ralph_executions" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let threshold_secs: Option<i64> = get_opt_arg!(args, "thresholdSecs", i64);
+            let stale = commands::ralph_loop::check_stale_ralph_executions(project_path, threshold_secs)?;
+            serde_json::to_value(stale).map_err(|e| e.to_string())
+        }
+
+        "recover_stale_ralph_iterations" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let execution_id: String = get_arg!(args, "executionId", String);
+            let count = commands::ralph_loop::recover_stale_ralph_iterations(project_path, execution_id)?;
+            serde_json::to_value(count).map_err(|e| e.to_string())
+        }
+
+        "cleanup_ralph_iteration_history" => {
+            let project_path: String = get_arg!(args, "projectPath", String);
+            let days_to_keep: Option<i64> = get_opt_arg!(args, "daysToKeep", i64);
+            let count = commands::ralph_loop::cleanup_ralph_iteration_history(project_path, days_to_keep)?;
+            serde_json::to_value(count).map_err(|e| e.to_string())
+        }
+
         // =====================================================================
         // Template Commands
         // =====================================================================
@@ -733,6 +754,26 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let prd_type: String = get_arg!(args, "prdType", String);
             let questions = commands::prd_chat::get_guided_questions(prd_type).await?;
             serde_json::to_value(questions).map_err(|e| e.to_string())
+        }
+
+        // File watching stubs for browser mode (desktop-only functionality)
+        // These return success but don't actually watch files in server mode
+        "start_watching_prd_file" => {
+            // In server mode, file watching is not supported
+            // Return a stub response indicating the feature is unavailable
+            let response = serde_json::json!({
+                "success": false,
+                "path": "",
+                "initial_content": null,
+                "error": "File watching is not available in browser mode"
+            });
+            Ok(response)
+        }
+
+        "stop_watching_prd_file" => {
+            // In server mode, file watching is not supported
+            // Return true to indicate "stopped" (no-op)
+            serde_json::to_value(true).map_err(|e| e.to_string())
         }
 
         // =====================================================================

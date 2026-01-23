@@ -153,12 +153,6 @@ export function SettingsPage() {
 
   // Load config from backend on mount
   const loadConfig = useCallback(async () => {
-    if (!isTauri) {
-      setLoading(false)
-      setError('Settings require Tauri runtime. Running in development mode.')
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -193,8 +187,6 @@ export function SettingsPage() {
 
   // Load templates
   const loadTemplates = useCallback(async () => {
-    if (!isTauri) return
-
     setTemplatesLoading(true)
     setTemplateError(null)
 
@@ -217,8 +209,6 @@ export function SettingsPage() {
   // Load template content when a template is selected
   const loadTemplateContent = useCallback(
     async (template: TemplateInfo) => {
-      if (!isTauri) return
-
       setTemplateContentLoading(true)
       setTemplateError(null)
 
@@ -239,7 +229,6 @@ export function SettingsPage() {
 
   // Save template
   const handleSaveTemplate = async () => {
-    if (!isTauri) return
     if (isCreatingTemplate && !newTemplateName.trim()) {
       setTemplateError('Template name is required')
       return
@@ -278,7 +267,7 @@ export function SettingsPage() {
 
   // Delete template
   const handleDeleteTemplate = async () => {
-    if (!isTauri || !selectedTemplate || selectedTemplate.source === 'builtin') return
+    if (!selectedTemplate || selectedTemplate.source === 'builtin') return
 
     setTemplateSaving(true)
     setTemplateError(null)
@@ -332,7 +321,7 @@ export function SettingsPage() {
 
   // Preview template (US-013)
   const handlePreviewTemplate = async () => {
-    if (!isTauri || !templateContent.trim()) return
+    if (!templateContent.trim()) return
 
     setPreviewLoading(true)
     setTemplateError(null)
@@ -473,8 +462,6 @@ export function SettingsPage() {
 
   // Reload config from files
   const handleReload = async () => {
-    if (!isTauri) return
-
     setLoading(true)
     setError(null)
 

@@ -89,10 +89,10 @@ Output locations:
 ### Unit Tests (Frontend)
 
 ```bash
-bun test
+bun run test
 ```
 
-Runs 139 unit tests across all stores and components.
+Runs unit tests across all stores and components.
 
 ### E2E Tests (Playwright)
 
@@ -109,13 +109,13 @@ cd src-tauri
 cargo test
 ```
 
-Runs 418+ backend tests covering:
-- Database operations
+Runs 650+ backend tests covering:
+- File storage operations
 - Git operations
 - Agent management
-- Parallel scheduling
+- GSD workflow
+- Ralph Loop execution
 - Template rendering
-- Progress tracking
 - Signal handling
 
 ---
@@ -127,20 +127,20 @@ Ralph-UI/
 ├── src/                    # Frontend (React + TypeScript)
 │   ├── components/         # UI components
 │   │   ├── ui/             # shadcn/ui base components
-│   │   ├── tasks/          # Task management
-│   │   ├── agents/         # Agent monitoring
-│   │   ├── git/            # Git operations
-│   │   └── prd/            # PRD management
+│   │   ├── prd/            # PRD management and GSD workflow
+│   │   └── git/            # Git operations
 │   ├── stores/             # Zustand state management
 │   ├── lib/                # Utilities and Tauri API
 │   └── types/              # TypeScript types
 ├── src-tauri/              # Backend (Rust + Tauri)
 │   ├── src/
 │   │   ├── commands/       # Tauri IPC commands
-│   │   ├── database/       # SQLite operations
+│   │   ├── file_storage/   # JSON file storage
 │   │   ├── git/            # Git operations (git2-rs)
 │   │   ├── agents/         # Agent process management
-│   │   └── parallel/       # Parallel execution
+│   │   ├── gsd/            # GSD workflow
+│   │   ├── ralph_loop/     # Ralph Loop execution
+│   │   └── server/         # HTTP/WebSocket server
 │   └── Cargo.toml          # Rust dependencies
 ├── e2e/                    # Playwright E2E tests
 └── package.json            # Node dependencies
@@ -200,17 +200,18 @@ sudo apt install libwebkit2gtk-4.1-dev
 |---------|-------------|
 | `bun run tauri dev` | Start development server |
 | `bun run tauri build` | Build for production |
-| `bun test` | Run unit tests |
+| `bun run test` | Run unit tests |
 | `bun run e2e` | Run E2E tests |
 | `bun run lint` | Run ESLint |
 | `bun run format` | Format with Prettier |
+| `bun run server` | Start HTTP/WebSocket server |
 
 ---
 
 ## Next Steps
 
 - **Understand the codebase:** Read [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
-- **Historical roadmap:** Read [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
+- **Development instructions:** Read [CLAUDE.md](./CLAUDE.md)
 
 ---
 

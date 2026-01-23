@@ -30,14 +30,14 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 ## Technology Stack
 
 **Frontend:**
-- React 18+ with TypeScript
+- React 19 with TypeScript
 - Tailwind CSS + shadcn/ui
 - Zustand for state management
 - xterm.js for terminal emulation
 
 **Backend:**
 - Rust with Tauri 2.0
-- SQLite for data persistence
+- File-based JSON storage in `.ralph-ui/`
 - git2-rs for git operations
 - tokio for async I/O
 
@@ -70,7 +70,7 @@ bun install
 bun run tauri dev
 
 # Run tests
-bun test
+bun run test
 
 # Build for production
 bun run tauri build
@@ -84,7 +84,7 @@ See [QUICK_START.md](./QUICK_START.md) for detailed setup instructions.
 
 - **[Quick Start Guide](./QUICK_START.md)** - Developer setup and getting started
 - **[Project Structure](./PROJECT_STRUCTURE.md)** - File organization and architecture
-- **[Implementation Plan](./IMPLEMENTATION_PLAN.md)** - Historical development roadmap
+- **[CLAUDE.md](./CLAUDE.md)** - Detailed development instructions and commands
 
 ---
 
@@ -124,13 +124,21 @@ Look at @src/main.rs for the entry point
 Files are automatically injected into agent prompts.
 
 ### Progress File Tracking
-Sessions persist progress to `.ralph/progress_{session_id}.txt` for recovery after interruptions. Tracks task state changes with timestamps.
+Sessions persist progress to `.ralph-ui/` directories within each project for recovery after interruptions. Tracks task state changes with timestamps.
 
 ### Graceful Shutdown
 Signal handlers (SIGINT, SIGTERM, SIGHUP) ensure clean shutdown:
 - Stops all running agents
 - Cleans up worktrees
 - Preserves committed branches
+
+### Server Mode
+Ralph UI can run as an HTTP/WebSocket server for browser-based access:
+```bash
+bun run server        # Start server (default port 3420)
+bun run server:dev    # Development mode with faster builds
+```
+See [CLAUDE.md](./CLAUDE.md) for detailed server mode documentation.
 
 ---
 
@@ -151,7 +159,7 @@ Signal handlers (SIGINT, SIGTERM, SIGHUP) ensure clean shutdown:
 │  - Task engine (PRD parsing, state tracking)            │
 │  - Git manager (worktrees, branches, commits)           │
 │  - Agent manager (spawn, monitor, kill)                 │
-│  - Storage layer (SQLite)                               │
+│  - File storage (.ralph-ui/ JSON files)                 │
 ├─────────────────────────────────────────────────────────┤
 │  External Integrations                                  │
 │  - Claude Code CLI, OpenCode CLI                        │

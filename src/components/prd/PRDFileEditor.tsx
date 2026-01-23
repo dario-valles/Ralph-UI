@@ -191,64 +191,75 @@ export function PRDFileEditor() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl py-8">
+    <div className="container mx-auto max-w-6xl px-4 py-4 md:py-8">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <FileText className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-3xl font-bold">{prdFile.title}</h1>
-            <Badge variant="outline" className="gap-1">
+      <div className="mb-6 md:mb-8 space-y-4">
+        {/* Top row: Cancel/Save buttons */}
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/prds')} className="text-muted-foreground">
+            ← Back to PRDs
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/prds')}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Title and badge */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-start gap-2">
+            <Badge variant="outline" className="gap-1 shrink-0">
               <FolderOpen className="h-3 w-3" />
               File PRD
             </Badge>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Last modified: {new Date(prdFile.modifiedAt).toLocaleString()}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {prdFile.filePath}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/prds')}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save
-              </>
+            {prdFile.hasRalphJson && (
+              <Badge variant="secondary" className="shrink-0">Ralph Loop Initialized</Badge>
             )}
-          </Button>
+            {prdFile.hasProgress && (
+              <Badge variant="secondary" className="shrink-0">Has Progress</Badge>
+            )}
+          </div>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold leading-tight break-words">
+            {prdFile.title}
+          </h1>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm text-muted-foreground">
+            <span>Last modified: {new Date(prdFile.modifiedAt).toLocaleString()}</span>
+            <span className="hidden sm:inline">•</span>
+            <span className="text-xs truncate max-w-full" title={prdFile.filePath}>
+              {prdFile.filePath}
+            </span>
+          </div>
+        </div>
+
+        {/* Action buttons row */}
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => navigate(`/prds/chat?prdId=${encodeURIComponent(prdFile.id)}&project=${encodeURIComponent(projectPath)}`)}
           >
             <MessageSquare className="mr-2 h-4 w-4" />
             Continue in Chat
           </Button>
-          <Button onClick={() => setShowExecutionDialog(true)} className="gap-2">
+          <Button size="sm" onClick={() => setShowExecutionDialog(true)} className="gap-2">
             <Play className="h-4 w-4" />
             Execute PRD
           </Button>
         </div>
-      </div>
-
-      {/* Status Badges */}
-      <div className="mb-6 flex gap-2">
-        {prdFile.hasRalphJson && (
-          <Badge variant="secondary">Ralph Loop Initialized</Badge>
-        )}
-        {prdFile.hasProgress && (
-          <Badge variant="secondary">Has Progress</Badge>
-        )}
       </div>
 
       {/* Tabs */}
