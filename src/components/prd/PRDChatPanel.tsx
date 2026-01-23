@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -28,6 +29,7 @@ import {
   AlertTriangle,
   ScrollText,
   ChevronDown,
+  Play,
 } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -38,9 +40,10 @@ import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
 import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
-import { prdChatApi } from '@/lib/tauri-api'
+import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
+import { prdChatApi, prdApi } from '@/lib/tauri-api'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, ChatSession, AgentType } from '@/types'
+import type { PRDTypeValue, ChatSession, AgentType, PRDFile } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { ModelSelector } from '@/components/shared/ModelSelector'
@@ -92,6 +95,9 @@ export function PRDChatPanel() {
   } = usePRDChatPanelState()
 
   const isMobile = useIsMobile()
+
+  // State for PRD execution dialog
+  const [executePrdFile, setExecutePrdFile] = useState<PRDFile | null>(null)
 
   const {
     sessions,
@@ -376,6 +382,28 @@ export function PRDChatPanel() {
     assessQuality()
   }
 
+  // Handle executing the PRD from the chat
+  const handleExecutePrd = async () => {
+    if (!watchedPlanPath || !currentSession?.projectPath) {
+      toast.error('No PRD available', 'Create or export a PRD first before executing.')
+      return
+    }
+
+    // Extract PRD name from the watched plan path
+    // Path format: {projectPath}/.ralph-ui/prds/{prdName}.md
+    const pathParts = watchedPlanPath.split('/')
+    const fileName = pathParts[pathParts.length - 1] // e.g., "my-feature-prd.md"
+    const prdName = fileName.replace('.md', '')
+
+    try {
+      const prdFile = await prdApi.getFile(currentSession.projectPath, prdName)
+      setExecutePrdFile(prdFile)
+    } catch (err) {
+      console.error('Failed to load PRD file:', err)
+      toast.error('Failed to load PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+    }
+  }
+
   const hasMessages = messages.length > 0
   const isDisabled = loading || streaming || !currentSession
 
@@ -522,15 +550,26 @@ export function PRDChatPanel() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   {hasMessages && (
-                    <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
-                      <BarChart3 className="h-4 w-4 mr-2" />
-                      Check Quality
-                      {qualityAssessment && (
-                        <Badge variant="secondary" className="ml-auto text-xs">
-                          {qualityAssessment.overall}%
-                        </Badge>
+                    <>
+                      <DropdownMenuItem onClick={handleRefreshQuality} disabled={loading}>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Check Quality
+                        {qualityAssessment && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {qualityAssessment.overall}%
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+                      {watchedPlanPath && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={handleExecutePrd} disabled={loading}>
+                            <Play className="h-4 w-4 mr-2" />
+                            Execute PRD
+                          </DropdownMenuItem>
+                        </>
                       )}
-                    </DropdownMenuItem>
+                    </>
                   )}
                   {!hasMessages && (
                     <DropdownMenuItem disabled>
@@ -725,6 +764,13 @@ export function PRDChatPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* PRD Execution Dialog */}
+      <PRDFileExecutionDialog
+        file={executePrdFile}
+        open={!!executePrdFile}
+        onOpenChange={(open) => !open && setExecutePrdFile(null)}
+      />
     </div>
   )
 }
