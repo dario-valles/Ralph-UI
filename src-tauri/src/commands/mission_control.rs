@@ -1,216 +1,173 @@
 // Tauri commands for Mission Control dashboard
+// Uses file-based storage for aggregating stats across projects
 
-use crate::database::Database;
-use crate::models::{ActivityEvent, ActivityEventType};
-use crate::utils::{lock_db, ResultExt};
-use std::sync::Mutex;
-use tauri::State;
+use crate::file_storage::agents as agent_storage;
+use crate::file_storage::projects as project_storage;
+use crate::file_storage::sessions as session_storage;
+use crate::models::{ActivityEvent, ActivityEventType, SessionStatus, TaskStatus};
+use std::path::Path;
 
 /// Get activity feed for Mission Control dashboard
 /// Aggregates events from tasks and sessions across all projects
 #[tauri::command]
 pub fn get_activity_feed(
-    db: State<Mutex<Database>>,
     limit: Option<i32>,
-    offset: Option<i32>,
+    _offset: Option<i32>,
 ) -> Result<Vec<ActivityEvent>, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
-    let limit = limit.unwrap_or(50);
-    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(50) as usize;
 
     let mut events: Vec<ActivityEvent> = Vec::new();
 
-    // Get task completion events
-    let mut task_stmt = conn.prepare(
-        "SELECT t.id, t.title, t.status, t.completed_at, t.started_at,
-                s.name as session_name, s.project_path
-         FROM tasks t
-         JOIN sessions s ON t.session_id = s.id
-         WHERE t.completed_at IS NOT NULL OR t.started_at IS NOT NULL
-         ORDER BY COALESCE(t.completed_at, t.started_at) DESC
-         LIMIT ?1 OFFSET ?2"
-    ).with_context("Failed to prepare statement")?;
+    // Get all registered projects
+    let projects = project_storage::get_all_projects().unwrap_or_default();
 
-    let task_events = task_stmt.query_map([limit, offset], |row| {
-        let id: String = row.get(0)?;
-        let title: String = row.get(1)?;
-        let status: String = row.get(2)?;
-        let completed_at: Option<String> = row.get(3)?;
-        let started_at: Option<String> = row.get(4)?;
-        let session_name: String = row.get(5)?;
-        let project_path: String = row.get(6)?;
-
-        Ok((id, title, status, completed_at, started_at, session_name, project_path))
-    }).with_context("Failed to query tasks")?;
-
-    for event_result in task_events {
-        let (id, title, status, completed_at, started_at, session_name, project_path) =
-            event_result.with_context("Failed to read row")?;
-
-        // Extract project name from path
-        let project_name = project_path
-            .split('/')
-            .last()
-            .unwrap_or(&project_path)
-            .to_string();
-
-        // Determine event type and timestamp
-        let (event_type, timestamp_str) = if let Some(completed) = completed_at {
-            let event_type = match status.as_str() {
-                "failed" => ActivityEventType::TaskFailed,
-                _ => ActivityEventType::TaskCompleted,
-            };
-            (event_type, completed)
-        } else if let Some(started) = started_at {
-            (ActivityEventType::TaskStarted, started)
-        } else {
+    for project in projects {
+        let project_path = Path::new(&project.path);
+        if !project_path.exists() {
             continue;
-        };
+        }
 
-        let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
+        // Get sessions for this project
+        let sessions = session_storage::list_sessions(project_path).unwrap_or_default();
 
-        let description = match event_type {
-            ActivityEventType::TaskCompleted => format!("Completed: {}", title),
-            ActivityEventType::TaskStarted => format!("Started: {}", title),
-            ActivityEventType::TaskFailed => format!("Failed: {}", title),
-            _ => title.clone(),
-        };
+        for session in sessions {
+            let project_name = project.name.clone();
 
-        events.push(ActivityEvent {
-            id: format!("task-{}", id),
-            timestamp,
-            event_type,
-            project_path,
-            project_name,
-            session_name,
-            description,
-        });
-    }
+            // Add session start event
+            let event_type = match session.status {
+                SessionStatus::Completed => ActivityEventType::SessionCompleted,
+                _ => ActivityEventType::SessionStarted,
+            };
 
-    // Get session start events
-    let mut session_stmt = conn.prepare(
-        "SELECT id, name, project_path, created_at, status
-         FROM sessions
-         ORDER BY created_at DESC
-         LIMIT ?1 OFFSET ?2"
-    ).with_context("Failed to prepare statement")?;
+            let description = match event_type {
+                ActivityEventType::SessionStarted => format!("Session started: {}", session.name),
+                ActivityEventType::SessionCompleted => {
+                    format!("Session completed: {}", session.name)
+                }
+                _ => session.name.clone(),
+            };
 
-    let session_events = session_stmt.query_map([limit, offset], |row| {
-        let id: String = row.get(0)?;
-        let name: String = row.get(1)?;
-        let project_path: String = row.get(2)?;
-        let created_at: String = row.get(3)?;
-        let status: String = row.get(4)?;
+            events.push(ActivityEvent {
+                id: format!("session-{}", session.id),
+                timestamp: session.created_at,
+                event_type,
+                project_path: session.project_path.clone(),
+                project_name: project_name.clone(),
+                session_name: session.name.clone(),
+                description,
+            });
 
-        Ok((id, name, project_path, created_at, status))
-    }).with_context("Failed to query sessions")?;
+            // Add task events
+            for task in &session.tasks {
+                // Determine event type and timestamp
+                let (event_type, timestamp) = if let Some(completed_at) = task.completed_at {
+                    let event_type = match task.status {
+                        TaskStatus::Failed => ActivityEventType::TaskFailed,
+                        _ => ActivityEventType::TaskCompleted,
+                    };
+                    (event_type, completed_at)
+                } else if let Some(started_at) = task.started_at {
+                    (ActivityEventType::TaskStarted, started_at)
+                } else {
+                    continue;
+                };
 
-    for event_result in session_events {
-        let (id, session_name, project_path, created_at, status) =
-            event_result.with_context("Failed to read row")?;
+                let description = match event_type {
+                    ActivityEventType::TaskCompleted => format!("Completed: {}", task.title),
+                    ActivityEventType::TaskStarted => format!("Started: {}", task.title),
+                    ActivityEventType::TaskFailed => format!("Failed: {}", task.title),
+                    _ => task.title.clone(),
+                };
 
-        let project_name = project_path
-            .split('/')
-            .last()
-            .unwrap_or(&project_path)
-            .to_string();
-
-        let timestamp = chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
-
-        let event_type = match status.as_str() {
-            "completed" => ActivityEventType::SessionCompleted,
-            _ => ActivityEventType::SessionStarted,
-        };
-
-        let description = match event_type {
-            ActivityEventType::SessionStarted => format!("Session started: {}", session_name),
-            ActivityEventType::SessionCompleted => format!("Session completed: {}", session_name),
-            _ => session_name.clone(),
-        };
-
-        events.push(ActivityEvent {
-            id: format!("session-{}", id),
-            timestamp,
-            event_type,
-            project_path,
-            project_name,
-            session_name,
-            description,
-        });
+                events.push(ActivityEvent {
+                    id: format!("task-{}", task.id),
+                    timestamp,
+                    event_type,
+                    project_path: session.project_path.clone(),
+                    project_name: project_name.clone(),
+                    session_name: session.name.clone(),
+                    description,
+                });
+            }
+        }
     }
 
     // Sort by timestamp descending
     events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
     // Apply limit
-    events.truncate(limit as usize);
+    events.truncate(limit);
 
     Ok(events)
 }
 
 /// Get global statistics for Mission Control dashboard
 #[tauri::command]
-pub fn get_global_stats(
-    db: State<Mutex<Database>>,
-) -> Result<GlobalStats, String> {
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
+pub fn get_global_stats() -> Result<GlobalStats, String> {
+    // Get all registered projects
+    let projects = project_storage::get_all_projects().unwrap_or_default();
+    let total_projects = projects.len() as i32;
 
-    // Count active agents
-    let active_agents: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM agents WHERE status != 'idle'",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+    let mut active_agents_count = 0i32;
+    let mut tasks_in_progress = 0i32;
+    let mut tasks_completed_today = 0i32;
+    let mut total_cost_today = 0.0f64;
+    let mut active_projects_count = 0i32;
 
-    // Count tasks in progress
-    let tasks_in_progress: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+    let today = chrono::Utc::now().date_naive();
 
-    // Count tasks completed today
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let tasks_completed_today: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM tasks WHERE status = 'completed' AND date(completed_at) = ?1",
-        [&today],
-        |row| row.get(0)
-    ).unwrap_or(0);
+    for project in projects {
+        let project_path = Path::new(&project.path);
+        if !project_path.exists() {
+            continue;
+        }
 
-    // Total cost today (from agents)
-    let total_cost_today: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(cost), 0) FROM agents",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0.0);
+        // Count active agents for this project
+        let active_agents = agent_storage::get_all_active_agents(project_path).unwrap_or_default();
+        active_agents_count += active_agents.len() as i32;
 
-    // Count active projects (projects with active sessions)
-    let active_projects: i32 = conn.query_row(
-        "SELECT COUNT(DISTINCT project_path) FROM sessions WHERE status = 'active'",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+        // Sum agent costs
+        for agent in &active_agents {
+            total_cost_today += agent.cost;
+        }
 
-    // Total projects
-    let total_projects: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM projects",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+        // Get sessions and count tasks
+        let sessions = session_storage::list_sessions(project_path).unwrap_or_default();
+        let mut project_has_active_session = false;
+
+        for session in sessions {
+            if matches!(session.status, SessionStatus::Active) {
+                project_has_active_session = true;
+            }
+
+            for task in &session.tasks {
+                // Count tasks in progress
+                if matches!(task.status, TaskStatus::InProgress) {
+                    tasks_in_progress += 1;
+                }
+
+                // Count tasks completed today
+                if matches!(task.status, TaskStatus::Completed) {
+                    if let Some(completed_at) = task.completed_at {
+                        if completed_at.date_naive() == today {
+                            tasks_completed_today += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if project_has_active_session {
+            active_projects_count += 1;
+        }
+    }
 
     Ok(GlobalStats {
-        active_agents_count: active_agents,
+        active_agents_count,
         tasks_in_progress,
         tasks_completed_today,
         total_cost_today,
-        active_projects_count: active_projects,
+        active_projects_count,
         total_projects,
     })
 }
@@ -228,17 +185,18 @@ pub struct GlobalStats {
 
 #[cfg(test)]
 mod tests {
-    use crate::database::Database;
+    use super::*;
+    use crate::file_storage::{agents as agent_storage, projects as project_storage, sessions as session_storage};
     use crate::models::{
-        Agent, AgentStatus, AgentType, Session, SessionConfig, SessionStatus, Task, TaskStatus,
+        Agent, AgentStatus, AgentType, Session, SessionConfig, Task,
     };
     use chrono::Utc;
+    use tempfile::TempDir;
     use uuid::Uuid;
 
-    fn create_test_db() -> Database {
-        let db = Database::new(":memory:").unwrap();
-        db.init().unwrap();
-        db
+    fn setup_test_project(temp_dir: &TempDir) -> String {
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
+        temp_dir.path().to_string_lossy().to_string()
     }
 
     fn create_test_session(id: &str, name: &str, project_path: &str, status: SessionStatus) -> Session {
@@ -310,255 +268,152 @@ mod tests {
     }
 
     // =========================================================================
-    // get_global_stats tests
+    // get_global_stats tests (using file storage)
     // =========================================================================
 
     #[test]
-    fn test_get_global_stats_empty_db() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+    fn test_get_global_stats_empty_project() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Query stats on empty database
-        let active_agents: i32 = conn
-            .query_row("SELECT COUNT(*) FROM agents WHERE status != 'idle'", [], |row| row.get(0))
-            .unwrap_or(0);
-        let tasks_in_progress: i32 = conn
-            .query_row("SELECT COUNT(*) FROM tasks WHERE status = 'in_progress'", [], |row| row.get(0))
-            .unwrap_or(0);
-        let total_projects: i32 = conn
-            .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
-            .unwrap_or(0);
+        // Empty project should have no active agents or tasks
+        let active_agents = agent_storage::get_all_active_agents(path).unwrap();
+        let sessions = session_storage::list_sessions(path).unwrap();
 
-        assert_eq!(active_agents, 0);
-        assert_eq!(tasks_in_progress, 0);
-        assert_eq!(total_projects, 0);
+        assert_eq!(active_agents.len(), 0);
+        assert_eq!(sessions.len(), 0);
     }
 
     #[test]
     fn test_get_global_stats_with_active_agents() {
-        let db = create_test_db();
-        let conn = db.get_connection();
-
-        // Create session and task
-        let session = create_test_session("session-1", "Test Session", "/tmp/project", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session).unwrap();
-
-        let task = create_test_task("task-1", "Test Task", TaskStatus::InProgress);
-        crate::database::tasks::create_task(conn, "session-1", &task).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
         // Create agents with different statuses
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Thinking, 0.05);
         let agent2 = create_test_agent("session-1", "task-1", AgentStatus::Implementing, 0.10);
         let agent3 = create_test_agent("session-1", "task-1", AgentStatus::Idle, 0.02);
-        db.create_agent(&agent1).unwrap();
-        db.create_agent(&agent2).unwrap();
-        db.create_agent(&agent3).unwrap();
+        agent_storage::save_agent_state(path, &agent1).unwrap();
+        agent_storage::save_agent_state(path, &agent2).unwrap();
+        agent_storage::save_agent_state(path, &agent3).unwrap();
 
-        // Query active agents (non-idle)
-        let active_agents: i32 = conn
-            .query_row("SELECT COUNT(*) FROM agents WHERE status != 'idle'", [], |row| row.get(0))
-            .unwrap();
+        // Get active agents (non-idle)
+        let active_agents = agent_storage::get_all_active_agents(path).unwrap();
+        assert_eq!(active_agents.len(), 2); // agent1 and agent2 are active
 
-        assert_eq!(active_agents, 2); // agent1 and agent2 are active
-
-        // Query total cost
-        let total_cost: f64 = conn
-            .query_row("SELECT COALESCE(SUM(cost), 0) FROM agents", [], |row| row.get(0))
-            .unwrap();
-
-        assert!((total_cost - 0.17).abs() < 0.001); // 0.05 + 0.10 + 0.02
+        // Sum total cost
+        let total_cost: f64 = active_agents.iter().map(|a| a.cost).sum();
+        assert!((total_cost - 0.15).abs() < 0.001); // 0.05 + 0.10 (idle agent not counted)
     }
 
     #[test]
     fn test_get_global_stats_with_tasks_in_progress() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Create session
-        let session = create_test_session("session-1", "Test Session", "/tmp/project", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session).unwrap();
+        // Create session with tasks
+        let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
+        session.tasks = vec![
+            create_test_task("task-1", "Task 1", TaskStatus::InProgress),
+            create_test_task("task-2", "Task 2", TaskStatus::InProgress),
+            create_test_task("task-3", "Task 3", TaskStatus::Completed),
+            create_test_task("task-4", "Task 4", TaskStatus::Pending),
+        ];
+        session_storage::save_session(path, &session).unwrap();
 
-        // Create tasks with different statuses
-        let task1 = create_test_task("task-1", "Task 1", TaskStatus::InProgress);
-        let task2 = create_test_task("task-2", "Task 2", TaskStatus::InProgress);
-        let task3 = create_test_task("task-3", "Task 3", TaskStatus::Completed);
-        let task4 = create_test_task("task-4", "Task 4", TaskStatus::Pending);
-        crate::database::tasks::create_task(conn, "session-1", &task1).unwrap();
-        crate::database::tasks::create_task(conn, "session-1", &task2).unwrap();
-        crate::database::tasks::create_task(conn, "session-1", &task3).unwrap();
-        crate::database::tasks::create_task(conn, "session-1", &task4).unwrap();
-
-        // Query tasks in progress
-        let tasks_in_progress: i32 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM tasks WHERE status = '\"in_progress\"'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        // Count tasks in progress
+        let loaded_session = session_storage::read_session(path, "session-1").unwrap();
+        let tasks_in_progress = loaded_session
+            .tasks
+            .iter()
+            .filter(|t| matches!(t.status, TaskStatus::InProgress))
+            .count();
 
         assert_eq!(tasks_in_progress, 2);
     }
 
     #[test]
     fn test_get_global_stats_active_projects() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Create sessions for different projects
-        let session1 = create_test_session("session-1", "Session 1", "/tmp/project1", SessionStatus::Active);
-        let session2 = create_test_session("session-2", "Session 2", "/tmp/project2", SessionStatus::Active);
-        let session3 = create_test_session("session-3", "Session 3", "/tmp/project3", SessionStatus::Paused);
-        let session4 = create_test_session("session-4", "Session 4", "/tmp/project1", SessionStatus::Active); // Same project as session1
+        // Create sessions with different statuses
+        let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
+        let session2 = create_test_session("session-2", "Session 2", &project_path, SessionStatus::Paused);
 
-        crate::database::sessions::create_session(conn, &session1).unwrap();
-        crate::database::sessions::create_session(conn, &session2).unwrap();
-        crate::database::sessions::create_session(conn, &session3).unwrap();
-        crate::database::sessions::create_session(conn, &session4).unwrap();
+        session_storage::save_session(path, &session1).unwrap();
+        session_storage::save_session(path, &session2).unwrap();
 
-        // Query active projects (distinct project paths with active sessions)
-        // Note: status is stored as JSON string, so 'active' becomes '"active"'
-        let active_projects: i32 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT project_path) FROM sessions WHERE status = '\"active\"'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        // Count active sessions
+        let sessions = session_storage::list_sessions(path).unwrap();
+        let active_sessions = sessions
+            .iter()
+            .filter(|s| matches!(s.status, SessionStatus::Active))
+            .count();
 
-        assert_eq!(active_projects, 2); // project1 and project2 are active
+        assert_eq!(active_sessions, 1);
     }
 
     // =========================================================================
-    // get_activity_feed tests
+    // get_activity_feed tests (using file storage)
     // =========================================================================
 
     #[test]
-    fn test_get_activity_feed_empty_db() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+    fn test_get_activity_feed_empty_project() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Query tasks with timestamps
-        let mut stmt = conn
-            .prepare(
-                "SELECT COUNT(*) FROM tasks WHERE completed_at IS NOT NULL OR started_at IS NOT NULL",
-            )
-            .unwrap();
-        let count: i32 = stmt.query_row([], |row| row.get(0)).unwrap();
-
-        assert_eq!(count, 0);
+        // Empty project should have no events
+        let sessions = session_storage::list_sessions(path).unwrap();
+        assert!(sessions.is_empty());
     }
 
     #[test]
     fn test_get_activity_feed_with_task_events() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Create session
-        let session = create_test_session("session-1", "Test Session", "/tmp/project", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session).unwrap();
+        // Create session with tasks
+        let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
+        session.tasks = vec![
+            create_test_task("task-1", "Completed Task", TaskStatus::Completed),
+            create_test_task("task-2", "In Progress Task", TaskStatus::InProgress),
+            create_test_task("task-3", "Failed Task", TaskStatus::Failed),
+        ];
+        session_storage::save_session(path, &session).unwrap();
 
-        // Create tasks with different statuses
-        let task1 = create_test_task("task-1", "Completed Task", TaskStatus::Completed);
-        let task2 = create_test_task("task-2", "In Progress Task", TaskStatus::InProgress);
-        let task3 = create_test_task("task-3", "Failed Task", TaskStatus::Failed);
-        crate::database::tasks::create_task(conn, "session-1", &task1).unwrap();
-        crate::database::tasks::create_task(conn, "session-1", &task2).unwrap();
-        crate::database::tasks::create_task(conn, "session-1", &task3).unwrap();
+        // Count task events (tasks with timestamps)
+        let loaded_session = session_storage::read_session(path, "session-1").unwrap();
+        let task_events = loaded_session
+            .tasks
+            .iter()
+            .filter(|t| t.completed_at.is_some() || t.started_at.is_some())
+            .count();
 
-        // Query task events
-        let mut stmt = conn
-            .prepare(
-                "SELECT t.id, t.title, t.status, t.completed_at, t.started_at, s.name, s.project_path
-                 FROM tasks t
-                 JOIN sessions s ON t.session_id = s.id
-                 WHERE t.completed_at IS NOT NULL OR t.started_at IS NOT NULL
-                 ORDER BY COALESCE(t.completed_at, t.started_at) DESC",
-            )
-            .unwrap();
-
-        let events: Vec<(String, String, String)> = stmt
-            .query_map([], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })
-            .unwrap()
-            .filter_map(|r| r.ok())
-            .collect();
-
-        assert_eq!(events.len(), 3);
+        assert_eq!(task_events, 3);
     }
 
     #[test]
     fn test_get_activity_feed_with_session_events() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
         // Create multiple sessions
-        let session1 = create_test_session("session-1", "Session 1", "/tmp/project1", SessionStatus::Active);
-        let session2 = create_test_session("session-2", "Session 2", "/tmp/project2", SessionStatus::Completed);
-        crate::database::sessions::create_session(conn, &session1).unwrap();
-        crate::database::sessions::create_session(conn, &session2).unwrap();
+        let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
+        let session2 = create_test_session("session-2", "Session 2", &project_path, SessionStatus::Completed);
+        session_storage::save_session(path, &session1).unwrap();
+        session_storage::save_session(path, &session2).unwrap();
 
-        // Query session events
-        let mut stmt = conn
-            .prepare("SELECT id, name, project_path, created_at, status FROM sessions ORDER BY created_at DESC")
-            .unwrap();
-
-        let sessions: Vec<(String, String, String)> = stmt
-            .query_map([], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(4)?))
-            })
-            .unwrap()
-            .filter_map(|r| r.ok())
-            .collect();
-
+        // Count sessions
+        let sessions = session_storage::list_sessions(path).unwrap();
         assert_eq!(sessions.len(), 2);
-    }
-
-    #[test]
-    fn test_get_activity_feed_limit_and_offset() {
-        let db = create_test_db();
-        let conn = db.get_connection();
-
-        // Create session
-        let session = create_test_session("session-1", "Test Session", "/tmp/project", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session).unwrap();
-
-        // Create many tasks
-        for i in 0..10 {
-            let task = create_test_task(&format!("task-{}", i), &format!("Task {}", i), TaskStatus::Completed);
-            crate::database::tasks::create_task(conn, "session-1", &task).unwrap();
-        }
-
-        // Query with limit
-        let mut stmt = conn
-            .prepare(
-                "SELECT id FROM tasks WHERE completed_at IS NOT NULL LIMIT 5",
-            )
-            .unwrap();
-
-        let limited: Vec<String> = stmt
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .filter_map(|r| r.ok())
-            .collect();
-
-        assert_eq!(limited.len(), 5);
-
-        // Query with offset
-        let mut stmt2 = conn
-            .prepare(
-                "SELECT id FROM tasks WHERE completed_at IS NOT NULL LIMIT 5 OFFSET 5",
-            )
-            .unwrap();
-
-        let offset: Vec<String> = stmt2
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .filter_map(|r| r.ok())
-            .collect();
-
-        assert_eq!(offset.len(), 5);
     }
 
     #[test]
@@ -578,36 +433,25 @@ mod tests {
     }
 
     // =========================================================================
-    // get_all_active_agents tests (from agents.rs but relevant to Mission Control)
+    // get_all_active_agents tests (using file storage)
     // =========================================================================
 
     #[test]
-    fn test_get_all_active_agents_across_sessions() {
-        let db = create_test_db();
-        let conn = db.get_connection();
+    fn test_get_all_active_agents_in_project() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        // Create multiple sessions
-        let session1 = create_test_session("session-1", "Session 1", "/tmp/project1", SessionStatus::Active);
-        let session2 = create_test_session("session-2", "Session 2", "/tmp/project2", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session1).unwrap();
-        crate::database::sessions::create_session(conn, &session2).unwrap();
-
-        // Create tasks for each session
-        let task1 = create_test_task("task-1", "Task 1", TaskStatus::InProgress);
-        let task2 = create_test_task("task-2", "Task 2", TaskStatus::InProgress);
-        crate::database::tasks::create_task(conn, "session-1", &task1).unwrap();
-        crate::database::tasks::create_task(conn, "session-2", &task2).unwrap();
-
-        // Create agents across sessions
+        // Create agents with different statuses
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Thinking, 0.05);
         let agent2 = create_test_agent("session-2", "task-2", AgentStatus::Implementing, 0.10);
         let agent3 = create_test_agent("session-1", "task-1", AgentStatus::Idle, 0.02);
-        db.create_agent(&agent1).unwrap();
-        db.create_agent(&agent2).unwrap();
-        db.create_agent(&agent3).unwrap();
+        agent_storage::save_agent_state(path, &agent1).unwrap();
+        agent_storage::save_agent_state(path, &agent2).unwrap();
+        agent_storage::save_agent_state(path, &agent3).unwrap();
 
         // Get all active agents
-        let active_agents = db.get_all_active_agents().unwrap();
+        let active_agents = agent_storage::get_all_active_agents(path).unwrap();
 
         assert_eq!(active_agents.len(), 2);
 
@@ -619,31 +463,27 @@ mod tests {
 
     #[test]
     fn test_get_all_active_agents_empty() {
-        let db = create_test_db();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
-        let active_agents = db.get_all_active_agents().unwrap();
+        let active_agents = agent_storage::get_all_active_agents(path).unwrap();
         assert_eq!(active_agents.len(), 0);
     }
 
     #[test]
     fn test_get_all_active_agents_all_idle() {
-        let db = create_test_db();
-        let conn = db.get_connection();
-
-        // Create session and task
-        let session = create_test_session("session-1", "Session", "/tmp/project", SessionStatus::Active);
-        crate::database::sessions::create_session(conn, &session).unwrap();
-
-        let task = create_test_task("task-1", "Task", TaskStatus::Pending);
-        crate::database::tasks::create_task(conn, "session-1", &task).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = setup_test_project(&temp_dir);
+        let path = Path::new(&project_path);
 
         // Create only idle agents
         let agent1 = create_test_agent("session-1", "task-1", AgentStatus::Idle, 0.0);
         let agent2 = create_test_agent("session-1", "task-1", AgentStatus::Idle, 0.0);
-        db.create_agent(&agent1).unwrap();
-        db.create_agent(&agent2).unwrap();
+        agent_storage::save_agent_state(path, &agent1).unwrap();
+        agent_storage::save_agent_state(path, &agent2).unwrap();
 
-        let active_agents = db.get_all_active_agents().unwrap();
+        let active_agents = agent_storage::get_all_active_agents(path).unwrap();
         assert_eq!(active_agents.len(), 0);
     }
 }

@@ -545,7 +545,7 @@ fn perform_auto_recovery(db: &database::Database) {
         }
 
         // Perform stale session recovery
-        match session::auto_recover_on_startup(conn, path) {
+        match session::auto_recover_on_startup(path) {
             Ok(results) => {
                 for result in &results {
                     log::info!(

@@ -3,7 +3,7 @@
 //! These commands control the external Ralph loop that spawns fresh agent instances.
 
 use crate::commands::ConfigState;
-use crate::database::Database;
+use crate::database::Database;  // Still needed for legacy PRD conversion
 use crate::models::AgentType;
 use crate::ralph_loop::{
     ConfigManager, ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
@@ -480,7 +480,6 @@ pub async fn start_ralph_loop(
     request: StartRalphLoopRequest,
     ralph_state: State<'_, RalphLoopManagerState>,
     agent_manager_state: State<'_, crate::AgentManagerState>,
-    db: State<'_, Mutex<Database>>,
     config_state: State<'_, ConfigState>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
@@ -693,15 +692,14 @@ pub async fn start_ralph_loop(
 
     orchestrator.initialize(&prd)?;
 
-    // Save initial execution state for crash recovery
+    // Save initial execution state for crash recovery (file-based)
     {
-        let db_guard = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
         let initial_state = ExecutionStateSnapshot {
             execution_id: execution_id.clone(),
             state: serde_json::to_string(&RalphLoopExecutionState::Idle).unwrap_or_default(),
             last_heartbeat: chrono::Utc::now().to_rfc3339(),
         };
-        ralph_iterations::save_execution_state(db_guard.get_connection(), &initial_state)
+        iteration_storage::save_execution_state(&project_path_buf, &initial_state)
             .map_err(|e| format!("Failed to save initial execution state: {}", e))?;
     }
 
@@ -717,24 +715,15 @@ pub async fn start_ralph_loop(
     // This ensures PTYs are registered in the same place the frontend queries
     let agent_manager_arc = agent_manager_state.clone_manager();
 
-    // Get database path for spawned tasks
-    // Note: We can't pass the State directly, so we get the path and create new connections
-    let db_path: Option<PathBuf> = {
-        let db_guard = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-        // Get the database file path from the application data directory
-        // We'll use a shared connection approach via the database path
-        db_guard.get_connection().path().map(PathBuf::from)
-    };
-
     // Spawn the loop in background
     log::info!("[RalphLoop] Spawning background task for execution {}", execution_id);
 
     // Clone for heartbeat task
     let execution_id_for_heartbeat = execution_id.clone();
-    let db_path_for_heartbeat = db_path.clone();
+    let project_path_for_heartbeat = project_path_buf.clone();
     let orchestrator_arc_for_heartbeat = orchestrator_arc.clone();
 
-    // Spawn heartbeat task
+    // Spawn heartbeat task (uses file storage)
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
 
@@ -755,28 +744,19 @@ pub async fn start_ralph_loop(
                 break;
             }
 
-            // Update heartbeat in database
-            if let Some(ref path) = db_path_for_heartbeat {
-                match rusqlite::Connection::open(path) {
-                    Ok(conn) => {
-                        let heartbeat = chrono::Utc::now().to_rfc3339();
-                        if let Err(e) = ralph_iterations::update_heartbeat(&conn, &execution_id_for_heartbeat, &heartbeat) {
-                            log::warn!("[Heartbeat] Failed to update heartbeat for {}: {}", execution_id_for_heartbeat, e);
-                        } else {
-                            log::debug!("[Heartbeat] Updated heartbeat for {}", execution_id_for_heartbeat);
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("[Heartbeat] Failed to open database for heartbeat update: {}", e);
-                    }
-                }
+            // Update heartbeat in file storage
+            let heartbeat = chrono::Utc::now().to_rfc3339();
+            if let Err(e) = iteration_storage::update_heartbeat(&project_path_for_heartbeat, &execution_id_for_heartbeat, &heartbeat) {
+                log::warn!("[Heartbeat] Failed to update heartbeat for {}: {}", execution_id_for_heartbeat, e);
+            } else {
+                log::debug!("[Heartbeat] Updated heartbeat for {}", execution_id_for_heartbeat);
             }
         }
     });
 
     // Clone for main loop task
     let execution_id_for_loop = execution_id.clone();
-    let db_path_for_loop = db_path.clone();
+    let project_path_for_loop = project_path_buf.clone();
     let prd_name_for_loop = request.prd_name.clone();
     let app_handle_for_loop = app_handle.clone();
 
@@ -792,18 +772,9 @@ pub async fn start_ralph_loop(
         // We lock/unlock for each operation within run() rather than holding lock
         let result = orchestrator.run(agent_manager_arc).await;
 
-        // Clean up execution state from database
-        if let Some(ref path) = db_path_for_loop {
-            match rusqlite::Connection::open(path) {
-                Ok(conn) => {
-                    if let Err(e) = ralph_iterations::delete_execution_state(&conn, &execution_id_for_loop) {
-                        log::warn!("[RalphLoop] Failed to delete execution state for {}: {}", execution_id_for_loop, e);
-                    }
-                }
-                Err(e) => {
-                    log::error!("[RalphLoop] Failed to open database for cleanup: {}", e);
-                }
-            }
+        // Clean up execution state from file storage
+        if let Err(e) = iteration_storage::delete_execution_state(&project_path_for_loop, &execution_id_for_loop) {
+            log::warn!("[RalphLoop] Failed to delete execution state for {}: {}", execution_id_for_loop, e);
         }
 
         match result {
@@ -1611,42 +1582,41 @@ pub fn update_ralph_config(
 // Iteration History Commands
 // ============================================================================
 
-use crate::database::ralph_iterations::{
-    self, IterationStats,
-};
+use crate::file_storage::iterations as iteration_storage;
+use crate::file_storage::iterations::IterationStats;
 use crate::ralph_loop::{ExecutionStateSnapshot, IterationOutcome, IterationRecord};
 
 /// Get iteration history for an execution
 #[tauri::command]
 pub fn get_ralph_iteration_history(
+    project_path: String,
     execution_id: String,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<IterationRecord>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    ralph_iterations::get_iterations_for_execution(db.get_connection(), &execution_id)
+    let path = std::path::Path::new(&project_path);
+    iteration_storage::get_iterations_for_execution(path, &execution_id)
         .map_err(|e| format!("Failed to get iteration history: {}", e))
 }
 
 /// Get iteration statistics for an execution
 #[tauri::command]
 pub fn get_ralph_iteration_stats(
+    project_path: String,
     execution_id: String,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<IterationStats, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    ralph_iterations::get_execution_stats(db.get_connection(), &execution_id)
+    let path = std::path::Path::new(&project_path);
+    iteration_storage::get_execution_stats(path, &execution_id)
         .map_err(|e| format!("Failed to get iteration stats: {}", e))
 }
 
 /// Get all iteration history with optional filters
 #[tauri::command]
 pub fn get_all_ralph_iterations(
+    project_path: String,
     execution_id: Option<String>,
     outcome_filter: Option<String>,
     limit: Option<u32>,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<IterationRecord>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
 
     let outcome = outcome_filter.and_then(|s| match s.as_str() {
         "success" => Some(IterationOutcome::Success),
@@ -1656,37 +1626,30 @@ pub fn get_all_ralph_iterations(
         _ => None,
     });
 
-    ralph_iterations::get_iteration_history(
-        db.get_connection(),
-        execution_id.as_deref(),
-        outcome,
-        limit,
-    )
-    .map_err(|e| format!("Failed to get iteration history: {}", e))
+    iteration_storage::get_iteration_history(path, execution_id.as_deref(), outcome, limit)
+        .map_err(|e| format!("Failed to get iteration history: {}", e))
 }
 
 /// Save an iteration record (used by orchestrator)
 #[tauri::command]
-pub fn save_ralph_iteration(
-    record: IterationRecord,
-    db: State<'_, Mutex<Database>>,
-) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    ralph_iterations::insert_iteration(db.get_connection(), &record)
+pub fn save_ralph_iteration(project_path: String, record: IterationRecord) -> Result<(), String> {
+    let path = std::path::Path::new(&project_path);
+    iteration_storage::insert_iteration(path, &record)
         .map_err(|e| format!("Failed to save iteration: {}", e))
 }
 
 /// Update an iteration record (used by orchestrator on completion)
 #[tauri::command]
 pub fn update_ralph_iteration(
+    project_path: String,
+    execution_id: String,
     id: String,
     outcome: String,
     duration_secs: f64,
     completed_at: String,
     error_message: Option<String>,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
 
     let outcome_enum = match outcome.as_str() {
         "success" => IterationOutcome::Success,
@@ -1696,8 +1659,9 @@ pub fn update_ralph_iteration(
         _ => return Err(format!("Invalid outcome: {}", outcome)),
     };
 
-    ralph_iterations::update_iteration(
-        db.get_connection(),
+    iteration_storage::update_iteration(
+        path,
+        &execution_id,
         &id,
         outcome_enum,
         duration_secs,
@@ -1712,23 +1676,20 @@ pub fn update_ralph_iteration(
 /// Save execution state snapshot (for heartbeat/crash recovery)
 #[tauri::command]
 pub fn save_ralph_execution_state(
+    project_path: String,
     snapshot: ExecutionStateSnapshot,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    ralph_iterations::save_execution_state(db.get_connection(), &snapshot)
+    let path = std::path::Path::new(&project_path);
+    iteration_storage::save_execution_state(path, &snapshot)
         .map_err(|e| format!("Failed to save execution state: {}", e))
 }
 
 /// Update heartbeat for an execution
 #[tauri::command]
-pub fn update_ralph_heartbeat(
-    execution_id: String,
-    db: State<'_, Mutex<Database>>,
-) -> Result<(), String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+pub fn update_ralph_heartbeat(project_path: String, execution_id: String) -> Result<(), String> {
+    let path = std::path::Path::new(&project_path);
     let heartbeat = chrono::Utc::now().to_rfc3339();
-    ralph_iterations::update_heartbeat(db.get_connection(), &execution_id, &heartbeat)
+    iteration_storage::update_heartbeat(path, &execution_id, &heartbeat)
         .map_err(|e| format!("Failed to update heartbeat: {}", e))?;
     Ok(())
 }
@@ -1736,44 +1697,40 @@ pub fn update_ralph_heartbeat(
 /// Get execution state snapshot
 #[tauri::command]
 pub fn get_ralph_execution_state(
+    project_path: String,
     execution_id: String,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<Option<ExecutionStateSnapshot>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    ralph_iterations::get_execution_state(db.get_connection(), &execution_id)
+    let path = std::path::Path::new(&project_path);
+    iteration_storage::get_execution_state(path, &execution_id)
         .map_err(|e| format!("Failed to get execution state: {}", e))
 }
 
 /// Check for stale executions (crash recovery)
 #[tauri::command]
 pub fn check_stale_ralph_executions(
+    project_path: String,
     threshold_secs: Option<i64>,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<Vec<ExecutionStateSnapshot>, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
     let threshold = threshold_secs.unwrap_or(120); // Default 2 minutes
-    ralph_iterations::get_stale_executions(db.get_connection(), threshold)
+    iteration_storage::get_stale_executions(path, threshold)
         .map_err(|e| format!("Failed to check stale executions: {}", e))
 }
 
 /// Mark stale iterations as interrupted (crash recovery)
 #[tauri::command]
 pub fn recover_stale_ralph_iterations(
+    project_path: String,
     execution_id: String,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<u32, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
     let completed_at = chrono::Utc::now().to_rfc3339();
 
-    let count = ralph_iterations::mark_interrupted_iterations(
-        db.get_connection(),
-        &execution_id,
-        &completed_at,
-    )
-    .map_err(|e| format!("Failed to recover iterations: {}", e))?;
+    let count = iteration_storage::mark_interrupted_iterations(path, &execution_id, &completed_at)
+        .map_err(|e| format!("Failed to recover iterations: {}", e))?;
 
     // Clean up execution state
-    ralph_iterations::delete_execution_state(db.get_connection(), &execution_id)
+    iteration_storage::delete_execution_state(path, &execution_id)
         .map_err(|e| format!("Failed to delete execution state: {}", e))?;
 
     Ok(count as u32)
@@ -1782,12 +1739,12 @@ pub fn recover_stale_ralph_iterations(
 /// Delete iteration history for an execution (cleanup)
 #[tauri::command]
 pub fn delete_ralph_iteration_history(
+    project_path: String,
     execution_id: String,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<u32, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
 
-    let count = ralph_iterations::delete_iterations_for_execution(db.get_connection(), &execution_id)
+    let count = iteration_storage::delete_iterations_for_execution(path, &execution_id)
         .map_err(|e| format!("Failed to delete iterations: {}", e))?;
 
     Ok(count as u32)
@@ -1812,23 +1769,22 @@ pub struct RalphLoopSnapshot {
 /// - Execution metrics (iterations, cost, tokens)
 /// - Current agent ID (for terminal connection)
 /// - Worktree path (for file operations)
-/// - Iteration history (from database)
+/// - Iteration history (from file storage)
 #[tauri::command]
 pub async fn get_ralph_loop_snapshot(
+    project_path: String,
     execution_id: String,
     ralph_state: State<'_, RalphLoopManagerState>,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<RalphLoopSnapshot, String> {
+    let path = std::path::Path::new(&project_path);
+
     // Get in-memory snapshot
     let snapshot = ralph_state.get_snapshot(&execution_id);
-    
-    // Get iteration history from database
-    let iteration_history = {
-        let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
-        ralph_iterations::get_iterations_for_execution(db.get_connection(), &execution_id)
-            .unwrap_or_default()
-    };
-    
+
+    // Get iteration history from file storage
+    let iteration_history =
+        iteration_storage::get_iterations_for_execution(path, &execution_id).unwrap_or_default();
+
     if let Some(snap) = snapshot {
         Ok(RalphLoopSnapshot {
             state: snap.state,
@@ -1840,11 +1796,13 @@ pub async fn get_ralph_loop_snapshot(
     } else {
         // Check if execution exists at all
         let exists = {
-            let executions = ralph_state.executions.lock()
+            let executions = ralph_state
+                .executions
+                .lock()
                 .map_err(|e| format!("Executions lock error: {}", e))?;
             executions.contains_key(&execution_id)
         };
-        
+
         if exists {
             // Execution exists but no snapshot yet
             Ok(RalphLoopSnapshot {
@@ -1861,20 +1819,49 @@ pub async fn get_ralph_loop_snapshot(
 }
 
 /// Cleanup old iteration history records (maintenance)
-/// Deletes iterations older than the specified number of days
+/// File-based iterations are stored per-execution, so this removes old execution files
 #[tauri::command]
 pub fn cleanup_ralph_iteration_history(
+    project_path: String,
     days_to_keep: Option<i64>,
-    db: State<'_, Mutex<Database>>,
 ) -> Result<u32, String> {
-    let db = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let path = std::path::Path::new(&project_path);
     let days = days_to_keep.unwrap_or(30); // Default: keep 30 days
+    let threshold_time = chrono::Utc::now() - chrono::Duration::days(days);
 
-    let count = ralph_iterations::cleanup_old_iterations(db.get_connection(), days)
-        .map_err(|e| format!("Failed to cleanup iterations: {}", e))?;
+    let iterations_dir = path.join(".ralph-ui").join("iterations");
+    if !iterations_dir.exists() {
+        return Ok(0);
+    }
 
-    log::info!("[RalphLoop] Cleaned up {} old iteration records (older than {} days)", count, days);
-    Ok(count as u32)
+    let mut count = 0u32;
+    if let Ok(entries) = std::fs::read_dir(&iterations_dir) {
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if file_path.extension().map_or(true, |ext| ext != "json") {
+                continue;
+            }
+
+            // Check file modification time
+            if let Ok(metadata) = file_path.metadata() {
+                if let Ok(modified) = metadata.modified() {
+                    let modified_time: chrono::DateTime<chrono::Utc> = modified.into();
+                    if modified_time < threshold_time {
+                        if std::fs::remove_file(&file_path).is_ok() {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!(
+        "[RalphLoop] Cleaned up {} old iteration files (older than {} days)",
+        count,
+        days
+    );
+    Ok(count)
 }
 
 // ============================================================================

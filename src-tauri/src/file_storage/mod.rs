@@ -22,6 +22,7 @@ pub mod agents;
 pub mod chat;
 pub mod chat_ops;
 pub mod index;
+pub mod iterations;
 pub mod projects;
 pub mod sessions;
 

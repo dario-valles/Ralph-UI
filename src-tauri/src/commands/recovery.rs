@@ -1,15 +1,14 @@
 // Recovery Tauri commands
+// Uses file-based storage for session data
 
-use crate::database::Database;
 use crate::session::{
-    lock::{find_stale_locks, remove_stale_lock, SessionLock, LockInfo},
+    lock::{find_stale_locks, remove_stale_lock, LockInfo, SessionLock},
     recovery::SessionRecovery,
 };
-use crate::utils::{lock_db, ResultExt};
+use crate::utils::ResultExt;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tauri::State;
 
 /// Stale session info for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,23 +58,20 @@ pub async fn check_stale_sessions(
 pub async fn recover_stale_session(
     project_path: String,
     session_id: String,
-    db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<RecoveryResult, String> {
     let path = Path::new(&project_path);
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
     let recovery = SessionRecovery::new(path);
 
-    match recovery.recover_session(conn, &session_id) {
-        Ok(result) => {
-            Ok(RecoveryResult {
-                session_id: result.session_id,
-                tasks_unassigned: result.tasks_unassigned,
-                success: true,
-                message: format!("Recovered session, unassigned {} tasks", result.tasks_unassigned),
-            })
-        }
+    match recovery.recover_session(&session_id) {
+        Ok(result) => Ok(RecoveryResult {
+            session_id: result.session_id,
+            tasks_unassigned: result.tasks_unassigned,
+            success: true,
+            message: format!(
+                "Recovered session, unassigned {} tasks",
+                result.tasks_unassigned
+            ),
+        }),
         Err(e) => Ok(RecoveryResult {
             session_id,
             tasks_unassigned: 0,
@@ -89,20 +85,17 @@ pub async fn recover_stale_session(
 #[tauri::command]
 pub async fn recover_all_stale_sessions(
     project_path: String,
-    db: State<'_, std::sync::Mutex<Database>>,
 ) -> Result<Vec<RecoveryResult>, String> {
     let path = Path::new(&project_path);
-    let db = lock_db(&db)?;
-    let conn = db.get_connection();
-
     let recovery = SessionRecovery::new(path);
-    let stale_sessions = recovery.detect_stale_sessions(conn)
+    let stale_sessions = recovery
+        .detect_stale_sessions()
         .with_context("Failed to detect stale sessions")?;
 
     let mut results = Vec::new();
 
     for crashed in stale_sessions {
-        match recovery.recover_session(conn, &crashed.session_id) {
+        match recovery.recover_session(&crashed.session_id) {
             Ok(result) => {
                 results.push(RecoveryResult {
                     session_id: result.session_id,
