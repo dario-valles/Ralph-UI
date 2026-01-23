@@ -633,6 +633,29 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        // US-4.1: Priority-Based Assignment - Manual Override
+        "manual_assign_ralph_story" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::ManualAssignStoryInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::manual_assign_ralph_story(
+                project_path,
+                prd_name,
+                input
+            ))
+        }
+
+        "release_ralph_story_assignment" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story_id: String = get_arg(&args, "storyId")?;
+            route_sync!(commands::ralph_loop::release_ralph_story_assignment(
+                project_path,
+                prd_name,
+                story_id
+            ))
+        }
+
         // US-3.3: Manual Learning Entry
         "get_ralph_learnings" => {
             let project_path: String = get_arg(&args, "projectPath")?;

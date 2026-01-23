@@ -430,6 +430,76 @@ pub fn get_ralph_files_in_use(project_path: String, prd_name: String) -> Result<
 }
 
 // =============================================================================
+// US-4.1: Priority-Based Assignment - Manual Override Commands
+// =============================================================================
+
+/// Input for manually assigning a story to an agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualAssignStoryInput {
+    /// Agent identifier
+    pub agent_id: String,
+    /// Agent type (claude, opencode, cursor, codex)
+    pub agent_type: String,
+    /// Story ID to assign
+    pub story_id: String,
+    /// If true, releases any existing assignment and reassigns
+    #[serde(default)]
+    pub force: bool,
+    /// Optional estimated files for conflict detection
+    pub estimated_files: Option<Vec<String>>,
+}
+
+/// Manually assign a story to an agent (US-4.1: Priority-Based Assignment)
+///
+/// This provides a manual override for exceptional cases where a specific
+/// story needs to be assigned regardless of priority order. Use cases include:
+/// - Debugging a specific story issue
+/// - Prioritizing urgent work that bypasses normal priority
+/// - Reassigning work after an agent failure
+///
+/// If the story is already assigned and `force` is false, returns an error.
+/// If `force` is true, releases the existing assignment first.
+pub fn manual_assign_ralph_story(
+    project_path: String,
+    prd_name: String,
+    input: ManualAssignStoryInput,
+) -> Result<crate::ralph_loop::Assignment, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+
+    // Parse agent type
+    let agent_type: AgentType = input
+        .agent_type
+        .parse()
+        .map_err(|_| format!("Invalid agent type: {}", input.agent_type))?;
+
+    // Use appropriate method based on whether files are provided
+    match input.estimated_files {
+        Some(files) => manager.manual_assign_story_with_files(
+            &input.agent_id,
+            agent_type,
+            &input.story_id,
+            files,
+            input.force,
+        ),
+        None => manager.manual_assign_story(&input.agent_id, agent_type, &input.story_id, input.force),
+    }
+}
+
+/// Release a story assignment back to the pool (US-4.1: Priority-Based Assignment)
+///
+/// This allows manually releasing a story that was assigned to an agent,
+/// making it available for automatic assignment to another agent.
+pub fn release_ralph_story_assignment(
+    project_path: String,
+    prd_name: String,
+    story_id: String,
+) -> Result<(), String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.release_story(&story_id)
+}
+
+// =============================================================================
 // US-3.3: Manual Learning Entry - CRUD commands for learnings
 // =============================================================================
 

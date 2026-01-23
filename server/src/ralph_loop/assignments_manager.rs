@@ -548,6 +548,101 @@ impl AssignmentsManager {
 
         self.write(&file)
     }
+
+    /// Manually assign a story to an agent, bypassing priority-based selection (US-4.1)
+    ///
+    /// This method provides a manual override for exceptional cases where a specific
+    /// story needs to be assigned regardless of priority order. Use cases include:
+    /// - Debugging a specific story issue
+    /// - Prioritizing urgent work that bypasses normal priority
+    /// - Reassigning work after an agent failure
+    ///
+    /// Unlike `assign_story_to_agent`, this method:
+    /// - Allows assignment even if the story would not be next by priority
+    /// - Can optionally force assignment even if story is already assigned (releases old assignment)
+    ///
+    /// # Arguments
+    /// * `agent_id` - The agent identifier
+    /// * `agent_type` - The type of agent (Claude, OpenCode, etc.)
+    /// * `story_id` - The story ID to assign
+    /// * `force` - If true, releases any existing assignment and reassigns
+    ///
+    /// # Returns
+    /// The created assignment on success
+    pub fn manual_assign_story(
+        &self,
+        agent_id: &str,
+        agent_type: AgentType,
+        story_id: &str,
+        force: bool,
+    ) -> Result<Assignment, String> {
+        let mut file = self.read()?;
+
+        // Check if story is already assigned
+        if file.is_story_assigned(story_id) {
+            if force {
+                // Release existing assignment first
+                for assignment in &mut file.assignments {
+                    if assignment.story_id == story_id && assignment.is_active() {
+                        assignment.release();
+                    }
+                }
+            } else {
+                return Err(format!(
+                    "Story {} is already assigned to another agent. Use force=true to override.",
+                    story_id
+                ));
+            }
+        }
+
+        // Create and add the assignment
+        let assignment = Assignment::new(agent_id, agent_type, story_id);
+        let assignment_clone = assignment.clone();
+        file.add_assignment(assignment);
+        self.write(&file)?;
+
+        Ok(assignment_clone)
+    }
+
+    /// Manually assign a story with estimated files (US-4.1)
+    ///
+    /// Like `manual_assign_story` but also includes estimated files for conflict detection.
+    pub fn manual_assign_story_with_files(
+        &self,
+        agent_id: &str,
+        agent_type: AgentType,
+        story_id: &str,
+        estimated_files: Vec<String>,
+        force: bool,
+    ) -> Result<Assignment, String> {
+        let mut file = self.read()?;
+
+        // Check if story is already assigned
+        if file.is_story_assigned(story_id) {
+            if force {
+                // Release existing assignment first
+                for assignment in &mut file.assignments {
+                    if assignment.story_id == story_id && assignment.is_active() {
+                        assignment.release();
+                    }
+                }
+            } else {
+                return Err(format!(
+                    "Story {} is already assigned to another agent. Use force=true to override.",
+                    story_id
+                ));
+            }
+        }
+
+        // Create assignment with estimated files
+        let mut assignment = Assignment::new(agent_id, agent_type, story_id);
+        assignment.estimated_files = estimated_files;
+        let assignment_clone = assignment.clone();
+        file.add_assignment(assignment);
+        self.write(&file)?;
+
+        Ok(assignment_clone)
+    }
 }
 
 #[cfg(test)]
@@ -1127,6 +1222,152 @@ mod tests {
         assert!(json.contains("src/shared.ts"));
         assert!(json.contains("conflictingAgentId"));
         assert!(json.contains("agent-1"));
+    }
+
+    // =========================================================================
+    // US-4.1: Priority-Based Assignment - Manual Override Tests
+    // =========================================================================
+
+    #[test]
+    fn test_manual_assign_story() {
+        // US-4.1: Manual override available for exceptional cases
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Manual assignment works without force flag when story is not assigned
+        let assignment = manager
+            .manual_assign_story("agent-1", AgentType::Claude, "US-1.1", false)
+            .unwrap();
+        assert_eq!(assignment.agent_id, "agent-1");
+        assert_eq!(assignment.story_id, "US-1.1");
+        assert!(assignment.is_active());
+    }
+
+    #[test]
+    fn test_manual_assign_story_already_assigned_no_force() {
+        // US-4.1: Manual override fails without force when story is already assigned
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // First assignment
+        manager
+            .manual_assign_story("agent-1", AgentType::Claude, "US-1.1", false)
+            .unwrap();
+
+        // Second assignment without force should fail
+        let result = manager.manual_assign_story("agent-2", AgentType::Opencode, "US-1.1", false);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("already assigned"));
+        assert!(err_msg.contains("force=true"));
+    }
+
+    #[test]
+    fn test_manual_assign_story_force_override() {
+        // US-4.1: Manual override with force releases old assignment and creates new one
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // First assignment to agent-1
+        manager
+            .manual_assign_story("agent-1", AgentType::Claude, "US-1.1", false)
+            .unwrap();
+
+        // Force reassign to agent-2
+        let new_assignment = manager
+            .manual_assign_story("agent-2", AgentType::Opencode, "US-1.1", true)
+            .unwrap();
+
+        assert_eq!(new_assignment.agent_id, "agent-2");
+        assert_eq!(new_assignment.story_id, "US-1.1");
+        assert!(new_assignment.is_active());
+
+        // Verify old assignment is released
+        let file = manager.read().unwrap();
+        let released = file
+            .assignments
+            .iter()
+            .find(|a| a.agent_id == "agent-1" && a.story_id == "US-1.1");
+        assert!(released.is_some());
+        assert_eq!(released.unwrap().status, AssignmentStatus::Released);
+    }
+
+    #[test]
+    fn test_manual_assign_story_with_files() {
+        // US-4.1: Manual assignment with estimated files
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        let files = vec!["src/a.ts".to_string(), "src/b.ts".to_string()];
+        let assignment = manager
+            .manual_assign_story_with_files("agent-1", AgentType::Claude, "US-1.1", files.clone(), false)
+            .unwrap();
+
+        assert_eq!(assignment.estimated_files, files);
+
+        // Verify files are tracked
+        let files_in_use = manager.get_files_in_use().unwrap();
+        assert_eq!(files_in_use.len(), 2);
+    }
+
+    #[test]
+    fn test_manual_assign_story_with_files_force() {
+        // US-4.1: Manual assignment with files and force override
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // First assignment
+        manager
+            .manual_assign_story_with_files(
+                "agent-1",
+                AgentType::Claude,
+                "US-1.1",
+                vec!["src/old.ts".to_string()],
+                false,
+            )
+            .unwrap();
+
+        // Force reassign with different files
+        let new_files = vec!["src/new.ts".to_string()];
+        let new_assignment = manager
+            .manual_assign_story_with_files(
+                "agent-2",
+                AgentType::Opencode,
+                "US-1.1",
+                new_files.clone(),
+                true,
+            )
+            .unwrap();
+
+        assert_eq!(new_assignment.agent_id, "agent-2");
+        assert_eq!(new_assignment.estimated_files, new_files);
+
+        // Verify only new files are in use (old assignment was released)
+        let files_in_use = manager.get_files_in_use().unwrap();
+        assert_eq!(files_in_use.len(), 1);
+        assert_eq!(files_in_use[0].path, "src/new.ts");
+    }
+
+    #[test]
+    fn test_manual_assign_bypasses_priority() {
+        // US-4.1: Manual assignment can assign any story regardless of priority
+        // This test verifies manual assignment doesn't check priority - it just assigns
+        let temp_dir = setup_test_dir();
+        let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        manager.initialize("exec-123").unwrap();
+
+        // Manually assign a low-priority story first (this would not be selected automatically)
+        let assignment = manager
+            .manual_assign_story("agent-1", AgentType::Claude, "US-5.1-LOW-PRIORITY", false)
+            .unwrap();
+
+        assert_eq!(assignment.story_id, "US-5.1-LOW-PRIORITY");
+        assert!(manager.is_story_assigned("US-5.1-LOW-PRIORITY").unwrap());
     }
 }
 
