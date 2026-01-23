@@ -464,6 +464,7 @@ pub fn manual_assign_ralph_story(
     project_path: String,
     prd_name: String,
     input: ManualAssignStoryInput,
+    broadcaster: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
 ) -> Result<crate::ralph_loop::Assignment, String> {
     let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
 
@@ -474,7 +475,7 @@ pub fn manual_assign_ralph_story(
         .map_err(|_| format!("Invalid agent type: {}", input.agent_type))?;
 
     // Use appropriate method based on whether files are provided
-    match input.estimated_files {
+    let result = match input.estimated_files {
         Some(files) => manager.manual_assign_story_with_files(
             &input.agent_id,
             agent_type,
@@ -483,7 +484,29 @@ pub fn manual_assign_ralph_story(
             input.force,
         ),
         None => manager.manual_assign_story(&input.agent_id, agent_type, &input.story_id, input.force),
+    };
+
+    // Emit event on successful assignment (US-6.2: Real-Time Assignment Updates)
+    if let Ok(assignment) = &result {
+        if let Some(bc) = broadcaster {
+            use crate::events::{AssignmentChangedPayload, AssignmentChangeType};
+            let payload = AssignmentChangedPayload {
+                change_type: AssignmentChangeType::Created,
+                agent_id: input.agent_id.clone(),
+                agent_type: input.agent_type.clone(),
+                story_id: input.story_id.clone(),
+                prd_name: prd_name.clone(),
+                estimated_files: assignment.estimated_files.clone(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            bc.broadcast(
+                "assignment:changed",
+                &payload,
+            );
+        }
     }
+
+    result
 }
 
 /// Release a story assignment back to the pool (US-4.1: Priority-Based Assignment)
@@ -494,9 +517,32 @@ pub fn release_ralph_story_assignment(
     project_path: String,
     prd_name: String,
     story_id: String,
+    broadcaster: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
 ) -> Result<(), String> {
     let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
-    manager.release_story(&story_id)
+    let result = manager.release_story(&story_id);
+
+    // Emit event on successful release (US-6.2: Real-Time Assignment Updates)
+    if result.is_ok() {
+        if let Some(bc) = broadcaster {
+            use crate::events::{AssignmentChangedPayload, AssignmentChangeType};
+            let payload = AssignmentChangedPayload {
+                change_type: AssignmentChangeType::Released,
+                agent_id: String::new(),
+                agent_type: String::new(),
+                story_id: story_id.clone(),
+                prd_name: prd_name.clone(),
+                estimated_files: Vec::new(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            bc.broadcast(
+                "assignment:changed",
+                &payload,
+            );
+        }
+    }
+
+    result
 }
 
 // =============================================================================

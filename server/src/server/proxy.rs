@@ -641,7 +641,8 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_sync!(commands::ralph_loop::manual_assign_ralph_story(
                 project_path,
                 prd_name,
-                input
+                input,
+                Some(state.broadcaster.clone())
             ))
         }
 
@@ -652,7 +653,8 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_sync!(commands::ralph_loop::release_ralph_story_assignment(
                 project_path,
                 prd_name,
-                story_id
+                story_id,
+                Some(state.broadcaster.clone())
             ))
         }
 
