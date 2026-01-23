@@ -217,6 +217,7 @@ pub struct ExecutionSnapshot {
     pub metrics: Option<RalphLoopMetrics>,
     pub current_agent_id: Option<String>,
     pub worktree_path: Option<String>,
+    pub project_path: Option<String>,
 }
 
 /// Type alias for snapshot storage

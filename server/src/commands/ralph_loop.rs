@@ -661,6 +661,7 @@ pub async fn start_ralph_loop(
             metrics: None,
             current_agent_id: None,
             worktree_path: None,
+            project_path: Some(request.project_path.clone()),
         });
     }
 
@@ -993,6 +994,34 @@ pub fn list_ralph_loop_executions(
     let executions = ralph_state.executions.lock()
         .map_err(|e| format!("Executions lock error: {}", e))?;
     Ok(executions.keys().cloned().collect())
+}
+
+/// Info about an active execution
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionInfo {
+    pub execution_id: String,
+    pub project_path: Option<String>,
+    pub state: Option<String>,
+}
+
+/// List all active Ralph loop executions with details
+pub fn list_ralph_loop_executions_with_details(
+    ralph_state: &RalphLoopManagerState,
+) -> Result<Vec<ExecutionInfo>, String> {
+    let executions = ralph_state.executions.lock()
+        .map_err(|e| format!("Executions lock error: {}", e))?;
+    let snapshots = ralph_state.snapshots.lock()
+        .map_err(|e| format!("Snapshots lock error: {}", e))?;
+
+    Ok(executions.keys().map(|id| {
+        let snapshot = snapshots.get(id);
+        ExecutionInfo {
+            execution_id: id.clone(),
+            project_path: snapshot.and_then(|s| s.project_path.clone()),
+            state: snapshot.and_then(|s| s.state.as_ref().map(|st| format!("{:?}", st))),
+        }
+    }).collect())
 }
 
 /// Get current agent ID for a Ralph loop execution (for terminal connection)

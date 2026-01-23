@@ -963,8 +963,11 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         }
 
         "list_ralph_loop_executions" => {
-            // For server mode, return empty list (would need different tracking)
-            serde_json::to_value(Vec::<String>::new()).map_err(|e| e.to_string())
+            route_sync!(commands::ralph_loop::list_ralph_loop_executions(&state.ralph_loop_state))
+        }
+
+        "list_ralph_loop_executions_with_details" => {
+            route_sync!(commands::ralph_loop::list_ralph_loop_executions_with_details(&state.ralph_loop_state))
         }
 
         "get_ralph_iteration_history" => {
@@ -2390,6 +2393,7 @@ async fn start_ralph_loop_server(
                 metrics: None,
                 current_agent_id: None,
                 worktree_path: None,
+                project_path: Some(request.project_path.clone()),
             },
         );
     }

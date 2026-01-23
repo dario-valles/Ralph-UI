@@ -173,6 +173,24 @@ const result = await invoke<T>('command_name', { args })
 - Shared components in `src/components/shared/` (EmptyState, StatCard)
 - Layout components in `src/components/layout/`
 
+### Mobile-First Design
+**IMPORTANT**: All UI components must be designed mobile-first. Write base styles for mobile screens, then use Tailwind's responsive prefixes (`sm:`, `md:`, `lg:`, `xl:`) to add styles for larger screens.
+
+```typescript
+// CORRECT: Mobile-first approach
+<div className="flex flex-col gap-2 p-4 md:flex-row md:gap-4 lg:p-6">
+
+// WRONG: Desktop-first approach
+<div className="flex flex-row gap-4 p-6 max-md:flex-col max-md:gap-2 max-md:p-4">
+```
+
+Key principles:
+- Start with single-column layouts, expand to multi-column at `md:` or `lg:`
+- Use smaller spacing/padding by default, increase at breakpoints
+- Stack elements vertically on mobile, arrange horizontally on larger screens
+- Test components at 320px width minimum (mobile viewport)
+- Use responsive text sizes: `text-sm md:text-base lg:text-lg`
+
 ### Prompt Templates
 **IMPORTANT**: When creating new prompts for AI agents, always add them to the template system so they can be edited by users.
 

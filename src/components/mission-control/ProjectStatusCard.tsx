@@ -20,6 +20,14 @@ interface ProjectStatusCardProps {
   onNavigate?: () => void
 }
 
+const runningConfig = {
+  color: 'text-green-500',
+  bgColor: 'bg-green-500/10',
+  borderColor: 'border-green-500/20',
+  icon: Play,
+  label: 'Running',
+}
+
 const healthConfig = {
   healthy: {
     color: 'text-green-500',
@@ -58,18 +66,21 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
     project,
     health,
     lastActivity,
+    activeExecutionId,
   } = projectStatus
 
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
 
-  const config = healthConfig[health]
+  // Show "Running" badge when there's an active execution
+  const isRunning = !!activeExecutionId
+  const config = isRunning ? runningConfig : healthConfig[health]
   const HealthIcon = config.icon
 
   return (
     <Card
       className={cn(
         'transition-all hover:shadow-md',
-        health === 'healthy' && 'border-green-500/20'
+        isRunning && 'border-green-500/50 bg-green-500/5'
       )}
     >
       <CardContent className="p-4">
@@ -102,7 +113,7 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
         {/* Action */}
         <Link to="/ralph-loop" state={{ projectPath: project.path }} className="block">
           <Button
-            variant="ghost"
+            variant={isRunning ? 'default' : 'ghost'}
             size="sm"
             className="w-full justify-between"
             onClick={() => {
@@ -111,7 +122,7 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
               onNavigate?.()
             }}
           >
-            Start Ralph Loop
+            {isRunning ? 'Go to Ralph Loop' : 'Start Ralph Loop'}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>

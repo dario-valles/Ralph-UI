@@ -370,6 +370,13 @@ export const ralphLoopApi = {
     return await invoke('list_ralph_loop_executions')
   },
 
+  /** List all active Ralph loop executions with details */
+  listExecutionsWithDetails: async (): Promise<
+    { executionId: string; projectPath: string | null; state: string | null }[]
+  > => {
+    return await invoke('list_ralph_loop_executions_with_details')
+  },
+
   /** Get current agent ID for terminal connection */
   getCurrentAgentId: async (executionId: string): Promise<string | null> => {
     return await invoke('get_ralph_loop_current_agent', { executionId })

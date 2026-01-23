@@ -12,16 +12,26 @@ import { ralphLoopApi } from '@/lib/backend-api'
 // Types
 // ============================================================================
 
+export interface ExecutionInfo {
+  executionId: string
+  projectPath: string | null
+  state: string | null
+}
+
 export interface GlobalStats {
   activeExecutionsCount: number
   totalProjects: number
   activeProjectsCount: number
+  /** Map of project path to execution ID for active executions */
+  activeProjectPaths: Map<string, string>
 }
 
 export interface ProjectStatus {
   project: Project
   health: 'healthy' | 'idle'
   lastActivity: Date | null
+  /** Execution ID if this project has an active execution */
+  activeExecutionId?: string
 }
 
 // ============================================================================
@@ -43,7 +53,7 @@ function getLastActivityDate(project: Project): Date | null {
  * Hook to get global statistics across all projects
  */
 export function useGlobalStats(): GlobalStats & { loading: boolean; error: string | null } {
-  const [activeExecutions, setActiveExecutions] = useState<string[]>([])
+  const [activeExecutions, setActiveExecutions] = useState<ExecutionInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,7 +67,7 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
   useEffect(() => {
     const fetchExecutions = async () => {
       try {
-        const executions = await ralphLoopApi.listExecutions()
+        const executions = await ralphLoopApi.listExecutionsWithDetails()
         setActiveExecutions(executions)
         setError(null)
       } catch (err) {
@@ -79,10 +89,19 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
   const stats = useMemo(() => {
     const { projects } = projectState
 
+    // Build map of project path -> execution ID
+    const activeProjectPaths = new Map<string, string>()
+    for (const exec of activeExecutions) {
+      if (exec.projectPath) {
+        activeProjectPaths.set(exec.projectPath, exec.executionId)
+      }
+    }
+
     return {
       activeExecutionsCount: activeExecutions.length,
       totalProjects: projects.length,
-      activeProjectsCount: activeExecutions.length > 0 ? 1 : 0, // Simplified
+      activeProjectsCount: activeProjectPaths.size,
+      activeProjectPaths,
     }
   }, [activeExecutions, projectState])
 
@@ -92,7 +111,7 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
 /**
  * Hook to get status for all projects
  */
-export function useProjectStatuses(): {
+export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
   projectStatuses: ProjectStatus[]
   loading: boolean
   error: string | null
@@ -103,6 +122,7 @@ export function useProjectStatuses(): {
     error: s.error
   })))
 
+  // Fallback to store state if activeProjectPaths not provided
   const activeExecutionId = useRalphLoopStore(s => s.activeExecutionId)
   const currentProjectPath = useRalphLoopStore(s => s.currentProjectPath)
 
@@ -111,15 +131,19 @@ export function useProjectStatuses(): {
 
     return projects.map(project => {
       // Check if this project has an active Ralph Loop execution
-      const hasActiveExecution = activeExecutionId && currentProjectPath === project.path
+      // First check the passed activeProjectPaths map (from API), then fallback to store
+      const executionIdFromMap = activeProjectPaths?.get(project.path)
+      const storeExecutionId = currentProjectPath === project.path ? activeExecutionId : undefined
+      const activeExecId = executionIdFromMap ?? storeExecutionId
 
       return {
         project,
-        health: hasActiveExecution ? 'healthy' as const : 'idle' as const,
+        health: activeExecId ? 'healthy' as const : 'idle' as const,
         lastActivity: getLastActivityDate(project),
+        activeExecutionId: activeExecId,
       }
     })
-  }, [projectState, activeExecutionId, currentProjectPath])
+  }, [projectState, activeExecutionId, currentProjectPath, activeProjectPaths])
 
   return { projectStatuses, loading: projectState.loading, error: projectState.error }
 }
@@ -190,7 +214,7 @@ export function useMissionControlRefresh() {
  */
 export function useMissionControlData() {
   const globalStats = useGlobalStats()
-  const { projectStatuses, loading: projectsLoading, error: projectsError } = useProjectStatuses()
+  const { projectStatuses, loading: projectsLoading, error: projectsError } = useProjectStatuses(globalStats.activeProjectPaths)
 
   const loading = globalStats.loading || projectsLoading
   const error = globalStats.error || projectsError
