@@ -161,7 +161,7 @@ export function createWebSocketPty(options: WebSocketPtyOptions): Promise<WebSoc
  */
 export function isWebSocketPtyAvailable(): boolean {
   // Check if we have a server connection stored
-  const stored = localStorage.getItem('ralph-server-connection')
+  const stored = localStorage.getItem('ralph_server_config')
   if (!stored) return false
 
   try {
@@ -176,7 +176,7 @@ export function isWebSocketPtyAvailable(): boolean {
  * Get server connection details for PTY
  */
 export function getServerConnection(): { url: string; token: string } | null {
-  const stored = localStorage.getItem('ralph-server-connection')
+  const stored = localStorage.getItem('ralph_server_config')
   if (!stored) return null
 
   try {
