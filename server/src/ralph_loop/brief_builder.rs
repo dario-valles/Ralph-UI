@@ -11,6 +11,7 @@
 //!
 //! File location: `.ralph-ui/briefs/{prd_name}/BRIEF.md`
 
+use super::learnings_manager::LearningsManager;
 use super::types::{RalphPrd, RalphStory};
 use std::path::{Path, PathBuf};
 
@@ -71,6 +72,38 @@ impl BriefBuilder {
             .map_err(|e| format!("Failed to create briefs directory {:?}: {}", briefs_dir, e))?;
 
         let brief = self.build_brief_content(prd, learnings, iteration);
+
+        std::fs::write(self.brief_path(), brief)
+            .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Generate BRIEF.md using structured learnings from LearningsManager
+    ///
+    /// This is the preferred method for US-1.2 crash recovery as it uses
+    /// the structured learnings.json file instead of parsing progress.txt.
+    ///
+    /// # Arguments
+    /// * `prd` - The PRD containing all stories
+    /// * `learnings_manager` - Manager for structured learnings storage
+    /// * `iteration` - Current iteration number (optional)
+    pub fn generate_brief_with_learnings_manager(
+        &self,
+        prd: &RalphPrd,
+        learnings_manager: &LearningsManager,
+        iteration: Option<u32>,
+    ) -> Result<(), String> {
+        // Ensure briefs directory exists
+        let briefs_dir = self.briefs_dir();
+        std::fs::create_dir_all(&briefs_dir)
+            .map_err(|e| format!("Failed to create briefs directory {:?}: {}", briefs_dir, e))?;
+
+        // Get formatted learnings from the structured storage
+        let structured_learnings = learnings_manager.format_for_brief().ok();
+        let learnings_ref = structured_learnings.as_deref();
+
+        let brief = self.build_brief_content(prd, learnings_ref, iteration);
 
         std::fs::write(self.brief_path(), brief)
             .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
