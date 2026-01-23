@@ -59,7 +59,7 @@ import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { ralphLoopApi } from '@/lib/tauri-api'
-import { Wand2 } from 'lucide-react'
+import { Wand2, Sparkles } from 'lucide-react'
 
 interface RalphLoopDashboardProps {
   projectPath: string
@@ -106,6 +106,7 @@ export function RalphLoopDashboard({
   const [activeTab, setActiveTab] = useState('stories')
   const [configOpen, setConfigOpen] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [regeneratingStories, setRegeneratingStories] = useState(false)
 
   // Worktree action states
   const [diffDialogOpen, setDiffDialogOpen] = useState(false)
@@ -448,6 +449,28 @@ export function RalphLoopDashboard({
       console.error('Failed to regenerate acceptance criteria:', err)
     } finally {
       setRegenerating(false)
+    }
+  }
+
+  const handleRegenerateStories = async () => {
+    if (!prd) return
+    setRegeneratingStories(true)
+    try {
+      await ralphLoopApi.regenerateStoriesWithAI(
+        projectPath,
+        prdName,
+        effectiveAgent,
+        effectiveModel || undefined
+      )
+      // Reload the PRD to show new stories
+      await loadPrd(projectPath, prdName)
+      await loadPrdStatus(projectPath, prdName)
+      toast.success('Stories regenerated', 'AI extracted user stories from PRD markdown')
+    } catch (err) {
+      console.error('Failed to regenerate stories:', err)
+      toast.error('Failed to regenerate stories', err instanceof Error ? err.message : String(err))
+    } finally {
+      setRegeneratingStories(false)
     }
   }
 
@@ -1026,7 +1049,7 @@ export function RalphLoopDashboard({
                 variant="outline"
                 size="sm"
                 onClick={handleRegenerateAcceptance}
-                disabled={regenerating || isRunning}
+                disabled={regenerating || regeneratingStories || isRunning}
                 title="Re-parse PRD markdown to extract acceptance criteria"
               >
                 {regenerating ? (
@@ -1035,6 +1058,20 @@ export function RalphLoopDashboard({
                   <Wand2 className="mr-2 h-4 w-4" />
                 )}
                 Regenerate Acceptance
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerateStories}
+                disabled={regenerating || regeneratingStories || isRunning}
+                title="Use AI to extract properly formatted user stories from PRD"
+              >
+                {regeneratingStories ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                Regenerate Stories
               </Button>
             </div>
             <ScrollArea className="h-[360px]">

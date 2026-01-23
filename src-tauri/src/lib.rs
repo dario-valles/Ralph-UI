@@ -441,6 +441,7 @@ pub fn run() {
             commands::get_ralph_loop_snapshot,
             commands::cleanup_ralph_iteration_history,
             commands::regenerate_ralph_prd_acceptance,
+            commands::regenerate_ralph_prd_stories,
             // Notification commands (US-005)
             commands::send_test_notification,
             // GSD workflow commands

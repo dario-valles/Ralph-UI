@@ -1675,103 +1675,151 @@ pub fn cleanup_ralph_iteration_history(
 /// 2. Generic headers as fallback
 ///
 /// Returns a vector of RalphStory objects with proper acceptance criteria extracted.
+/// Check if a line is a user story header (markdown or bold format)
+/// Returns (is_story, id, title) if matched
+fn parse_story_header(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+
+    // Pattern 1: Markdown headers like "#### US-1.1: Title" or "### US-1.1: Title"
+    if trimmed.contains("#### US-") || trimmed.contains("### US-") ||
+       trimmed.contains("#### T-") || trimmed.contains("### T-") {
+        let header_marker = if trimmed.contains("#### ") { "#### " } else { "### " };
+        if let Some(start_idx) = trimmed.find(header_marker) {
+            let text = &trimmed[start_idx + header_marker.len()..];
+            return extract_id_and_title(text);
+        }
+    }
+
+    // Pattern 2: Bold format like "**US-1.1: Title**" or "**US-1.1:** Title"
+    // This handles both "**US-1.1: Title**" and "**US-1.1:** Title" formats
+    if trimmed.starts_with("**US-") || trimmed.starts_with("**T-") {
+        // Remove leading **
+        let without_prefix = trimmed.trim_start_matches("**");
+
+        // Check for ":**" pattern FIRST (more specific)
+        // This handles "**US-1.1:** Title" where only the ID is bold
+        // Note: ":**" contains "**", so we must check this pattern first
+        if let Some(colon_star_pos) = without_prefix.find(":**") {
+            let id = without_prefix[..colon_star_pos].trim().to_string();
+            let title = without_prefix[colon_star_pos + 3..].trim().to_string();
+            if !id.is_empty() && !title.is_empty() {
+                return Some((id, title));
+            } else if !id.is_empty() {
+                return Some((id.clone(), id));
+            }
+        } else if let Some(end_bold_pos) = without_prefix.find("**") {
+            // Case: "**US-1.1: Title**" - ID and title both in bold
+            let inside_bold = &without_prefix[..end_bold_pos];
+            return extract_id_and_title(inside_bold);
+        }
+    }
+
+    None
+}
+
+/// Extract ID and title from a string like "US-1.1: Some Title"
+fn extract_id_and_title(text: &str) -> Option<(String, String)> {
+    if let Some((id_part, title_part)) = text.split_once(':') {
+        let id = id_part.trim().to_string();
+        let title = title_part.trim().trim_end_matches("**").trim().to_string();
+        if !id.is_empty() && !title.is_empty() {
+            return Some((id, title));
+        } else if !id.is_empty() {
+            return Some((id.clone(), id));
+        }
+    } else {
+        // Fallback: first word is ID, rest is title
+        let parts: Vec<&str> = text.split_whitespace().collect();
+        if !parts.is_empty() {
+            return Some((parts[0].to_string(), text.to_string()));
+        }
+    }
+    None
+}
+
+/// Check if a line is any kind of user story header (for stopping condition)
+fn is_story_header(line: &str) -> bool {
+    parse_story_header(line).is_some()
+}
+
 fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<RalphStory> {
     let lines: Vec<&str> = content.lines().collect();
     let mut stories = Vec::new();
 
     // First pass: Look for explicit US patterns with acceptance criteria
+    // Now supports both markdown headers (#### US-1.1:) and bold format (**US-1.1:**)
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i];
 
-        // Look for user story headers: "#### US-XXX: Title" or "### US-XXX: Title"
-        if line.contains("#### US-") || line.contains("### US-") ||
-            line.contains("#### T-") || line.contains("### T-") {
+        // Try to parse as a story header
+        if let Some((id, title)) = parse_story_header(line) {
+            // Now look for "**Acceptance Criteria**:" or "Acceptance Criteria:" section
+            let mut acceptance_lines = Vec::new();
+            let mut j = i + 1;
+            let mut found_acceptance_section = false;
 
-            // Extract ID and Title
-            let header_marker = if line.contains("#### ") { "#### " } else { "### " };
-            if let Some(start_idx) = line.find(header_marker) {
-                let text = &line[start_idx + header_marker.len()..];
+            while j < lines.len() {
+                let current_line = lines[j];
 
-                let (id, title) = if let Some((id_part, title_part)) = text.split_once(':') {
-                    (id_part.trim().to_string(), title_part.trim().to_string())
-                } else {
-                    // Fallback: first word is ID, rest is title
-                    let parts: Vec<&str> = text.split_whitespace().collect();
-                    if !parts.is_empty() {
-                        (parts[0].to_string(), text.to_string())
-                    } else {
-                        i += 1;
-                        continue;
-                    }
-                };
-
-                // Now look for "**Acceptance Criteria**:" or "Acceptance Criteria:" section
-                let mut acceptance_lines = Vec::new();
-                let mut j = i + 1;
-                let mut found_acceptance_section = false;
-
-                while j < lines.len() {
-                    let current_line = lines[j];
-
-                    // Stop at next user story header
-                    if current_line.contains("#### US-") || current_line.contains("### US-") ||
-                       current_line.contains("#### T-") || current_line.contains("### T-") ||
-                       current_line.starts_with("## ") {
-                        break;
-                    }
-
-                    // Check for acceptance criteria section header
-                    let lower = current_line.to_lowercase();
-                    if lower.contains("acceptance criteria") {
-                        found_acceptance_section = true;
-                        j += 1;
-                        continue;
-                    }
-
-                    // If we're in the acceptance section, collect bullet points
-                    if found_acceptance_section {
-                        let trimmed = current_line.trim();
-
-                        // Stop at next section header within the story
-                        if trimmed.starts_with("**") && !trimmed.starts_with("**Acceptance") {
-                            break;
-                        }
-
-                        // Collect bullet points (lines starting with - or *)
-                        if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
-                            // Remove the bullet and checkbox markers like "[ ]"
-                            let criterion = trimmed
-                                .trim_start_matches("- ")
-                                .trim_start_matches("* ")
-                                .trim_start_matches("[ ] ")
-                                .trim_start_matches("[x] ")
-                                .trim_start_matches("[X] ")
-                                .trim();
-                            if !criterion.is_empty() {
-                                acceptance_lines.push(criterion.to_string());
-                            }
-                        }
-                    }
-
-                    j += 1;
+                // Stop at next user story header (any format) or major section
+                if is_story_header(current_line) || current_line.starts_with("## ") {
+                    break;
                 }
 
-                // Create the acceptance criteria string
-                let acceptance = if acceptance_lines.is_empty() {
-                    // No acceptance criteria found - use a placeholder that's better than just the title
-                    format!("Implement: {}", title)
-                } else {
-                    acceptance_lines.iter()
-                        .map(|s| format!("- {}", s))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                };
+                // Check for acceptance criteria section header
+                let lower = current_line.to_lowercase();
+                if lower.contains("acceptance criteria") {
+                    found_acceptance_section = true;
+                    j += 1;
+                    continue;
+                }
 
-                stories.push(RalphStory::new(&id, &title, &acceptance));
-                i = j;
-                continue;
+                // If we're in the acceptance section, collect bullet points
+                if found_acceptance_section {
+                    let trimmed = current_line.trim();
+
+                    // Stop at next section header within the story (bold headers that aren't acceptance)
+                    if trimmed.starts_with("**") && !lower.contains("acceptance") {
+                        // But don't stop if this is another story header (handled above)
+                        if !trimmed.starts_with("**US-") && !trimmed.starts_with("**T-") {
+                            break;
+                        }
+                    }
+
+                    // Collect bullet points (lines starting with - or *)
+                    if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+                        // Remove the bullet and checkbox markers like "[ ]"
+                        let criterion = trimmed
+                            .trim_start_matches("- ")
+                            .trim_start_matches("* ")
+                            .trim_start_matches("[ ] ")
+                            .trim_start_matches("[x] ")
+                            .trim_start_matches("[X] ")
+                            .trim();
+                        if !criterion.is_empty() {
+                            acceptance_lines.push(criterion.to_string());
+                        }
+                    }
+                }
+
+                j += 1;
             }
+
+            // Create the acceptance criteria string
+            let acceptance = if acceptance_lines.is_empty() {
+                // No acceptance criteria found - use a placeholder that's better than just the title
+                format!("Implement: {}", title)
+            } else {
+                acceptance_lines.iter()
+                    .map(|s| format!("- {}", s))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+
+            stories.push(RalphStory::new(&id, &title, &acceptance));
+            i = j;
+            continue;
         }
 
         i += 1;
@@ -1888,6 +1936,184 @@ pub fn regenerate_ralph_prd_acceptance(
     );
 
     Ok(prd)
+}
+
+// ============================================================================
+// AI-Powered Story Regeneration
+// ============================================================================
+
+/// Request to regenerate stories using AI for an existing Ralph PRD
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegenerateStoriesRequest {
+    /// Project path
+    pub project_path: String,
+    /// PRD name (without .json extension)
+    pub prd_name: String,
+    /// Agent type to use for extraction (claude, opencode, etc.)
+    pub agent_type: String,
+    /// Optional model override
+    pub model: Option<String>,
+}
+
+/// Story extracted by AI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedStory {
+    pub id: String,
+    pub title: String,
+    pub acceptance_criteria: Vec<String>,
+}
+
+/// Regenerate stories using AI to properly extract user stories from PRD markdown.
+///
+/// This is useful when the initial story extraction created generic tasks like
+/// "Problem Statement", "Solution" instead of proper US-X.X user stories.
+#[tauri::command]
+pub async fn regenerate_ralph_prd_stories(
+    app_handle: tauri::AppHandle,
+    request: RegenerateStoriesRequest,
+) -> Result<RalphPrd, String> {
+    use crate::commands::prd_chat::agent_executor::{execute_chat_agent, TauriEmitter};
+    use crate::models::AgentType;
+    use std::fs;
+
+    let project_path = PathBuf::from(&request.project_path);
+    let prds_dir = project_path.join(".ralph-ui").join("prds");
+
+    // Read the existing PRD JSON
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
+    let mut prd = executor.read_prd()?;
+
+    // Read the markdown file
+    let md_path = prds_dir.join(format!("{}.md", request.prd_name));
+    let content = if md_path.exists() {
+        fs::read_to_string(&md_path)
+            .map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
+    } else {
+        return Err("No PRD markdown file found. Cannot regenerate stories without source content.".to_string());
+    };
+
+    // Parse agent type
+    let agent_type: AgentType = request.agent_type.parse()
+        .map_err(|_| format!("Invalid agent type: {}", request.agent_type))?;
+
+    // Build prompt for AI extraction
+    let prompt = build_story_extraction_prompt(&content);
+
+    // Execute AI agent to extract stories
+    let emitter = TauriEmitter::new(&app_handle);
+    let session_id = format!("story-regen-{}", uuid::Uuid::new_v4());
+
+    let response = execute_chat_agent(
+        &emitter,
+        &session_id,
+        agent_type,
+        &prompt,
+        Some(&request.project_path),
+    ).await?;
+
+    // Parse the AI response to extract stories
+    let extracted_stories = parse_ai_story_response(&response)?;
+
+    if extracted_stories.is_empty() {
+        return Err("AI did not extract any valid user stories. The PRD may need manual formatting.".to_string());
+    }
+
+    // Replace stories in the PRD, preserving any pass/fail status for matching IDs
+    let old_status: std::collections::HashMap<String, bool> = prd.stories
+        .iter()
+        .map(|s| (s.id.clone(), s.passes))
+        .collect();
+
+    prd.stories = extracted_stories.into_iter().map(|es| {
+        let passes = old_status.get(&es.id).copied().unwrap_or(false);
+        let acceptance = if es.acceptance_criteria.is_empty() {
+            format!("Implement: {}", es.title)
+        } else {
+            es.acceptance_criteria.iter()
+                .map(|c| format!("- {}", c))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let mut story = RalphStory::new(&es.id, &es.title, &acceptance);
+        story.passes = passes;
+        story
+    }).collect();
+
+    // Write the updated PRD
+    executor.write_prd(&prd)?;
+
+    log::info!(
+        "[RalphLoop] Regenerated {} stories using AI for PRD '{}'",
+        prd.stories.len(),
+        request.prd_name
+    );
+
+    Ok(prd)
+}
+
+/// Build prompt for AI to extract user stories from PRD content
+fn build_story_extraction_prompt(prd_content: &str) -> String {
+    format!(r#"Analyze this PRD document and extract all user stories in a structured format.
+
+## PRD Content:
+{}
+
+## Instructions:
+1. Identify all user stories, features, or tasks that should be implemented
+2. Assign each a unique ID in the format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
+3. Extract or create clear acceptance criteria for each story
+
+## Output Format:
+Return ONLY a JSON array with no additional text. Each story should have:
+- "id": string (US-X.X format)
+- "title": string (brief, actionable title)
+- "acceptance_criteria": array of strings
+
+Example:
+```json
+[
+  {{
+    "id": "US-1.1",
+    "title": "User Login",
+    "acceptance_criteria": [
+      "User can enter email and password",
+      "Form validates inputs before submission",
+      "Shows error message on invalid credentials"
+    ]
+  }},
+  {{
+    "id": "US-1.2",
+    "title": "User Registration",
+    "acceptance_criteria": [
+      "User can create account with email",
+      "Password must meet security requirements"
+    ]
+  }}
+]
+```
+
+Extract the stories now and return ONLY the JSON array:"#, prd_content)
+}
+
+/// Parse AI response to extract stories
+fn parse_ai_story_response(response: &str) -> Result<Vec<ExtractedStory>, String> {
+    // Try to find JSON array in the response
+    let json_start = response.find('[');
+    let json_end = response.rfind(']');
+
+    match (json_start, json_end) {
+        (Some(start), Some(end)) if start < end => {
+            let json_str = &response[start..=end];
+            serde_json::from_str::<Vec<ExtractedStory>>(json_str)
+                .map_err(|e| format!("Failed to parse AI response as JSON: {}", e))
+        }
+        _ => {
+            // Try parsing the whole response as JSON
+            serde_json::from_str::<Vec<ExtractedStory>>(response.trim())
+                .map_err(|e| format!("No valid JSON array found in AI response: {}", e))
+        }
+    }
 }
 
 // =============================================================================
@@ -2049,5 +2275,298 @@ pub fn send_test_notification(app_handle: tauri::AppHandle) -> Result<(), String
             log::warn!("[Notification] Failed to send test notification: {}", e);
             Err(format!("Failed to send test notification: {}", e))
         }
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // parse_story_header tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_story_header_markdown_h4() {
+        let line = "#### US-1.1: User Login Feature";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "US-1.1");
+        assert_eq!(title, "User Login Feature");
+    }
+
+    #[test]
+    fn test_parse_story_header_markdown_h3() {
+        let line = "### US-2.3: Dashboard Analytics";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "US-2.3");
+        assert_eq!(title, "Dashboard Analytics");
+    }
+
+    #[test]
+    fn test_parse_story_header_bold_format() {
+        let line = "**US-1.1: User Login Feature**";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "US-1.1");
+        assert_eq!(title, "User Login Feature");
+    }
+
+    #[test]
+    fn test_parse_story_header_bold_colon_outside() {
+        // Format where colon is outside the bold: **US-1.1:** Title
+        let line = "**US-1.1:** User Login Feature";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "US-1.1");
+        assert_eq!(title, "User Login Feature");
+    }
+
+    #[test]
+    fn test_parse_story_header_task_format() {
+        let line = "#### T-3.2: Implement API Endpoint";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "T-3.2");
+        assert_eq!(title, "Implement API Endpoint");
+    }
+
+    #[test]
+    fn test_parse_story_header_bold_task_format() {
+        let line = "**T-3.2: Implement API Endpoint**";
+        let result = parse_story_header(line);
+        assert!(result.is_some());
+        let (id, title) = result.unwrap();
+        assert_eq!(id, "T-3.2");
+        assert_eq!(title, "Implement API Endpoint");
+    }
+
+    #[test]
+    fn test_parse_story_header_non_story_line() {
+        let line = "This is just a regular line of text";
+        let result = parse_story_header(line);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_story_header_section_header() {
+        let line = "## Overview";
+        let result = parse_story_header(line);
+        assert!(result.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // is_story_header tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_story_header_markdown() {
+        assert!(is_story_header("#### US-1.1: Title"));
+        assert!(is_story_header("### US-2.1: Title"));
+        assert!(is_story_header("#### T-1.1: Title"));
+    }
+
+    #[test]
+    fn test_is_story_header_bold() {
+        assert!(is_story_header("**US-1.1: Title**"));
+        assert!(is_story_header("**US-1.1:** Title"));
+        assert!(is_story_header("**T-1.1: Title**"));
+    }
+
+    #[test]
+    fn test_is_story_header_false_cases() {
+        assert!(!is_story_header("## Overview"));
+        assert!(!is_story_header("Regular text"));
+        assert!(!is_story_header("**Bold but not a story**"));
+    }
+
+    // -------------------------------------------------------------------------
+    // parse_markdown_stories_with_acceptance tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_stories_markdown_format() {
+        let content = r#"
+# PRD Document
+
+## User Stories
+
+#### US-1.1: User Login
+
+**Acceptance Criteria:**
+- User can enter email and password
+- Form validates inputs
+- Shows error on invalid credentials
+
+#### US-1.2: User Registration
+
+**Acceptance Criteria:**
+- User can create new account
+- Email verification required
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        assert_eq!(stories[0].id, "US-1.1");
+        assert_eq!(stories[0].title, "User Login");
+        assert!(stories[0].acceptance.contains("User can enter email"));
+
+        assert_eq!(stories[1].id, "US-1.2");
+        assert_eq!(stories[1].title, "User Registration");
+        assert!(stories[1].acceptance.contains("User can create new account"));
+    }
+
+    #[test]
+    fn test_parse_stories_bold_format() {
+        let content = r#"
+# PRD Document
+
+## User Stories
+
+**US-1.1: User Login**
+
+**Acceptance Criteria:**
+- User can enter email and password
+- Form validates inputs
+- Shows error on invalid credentials
+
+**US-1.2: User Registration**
+
+**Acceptance Criteria:**
+- User can create new account
+- Email verification required
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        assert_eq!(stories[0].id, "US-1.1");
+        assert_eq!(stories[0].title, "User Login");
+        assert!(stories[0].acceptance.contains("User can enter email"));
+
+        assert_eq!(stories[1].id, "US-1.2");
+        assert_eq!(stories[1].title, "User Registration");
+    }
+
+    #[test]
+    fn test_parse_stories_bold_colon_outside_format() {
+        let content = r#"
+# PRD Document
+
+**US-1.1:** User Login
+
+**Acceptance Criteria:**
+- User can enter email and password
+- Form validates inputs
+
+**US-2.1:** Dashboard View
+
+**Acceptance Criteria:**
+- Shows user statistics
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        assert_eq!(stories[0].id, "US-1.1");
+        assert_eq!(stories[0].title, "User Login");
+
+        assert_eq!(stories[1].id, "US-2.1");
+        assert_eq!(stories[1].title, "Dashboard View");
+    }
+
+    #[test]
+    fn test_parse_stories_mixed_format() {
+        let content = r#"
+# PRD
+
+#### US-1.1: Login (Header Format)
+
+**Acceptance Criteria:**
+- Criteria 1
+
+**US-2.1: Dashboard (Bold Format)**
+
+**Acceptance Criteria:**
+- Criteria 2
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        assert_eq!(stories[0].id, "US-1.1");
+        assert_eq!(stories[1].id, "US-2.1");
+    }
+
+    #[test]
+    fn test_parse_stories_no_acceptance_criteria() {
+        let content = r#"
+#### US-1.1: Feature Without Criteria
+
+Just some description text.
+
+#### US-1.2: Another Feature
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        // Should have fallback acceptance criteria
+        assert!(stories[0].acceptance.starts_with("Implement:"));
+        assert!(stories[1].acceptance.starts_with("Implement:"));
+    }
+
+    #[test]
+    fn test_parse_stories_deduplicates() {
+        let content = r#"
+#### US-1.1: Duplicate Story
+
+**Acceptance Criteria:**
+- First version
+
+#### US-1.1: Duplicate Story Again
+
+**Acceptance Criteria:**
+- Second version
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        // Should only have one US-1.1
+        assert_eq!(stories.len(), 1);
+        assert_eq!(stories[0].id, "US-1.1");
+    }
+
+    #[test]
+    fn test_parse_stories_fallback_to_headers() {
+        // When no US- patterns are found, fall back to generic headers
+        let content = r#"
+## Overview
+This is an overview.
+
+## Login Feature
+Implement login.
+
+## Dashboard
+Show analytics.
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        // Should find "Login Feature" and "Dashboard" (Overview is skipped)
+        assert_eq!(stories.len(), 2);
+        assert_eq!(stories[0].id, "task-1");
+        assert_eq!(stories[0].title, "Login Feature");
+        assert_eq!(stories[1].id, "task-2");
+        assert_eq!(stories[1].title, "Dashboard");
     }
 }

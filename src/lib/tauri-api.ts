@@ -525,6 +525,22 @@ export const ralphLoopApi = {
       request: { projectPath, prdName },
     })
   },
+
+  /** Regenerate stories using AI to properly extract user stories from PRD markdown.
+   * This is useful when initial story extraction created generic tasks instead of
+   * proper US-X.X user stories.
+   * @returns Updated RalphPrd with AI-extracted stories
+   */
+  regenerateStoriesWithAI: async (
+    projectPath: string,
+    prdName: string,
+    agentType: string,
+    model?: string
+  ): Promise<RalphPrd> => {
+    return await invoke('regenerate_ralph_prd_stories', {
+      request: { projectPath, prdName, agentType, model },
+    })
+  },
 }
 
 // Import GSD types
