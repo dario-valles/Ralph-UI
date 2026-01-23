@@ -1078,6 +1078,7 @@ export type AssignmentStatus = 'active' | 'completed' | 'failed' | 'released'
 
 /** An assignment of a story to an agent */
 export interface Assignment {
+  id: string
   agentId: string
   agentType: AgentType
   storyId: string
@@ -1088,6 +1089,15 @@ export interface Assignment {
   errorMessage?: string
   assignedAt: string
   updatedAt?: string
+}
+
+/** The complete assignments file structure (US-2.3: View Parallel Progress) */
+export interface AssignmentsFile {
+  assignments: Assignment[]
+  createdAt: string
+  lastUpdated: string
+  currentIteration: number
+  executionId?: string
 }
 
 /** A file currently in use by an agent */

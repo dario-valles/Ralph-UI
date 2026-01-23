@@ -614,6 +614,25 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_sync!(commands::ralph_loop::get_ralph_config(project_path))
         }
 
+        // US-2.3: View Parallel Progress - Assignment Commands
+        "get_ralph_assignments" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_assignments(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "get_ralph_files_in_use" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_files_in_use(
+                project_path,
+                prd_name
+            ))
+        }
+
         "list_ralph_loop_executions" => {
             // For server mode, return empty list (would need different tracking)
             serde_json::to_value(Vec::<String>::new()).map_err(|e| e.to_string())

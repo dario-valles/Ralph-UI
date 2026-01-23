@@ -35,6 +35,7 @@ import {
   PanelTopClose,
   PanelTop,
   GripHorizontal,
+  Users,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
@@ -54,6 +55,7 @@ import { AgentTree } from '@/components/ralph-loop/AgentTree'
 import { StoryCard } from '@/components/ralph-loop/StoryCard'
 import { ProgressViewer } from '@/components/ralph-loop/ProgressViewer'
 import { CommitCard } from '@/components/ralph-loop/CommitCard'
+import { AssignmentsPanel } from '@/components/ralph-loop/AssignmentsPanel'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -1020,6 +1022,13 @@ export function RalphLoopDashboard({
                 <Clock className="mr-2 h-4 w-4" />
                 History ({iterationHistory.length})
               </TabsTrigger>
+              <TabsTrigger
+                value="agents"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <Users className="mr-2 h-4 w-4" />
+                Agents
+              </TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1152,6 +1161,17 @@ export function RalphLoopDashboard({
           <TabsContent value="history" className="p-0 mt-0">
             <div className="max-h-[400px] overflow-y-auto p-4">
               <IterationHistoryView iterations={iterationHistory} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="agents" className="p-0 mt-0">
+            <div className="p-4">
+              <AssignmentsPanel
+                projectPath={projectPath}
+                prdName={prdName}
+                autoRefresh={!!activeExecutionId}
+                refreshInterval={3000}
+              />
             </div>
           </TabsContent>
         </Tabs>

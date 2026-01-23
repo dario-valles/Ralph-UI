@@ -5,10 +5,10 @@
 use crate::commands::ConfigState;
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
-    ProgressSummary, ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig,
-    RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
-    RalphStory, RetryConfig, SnapshotStore,
+    AssignmentsFile, AssignmentsManager, ErrorStrategy, ExecutionSnapshot, FallbackChainConfig,
+    FileInUse, PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder,
+    RalphConfig, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
+    RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory, RetryConfig, SnapshotStore,
 };
 use crate::utils::{as_path, prds_dir, ralph_ui_dir, to_path_buf};
 use serde::{Deserialize, Serialize};
@@ -401,6 +401,31 @@ pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String
 pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
     let builder = PromptBuilder::new(&to_path_buf(&project_path), &prd_name);
     builder.write_prompt(&content)
+}
+
+// =============================================================================
+// Assignment Commands (US-2.3: View Parallel Progress)
+// =============================================================================
+
+/// Get all assignments for a PRD (US-2.3: View Parallel Progress)
+///
+/// Returns the assignments file containing all current and historical assignments
+/// for the specified PRD. This enables the UI to display:
+/// - All current agent assignments
+/// - Each assignment's agent ID, story, start time, estimated files
+/// - Assignment status (active, completed, failed, released)
+pub fn get_ralph_assignments(project_path: String, prd_name: String) -> Result<AssignmentsFile, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.read()
+}
+
+/// Get files currently in use by active agents (US-2.3: View Parallel Progress)
+///
+/// Returns a list of files that are currently being modified by active agents.
+/// This is used to display visual indicators for potential conflict zones.
+pub fn get_ralph_files_in_use(project_path: String, prd_name: String) -> Result<Vec<FileInUse>, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.get_files_in_use()
 }
 
 /// Heartbeat interval in seconds (30 seconds)

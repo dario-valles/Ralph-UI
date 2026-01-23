@@ -18,6 +18,8 @@ import type {
   RalphLoopSnapshot,
   AgentType,
   DeletePrdResult,
+  AssignmentsFile,
+  FileInUse,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -540,6 +542,20 @@ export const ralphLoopApi = {
     return await invoke('regenerate_ralph_prd_stories', {
       request: { projectPath, prdName, agentType, model },
     })
+  },
+
+  // ============================================================================
+  // Assignment API (US-2.3: View Parallel Progress)
+  // ============================================================================
+
+  /** Get all assignments for a PRD */
+  getAssignments: async (projectPath: string, prdName: string): Promise<AssignmentsFile> => {
+    return await invoke('get_ralph_assignments', { projectPath, prdName })
+  },
+
+  /** Get files currently in use by active agents */
+  getFilesInUse: async (projectPath: string, prdName: string): Promise<FileInUse[]> => {
+    return await invoke('get_ralph_files_in_use', { projectPath, prdName })
   },
 }
 
