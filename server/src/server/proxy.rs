@@ -656,6 +656,25 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             ))
         }
 
+        // US-6.1: View Current Brief
+        "get_ralph_brief" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_brief(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "regenerate_ralph_brief" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::regenerate_ralph_brief(
+                project_path,
+                prd_name
+            ))
+        }
+
         // US-3.3: Manual Learning Entry
         "get_ralph_learnings" => {
             let project_path: String = get_arg(&args, "projectPath")?;

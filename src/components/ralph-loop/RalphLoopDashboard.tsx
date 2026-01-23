@@ -36,6 +36,7 @@ import {
   PanelTop,
   GripHorizontal,
   Users,
+  FileText,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
@@ -57,6 +58,7 @@ import { ProgressViewer } from '@/components/ralph-loop/ProgressViewer'
 import { CommitCard } from '@/components/ralph-loop/CommitCard'
 import { AssignmentsPanel } from '@/components/ralph-loop/AssignmentsPanel'
 import { LearningsPanel } from '@/components/ralph-loop/LearningsPanel'
+import { BriefViewer } from '@/components/ralph-loop/BriefViewer'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -1037,6 +1039,13 @@ export function RalphLoopDashboard({
                 <BookOpen className="mr-2 h-4 w-4" />
                 Learnings
               </TabsTrigger>
+              <TabsTrigger
+                value="brief"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Brief
+              </TabsTrigger>
             </TabsList>
             <Button
               variant="ghost"
@@ -1191,6 +1200,12 @@ export function RalphLoopDashboard({
                 prdName={prdName}
                 stories={prd.stories}
               />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="brief" className="p-0 mt-0">
+            <div className="p-4">
+              <BriefViewer projectPath={projectPath} prdName={prdName} />
             </div>
           </TabsContent>
         </Tabs>

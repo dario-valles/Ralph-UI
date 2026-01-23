@@ -595,6 +595,20 @@ export const ralphLoopApi = {
   },
 
   // ============================================================================
+  // Brief Viewing API (US-6.1: View Current Brief)
+  // ============================================================================
+
+  /** Get the current BRIEF.md content for a PRD */
+  getBrief: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('get_ralph_brief', { projectPath, prdName })
+  },
+
+  /** Regenerate the BRIEF.md file for a PRD */
+  regenerateBrief: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('regenerate_ralph_brief', { projectPath, prdName })
+  },
+
+  // ============================================================================
   // Learnings API (US-3.3: Manual Learning Entry)
   // ============================================================================
 
