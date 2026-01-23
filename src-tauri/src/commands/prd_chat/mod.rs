@@ -79,6 +79,7 @@ pub async fn start_prd_chat_session(
         created_at: now.clone(),
         updated_at: now.clone(),
         message_count: Some(0),
+        pending_operation_started_at: None,
     };
 
     // Initialize .ralph-ui directory and save session to file
@@ -207,9 +208,14 @@ pub async fn send_prd_chat_message(
     // Parse agent type
     let agent_type = parse_agent_type(&session.agent_type)?;
 
+    // Set pending operation before agent execution (for page reload recovery)
+    if let Err(e) = chat_ops::set_pending_operation(project_path_obj, &request.session_id) {
+        log::warn!("Failed to set pending operation: {}", e);
+    }
+
     // Execute CLI agent and get response with streaming using the unified executor
     let emitter = agent_executor::TauriEmitter::new(&app_handle);
-    let response_content = agent_executor::execute_chat_agent(
+    let response_content = match agent_executor::execute_chat_agent(
         &emitter,
         &request.session_id,
         agent_type,
@@ -217,7 +223,16 @@ pub async fn send_prd_chat_message(
         session.project_path.as_deref(),
     )
     .await
-    .map_err(|e| format!("Agent execution failed: {}", e))?;
+    {
+        Ok(content) => content,
+        Err(e) => {
+            // Clear pending operation on error
+            if let Err(clear_err) = chat_ops::clear_pending_operation(project_path_obj, &request.session_id) {
+                log::warn!("Failed to clear pending operation after error: {}", clear_err);
+            }
+            return Err(format!("Agent execution failed: {}", e));
+        }
+    };
 
     // Second phase: store response and parse structured output
     let response_now = chrono::Utc::now().to_rfc3339();
@@ -233,6 +248,11 @@ pub async fn send_prd_chat_message(
 
     chat_ops::create_chat_message(project_path_obj, &assistant_message)
         .map_err(|e| format!("Failed to store assistant message: {}", e))?;
+
+    // Clear pending operation after successful execution
+    if let Err(e) = chat_ops::clear_pending_operation(project_path_obj, &request.session_id) {
+        log::warn!("Failed to clear pending operation: {}", e);
+    }
 
     // Update session timestamp
     chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
@@ -2087,6 +2107,7 @@ mod tests {
             message_count: None,
             gsd_mode: false,
             gsd_state: None,
+            pending_operation_started_at: None,
         }
     }
 

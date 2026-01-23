@@ -160,6 +160,28 @@ pub fn update_chat_session_agent(
     Ok(())
 }
 
+/// Set pending operation timestamp (called before agent execution)
+pub fn set_pending_operation(project_path: &Path, session_id: &str) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.pending_operation_started_at = Some(Utc::now());
+    // Don't update updated_at since this is internal state
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
+/// Clear pending operation timestamp (called after agent execution completes or fails)
+pub fn clear_pending_operation(project_path: &Path, session_id: &str) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.pending_operation_started_at = None;
+    // Don't update updated_at since this is internal state
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +206,7 @@ mod tests {
             message_count: Some(0),
             gsd_mode: false,
             gsd_state: None,
+            pending_operation_started_at: None,
         }
     }
 
@@ -275,5 +298,28 @@ mod tests {
 
         let retrieved = get_chat_session(temp_dir.path(), "chat-123").unwrap();
         assert!(retrieved.structured_mode);
+    }
+
+    #[test]
+    fn test_set_and_clear_pending_operation() {
+        let temp_dir = TempDir::new().unwrap();
+        crate::file_storage::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        let session = create_test_session("chat-123");
+        create_chat_session(temp_dir.path(), &session).unwrap();
+
+        // Initially no pending operation
+        let retrieved = get_chat_session(temp_dir.path(), "chat-123").unwrap();
+        assert!(retrieved.pending_operation_started_at.is_none());
+
+        // Set pending operation
+        set_pending_operation(temp_dir.path(), "chat-123").unwrap();
+        let retrieved = get_chat_session(temp_dir.path(), "chat-123").unwrap();
+        assert!(retrieved.pending_operation_started_at.is_some());
+
+        // Clear pending operation
+        clear_pending_operation(temp_dir.path(), "chat-123").unwrap();
+        let retrieved = get_chat_session(temp_dir.path(), "chat-123").unwrap();
+        assert!(retrieved.pending_operation_started_at.is_none());
     }
 }

@@ -594,6 +594,11 @@ export interface ChatSession {
   createdAt: string
   updatedAt: string
   messageCount?: number
+  /**
+   * ISO timestamp when a pending operation (agent execution) started.
+   * Used to restore "thinking" state after page reload.
+   */
+  pendingOperationStartedAt?: string
 }
 
 export interface SendMessageResponse {

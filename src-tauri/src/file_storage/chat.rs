@@ -53,6 +53,10 @@ pub struct ChatFile {
     pub updated_at: DateTime<Utc>,
     /// Messages in this chat session
     pub messages: Vec<ChatMessageEntry>,
+    /// Timestamp when a pending operation (agent execution) started
+    /// Used to restore "thinking" state after page reload
+    #[serde(default)]
+    pub pending_operation_started_at: Option<DateTime<Utc>>,
 }
 
 /// Message entry in chat file
@@ -117,6 +121,11 @@ impl From<&ChatSession> for ChatFile {
             created_at,
             updated_at,
             messages: Vec::new(),
+            pending_operation_started_at: session
+                .pending_operation_started_at
+                .as_ref()
+                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&Utc)),
         }
     }
 }
@@ -141,6 +150,7 @@ impl ChatFile {
             created_at: self.created_at.to_rfc3339(),
             updated_at: self.updated_at.to_rfc3339(),
             message_count: Some(self.messages.len() as i32),
+            pending_operation_started_at: self.pending_operation_started_at.map(|dt| dt.to_rfc3339()),
         }
     }
 
@@ -343,6 +353,7 @@ mod tests {
                     created_at: Utc::now(),
                 },
             ],
+            pending_operation_started_at: None,
         }
     }
 
@@ -463,5 +474,22 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].session_id, "chat-123");
         assert_eq!(messages[0].content, "Hello");
+    }
+
+    #[test]
+    fn test_pending_operation_persists() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        let mut chat = create_test_chat_file("chat-123");
+        let now = Utc::now();
+        chat.pending_operation_started_at = Some(now);
+        save_chat_file(temp_dir.path(), &chat).unwrap();
+
+        let read_chat = read_chat_file(temp_dir.path(), "chat-123").unwrap();
+        assert!(read_chat.pending_operation_started_at.is_some());
+
+        let session = read_chat.to_session();
+        assert!(session.pending_operation_started_at.is_some());
     }
 }

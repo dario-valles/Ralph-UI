@@ -81,6 +81,10 @@ pub struct ChatSession {
     pub updated_at: String,
     #[serde(skip_deserializing)]
     pub message_count: Option<i32>,
+    /// Timestamp when a pending operation (agent execution) started
+    /// Used to restore "thinking" state after page reload
+    #[serde(default)]
+    pub pending_operation_started_at: Option<String>,
 }
 
 /// A message in a chat session

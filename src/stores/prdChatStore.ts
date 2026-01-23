@@ -222,10 +222,42 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
   },
 
   // Set the current session (clears messages)
+  // Also restores streaming state if session has a pending operation (for page reload recovery)
   setCurrentSession: (session: ChatSession | null) => {
+    const currentState = get()
+
+    // Don't interfere with active streaming - only update session and messages
+    // This prevents bugs where session selection during streaming would kill the stream
+    if (currentState.streaming) {
+      set({
+        currentSession: session,
+        messages: [],
+      })
+      return
+    }
+
+    // Check if session has a pending operation that may still be running (page reload recovery)
+    let shouldRestoreStreaming = false
+    if (session?.pendingOperationStartedAt) {
+      const startedAt = new Date(session.pendingOperationStartedAt)
+      const elapsedMs = Date.now() - startedAt.getTime()
+      const timeoutMs = 25 * 60 * 1000 // 25 minutes (AGENT_TIMEOUT_SECS from backend)
+
+      if (elapsedMs < timeoutMs) {
+        // Operation may still be running - restore streaming state
+        shouldRestoreStreaming = true
+      }
+    }
+
     set({
       currentSession: session,
       messages: [],
+      ...(shouldRestoreStreaming && session
+        ? {
+            streaming: true,
+            processingSessionId: session.id,
+          }
+        : {}), // Don't reset streaming state if not restoring - leave it as-is
     })
   },
 
