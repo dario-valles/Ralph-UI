@@ -683,7 +683,7 @@ export function PRDChatPanel() {
                     {messages.map((message) => (
                       <ChatMessageItem key={message.id} message={message} />
                     ))}
-                    {streaming && (
+                    {streaming && processingSessionId === currentSession?.id && (
                       <StreamingIndicator
                         startedAt={streamingStartedAt || undefined}
                         onRetry={handleRetryMessage}

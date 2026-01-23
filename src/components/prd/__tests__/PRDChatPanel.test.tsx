@@ -445,6 +445,7 @@ describe('PRDChatPanel', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         streaming: true,
+        processingSessionId: 'session-1', // Must match currentSession.id
       })
 
       renderWithRouter(<PRDChatPanel />)
@@ -486,6 +487,7 @@ describe('PRDChatPanel', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         streaming: true,
+        processingSessionId: 'session-1', // Must match currentSession.id
       })
 
       renderWithRouter(<PRDChatPanel />)

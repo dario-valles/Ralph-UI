@@ -138,10 +138,14 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
       throw new Error('Session has no project path')
     }
 
+    // Capture session ID at start to verify it hasn't changed when response arrives
+    const sessionId = currentSession.id
+    const projectPath = currentSession.projectPath
+
     // Create optimistic user message with UUID to prevent collision
     const optimisticMessage: ChatMessage = {
       id: `temp-${crypto.randomUUID()}`,
-      sessionId: currentSession.id,
+      sessionId: sessionId,
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
@@ -152,15 +156,24 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, optimisticMessage],
       streaming: true,
-      processingSessionId: currentSession.id,
+      processingSessionId: sessionId,
       error: null,
     }))
 
     try {
-      const response = await prdChatApi.sendMessage(currentSession.id, content, currentSession.projectPath, attachments)
+      const response = await prdChatApi.sendMessage(sessionId, content, projectPath, attachments)
 
       // Replace optimistic message with actual messages and update session message count
       set((state) => {
+        // If user switched to a different session while processing,
+        // don't update messages - just clear streaming state
+        if (state.currentSession?.id !== sessionId) {
+          return {
+            streaming: false,
+            processingSessionId: null,
+          }
+        }
+
         // Update current session's message count locally
         const updatedSession = state.currentSession
           ? {
@@ -187,13 +200,23 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => ({
         }
       })
     } catch (error) {
-      // Remove optimistic message on error
-      set((state) => ({
-        messages: state.messages.filter((m) => m.id !== optimisticMessage.id),
-        streaming: false,
-        processingSessionId: null,
-        error: errorToString(error),
-      }))
+      // Remove optimistic message on error (only if still on same session)
+      set((state) => {
+        // If user switched sessions, just clear streaming state
+        if (state.currentSession?.id !== sessionId) {
+          return {
+            streaming: false,
+            processingSessionId: null,
+            error: errorToString(error),
+          }
+        }
+        return {
+          messages: state.messages.filter((m) => m.id !== optimisticMessage.id),
+          streaming: false,
+          processingSessionId: null,
+          error: errorToString(error),
+        }
+      })
       throw error
     }
   },
