@@ -424,8 +424,9 @@ impl RalphLoopOrchestrator {
         // Generate initial prompt file
         self.prompt_builder.generate_prompt(&self.config)?;
 
-        // Generate initial BRIEF.md (US-1.1: Resume After Rate Limit)
-        self.brief_builder.generate_brief(prd, None, Some(1))?;
+        // Generate initial BRIEF.md (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
+        // Use learnings manager for structured learnings from all agents
+        self.brief_builder.generate_brief_with_learnings_manager(prd, &self.learnings_manager, Some(1))?;
 
         // Initialize crash recovery state (US-1.2: Resume After Crash)
         self.assignments_manager.initialize(&self.execution_id)?;
@@ -627,10 +628,9 @@ impl RalphLoopOrchestrator {
                 prd_status.passed, prd_status.total, prd_status.progress_percent as u32,
                 prd_status.all_pass, prd_status.incomplete_story_ids);
 
-            // Generate BRIEF.md for this iteration (US-1.1: Resume After Rate Limit)
-            // This enables agents to read completed stories and skip them on resume
-            let learnings = self.progress_tracker.read_learnings().ok();
-            if let Err(e) = self.brief_builder.generate_brief(&prd, learnings.as_deref(), Some(iteration)) {
+            // Generate BRIEF.md for this iteration (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
+            // Use structured learnings manager to include accumulated learnings from all agents
+            if let Err(e) = self.brief_builder.generate_brief_with_learnings_manager(&prd, &self.learnings_manager, Some(iteration)) {
                 log::warn!("[RalphLoop] Failed to generate BRIEF.md: {}", e);
             } else {
                 log::debug!("[RalphLoop] Generated BRIEF.md for iteration {}", iteration);

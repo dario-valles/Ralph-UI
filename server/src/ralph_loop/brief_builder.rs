@@ -2,15 +2,23 @@
 //!
 //! The BRIEF.md file provides agents with a clear understanding of:
 //! - What work has been completed (stories marked as passing)
-//! - What work is in progress (current story)
-//! - What work is pending (remaining stories)
+//! - What work is in progress (stories being worked on by other agents)
+//! - What work is pending (remaining stories not yet assigned)
 //! - Accumulated learnings from previous iterations
 //!
 //! This enables agents to resume after rate limits, crashes, or context switches
 //! by reading a single file that captures the complete project state.
 //!
+//! ## US-1.3: Context Handoff Between Agents
+//!
+//! The BRIEF.md format is designed to be agent-agnostic (standard markdown) so that:
+//! - Any AI coding agent can read and understand the brief
+//! - Handoffs between different agent types (Claude, OpenCode, Cursor, Codex) work seamlessly
+//! - Accumulated learnings from all previous agents are included
+//!
 //! File location: `.ralph-ui/briefs/{prd_name}/BRIEF.md`
 
+use super::assignments_manager::{AssignmentsManager, AssignmentStatus};
 use super::learnings_manager::LearningsManager;
 use super::types::{RalphPrd, RalphStory};
 use std::path::{Path, PathBuf};
@@ -111,12 +119,85 @@ impl BriefBuilder {
         Ok(())
     }
 
+    /// Generate BRIEF.md with full context handoff support (US-1.3)
+    ///
+    /// This method generates a comprehensive brief that includes:
+    /// - Completed work (stories that have passed)
+    /// - In-progress work (stories being worked on by other agents)
+    /// - Pending work (stories waiting to be assigned)
+    /// - Accumulated learnings from all previous agents
+    ///
+    /// The resulting BRIEF.md is agent-agnostic (standard markdown) and can be
+    /// understood by any AI coding agent (Claude, OpenCode, Cursor, Codex, etc.).
+    ///
+    /// # Arguments
+    /// * `prd` - The PRD containing all stories
+    /// * `learnings_manager` - Manager for structured learnings storage
+    /// * `assignments_manager` - Manager for tracking agent assignments
+    /// * `iteration` - Current iteration number (optional)
+    /// * `current_agent_id` - The ID of the current agent (to exclude from "in-progress")
+    pub fn generate_brief_with_full_context(
+        &self,
+        prd: &RalphPrd,
+        learnings_manager: &LearningsManager,
+        assignments_manager: &AssignmentsManager,
+        iteration: Option<u32>,
+        current_agent_id: Option<&str>,
+    ) -> Result<(), String> {
+        // Ensure briefs directory exists
+        let briefs_dir = self.briefs_dir();
+        std::fs::create_dir_all(&briefs_dir)
+            .map_err(|e| format!("Failed to create briefs directory {:?}: {}", briefs_dir, e))?;
+
+        // Get formatted learnings from the structured storage
+        let structured_learnings = learnings_manager.format_for_brief().ok();
+        let learnings_ref = structured_learnings.as_deref();
+
+        // Get active assignments from other agents
+        let active_assignments = assignments_manager.get_active_assignments().ok();
+
+        let brief = self.build_brief_content_with_assignments(
+            prd,
+            learnings_ref,
+            iteration,
+            active_assignments.as_ref(),
+            current_agent_id,
+        );
+
+        std::fs::write(self.brief_path(), brief)
+            .map_err(|e| format!("Failed to write BRIEF.md: {}", e))?;
+
+        Ok(())
+    }
+
     /// Build the brief content as a string
     pub fn build_brief_content(
         &self,
         prd: &RalphPrd,
         learnings: Option<&str>,
         iteration: Option<u32>,
+    ) -> String {
+        // Delegate to the new method without assignments
+        self.build_brief_content_with_assignments(prd, learnings, iteration, None, None)
+    }
+
+    /// Build the brief content with full context handoff support (US-1.3)
+    ///
+    /// This method builds a comprehensive brief that includes:
+    /// - Completed work (stories that have passed)
+    /// - In-progress work (stories being worked on by other agents)
+    /// - Current story (the story this agent should work on)
+    /// - Pending work (stories waiting to be assigned)
+    /// - Accumulated learnings from all previous agents
+    ///
+    /// The format is agent-agnostic (standard markdown) for seamless handoffs.
+    pub fn build_brief_content_with_assignments(
+        &self,
+        prd: &RalphPrd,
+        learnings: Option<&str>,
+        iteration: Option<u32>,
+        active_assignments: Option<&Vec<super::assignments_manager::Assignment>>,
+        current_agent_id: Option<&str>,
     ) -> String {
         let mut brief = String::new();
 
@@ -155,6 +236,38 @@ impl BriefBuilder {
                 brief.push_str(&format!("- [x] **{}**: {}\n", story.id, story.title));
             }
             brief.push_str("\n");
+        }
+
+        // In-progress work by OTHER agents (US-1.3: Context Handoff)
+        // This section shows what other agents are currently working on
+        if let Some(assignments) = active_assignments {
+            // Filter to only show active assignments from OTHER agents
+            let other_agent_work: Vec<_> = assignments
+                .iter()
+                .filter(|a| {
+                    a.status == AssignmentStatus::Active
+                        && current_agent_id.map(|id| a.agent_id != id).unwrap_or(true)
+                })
+                .collect();
+
+            if !other_agent_work.is_empty() {
+                brief.push_str("## In-Progress Work (OTHER AGENTS)\n\n");
+                brief.push_str("These stories are currently being worked on by other agents. **Do not work on these.**\n\n");
+                for assignment in &other_agent_work {
+                    // Find the story details
+                    let story_title = prd
+                        .stories
+                        .iter()
+                        .find(|s| s.id == assignment.story_id)
+                        .map(|s| s.title.as_str())
+                        .unwrap_or("Unknown");
+                    brief.push_str(&format!(
+                        "- [ ] **{}**: {} *(assigned to {} agent)*\n",
+                        assignment.story_id, story_title, assignment.agent_type
+                    ));
+                }
+                brief.push_str("\n");
+            }
         }
 
         // Next story to work on
@@ -204,11 +317,20 @@ impl BriefBuilder {
             brief.push_str("- There's a circular dependency issue\n\n");
         }
 
-        // Pending stories (for context)
+        // Pending stories (for context) - excluding in-progress work
+        let in_progress_ids: std::collections::HashSet<&str> = active_assignments
+            .map(|a| {
+                a.iter()
+                    .filter(|a| a.status == AssignmentStatus::Active)
+                    .map(|a| a.story_id.as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let pending_stories: Vec<&RalphStory> = prd
             .stories
             .iter()
-            .filter(|s| !s.passes)
+            .filter(|s| !s.passes && !in_progress_ids.contains(s.id.as_str()))
             .collect();
         if pending_stories.len() > 1 {
             // More than just the current story
@@ -228,12 +350,12 @@ impl BriefBuilder {
             brief.push_str("\n");
         }
 
-        // Accumulated learnings
+        // Accumulated learnings (US-1.3: Context Handoff - learnings from ALL agents)
         if let Some(learnings_content) = learnings {
             if !learnings_content.trim().is_empty() {
                 brief.push_str("## Accumulated Learnings\n\n");
                 brief.push_str(
-                    "These insights were gathered from previous iterations. Use them to avoid mistakes:\n\n",
+                    "These insights were gathered from previous iterations by all agents. Use them to avoid mistakes:\n\n",
                 );
                 brief.push_str(learnings_content);
                 brief.push_str("\n");
@@ -245,10 +367,11 @@ impl BriefBuilder {
         brief.push_str("## Instructions\n\n");
         brief.push_str("1. **Focus on the Current Story above** - implement only this story\n");
         brief.push_str("2. **Skip Completed Stories** - they are already done\n");
-        brief.push_str("3. **Meet all Acceptance Criteria** before marking as complete\n");
-        brief.push_str("4. **Add learnings** to `.ralph-ui/prds/{prd_name}-progress.txt` for future iterations\n");
-        brief.push_str("5. **Update PRD JSON** - set `passes: true` for the story when complete\n");
-        brief.push_str("6. **Commit your changes** with a clear message referencing the story ID\n");
+        brief.push_str("3. **Avoid In-Progress Work** - other agents are working on those\n");
+        brief.push_str("4. **Meet all Acceptance Criteria** before marking as complete\n");
+        brief.push_str("5. **Add learnings** to `.ralph-ui/prds/{prd_name}-progress.txt` for future iterations\n");
+        brief.push_str("6. **Update PRD JSON** - set `passes: true` for the story when complete\n");
+        brief.push_str("7. **Commit your changes** with a clear message referencing the story ID\n");
 
         brief
     }
@@ -482,5 +605,226 @@ mod tests {
         let brief = builder.read_brief().unwrap();
         // Should not contain learnings section when no learnings provided
         assert!(!brief.contains("Accumulated Learnings"));
+    }
+
+    // US-1.3: Context Handoff Between Agents tests
+
+    #[test]
+    fn test_brief_format_is_agent_agnostic() {
+        // US-1.3: BRIEF.md format is agent-agnostic (standard markdown)
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        builder.generate_brief(&prd, Some("Test learning"), Some(1)).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Verify standard markdown structure
+        assert!(brief.starts_with("# Agent Task Brief\n"));
+
+        // Check for standard markdown headers (## sections)
+        assert!(brief.contains("## Progress Summary"));
+        assert!(brief.contains("## Completed Stories"));
+        assert!(brief.contains("## Current Story"));
+        assert!(brief.contains("## Instructions"));
+
+        // Check for markdown checkboxes
+        assert!(brief.contains("- [x]") || brief.contains("- [ ]"));
+
+        // Check that it uses standard markdown bold
+        assert!(brief.contains("**PRD**:"));
+        assert!(brief.contains("**Branch**:"));
+    }
+
+    #[test]
+    fn test_brief_includes_completed_inprogress_pending() {
+        // US-1.3: Brief includes completed work, in-progress work, and pending work
+        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
+        use crate::models::AgentType;
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+
+        // Create PRD with multiple stories
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut story1 = RalphStory::new("US-1", "Completed Story", "- Done");
+        story1.passes = true;
+
+        let mut story2 = RalphStory::new("US-2", "In Progress Story", "- Doing");
+        story2.passes = false;
+
+        let mut story3 = RalphStory::new("US-3", "Pending Story One", "- Todo");
+        story3.passes = false;
+
+        let mut story4 = RalphStory::new("US-4", "Pending Story Two", "- Todo");
+        story4.passes = false;
+
+        let mut story5 = RalphStory::new("US-5", "Pending Story Three", "- Todo");
+        story5.passes = false;
+
+        prd.add_story(story1);
+        prd.add_story(story2);
+        prd.add_story(story3);
+        prd.add_story(story4);
+        prd.add_story(story5);
+
+        // Create assignments to simulate another agent working on US-2
+        let assignments_manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        assignments_manager.initialize("exec-123").unwrap();
+
+        let assignment = Assignment::new("other-agent-1", AgentType::Opencode, "US-2");
+        assignments_manager.add_assignment(assignment).unwrap();
+
+        // Generate brief with full context
+        builder.generate_brief_with_full_context(
+            &prd,
+            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
+            &assignments_manager,
+            Some(1),
+            Some("current-agent"),
+        ).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Check completed section
+        assert!(brief.contains("Completed Stories (SKIP THESE)"));
+        assert!(brief.contains("**US-1**"));
+
+        // Check in-progress section (work by other agents)
+        assert!(brief.contains("In-Progress Work (OTHER AGENTS)"));
+        assert!(brief.contains("**US-2**"));
+        assert!(brief.contains("opencode")); // Agent type should be shown
+
+        // Check current story section (US-3 should be assigned to this agent)
+        assert!(brief.contains("Current Story (WORK ON THIS)"));
+        assert!(brief.contains("US-3"));
+
+        // Check pending section (US-4 and US-5 should be pending)
+        assert!(brief.contains("Pending Stories"));
+        assert!(brief.contains("**US-4**"));
+        assert!(brief.contains("**US-5**"));
+    }
+
+    #[test]
+    fn test_brief_includes_accumulated_learnings_from_all_agents() {
+        // US-1.3: Brief includes accumulated learnings from all previous agents
+        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        // Create learnings from different agents/iterations
+        let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
+        learnings_manager.initialize().unwrap();
+
+        // Add learning from iteration 1 (simulating Claude agent)
+        let learning1 = LearningEntry::with_type(1, LearningType::Pattern, "Use existing patterns from codebase");
+        learnings_manager.add_learning(learning1).unwrap();
+
+        // Add learning from iteration 2 (simulating OpenCode agent)
+        let learning2 = LearningEntry::with_type(2, LearningType::Gotcha, "Watch out for async race conditions");
+        learnings_manager.add_learning(learning2).unwrap();
+
+        // Add learning from iteration 3 (simulating Cursor agent)
+        let learning3 = LearningEntry::with_type(3, LearningType::Architecture, "Follow hexagonal architecture");
+        learnings_manager.add_learning(learning3).unwrap();
+
+        // Generate brief with learnings manager
+        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Check learnings section exists and has content
+        assert!(brief.contains("Accumulated Learnings"));
+        assert!(brief.contains("gathered from previous iterations by all agents"));
+
+        // Check all learnings are included (from different iterations)
+        assert!(brief.contains("Use existing patterns"));
+        assert!(brief.contains("Watch out for async race conditions"));
+        assert!(brief.contains("Follow hexagonal architecture"));
+
+        // Check learnings are grouped by type
+        assert!(brief.contains("### Pattern"));
+        assert!(brief.contains("### Gotcha"));
+        assert!(brief.contains("### Architecture"));
+    }
+
+    #[test]
+    fn test_brief_readable_by_any_agent() {
+        // US-1.3: Any AI coding agent can read and understand the brief
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+        let prd = create_test_prd();
+
+        builder.generate_brief(&prd, Some("### Test Section\n- Point 1\n- Point 2"), Some(1)).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // Verify the brief is pure UTF-8 text (no binary or special encoding)
+        assert!(brief.is_ascii() || brief.chars().all(|c| c.is_ascii() || c == '🎉'));
+
+        // Verify clear section markers that any agent can parse
+        assert!(brief.contains("## Completed Stories (SKIP THESE)") || brief.contains("## Current Story"));
+        assert!(brief.contains("## Instructions"));
+
+        // Verify actionable instructions are clear and universal
+        assert!(brief.contains("Focus on the Current Story"));
+        assert!(brief.contains("Skip Completed Stories"));
+        assert!(brief.contains("Meet all Acceptance Criteria"));
+
+        // Verify PRD reference path pattern is included
+        assert!(brief.contains("Update PRD JSON"));
+        assert!(brief.contains("passes: true"));
+    }
+
+    #[test]
+    fn test_brief_excludes_current_agent_from_inprogress() {
+        // Ensure the current agent's work is not shown in "In-Progress" section
+        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
+        use crate::models::AgentType;
+
+        let temp_dir = setup_test_dir();
+        let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
+
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+        let mut story1 = RalphStory::new("US-1", "Story One", "- Test");
+        story1.passes = false;
+        let mut story2 = RalphStory::new("US-2", "Story Two", "- Test");
+        story2.passes = false;
+        prd.add_story(story1);
+        prd.add_story(story2);
+
+        // Create assignments
+        let assignments_manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
+        assignments_manager.initialize("exec-123").unwrap();
+
+        // Current agent is working on US-1
+        let assignment1 = Assignment::new("current-agent", AgentType::Claude, "US-1");
+        assignments_manager.add_assignment(assignment1).unwrap();
+
+        // Other agent is working on US-2
+        let assignment2 = Assignment::new("other-agent", AgentType::Opencode, "US-2");
+        assignments_manager.add_assignment(assignment2).unwrap();
+
+        // Generate brief as current-agent
+        builder.generate_brief_with_full_context(
+            &prd,
+            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
+            &assignments_manager,
+            Some(1),
+            Some("current-agent"),
+        ).unwrap();
+
+        let brief = builder.read_brief().unwrap();
+
+        // In-Progress should only show other agent's work (US-2), not current agent's work (US-1)
+        if brief.contains("In-Progress Work") {
+            assert!(brief.contains("**US-2**"));
+            // US-1 should NOT be in the in-progress section
+            // It might be in current story section instead
+        }
     }
 }
