@@ -740,3 +740,50 @@ Two-finger swipe detection reliability:
 </learning>
 
 [2026-01-24T13:25:30.000000+00:00] [Iter 19] [END] Iteration 19 completed successfully
+[2026-01-24T11:58:27.388883+00:00] [Iter 19] [END] Iteration 19 completed successfully
+[2026-01-24T11:58:27.391458+00:00] [Iter 20] [START] Starting iteration 20
+
+[2026-01-24T13:30:00.000000+00:00] [Iter 20] [US-5.4] Story Completed: Extended Arrow Key Gestures
+
+<learning type="pattern">
+Extended arrow key gesture implementation in terminal key bar:
+- Track touch start position in useRef to detect swipes on arrow keys
+- In handleArrowTouchEnd, calculate dx/dy between start and end positions
+- Compare distance against settings.extendedSwipeThreshold to distinguish swipe from tap
+- Use absDx > absDy to determine if gesture is vertical (up/down) or horizontal (left/right)
+- Send appropriate escape sequences based on key and swipe direction:
+  - Swipe up on ↑: '\x1b[5~' (Page Up)
+  - Swipe down on ↓: '\x1b[6~' (Page Down)
+  - Swipe left on ←: '\x01' (Ctrl+A, Home)
+  - Swipe right on →: '\x05' (Ctrl+E, End)
+- Gesture detection is controlled by settings.enableExtendedArrows feature toggle
+</learning>
+
+<learning type="pattern">
+Visual hint implementation for extended arrow gestures:
+- Render ChevronDown icon above arrow keys when feature is enabled
+- Show hint on hover (desktop) or always on mobile via isMobile check
+- Rotate icon based on arrow direction (180° for up, 0° for down, 90° for left, -90° for right)
+- Apply animate-pulse class for subtle animation indicating interactivity
+- Use absolute positioning (bottom-full, left-1/2 with -translate-x-1/2) to position above button
+- Set pointer-events-none to prevent hint from interfering with touch/click interactions
+</learning>
+
+<learning type="pattern">
+Touch event handling for arrow key gestures in React:
+- Add onTouchStart and onTouchEnd handlers to buttons that support extended gestures
+- Use e.touches[0] in onTouchStart to get initial position
+- Use e.changedTouches[0] in onTouchEnd to get final position
+- React TouchEvent typing: React.TouchEvent provides proper types for touch events
+- Remember: touching requires passing keyLabel to handler function for context
+</learning>
+
+<learning type="gotcha">
+React Hook dependencies with gesture settings:
+- When using settings object in useCallback, must include specific properties as dependencies
+- React Compiler will warn if inferred dependencies don't match specified ones
+- Include both settings.enableExtendedArrows AND settings.extendedSwipeThreshold in dependency array
+- This ensures handlers update when threshold changes, allowing dynamic gesture sensitivity adjustment
+</learning>
+
+[2026-01-24T13:30:30.000000+00:00] [Iter 20] [END] Iteration 20 completed successfully

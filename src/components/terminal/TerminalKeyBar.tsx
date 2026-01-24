@@ -3,11 +3,12 @@
 // Supports modifier keys (CTRL/ALT) with sticky/lock modes
 
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen } from 'lucide-react'
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useKeyBarLayoutStore } from '@/stores/keyBarLayoutStore'
+import { useGestureStore } from '@/stores/gestureStore'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { CustomCommandsSheet } from './CustomCommandsSheet'
 
@@ -42,6 +43,7 @@ interface TerminalKeyBarProps {
 export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const { activeTerminalId } = useTerminalStore()
   const { getLayout } = useKeyBarLayoutStore()
+  const { settings } = useGestureStore()
   const isMobile = useIsMobile()
   const [modifierState, setModifierState] = useState<ModifierState>({
     ctrl: 'inactive',
@@ -52,6 +54,10 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const lastClickRef = useRef<{ label: string; time: number } | null>(null)
   const stickyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Touch tracking for extended arrow key gestures
+  const touchStartRef = useRef<{ x: number; y: number; timestamp: number } | null>(null)
+  const [hoveredArrowKey, setHoveredArrowKey] = useState<string | null>(null)
 
   // Get custom layout from store and convert icon names to components
   const keys = useMemo(() => {
@@ -69,6 +75,57 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
       alt: prev.alt === 'sticky' ? 'inactive' : prev.alt,
     }))
   }, [])
+
+  // Handle extended arrow key gestures (swipes on arrow buttons)
+  const handleArrowTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!settings.enableExtendedArrows || !activeTerminalId) return
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      timestamp: Date.now(),
+    }
+  }, [settings.enableExtendedArrows, activeTerminalId])
+
+  const handleArrowTouchEnd = useCallback(
+    (keyLabel: string, e: React.TouchEvent) => {
+      if (!settings.enableExtendedArrows || !activeTerminalId || !touchStartRef.current) return
+
+      const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+      const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      const threshold = settings.extendedSwipeThreshold
+
+      // Check if it's a swipe (distance > threshold) vs a tap (distance < threshold)
+      if (distance >= threshold) {
+        const absDx = Math.abs(dx)
+        const absDy = Math.abs(dy)
+
+        // Determine if swipe is vertical or horizontal
+        if (absDy > absDx) {
+          // Vertical swipe
+          if (keyLabel === '↑' && dy < 0) {
+            // Swipe up on ↑ = Page Up
+            writeToTerminal(activeTerminalId, '\x1b[5~')
+          } else if (keyLabel === '↓' && dy > 0) {
+            // Swipe down on ↓ = Page Down
+            writeToTerminal(activeTerminalId, '\x1b[6~')
+          }
+        } else {
+          // Horizontal swipe
+          if (keyLabel === '←' && dx < 0) {
+            // Swipe left on ← = Home (Ctrl+A)
+            writeToTerminal(activeTerminalId, '\x01')
+          } else if (keyLabel === '→' && dx > 0) {
+            // Swipe right on → = End (Ctrl+E)
+            writeToTerminal(activeTerminalId, '\x05')
+          }
+        }
+      }
+
+      touchStartRef.current = null
+    },
+    [settings.enableExtendedArrows, settings.extendedSwipeThreshold, activeTerminalId]
+  )
 
   const handleKeyPress = useCallback(
     (keyDef: KeyDefinition) => {
@@ -252,45 +309,73 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
             keyDef.label === 'CTRL' ? 'ctrl' : keyDef.label === 'ALT' ? 'alt' : null
           const isModifierActive = !!(modifierKey && modifierState[modifierKey] !== 'inactive')
           const isModifierLocked = modifierKey && modifierState[modifierKey] === 'locked'
+          const isArrowKey = ['↑', '↓', '←', '→'].includes(keyDef.label)
+          const isHoveredArrowKey = hoveredArrowKey === keyDef.label
 
           return (
-            <button
-              key={keyDef.label}
-              onClick={() => handleKeyPress(keyDef)}
-              aria-label={keyDef.ariaLabel || keyDef.label}
-              aria-pressed={keyDef.isModifier ? isModifierActive : undefined}
-              className={cn(
-                'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
-                'bg-background rounded border transition-all duration-75',
-                'hover:bg-accent hover:text-accent-foreground',
-                'active:bg-accent active:scale-95',
-                'touch-manipulation',
-                'min-h-[32px] min-w-[40px]',
-                // Modifier key styling
-                keyDef.isModifier && [
-                  'border-border',
-                  isModifierActive && [
-                    'bg-accent text-accent-foreground',
-                    isModifierLocked && 'border-accent border-2 animate-pulse',
-                  ],
-                ],
-                // Interrupt button styling
-                keyDef.label === '^C' && 'bg-destructive/10 text-destructive hover:bg-destructive/20',
-                // Regular key styling
-                !keyDef.isModifier &&
-                  keyDef.label !== '^C' && [
+            <div key={keyDef.label} className="relative">
+              <button
+                onClick={() => handleKeyPress(keyDef)}
+                onTouchStart={isArrowKey ? handleArrowTouchStart : undefined}
+                onTouchEnd={isArrowKey ? (e) => handleArrowTouchEnd(keyDef.label, e) : undefined}
+                onMouseEnter={isArrowKey ? () => setHoveredArrowKey(keyDef.label) : undefined}
+                onMouseLeave={isArrowKey ? () => setHoveredArrowKey(null) : undefined}
+                aria-label={keyDef.ariaLabel || keyDef.label}
+                aria-pressed={keyDef.isModifier ? isModifierActive : undefined}
+                className={cn(
+                  'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
+                  'bg-background rounded border transition-all duration-75',
+                  'hover:bg-accent hover:text-accent-foreground',
+                  'active:bg-accent active:scale-95',
+                  'touch-manipulation',
+                  'min-h-[32px] min-w-[40px]',
+                  // Modifier key styling
+                  keyDef.isModifier && [
                     'border-border',
-                    (modifierState.ctrl !== 'inactive' || modifierState.alt !== 'inactive') &&
-                      'border-accent/50',
-                  ]
+                    isModifierActive && [
+                      'bg-accent text-accent-foreground',
+                      isModifierLocked && 'border-accent border-2 animate-pulse',
+                    ],
+                  ],
+                  // Interrupt button styling
+                  keyDef.label === '^C' && 'bg-destructive/10 text-destructive hover:bg-destructive/20',
+                  // Regular key styling
+                  !keyDef.isModifier &&
+                    keyDef.label !== '^C' && [
+                      'border-border',
+                      (modifierState.ctrl !== 'inactive' || modifierState.alt !== 'inactive') &&
+                        'border-accent/50',
+                    ],
+                  // Arrow key with extended gestures enabled
+                  isArrowKey && settings.enableExtendedArrows && 'relative',
+                )}
+              >
+                {keyDef.icon ? (
+                  <span className="flex items-center justify-center">{keyDef.icon}</span>
+                ) : (
+                  keyDef.label
+                )}
+              </button>
+
+              {/* Visual hint for extended arrow key gestures */}
+              {isArrowKey && settings.enableExtendedArrows && (isHoveredArrowKey || isMobile) && (
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 pointer-events-none">
+                  <ChevronDown
+                    className="w-3 h-3 text-accent animate-pulse"
+                    style={{
+                      transform:
+                        keyDef.label === '↑'
+                          ? 'rotate(180deg)'
+                          : keyDef.label === '↓'
+                            ? 'rotate(0deg)'
+                            : keyDef.label === '←'
+                              ? 'rotate(90deg)'
+                              : 'rotate(-90deg)',
+                    }}
+                  />
+                </div>
               )}
-            >
-              {keyDef.icon ? (
-                <span className="flex items-center justify-center">{keyDef.icon}</span>
-              ) : (
-                keyDef.label
-              )}
-            </button>
+            </div>
           )
         })}
 

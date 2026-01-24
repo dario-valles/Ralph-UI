@@ -47,7 +47,7 @@ const DEFAULT_SETTINGS: GestureSettings = {
   cursorSwipeThreshold: 30,
   enablePageScroll: true, // Enabled for US-5.3
   pageSwipeThreshold: 50,
-  enableExtendedArrows: false, // Disabled for US-5.4
+  enableExtendedArrows: true, // Enabled for US-5.4
   extendedSwipeThreshold: 50,
   enablePinchZoom: false, // Disabled for US-5.5
   pinchThreshold: 0.1,
