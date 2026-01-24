@@ -16,6 +16,7 @@ import { AgentTerminalInstance } from './AgentTerminalInstance'
 import { TerminalTabs } from './TerminalTabs'
 import { ResizeHandle } from './ResizeHandle'
 import { SplitResizeHandle } from './SplitResizeHandle'
+import { TerminalKeyBar } from './TerminalKeyBar'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 
@@ -271,25 +272,30 @@ export function TerminalPanel() {
 
       {/* Terminal content */}
       {!isMinimized && (
-        <div className="flex-1 overflow-hidden">
-          {!rootPane ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No terminals open
-            </div>
-          ) : (
-            <PaneRenderer
-              node={rootPane}
-              terminals={terminals.map((t) => ({
-                id: t.id,
-                cwd: t.cwd,
-                terminalType: t.terminalType,
-                agentId: t.agentId,
-              }))}
-              activeTerminalId={activeTerminalId}
-              onSelectTerminal={setActiveTerminal}
-              onUpdateSizes={updatePaneSizes}
-            />
-          )}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            {!rootPane ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                No terminals open
+              </div>
+            ) : (
+              <PaneRenderer
+                node={rootPane}
+                terminals={terminals.map((t) => ({
+                  id: t.id,
+                  cwd: t.cwd,
+                  terminalType: t.terminalType,
+                  agentId: t.agentId,
+                }))}
+                activeTerminalId={activeTerminalId}
+                onSelectTerminal={setActiveTerminal}
+                onUpdateSizes={updatePaneSizes}
+              />
+            )}
+          </div>
+
+          {/* Mobile key bar - only shown on mobile devices */}
+          {isMobile && <TerminalKeyBar />}
         </div>
       )}
     </div>
