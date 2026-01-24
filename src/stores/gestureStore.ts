@@ -20,6 +20,11 @@ interface GestureSettings {
 
   enablePinchZoom: boolean
   pinchThreshold: number
+
+  // Font size settings
+  terminalFontSize: number // Default font size (pixels)
+  minFontSize: number // Minimum font size
+  maxFontSize: number // Maximum font size
 }
 
 interface GestureStore {
@@ -37,6 +42,7 @@ interface GestureStore {
   setExtendedSwipeThreshold: (threshold: number) => void
   togglePinchZoom: () => void
   setPinchThreshold: (threshold: number) => void
+  setTerminalFontSize: (fontSize: number) => void
   resetToDefaults: () => void
 }
 
@@ -49,8 +55,11 @@ const DEFAULT_SETTINGS: GestureSettings = {
   pageSwipeThreshold: 50,
   enableExtendedArrows: true, // Enabled for US-5.4
   extendedSwipeThreshold: 50,
-  enablePinchZoom: false, // Disabled for US-5.5
+  enablePinchZoom: true, // Enabled for US-5.5
   pinchThreshold: 0.1,
+  terminalFontSize: 13, // Default font size in pixels
+  minFontSize: 8, // Minimum font size
+  maxFontSize: 32, // Maximum font size
 }
 
 export const useGestureStore = create<GestureStore>()(
@@ -135,6 +144,17 @@ export const useGestureStore = create<GestureStore>()(
           settings: {
             ...state.settings,
             pinchThreshold: threshold,
+          },
+        })),
+
+      setTerminalFontSize: (fontSize: number) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            terminalFontSize: Math.max(
+              state.settings.minFontSize,
+              Math.min(fontSize, state.settings.maxFontSize)
+            ),
           },
         })),
 

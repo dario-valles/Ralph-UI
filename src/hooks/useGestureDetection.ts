@@ -6,12 +6,19 @@ export interface GestureState {
   isDetecting: boolean
   direction: 'up' | 'down' | 'left' | 'right' | null
   distance: number
+  scale?: number // For pinch gestures (1.0 = no change, >1.0 = pinch out, <1.0 = pinch in)
 }
 
 interface TouchPoint {
   x: number
   y: number
   timestamp: number
+}
+
+function getDistance(x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  return Math.sqrt(dx * dx + dy * dy)
 }
 
 export interface UseGestureDetectionOptions {
@@ -21,9 +28,12 @@ export interface UseGestureDetectionOptions {
   onSwipeRight?: () => void
   onTwoFingerSwipeUp?: () => void
   onTwoFingerSwipeDown?: () => void
+  onPinchIn?: (scale: number) => void
+  onPinchOut?: (scale: number) => void
   onGestureStart?: () => void
   onGestureEnd?: () => void
   threshold?: number // Minimum distance to register as swipe (pixels)
+  pinchThreshold?: number // Minimum scale change to register as pinch (0.1 = 10%)
   enabled?: boolean
 }
 
@@ -38,9 +48,12 @@ export function useGestureDetection(
     onSwipeRight,
     onTwoFingerSwipeUp,
     onTwoFingerSwipeDown,
+    onPinchIn,
+    onPinchOut,
     onGestureStart,
     onGestureEnd,
     threshold = 30,
+    pinchThreshold = 0.1,
     enabled = true,
   } = options
 
@@ -48,10 +61,14 @@ export function useGestureDetection(
     isDetecting: false,
     direction: null,
     distance: 0,
+    scale: 1,
   })
 
   const touchStartRef = useRef<TouchPoint | null>(null)
+  const touchSecondStartRef = useRef<TouchPoint | null>(null)
   const touchCurrentRef = useRef<TouchPoint | null>(null)
+  const touchSecondCurrentRef = useRef<TouchPoint | null>(null)
+  const initialPinchDistanceRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!enabled || !elementRef.current) return
@@ -69,10 +86,32 @@ export function useGestureDetection(
       }
       touchCurrentRef.current = { ...touchStartRef.current }
 
+      // Track second touch point for pinch detection
+      if (e.touches.length === 2) {
+        const touch2 = e.touches[1]
+        touchSecondStartRef.current = {
+          x: touch2.clientX,
+          y: touch2.clientY,
+          timestamp: Date.now(),
+        }
+        touchSecondCurrentRef.current = { ...touchSecondStartRef.current }
+        initialPinchDistanceRef.current = getDistance(
+          touchStartRef.current.x,
+          touchStartRef.current.y,
+          touch2.clientX,
+          touch2.clientY
+        )
+      } else {
+        touchSecondStartRef.current = null
+        touchSecondCurrentRef.current = null
+        initialPinchDistanceRef.current = null
+      }
+
       setGestureState({
         isDetecting: true,
         direction: null,
         distance: 0,
+        scale: 1,
       })
 
       onGestureStart?.()
@@ -86,6 +125,33 @@ export function useGestureDetection(
         x: touch.clientX,
         y: touch.clientY,
         timestamp: Date.now(),
+      }
+
+      // Handle two-finger pinch
+      if (e.touches.length === 2 && touchSecondStartRef.current && initialPinchDistanceRef.current !== null) {
+        const touch2 = e.touches[1]
+        touchSecondCurrentRef.current = {
+          x: touch2.clientX,
+          y: touch2.clientY,
+          timestamp: Date.now(),
+        }
+
+        const currentDistance = getDistance(
+          touchCurrentRef.current.x,
+          touchCurrentRef.current.y,
+          touch2.clientX,
+          touch2.clientY
+        )
+
+        const scale = currentDistance / initialPinchDistanceRef.current
+
+        setGestureState({
+          isDetecting: true,
+          direction: null,
+          distance: 0,
+          scale,
+        })
+        return
       }
 
       const dx = touch.clientX - touchStartRef.current.x
@@ -111,11 +177,49 @@ export function useGestureDetection(
         isDetecting: true,
         direction,
         distance,
+        scale: 1,
       })
     }
 
     const handleTouchEnd = (e: TouchEvent) => {
       if (!touchStartRef.current || !touchCurrentRef.current) return
+
+      // Check if this was a pinch gesture (ended with scale change)
+      if (touchSecondStartRef.current && touchSecondCurrentRef.current && initialPinchDistanceRef.current !== null) {
+        const currentDistance = getDistance(
+          touchCurrentRef.current.x,
+          touchCurrentRef.current.y,
+          touchSecondCurrentRef.current.x,
+          touchSecondCurrentRef.current.y
+        )
+        const scale = currentDistance / initialPinchDistanceRef.current
+
+        // Trigger pinch callback if scale changed beyond threshold
+        if (Math.abs(scale - 1) >= pinchThreshold) {
+          if (scale < 1) {
+            // Pinch in (zoom out)
+            onPinchIn?.(scale)
+          } else {
+            // Pinch out (zoom in)
+            onPinchOut?.(scale)
+          }
+        }
+
+        setGestureState({
+          isDetecting: false,
+          direction: null,
+          distance: 0,
+          scale: 1,
+        })
+
+        onGestureEnd?.()
+        touchStartRef.current = null
+        touchCurrentRef.current = null
+        touchSecondStartRef.current = null
+        touchSecondCurrentRef.current = null
+        initialPinchDistanceRef.current = null
+        return
+      }
 
       const dx = touchCurrentRef.current.x - touchStartRef.current.x
       const dy = touchCurrentRef.current.y - touchStartRef.current.y
@@ -163,6 +267,7 @@ export function useGestureDetection(
         isDetecting: false,
         direction: null,
         distance: 0,
+        scale: 1,
       })
 
       onGestureEnd?.()
@@ -184,12 +289,15 @@ export function useGestureDetection(
     enabled,
     elementRef,
     threshold,
+    pinchThreshold,
     onSwipeUp,
     onSwipeDown,
     onSwipeLeft,
     onSwipeRight,
     onTwoFingerSwipeUp,
     onTwoFingerSwipeDown,
+    onPinchIn,
+    onPinchOut,
     onGestureStart,
     onGestureEnd,
   ])

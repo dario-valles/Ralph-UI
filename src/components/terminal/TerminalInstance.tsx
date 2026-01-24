@@ -1,7 +1,7 @@
 // Terminal instance component - wraps xterm.js with PTY connection
 // Uses WebSocket PTY for browser mode
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -34,11 +34,38 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const ptyRef = useRef<UnifiedPty | null>(null)
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
-  const { settings } = useGestureStore()
+  const { settings, setTerminalFontSize } = useGestureStore()
   const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | 'left' | 'right' | null>(null)
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
+
+  // Pinch handlers
+  const handlePinchIn = useCallback(
+    (scale: number) => {
+      if (!terminalRef.current || !isActive) return
+      const newFontSize = Math.round(settings.terminalFontSize * scale)
+      if (newFontSize !== settings.terminalFontSize) {
+        setTerminalFontSize(newFontSize)
+        terminalRef.current.options.fontSize = newFontSize
+        fitAddonRef.current?.fit()
+      }
+    },
+    [settings.terminalFontSize, setTerminalFontSize, isActive]
+  )
+
+  const handlePinchOut = useCallback(
+    (scale: number) => {
+      if (!terminalRef.current || !isActive) return
+      const newFontSize = Math.round(settings.terminalFontSize * scale)
+      if (newFontSize !== settings.terminalFontSize) {
+        setTerminalFontSize(newFontSize)
+        terminalRef.current.options.fontSize = newFontSize
+        fitAddonRef.current?.fit()
+      }
+    },
+    [settings.terminalFontSize, setTerminalFontSize, isActive]
+  )
 
   // Setup gesture detection
   const gestureState = useGestureDetection(containerRef, {
@@ -100,8 +127,11 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         setTimeout(() => setGestureIndicator(null), 200)
       }
     },
+    onPinchIn: handlePinchIn,
+    onPinchOut: handlePinchOut,
     threshold: Math.min(settings.historySwipeThreshold, settings.cursorSwipeThreshold, settings.pageSwipeThreshold),
-    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement || settings.enablePageScroll) && isActive,
+    pinchThreshold: settings.pinchThreshold,
+    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement || settings.enablePageScroll || settings.enablePinchZoom) && isActive,
   })
 
   // Initialize terminal
@@ -115,7 +145,7 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
     const terminal = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontSize: 13,
+      fontSize: settings.terminalFontSize,
       fontFamily:
         '"MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", "JetBrainsMono Nerd Font", Menlo, Monaco, "Courier New", monospace',
       theme: {
@@ -251,7 +281,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       killTerminal(terminalId)
       isInitializedRef.current = false
     }
-  }, [terminalId, cwd, updateTerminalTitle, ptyAvailable])
+  }, [terminalId, cwd, updateTerminalTitle, ptyAvailable, settings.terminalFontSize])
+
+  // Update font size when setting changes
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.options.fontSize = settings.terminalFontSize
+      fitAddonRef.current?.fit()
+    }
+  }, [settings.terminalFontSize])
 
   // Handle container resize
   useEffect(() => {

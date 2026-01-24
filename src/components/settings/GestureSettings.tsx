@@ -15,6 +15,12 @@ export function GestureSettings() {
     setHistorySwipeThreshold,
     toggleCursorMovement,
     setCursorSwipeThreshold,
+    togglePageScroll,
+    setPageSwipeThreshold,
+    toggleExtendedArrows,
+    setExtendedSwipeThreshold,
+    togglePinchZoom,
+    setTerminalFontSize,
     resetToDefaults,
   } = useGestureStore()
 
@@ -107,14 +113,127 @@ export function GestureSettings() {
           )}
         </div>
 
-        {/* Future gesture features - placeholder for upcoming stories */}
-        <div className="space-y-3 text-sm text-muted-foreground p-4 bg-secondary/20 rounded-lg border">
-          <p className="font-medium">Coming Soon</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Page scrolling with two-finger swipes</li>
-            <li>Extended arrow key gestures</li>
-            <li>Pinch-to-zoom for terminal font size</li>
-          </ul>
+        {/* Page Scrolling */}
+        <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Page Scrolling</Label>
+              <p className="text-sm text-muted-foreground">
+                Two-finger swipe up/down to scroll terminal output (Page Up/Down)
+              </p>
+            </div>
+            <Switch
+              checked={settings.enablePageScroll}
+              onCheckedChange={togglePageScroll}
+              aria-label="Toggle page scrolling"
+            />
+          </div>
+
+          {settings.enablePageScroll && (
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="pageThreshold" className="text-sm">
+                Swipe Sensitivity: {settings.pageSwipeThreshold}px
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Minimum swipe distance to register two-finger scroll
+              </p>
+              <Slider
+                id="pageThreshold"
+                min={10}
+                max={100}
+                step={5}
+                value={[settings.pageSwipeThreshold]}
+                onValueChange={([v]) => setPageSwipeThreshold(v)}
+                className="w-full"
+              />
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span>10px (very sensitive)</span>
+                <span className="ml-auto">100px (less sensitive)</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Extended Arrow Key Gestures */}
+        <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Extended Arrow Key Gestures</Label>
+              <p className="text-sm text-muted-foreground">
+                Swipe on arrow keys for advanced navigation (Page Up/Down, Home/End)
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableExtendedArrows}
+              onCheckedChange={toggleExtendedArrows}
+              aria-label="Toggle extended arrow gestures"
+            />
+          </div>
+
+          {settings.enableExtendedArrows && (
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="extendedThreshold" className="text-sm">
+                Swipe Sensitivity: {settings.extendedSwipeThreshold}px
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Minimum swipe distance on arrow keys to trigger extended gestures
+              </p>
+              <Slider
+                id="extendedThreshold"
+                min={10}
+                max={100}
+                step={5}
+                value={[settings.extendedSwipeThreshold]}
+                onValueChange={([v]) => setExtendedSwipeThreshold(v)}
+                className="w-full"
+              />
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span>10px (very sensitive)</span>
+                <span className="ml-auto">100px (less sensitive)</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pinch-to-Zoom for Terminal Font Size */}
+        <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Pinch-to-Zoom Terminal</Label>
+              <p className="text-sm text-muted-foreground">
+                Pinch in/out to adjust terminal font size
+              </p>
+            </div>
+            <Switch
+              checked={settings.enablePinchZoom}
+              onCheckedChange={togglePinchZoom}
+              aria-label="Toggle pinch-to-zoom"
+            />
+          </div>
+
+          {settings.enablePinchZoom && (
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="fontSize" className="text-sm">
+                Terminal Font Size: {settings.terminalFontSize}px
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Adjust font size or use pinch gestures on the terminal
+              </p>
+              <Slider
+                id="fontSize"
+                min={settings.minFontSize}
+                max={settings.maxFontSize}
+                step={1}
+                value={[settings.terminalFontSize]}
+                onValueChange={([v]) => setTerminalFontSize(v)}
+                className="w-full"
+              />
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span>{settings.minFontSize}px (smallest)</span>
+                <span className="ml-auto">{settings.maxFontSize}px (largest)</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reset button */}

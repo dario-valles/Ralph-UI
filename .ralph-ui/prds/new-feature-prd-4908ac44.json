@@ -158,7 +158,7 @@
       "id": "US-5.4",
       "title": "Extended Arrow Key Gestures",
       "acceptance": "- Swipe up on ↑ sends Page Up\n- Swipe down on ↓ sends Page Down\n- Swipe left on ← sends Home (Ctrl+A)\n- Swipe right on → sends End (Ctrl+E)\n- Visual hint shows extended gesture is available",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
@@ -166,7 +166,7 @@
       "id": "US-5.5",
       "title": "Adjust Terminal Font Size",
       "acceptance": "- Pinch gesture changes terminal font size\n- Font size persists across sessions\n- Minimum and maximum size limits\n- Can reset to default from settings",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
