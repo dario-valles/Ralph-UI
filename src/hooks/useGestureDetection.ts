@@ -19,6 +19,8 @@ export interface UseGestureDetectionOptions {
   onSwipeDown?: () => void
   onSwipeLeft?: () => void
   onSwipeRight?: () => void
+  onTwoFingerSwipeUp?: () => void
+  onTwoFingerSwipeDown?: () => void
   onGestureStart?: () => void
   onGestureEnd?: () => void
   threshold?: number // Minimum distance to register as swipe (pixels)
@@ -34,6 +36,8 @@ export function useGestureDetection(
     onSwipeDown,
     onSwipeLeft,
     onSwipeRight,
+    onTwoFingerSwipeUp,
+    onTwoFingerSwipeDown,
     onGestureStart,
     onGestureEnd,
     threshold = 30,
@@ -55,7 +59,7 @@ export function useGestureDetection(
     const element = elementRef.current
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return // Only handle single finger touches
+      if (e.touches.length !== 1 && e.touches.length !== 2) return // Handle single or two finger touches
 
       const touch = e.touches[0]
       touchStartRef.current = {
@@ -75,7 +79,7 @@ export function useGestureDetection(
     }
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!touchStartRef.current || e.touches.length !== 1) return
+      if (!touchStartRef.current || (e.touches.length !== 1 && e.touches.length !== 2)) return
 
       const touch = e.touches[0]
       touchCurrentRef.current = {
@@ -110,12 +114,15 @@ export function useGestureDetection(
       })
     }
 
-    const handleTouchEnd = () => {
+    const handleTouchEnd = (e: TouchEvent) => {
       if (!touchStartRef.current || !touchCurrentRef.current) return
 
       const dx = touchCurrentRef.current.x - touchStartRef.current.x
       const dy = touchCurrentRef.current.y - touchStartRef.current.y
       const distance = Math.sqrt(dx * dx + dy * dy)
+
+      // Check if this was a two-finger gesture
+      const isTwoFinger = e.touches.length > 0 && (e.touches.length === 2 || e.changedTouches.length === 2)
 
       // Only trigger callback if swipe exceeded threshold
       if (distance >= threshold) {
@@ -124,17 +131,30 @@ export function useGestureDetection(
 
         if (absDy > absDx) {
           // Vertical swipe
-          if (dy < 0 && distance >= threshold) {
-            onSwipeUp?.()
-          } else if (dy > 0 && distance >= threshold) {
-            onSwipeDown?.()
+          if (isTwoFinger) {
+            // Two-finger swipe
+            if (dy < 0 && distance >= threshold) {
+              onTwoFingerSwipeUp?.()
+            } else if (dy > 0 && distance >= threshold) {
+              onTwoFingerSwipeDown?.()
+            }
+          } else {
+            // Single-finger swipe
+            if (dy < 0 && distance >= threshold) {
+              onSwipeUp?.()
+            } else if (dy > 0 && distance >= threshold) {
+              onSwipeDown?.()
+            }
           }
         } else {
           // Horizontal swipe
-          if (dx < 0 && distance >= threshold) {
-            onSwipeLeft?.()
-          } else if (dx > 0 && distance >= threshold) {
-            onSwipeRight?.()
+          if (!isTwoFinger) {
+            // Only handle single-finger horizontal swipes
+            if (dx < 0 && distance >= threshold) {
+              onSwipeLeft?.()
+            } else if (dx > 0 && distance >= threshold) {
+              onSwipeRight?.()
+            }
           }
         }
       }
@@ -153,12 +173,12 @@ export function useGestureDetection(
 
     element.addEventListener('touchstart', handleTouchStart, { passive: true })
     element.addEventListener('touchmove', handleTouchMove, { passive: true })
-    element.addEventListener('touchend', handleTouchEnd, { passive: true })
+    element.addEventListener('touchend', handleTouchEnd as EventListener, { passive: true })
 
     return () => {
       element.removeEventListener('touchstart', handleTouchStart)
       element.removeEventListener('touchmove', handleTouchMove)
-      element.removeEventListener('touchend', handleTouchEnd)
+      element.removeEventListener('touchend', handleTouchEnd as EventListener)
     }
   }, [
     enabled,
@@ -168,6 +188,8 @@ export function useGestureDetection(
     onSwipeDown,
     onSwipeLeft,
     onSwipeRight,
+    onTwoFingerSwipeUp,
+    onTwoFingerSwipeDown,
     onGestureStart,
     onGestureEnd,
   ])

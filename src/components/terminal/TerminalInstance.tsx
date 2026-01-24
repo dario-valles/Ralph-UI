@@ -86,8 +86,22 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         setTimeout(() => setGestureIndicator(null), 200)
       }
     },
-    threshold: Math.min(settings.historySwipeThreshold, settings.cursorSwipeThreshold),
-    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement) && isActive,
+    onTwoFingerSwipeUp: () => {
+      if (settings.enablePageScroll && isActive) {
+        writeToTerminal(terminalId, '\x1b[5~') // Page Up escape sequence
+        setGestureIndicator('up')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    onTwoFingerSwipeDown: () => {
+      if (settings.enablePageScroll && isActive) {
+        writeToTerminal(terminalId, '\x1b[6~') // Page Down escape sequence
+        setGestureIndicator('down')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    threshold: Math.min(settings.historySwipeThreshold, settings.cursorSwipeThreshold, settings.pageSwipeThreshold),
+    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement || settings.enablePageScroll) && isActive,
   })
 
   // Initialize terminal

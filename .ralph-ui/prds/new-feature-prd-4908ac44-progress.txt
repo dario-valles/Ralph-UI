@@ -691,3 +691,52 @@ Gesture indicator display for multiple directions:
 </learning>
 
 [2026-01-24T13:20:30.000000+00:00] [Iter 18] [END] Iteration 18 completed successfully
+[2026-01-24T11:56:26.829846+00:00] [Iter 18] [END] Iteration 18 completed successfully
+[2026-01-24T11:56:26.833467+00:00] [Iter 19] [START] Starting iteration 19
+
+[2026-01-24T13:25:00.000000+00:00] [Iter 19] [US-5.3] Story Completed: Page Through Terminal Output
+
+<learning type="pattern">
+Two-finger gesture support in useGestureDetection hook:
+- Track both single-finger (e.touches.length === 1) and two-finger (e.touches.length === 2) swipes
+- In handleTouchStart/Move, check e.touches.length !== 1 && e.touches.length !== 2 to allow both
+- In handleTouchEnd, detect two-finger by checking e.changedTouches.length === 2
+- Use onTwoFingerSwipeUp/Down callbacks for two-finger vertical swipes
+- Two-finger swipes use Page Up/Down escape sequences: '\x1b[5~' (Page Up) and '\x1b[6~' (Page Down)
+- Importantly: only process one touch point (e.touches[0]) for movement detection, ignoring second finger position
+- This allows two-finger swipe to work naturally while avoiding conflicts with pinch gestures
+</learning>
+
+<learning type="pattern">
+Page scrolling gesture escape sequences:
+- Page Up: '\x1b[5~' (same as physical Page Up key)
+- Page Down: '\x1b[6~' (same as physical Page Down key)
+- These work with terminal scrollback in most terminal emulators (xterm, tmux, less, etc.)
+- Works smoothly in vim pagination modes and terminal pagers
+</learning>
+
+<learning type="architecture">
+Gesture feature detection should be enabled in gesture store defaults when story completes:
+- enablePageScroll: true (was false during development)
+- enableCursorMovement: true (from previous US-5.2, was false)
+- This allows features to work immediately after implementation
+- Gesture settings are persisted via Zustand persist middleware, so defaults only apply on fresh install
+</learning>
+
+<learning type="pattern">
+Touch event type handling in TypeScript:
+- handleTouchEnd callback receives TouchEvent parameter for accessing e.changedTouches
+- Must cast event listener to EventListener type when registering: handleTouchEnd as EventListener
+- This is necessary because TouchEvent and EventListener have different type signatures in TypeScript
+- Add callbacks to dependency array: onTwoFingerSwipeUp, onTwoFingerSwipeDown
+</learning>
+
+<learning type="gotcha">
+Two-finger swipe detection reliability:
+- Mobile browsers vary in touch handling - some may drop the second touch point
+- Testing on real devices recommended since browser simulators may not accurately simulate multi-touch
+- The implementation tolerates second finger disappearing mid-gesture (doesn't cancel)
+- Distinguishing between pinch (changing distance between two fingers) and swipe (parallel movement) requires measuring distance between both fingers - current implementation only checks one finger position, which naturally avoids pinch conflicts
+</learning>
+
+[2026-01-24T13:25:30.000000+00:00] [Iter 19] [END] Iteration 19 completed successfully

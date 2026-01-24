@@ -150,7 +150,7 @@
       "id": "US-5.3",
       "title": "Page Through Terminal Output",
       "acceptance": "- Two-finger swipe up sends Page Up\n- Two-finger swipe down sends Page Down\n- Works smoothly with terminal scrollback\n- Doesn't conflict with pinch-to-zoom",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

@@ -43,9 +43,9 @@ interface GestureStore {
 const DEFAULT_SETTINGS: GestureSettings = {
   enableHistoryNavigation: true,
   historySwipeThreshold: 30, // 30px minimum swipe distance
-  enableCursorMovement: false, // Disabled for US-5.2
+  enableCursorMovement: true, // Enabled for US-5.2
   cursorSwipeThreshold: 30,
-  enablePageScroll: false, // Disabled for US-5.3
+  enablePageScroll: true, // Enabled for US-5.3
   pageSwipeThreshold: 50,
   enableExtendedArrows: false, // Disabled for US-5.4
   extendedSwipeThreshold: 50,
