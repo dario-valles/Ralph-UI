@@ -37,6 +37,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { useConnectionStore } from '@/stores/connectionStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { GSDWorkflow } from './GSDWorkflow'
 import { ChatMessageItem } from './ChatMessageItem'
@@ -235,6 +236,57 @@ export function PRDChatPanel() {
       prevSessionIdRef.current = currentSession.id
     }
   }, [currentSession, loadHistory])
+
+  // Track connection status for mobile resilience - reload history when reconnected
+  const connectionStatus = useConnectionStore((state) => state.status)
+  const prevConnectionStatusRef = useRef(connectionStatus)
+
+  // Reload history when connection is restored (mobile resilience)
+  useEffect(() => {
+    const wasDisconnected =
+      prevConnectionStatusRef.current === 'disconnected' ||
+      prevConnectionStatusRef.current === 'reconnecting' ||
+      prevConnectionStatusRef.current === 'offline'
+    const isNowConnected = connectionStatus === 'connected'
+    prevConnectionStatusRef.current = connectionStatus
+
+    // If we just reconnected and have an active session, reload its history
+    // This ensures we get any messages that arrived while we were away
+    if (wasDisconnected && isNowConnected && currentSession && activeProject?.path) {
+      console.log('[PRDChatPanel] Connection restored, reloading session and history')
+      const currentSessionId = currentSession.id
+
+      // Reload the session to check if it's still processing (pendingOperationStartedAt)
+      // and reload history to get any new messages
+      const refreshSession = async () => {
+        try {
+          // Reload sessions to get fresh state including pendingOperationStartedAt
+          await loadSessions(activeProject.path)
+
+          // Get the updated session from the store and refresh currentSession
+          const updatedSessions = usePRDChatStore.getState().sessions
+          const updatedSession = updatedSessions.find((s) => s.id === currentSessionId)
+          if (updatedSession) {
+            // Update currentSession with fresh data (this triggers streaming state restoration)
+            setCurrentSession(updatedSession)
+          }
+
+          // Then reload history for current session
+          await loadHistory(currentSessionId)
+        } catch (err) {
+          console.error('[PRDChatPanel] Failed to refresh after reconnection:', err)
+        }
+      }
+      refreshSession()
+    }
+  }, [
+    connectionStatus,
+    currentSession,
+    loadHistory,
+    loadSessions,
+    setCurrentSession,
+    activeProject?.path,
+  ])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
