@@ -1,12 +1,13 @@
 // Custom commands side sheet for saving and using frequently used commands
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2 } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2, AlertCircle } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCustomCommandsStore, CustomCommand } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { cn } from '@/lib/utils'
+import { isCommandOverriding } from '@/lib/command-priority'
 
 interface CustomCommandsSheetProps {
   open: boolean
@@ -29,8 +30,15 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [viewingOverrideFor, setViewingOverrideFor] = useState<string | null>(null)
 
   const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
+
+  const getOverriddenCommand = (cmdId: string): CustomCommand | undefined => {
+    const cmd = commands.find((c) => c.id === cmdId)
+    if (!cmd) return undefined
+    return isCommandOverriding(cmd, commands)
+  }
 
   const filteredCommands = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -172,6 +180,19 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
         <SheetHeader>
           <SheetTitle>Custom Commands</SheetTitle>
         </SheetHeader>
+
+        {/* Priority Info */}
+        <div className="bg-blue-50/50 border border-blue-200/50 rounded p-3 text-xs text-blue-900 space-y-1">
+          <div className="font-medium">Command Priority:</div>
+          <div className="ml-2 space-y-0.5">
+            <div>1. 🔄 Project commands (highest)</div>
+            <div>2. 🌐 Global commands</div>
+            <div>3. 📱 Local commands (lowest)</div>
+          </div>
+          <div className="text-blue-800 mt-2">
+            If commands have the same label, the highest priority version is used. Project commands override Global commands.
+          </div>
+        </div>
 
         <div className="flex-1 overflow-y-auto flex flex-col">
           {/* Add Command Button */}
@@ -415,7 +436,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                                 </button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span
                                 className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
                                   cmd.action === 'execute'
@@ -436,7 +457,39 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                               >
                                 {cmd.scope === 'project' ? '🔄 Project' : cmd.scope === 'global' ? '🌐 Global' : '📱 Local'}
                               </span>
+                              {cmd.scope === 'project' && getOverriddenCommand(cmd.id) && (
+                                <button
+                                  onClick={() => setViewingOverrideFor(viewingOverrideFor === cmd.id ? null : cmd.id)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-amber-100/20 text-amber-700 hover:bg-amber-100/30 transition-colors"
+                                  title="This project command overrides a global command"
+                                >
+                                  <AlertCircle className="w-3 h-3" />
+                                  Overrides
+                                </button>
+                              )}
                             </div>
+                            {/* Override Information */}
+                            {viewingOverrideFor === cmd.id && getOverriddenCommand(cmd.id) && (
+                              <div className="mt-2 p-3 bg-amber-50/50 border border-amber-200/50 rounded text-sm">
+                                <div className="font-medium text-amber-900 mb-2">Overriding Global Command:</div>
+                                <div className="ml-2 pl-2 border-l-2 border-amber-200 space-y-1">
+                                  {(() => {
+                                    const overridden = getOverriddenCommand(cmd.id)
+                                    return (
+                                      <>
+                                        <div className="text-xs text-amber-800/80">
+                                          <span className="font-mono">{overridden?.label}</span>
+                                        </div>
+                                        <div className="text-xs text-amber-700/70 font-mono break-all">
+                                          {overridden?.command}
+                                        </div>
+                                      </>
+                                    )
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Delete Confirmation */}
                             {deleteConfirmId === cmd.id && (
                               <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-foreground">
