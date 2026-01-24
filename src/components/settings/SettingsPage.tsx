@@ -640,7 +640,9 @@ export function SettingsPage() {
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
+                  <div
+                    className={`space-y-2 ${config.execution.strategy === 'sequential' ? 'opacity-50' : ''}`}
+                  >
                     <Label htmlFor="maxParallel">
                       Max Parallel Agents: {config.execution.maxParallel}
                     </Label>
@@ -651,7 +653,13 @@ export function SettingsPage() {
                       step={1}
                       value={[config.execution.maxParallel]}
                       onValueChange={([v]) => updateExecutionConfig({ maxParallel: v })}
+                      disabled={config.execution.strategy === 'sequential'}
                     />
+                    {config.execution.strategy === 'sequential' && (
+                      <p className="text-xs text-muted-foreground">
+                        Sequential strategy always runs one agent at a time.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -699,21 +707,6 @@ export function SettingsPage() {
             <CardContent className="space-y-6">
               {config ? (
                 <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="branchPattern">Branch Pattern</Label>
-                      <Input
-                        id="branchPattern"
-                        value={config.git.branchPattern}
-                        onChange={(e) => updateGitConfig({ branchPattern: e.target.value })}
-                        placeholder="ralph/{task_id}"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Pattern for branches created by agents. Use {'{task_id}'} as placeholder.
-                      </p>
-                    </div>
-                  </div>
-
                   <div className="space-y-4">
                     <h4 className="text-sm font-medium">Pull Request Options</h4>
                     <div className="grid gap-4 md:grid-cols-2">
@@ -728,16 +721,38 @@ export function SettingsPage() {
                         <Label htmlFor="autoCreatePrs">Automatically create pull requests</Label>
                       </div>
 
-                      <div className="flex items-center space-x-2">
+                      <div
+                        className={`flex items-center space-x-2 ${!config.git.autoCreatePrs ? 'opacity-50' : ''}`}
+                      >
                         <Checkbox
                           id="draftPrs"
                           checked={config.git.draftPrs}
                           onCheckedChange={(checked) =>
                             updateGitConfig({ draftPrs: checked as boolean })
                           }
+                          disabled={!config.git.autoCreatePrs}
                         />
                         <Label htmlFor="draftPrs">Create PRs as draft</Label>
                       </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`grid gap-4 md:grid-cols-2 ${!config.git.autoCreatePrs ? 'opacity-50' : ''}`}
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="branchPattern">Branch Pattern</Label>
+                      <Input
+                        id="branchPattern"
+                        value={config.git.branchPattern}
+                        onChange={(e) => updateGitConfig({ branchPattern: e.target.value })}
+                        placeholder="ralph/{task_id}"
+                        disabled={!config.git.autoCreatePrs}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Pattern for branches created by agents. Use {'{task_id}'} as placeholder.
+                        {!config.git.autoCreatePrs && ' (Enable auto-create PRs to configure)'}
+                      </p>
                     </div>
                   </div>
                 </>
@@ -790,7 +805,9 @@ export function SettingsPage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
+                    <div
+                      className={`space-y-2 ${!config.validation.runTests ? 'opacity-50' : ''}`}
+                    >
                       <Label htmlFor="testCommand">Test Command (Optional)</Label>
                       <Input
                         id="testCommand"
@@ -801,13 +818,17 @@ export function SettingsPage() {
                           })
                         }
                         placeholder="npm test"
+                        disabled={!config.validation.runTests}
                       />
                       <p className="text-xs text-muted-foreground">
                         Custom command to run tests. Leave empty for auto-detection.
+                        {!config.validation.runTests && ' (Enable tests to configure)'}
                       </p>
                     </div>
 
-                    <div className="space-y-2">
+                    <div
+                      className={`space-y-2 ${!config.validation.runLint ? 'opacity-50' : ''}`}
+                    >
                       <Label htmlFor="lintCommand">Lint Command (Optional)</Label>
                       <Input
                         id="lintCommand"
@@ -818,9 +839,11 @@ export function SettingsPage() {
                           })
                         }
                         placeholder="npm run lint"
+                        disabled={!config.validation.runLint}
                       />
                       <p className="text-xs text-muted-foreground">
                         Custom command to run linter. Leave empty for auto-detection.
+                        {!config.validation.runLint && ' (Enable linting to configure)'}
                       </p>
                     </div>
                   </div>
