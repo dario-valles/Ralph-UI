@@ -194,7 +194,7 @@ export function TerminalPanel() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px]">
+      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px] shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Terminal</span>
           {!isMinimized && <TerminalTabs className="flex-1 min-w-0" />}
@@ -270,32 +270,30 @@ export function TerminalPanel() {
         </div>
       </div>
 
+      {/* Mobile key bar - outside scrollable area, stays fixed */}
+      {!isMinimized && isMobile && <TerminalKeyBar className="shrink-0" />}
+
       {/* Terminal content */}
       {!isMinimized && (
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-hidden">
-            {!rootPane ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                No terminals open
-              </div>
-            ) : (
-              <PaneRenderer
-                node={rootPane}
-                terminals={terminals.map((t) => ({
-                  id: t.id,
-                  cwd: t.cwd,
-                  terminalType: t.terminalType,
-                  agentId: t.agentId,
-                }))}
-                activeTerminalId={activeTerminalId}
-                onSelectTerminal={setActiveTerminal}
-                onUpdateSizes={updatePaneSizes}
-              />
-            )}
-          </div>
-
-          {/* Mobile key bar - positioned at bottom, above device keyboard */}
-          {isMobile && <TerminalKeyBar className="shrink-0" />}
+        <div className="flex-1 overflow-hidden">
+          {!rootPane ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+              No terminals open
+            </div>
+          ) : (
+            <PaneRenderer
+              node={rootPane}
+              terminals={terminals.map((t) => ({
+                id: t.id,
+                cwd: t.cwd,
+                terminalType: t.terminalType,
+                agentId: t.agentId,
+              }))}
+              activeTerminalId={activeTerminalId}
+              onSelectTerminal={setActiveTerminal}
+              onUpdateSizes={updatePaneSizes}
+            />
+          )}
         </div>
       )}
     </div>
