@@ -10,6 +10,7 @@ export interface CustomCommand {
   action: 'insert' | 'execute'
   category: string
   createdAt: number
+  sortOrder: number
 }
 
 interface CustomCommandsStore {
@@ -19,6 +20,8 @@ interface CustomCommandsStore {
   // Actions
   addCommand: (label: string, command: string, action: 'insert' | 'execute', category: string) => void
   deleteCommand: (id: string) => void
+  editCommand: (id: string, label: string, command: string, action: 'insert' | 'execute', category: string) => void
+  reorderCommands: (commands: CustomCommand[]) => void
   getCommands: () => CustomCommand[]
   getCommandsByCategory: (category: string) => CustomCommand[]
   getAllCategories: () => string[]
@@ -39,6 +42,7 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           action,
           category,
           createdAt: Date.now(),
+          sortOrder: commands.length,
         }
         set({ commands: [...commands, newCommand] })
       },
@@ -46,6 +50,19 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
       deleteCommand: (id: string) => {
         const { commands } = get()
         set({ commands: commands.filter((c) => c.id !== id) })
+      },
+
+      editCommand: (id: string, label: string, command: string, action: 'insert' | 'execute', category: string) => {
+        const { commands } = get()
+        set({
+          commands: commands.map((c) =>
+            c.id === id ? { ...c, label, command, action, category } : c
+          ),
+        })
+      },
+
+      reorderCommands: (reorderedCommands: CustomCommand[]) => {
+        set({ commands: reorderedCommands })
       },
 
       getCommands: () => {

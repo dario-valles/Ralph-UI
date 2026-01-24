@@ -1,9 +1,9 @@
 // Custom commands side sheet for saving and using frequently used commands
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2 } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useCustomCommandsStore } from '@/stores/customCommandsStore'
+import { useCustomCommandsStore, CustomCommand } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ interface CustomCommandsSheetProps {
 
 export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetProps) {
   const { activeTerminalId } = useTerminalStore()
-  const { commands, addCommand, deleteCommand, getAllCategories } = useCustomCommandsStore()
+  const { commands, addCommand, deleteCommand, editCommand, getAllCategories, reorderCommands } = useCustomCommandsStore()
   const [label, setLabel] = useState('')
   const [command, setCommand] = useState('')
   const [action, setAction] = useState<'insert' | 'execute'>('execute')
@@ -24,6 +24,9 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Uncategorized']))
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
 
@@ -57,13 +60,64 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
 
   const handleAddCommand = () => {
     if (label.trim() && command.trim()) {
-      addCommand(label, command, action, category)
+      if (editingId) {
+        editCommand(editingId, label, command, action, category)
+        setEditingId(null)
+      } else {
+        addCommand(label, command, action, category)
+      }
       setLabel('')
       setCommand('')
       setAction('execute')
       setCategory('Uncategorized')
       setShowForm(false)
     }
+  }
+
+  const handleEditCommand = (cmd: CustomCommand) => {
+    setLabel(cmd.label)
+    setCommand(cmd.command)
+    setAction(cmd.action)
+    setCategory(cmd.category)
+    setEditingId(cmd.id)
+    setShowForm(true)
+  }
+
+  const handleCancelForm = () => {
+    setShowForm(false)
+    setLabel('')
+    setCommand('')
+    setAction('execute')
+    setCategory('Uncategorized')
+    setEditingId(null)
+  }
+
+  const handleDeleteCommand = (id: string) => {
+    deleteCommand(id)
+    setDeleteConfirmId(null)
+  }
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDropCommand = (targetIndex: number) => {
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null)
+      return
+    }
+
+    const newCommands = [...commands]
+    const draggedCmd = newCommands[draggedIndex]
+    newCommands.splice(draggedIndex, 1)
+    newCommands.splice(targetIndex, 0, draggedCmd)
+    reorderCommands(newCommands)
+    setDraggedIndex(null)
   }
 
   const toggleCategoryExpanded = (cat: string) => {
@@ -125,9 +179,12 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
             </div>
           )}
 
-          {/* Add Command Form */}
+          {/* Add/Edit Command Form */}
           {showForm && (
             <div className="border rounded p-3 mb-4 bg-muted/50 space-y-2">
+              <div className="text-sm font-medium text-foreground mb-2">
+                {editingId ? 'Edit Command' : 'Add New Command'}
+              </div>
               <input
                 type="text"
                 placeholder="Label (e.g., 'Clear screen')"
@@ -197,13 +254,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                     Save
                   </button>
                   <button
-                    onClick={() => {
-                      setShowForm(false)
-                      setLabel('')
-                      setCommand('')
-                      setAction('execute')
-                      setCategory('Uncategorized')
-                    }}
+                    onClick={handleCancelForm}
                     className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
                   >
                     Cancel
@@ -277,44 +328,84 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                   {/* Category Commands */}
                   {expandedCategories.has(cat) && (
                     <div className="ml-2 mt-2 space-y-2">
-                      {categoryCommands.map((cmd) => (
-                        <div
-                          key={cmd.id}
-                          className="border rounded p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <button
-                              onClick={() => handleUseCommand(cmd.command, cmd.action)}
-                              className="flex-1 text-left"
-                            >
-                              <div className="font-medium text-sm text-foreground hover:text-primary">
-                                {cmd.label}
+                      {categoryCommands.map((cmd) => {
+                        const cmdIndex = commands.findIndex((c) => c.id === cmd.id)
+                        return (
+                          <div
+                            key={cmd.id}
+                            draggable
+                            onDragStart={() => handleDragStart(cmdIndex)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDropCommand(cmdIndex)}
+                            className={`border rounded p-3 transition-colors cursor-move ${
+                              draggedIndex === cmdIndex
+                                ? 'bg-muted/70 opacity-50'
+                                : 'bg-muted/30 hover:bg-muted/50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <button
+                                onClick={() => handleUseCommand(cmd.command, cmd.action)}
+                                className="flex-1 text-left"
+                              >
+                                <div className="font-medium text-sm text-foreground hover:text-primary">
+                                  {cmd.label}
+                                </div>
+                                <div className="text-xs text-muted-foreground font-mono break-words">
+                                  {cmd.command}
+                                </div>
+                              </button>
+                              <div className="flex gap-1 shrink-0">
+                                <button
+                                  onClick={() => handleEditCommand(cmd)}
+                                  className="flex items-center justify-center w-6 h-6 text-primary hover:bg-primary/10 rounded transition-colors"
+                                  aria-label="Edit command"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirmId(cmd.id)}
+                                  className="flex items-center justify-center w-6 h-6 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                                  aria-label="Delete command"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
-                              <div className="text-xs text-muted-foreground font-mono break-words">
-                                {cmd.command}
+                            </div>
+                            <div className="flex items-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                                  cmd.action === 'execute'
+                                    ? 'bg-primary/20 text-primary'
+                                    : 'bg-secondary/20 text-secondary-foreground'
+                                }`}
+                              >
+                                {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
+                              </span>
+                            </div>
+                            {/* Delete Confirmation */}
+                            {deleteConfirmId === cmd.id && (
+                              <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-foreground">
+                                <div className="mb-2">Delete this command?</div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleDeleteCommand(cmd.id)}
+                                    className="flex-1 px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded hover:bg-destructive/90 transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirmId(null)}
+                                    className="flex-1 px-2 py-1 text-xs bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
                               </div>
-                            </button>
-                            <button
-                              onClick={() => deleteCommand(cmd.id)}
-                              className="flex items-center justify-center w-6 h-6 text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
-                              aria-label="Delete command"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            )}
                           </div>
-                          <div className="flex items-center">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
-                                cmd.action === 'execute'
-                                  ? 'bg-primary/20 text-primary'
-                                  : 'bg-secondary/20 text-secondary-foreground'
-                              }`}
-                            >
-                              {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>

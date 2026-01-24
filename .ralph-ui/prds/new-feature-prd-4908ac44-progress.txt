@@ -386,3 +386,47 @@ When implementing filtered search with category grouping:
 - The old groupedCommands memoization should be removed to avoid unused variable errors
 - Search query should be reset when user clears (happens automatically via setSearchQuery)
 </learning>
+[2026-01-24T11:37:11.330265+00:00] [Iter 11] [END] Iteration 11 completed successfully
+[2026-01-24T11:37:11.332687+00:00] [Iter 12] [START] Starting iteration 12
+
+[2026-01-24T12:58:00.000000+00:00] [Iter 12] [US-3.5] Story Completed: Manage Commands (Edit/Delete/Reorder)
+
+<learning type="pattern">
+Command edit/delete/reorder implementation for custom commands:
+- Add sortOrder field to CustomCommand interface to track drag-and-drop order
+- Store actions: editCommand updates existing command fields, reorderCommands replaces entire array
+- Edit flow: populate form fields from existing command, set editingId, then call editCommand on save
+- Delete flow: use deleteConfirmId state for confirmation dialog to prevent accidental deletion
+- Reorder flow: track draggedIndex on drag start, find target index on drop, splice and reorder array
+- Form UX: show "Edit Command" vs "Add New Command" title based on editingId, reset form on cancel
+</learning>
+
+<learning type="pattern">
+HTML5 drag-and-drop for list reordering in React:
+- Use draggable attribute on each item to enable native drag events
+- Track draggedIndex in state during drag operation
+- onDragStart captures which index is being dragged
+- onDragOver(e) prevents default and sets dropEffect='move' to show move cursor
+- onDrop(targetIndex) reorders array: splice dragged item, insert at target, update state
+- Visual feedback: apply opacity-50 to dragged item, change background color for drop target
+- Important: Clear draggedIndex after drop to reset visual state
+</learning>
+
+<learning type="gotcha">
+When implementing edit functionality alongside add:
+- Must track editingId state separately to know if in edit mode
+- Form fields need proper initialization from existing command data
+- Must reset editingId to null after save to avoid stale state
+- handleCancelForm must reset all fields AND editingId to prevent form leaking state
+- Reset form fields on successful add/edit to prepare for next operation
+</learning>
+
+<learning type="gotcha">
+When adding multiple buttons (edit/delete) to command cards:
+- Wrap buttons in flex container with gap-1 to keep them close together
+- Use separate w-6 h-6 styling for consistency with previous delete-only design
+- For delete, use deleteConfirmId state instead of immediate deletion
+- Confirmation dialog prevents accidental deletions from mobile fat-finger errors
+- Delete confirmation is shown inline on the command card, not as separate modal
+</learning>
+[2026-01-24T11:39:42.000000+00:00] [Iter 12] [END] Iteration 12 completed successfully

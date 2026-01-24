@@ -94,7 +94,7 @@
       "id": "US-3.5",
       "title": "Manage Commands (Edit/Delete/Reorder)",
       "acceptance": "- Can edit command label, text, action, category, icon\n- Can delete command with confirmation\n- Can reorder commands via drag-and-drop\n- Changes persist immediately",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
