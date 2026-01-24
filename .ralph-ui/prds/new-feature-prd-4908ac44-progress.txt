@@ -354,3 +354,35 @@ When implementing category features:
 - getAllCategories() must use Set to deduplicate then sort alphabetically for consistent UI
 - groupedCommands needs proper Object.entries().sort() to ensure consistent ordering across renders
 </learning>
+[2026-01-24T11:35:41.699632+00:00] [Iter 10] [END] Iteration 10 completed successfully
+[2026-01-24T11:35:41.702181+00:00] [Iter 11] [START] Starting iteration 11
+
+[2026-01-24T12:55:00.000000+00:00] [Iter 11] [US-3.4] Story Completed: Search Commands
+
+<learning type="pattern">
+Search functionality implementation for custom commands:
+- Add searchQuery state to track user input
+- Create filteredCommands useMemo that filters based on searchQuery using toLowerCase() matching on both label and command fields
+- Create displayedGroups useMemo that groups filtered commands by category and applies category filter
+- Show search input conditionally: only when commands.length > 10
+- Add X (clear) button using lucide-react's X icon that appears when searchQuery is non-empty
+- Update category filter counts to use filteredCommands instead of commands for accurate filtering display
+- Remove old unused groupedCommands memoization to pass linting
+</learning>
+
+<learning type="pattern">
+Search UI placement and interaction:
+- Search input appears after the "Add Command" button and before the "Add Command Form"
+- Use relative positioning for the clear button (X icon) positioned at right side of input
+- Search field has placeholder "Search commands..." to guide users
+- Results update immediately as user types (real-time filtering)
+- Clear button has aria-label for accessibility
+</learning>
+
+<learning type="gotcha">
+When implementing filtered search with category grouping:
+- Must ensure both useMemo dependencies are correct (filteredCommands in displayedGroups, searchQuery in filteredCommands)
+- Category filter counts must use filteredCommands not commands to show correct filtered counts
+- The old groupedCommands memoization should be removed to avoid unused variable errors
+- Search query should be reset when user clears (happens automatically via setSearchQuery)
+</learning>

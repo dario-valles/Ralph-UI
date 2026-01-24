@@ -1,7 +1,7 @@
 // Custom commands side sheet for saving and using frequently used commands
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCustomCommandsStore } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
@@ -23,26 +23,37 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const [showForm, setShowForm] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Uncategorized']))
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
 
-  const groupedCommands = useMemo(() => {
+  const filteredCommands = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return commands
+    }
+    const query = searchQuery.toLowerCase()
+    return commands.filter(
+      (cmd) =>
+        cmd.label.toLowerCase().includes(query) ||
+        cmd.command.toLowerCase().includes(query)
+    )
+  }, [commands, searchQuery])
+
+  const displayedGroups = useMemo(() => {
     const groups: Record<string, typeof commands> = {}
-    commands.forEach((cmd) => {
+    filteredCommands.forEach((cmd) => {
       if (!groups[cmd.category]) {
         groups[cmd.category] = []
       }
       groups[cmd.category].push(cmd)
     })
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
-  }, [commands])
+    const sorted = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
 
-  const displayedGroups = useMemo(() => {
     if (!selectedFilter) {
-      return groupedCommands
+      return sorted
     }
-    return groupedCommands.filter(([cat]) => cat === selectedFilter)
-  }, [groupedCommands, selectedFilter])
+    return sorted.filter(([cat]) => cat === selectedFilter)
+  }, [filteredCommands, selectedFilter])
 
   const handleAddCommand = () => {
     if (label.trim() && command.trim()) {
@@ -91,6 +102,28 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
             <Plus className="w-4 h-4" />
             Add Command
           </button>
+
+          {/* Search Input - Only show if >10 commands */}
+          {commands.length > 10 && (
+            <div className="relative mb-4">
+              <input
+                type="text"
+                placeholder="Search commands..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded bg-background pr-8"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Add Command Form */}
           {showForm && (
@@ -192,10 +225,10 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >
-                All ({commands.length})
+                All ({filteredCommands.length})
               </button>
               {allCategories.map((cat) => {
-                const count = commands.filter((c) => c.category === cat).length
+                const count = filteredCommands.filter((c) => c.category === cat).length
                 return (
                   <button
                     key={cat}

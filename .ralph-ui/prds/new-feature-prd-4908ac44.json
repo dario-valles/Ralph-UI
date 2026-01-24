@@ -86,7 +86,7 @@
       "id": "US-3.4",
       "title": "Search Commands",
       "acceptance": "- Search input appears when >10 commands exist\n- Search filters by label and command text\n- Results update as user types\n- Clear button resets search",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
