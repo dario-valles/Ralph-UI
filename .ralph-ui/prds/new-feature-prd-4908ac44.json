@@ -54,7 +54,7 @@
       "id": "US-2.3",
       "title": "Use and Save Presets",
       "acceptance": "- Built-in presets available: Default, Git, Vim, Node\n- Can save current layout as custom preset\n- Can switch between presets with one tap\n- Can delete custom presets",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

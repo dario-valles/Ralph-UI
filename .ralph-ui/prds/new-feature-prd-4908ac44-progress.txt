@@ -209,3 +209,48 @@ When managing complex component state with multiple related fields:
 </learning>
 
 [2026-01-24T12:30:30.000000+00:00] [Iter 6] [END] Iteration 6 completed successfully
+[2026-01-24T11:27:05.443680+00:00] [Iter 6] [END] Iteration 6 completed successfully
+[2026-01-24T11:27:05.446978+00:00] [Iter 7] [START] Starting iteration 7
+
+[2026-01-24T12:35:00.000000+00:00] [Iter 7] [US-2.3] Story Completed: Use and Save Presets
+
+<learning type="pattern">
+Preset system implementation for terminal key bar:
+- Create Preset interface with id, name, layout, and isBuiltin flag
+- Store presets array in Zustand with built-in presets initialized by default
+- Track activePresetId to know which preset is currently selected
+- Implement store methods: savePreset (generates ID from timestamp), switchPreset, deletePreset, getActivePreset
+- Built-in presets cannot be deleted (checked via isBuiltin flag)
+- Custom presets get unique IDs like 'preset-custom-{timestamp}'
+- When switching presets, clear customLayout to ensure preset layout is used
+- All preset operations persist to localStorage via Zustand persist middleware
+</learning>
+
+<learning type="pattern">
+Preset UI implementation in key bar customizer:
+- Display presets in a vertical list with one button per preset
+- Highlight active preset with accent color and border-2
+- Show delete button only for custom presets (isBuiltin === false)
+- "Save as preset" button disabled when no changes (hasChanges === false)
+- Use controlled input dialog for preset name with Enter key support
+- Show preset list above the current layout preview for easy discoverability
+- Grid layout breaks down on mobile (single preset per row) and expands to 2-4 cols on md+
+</learning>
+
+<learning type="pattern">
+Built-in presets design:
+- Default: Full keyboard layout with all standard keys
+- Git: Optimized for git workflows (arrows, slash, hyphen, Ctrl, Alt, ^C)
+- Vim: Optimized for vim/nano editors (arrows, colon, slash, Escape key)
+- Node: Optimized for JavaScript development (parens, braces, semicolon, colon)
+- Each preset has 11-12 keys (respects MIN_KEYS = 6 and MAX_KEYS_PER_ROW = 10)
+</learning>
+
+<learning type="gotcha">
+When implementing preset switching:
+- Must clear customLayout when switching presets to avoid confusion
+- activePresetId should be set to 'preset-default' when deleting the active custom preset
+- Store methods should validate that presets exist before returning them (defensive coding)
+- Be careful with preset IDs - use consistent naming scheme for builtin (preset-{name}) vs custom (preset-custom-{timestamp})
+</learning>
+[2026-01-24T12:35:30.000000+00:00] [Iter 7] [END] Iteration 7 completed successfully
