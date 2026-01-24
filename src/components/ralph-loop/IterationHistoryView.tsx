@@ -22,11 +22,7 @@ import {
   Filter,
   AlertTriangle,
 } from 'lucide-react'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -115,13 +111,9 @@ function IterationRow({ record }: IterationRowProps) {
           )}
         >
           <div className="flex items-center gap-3">
-            <span className="text-muted-foreground text-xs w-8">
-              #{record.iteration}
-            </span>
+            <span className="text-muted-foreground text-xs w-8">#{record.iteration}</span>
             <OutcomeBadge outcome={record.outcome} />
-            <span className="text-sm text-muted-foreground">
-              {record.agentType}
-            </span>
+            <span className="text-sm text-muted-foreground">{record.agentType}</span>
           </div>
 
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -155,9 +147,7 @@ function IterationRow({ record }: IterationRowProps) {
             <div>
               <span className="text-muted-foreground">Completed:</span>{' '}
               <span>
-                {record.completedAt
-                  ? new Date(record.completedAt).toLocaleString()
-                  : 'N/A'}
+                {record.completedAt ? new Date(record.completedAt).toLocaleString() : 'N/A'}
               </span>
             </div>
             <div>
@@ -192,16 +182,9 @@ function SummaryStats({ iterations }: SummaryStatsProps) {
     const successful = iterations.filter((i) => i.outcome === 'success').length
     const failed = iterations.filter((i) => i.outcome === 'failed').length
     const skipped = iterations.filter((i) => i.outcome === 'skipped').length
-    const interrupted = iterations.filter(
-      (i) => i.outcome === 'interrupted'
-    ).length
-    const rateLimited = iterations.filter(
-      (i) => i.rateLimitEncountered
-    ).length
-    const totalDuration = iterations.reduce(
-      (sum, i) => sum + i.durationSecs,
-      0
-    )
+    const interrupted = iterations.filter((i) => i.outcome === 'interrupted').length
+    const rateLimited = iterations.filter((i) => i.rateLimitEncountered).length
+    const totalDuration = iterations.reduce((sum, i) => sum + i.durationSecs, 0)
 
     return {
       total,
@@ -222,12 +205,8 @@ function SummaryStats({ iterations }: SummaryStatsProps) {
         <div className="text-xs text-muted-foreground">Total</div>
       </div>
       <div className="text-center">
-        <div className="text-2xl font-bold text-green-500">
-          {stats.successful}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Success ({stats.successRate}%)
-        </div>
+        <div className="text-2xl font-bold text-green-500">{stats.successful}</div>
+        <div className="text-xs text-muted-foreground">Success ({stats.successRate}%)</div>
       </div>
       <div className="text-center">
         <div className="text-2xl font-bold text-red-500">{stats.failed}</div>
@@ -245,10 +224,7 @@ function SummaryStats({ iterations }: SummaryStatsProps) {
 
 type FilterOption = 'all' | IterationOutcome
 
-export function IterationHistoryView({
-  iterations,
-  className,
-}: IterationHistoryViewProps) {
+export function IterationHistoryView({ iterations, className }: IterationHistoryViewProps) {
   const [filter, setFilter] = useState<FilterOption>('all')
 
   const filteredIterations = useMemo(() => {
@@ -274,9 +250,7 @@ export function IterationHistoryView({
       >
         <Clock className="h-12 w-12 mb-2 opacity-50" />
         <p>No iteration history yet</p>
-        <p className="text-sm">
-          History will appear here once the Ralph Loop runs
-        </p>
+        <p className="text-sm">History will appear here once the Ralph Loop runs</p>
       </div>
     )
   }
@@ -286,9 +260,7 @@ export function IterationHistoryView({
       <SummaryStats iterations={iterations} />
 
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium">
-          Iteration History ({filteredIterations.length})
-        </h3>
+        <h3 className="text-sm font-medium">Iteration History ({filteredIterations.length})</h3>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 gap-1">

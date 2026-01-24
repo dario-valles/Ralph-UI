@@ -112,7 +112,13 @@ interface EditPhaseDialogProps {
   nextPhaseNumber: number
 }
 
-function EditPhaseDialog({ phase, isOpen, onClose, onSave, nextPhaseNumber }: EditPhaseDialogProps) {
+function EditPhaseDialog({
+  phase,
+  isOpen,
+  onClose,
+  onSave,
+  nextPhaseNumber,
+}: EditPhaseDialogProps) {
   const [title, setTitle] = useState(phase?.title || '')
   const [description, setDescription] = useState(phase?.description || '')
   const [milestone, setMilestone] = useState(phase?.milestone || '')
@@ -151,9 +157,7 @@ function EditPhaseDialog({ phase, isOpen, onClose, onSave, nextPhaseNumber }: Ed
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{phase ? 'Edit Phase' : 'Add Phase'}</DialogTitle>
-          <DialogDescription>
-            Configure the phase details and milestones.
-          </DialogDescription>
+          <DialogDescription>Configure the phase details and milestones.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -294,8 +298,8 @@ export function RoadmapEditor({
             <CardTitle>Implementation Roadmap</CardTitle>
           </div>
           <CardDescription>
-            Review and refine the generated roadmap. Each phase groups related
-            requirements with clear milestones.
+            Review and refine the generated roadmap. Each phase groups related requirements with
+            clear milestones.
           </CardDescription>
         </CardHeader>
       </Card>

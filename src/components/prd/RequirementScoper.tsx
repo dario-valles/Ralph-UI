@@ -16,7 +16,13 @@ import { NativeSelect as Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { RequirementsDoc, Requirement, ScopeSelection, ScopeLevel, RequirementCategory } from '@/types/planning'
+import type {
+  RequirementsDoc,
+  Requirement,
+  ScopeSelection,
+  ScopeLevel,
+  RequirementCategory,
+} from '@/types/planning'
 import { ListChecks, ArrowRight, Filter, Plus, X, LayoutGrid, List } from 'lucide-react'
 
 interface RequirementScoperProps {
@@ -25,7 +31,11 @@ interface RequirementScoperProps {
   /** Callback when scope selections are applied */
   onApplyScope: (selections: ScopeSelection) => Promise<void>
   /** Callback when a new requirement is added */
-  onAddRequirement?: (category: RequirementCategory, title: string, description: string) => Promise<Requirement>
+  onAddRequirement?: (
+    category: RequirementCategory,
+    title: string,
+    description: string
+  ) => Promise<Requirement>
   /** Callback when ready to proceed */
   onProceed: () => void
   /** Whether the component is in loading state */
@@ -75,9 +85,7 @@ function RequirementRow({
           <span className="text-sm truncate">{requirement.title}</span>
         </div>
         {requirement.description && (
-          <p className="text-xs text-muted-foreground mt-1 truncate">
-            {requirement.description}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1 truncate">{requirement.description}</p>
         )}
       </div>
       <Select
@@ -129,9 +137,7 @@ function DraggableRequirementCard({ requirement }: DraggableRequirementCardProps
       </div>
       <p className="text-sm font-medium line-clamp-2">{requirement.title}</p>
       {requirement.description && (
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-          {requirement.description}
-        </p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{requirement.description}</p>
       )}
     </div>
   )
@@ -149,7 +155,12 @@ const SCOPE_COLUMNS: ScopeColumnConfig[] = [
   { scope: 'unscoped', title: 'Unscoped', color: 'text-yellow-600', bgColor: 'bg-yellow-500/10' },
   { scope: 'v1', title: 'V1 - Must Have', color: 'text-green-600', bgColor: 'bg-green-500/10' },
   { scope: 'v2', title: 'V2 - Nice to Have', color: 'text-blue-600', bgColor: 'bg-blue-500/10' },
-  { scope: 'out_of_scope', title: 'Out of Scope', color: 'text-gray-500', bgColor: 'bg-gray-500/10' },
+  {
+    scope: 'out_of_scope',
+    title: 'Out of Scope',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-500/10',
+  },
 ]
 
 /** Scope column for Kanban view */
@@ -211,9 +222,7 @@ function ScopeColumn({ config, requirements, onDrop }: ScopeColumnProps) {
               Drop requirements here
             </div>
           ) : (
-            requirements.map((req) => (
-              <DraggableRequirementCard key={req.id} requirement={req} />
-            ))
+            requirements.map((req) => <DraggableRequirementCard key={req.id} requirement={req} />)
           )}
         </div>
       </ScrollArea>
@@ -229,9 +238,9 @@ export function RequirementScoper({
   isLoading = false,
 }: RequirementScoperProps) {
   // Local state for scope changes before saving
-  const [localRequirements, setLocalRequirements] = useState<Record<string, Requirement>>(
-    () => ({ ...requirements.requirements })
-  )
+  const [localRequirements, setLocalRequirements] = useState<Record<string, Requirement>>(() => ({
+    ...requirements.requirements,
+  }))
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterScope, setFilterScope] = useState<string>('all')
@@ -298,10 +307,14 @@ export function RequirementScoper({
   const requirementsByScope = useMemo(() => {
     const reqs = Object.values(localRequirements)
     return {
-      unscoped: reqs.filter((r) => !r.scope || r.scope === 'unscoped').sort((a, b) => a.id.localeCompare(b.id)),
+      unscoped: reqs
+        .filter((r) => !r.scope || r.scope === 'unscoped')
+        .sort((a, b) => a.id.localeCompare(b.id)),
       v1: reqs.filter((r) => r.scope === 'v1').sort((a, b) => a.id.localeCompare(b.id)),
       v2: reqs.filter((r) => r.scope === 'v2').sort((a, b) => a.id.localeCompare(b.id)),
-      out_of_scope: reqs.filter((r) => r.scope === 'out_of_scope').sort((a, b) => a.id.localeCompare(b.id)),
+      out_of_scope: reqs
+        .filter((r) => r.scope === 'out_of_scope')
+        .sort((a, b) => a.id.localeCompare(b.id)),
     }
   }, [localRequirements])
 
@@ -325,19 +338,22 @@ export function RequirementScoper({
     })
   }, [])
 
-  const handleBulkScope = useCallback((scope: ScopeLevel) => {
-    setLocalRequirements((prev) => {
-      const next = { ...prev }
-      selectedIds.forEach((id) => {
-        if (next[id]) {
-          next[id] = { ...next[id], scope }
-        }
+  const handleBulkScope = useCallback(
+    (scope: ScopeLevel) => {
+      setLocalRequirements((prev) => {
+        const next = { ...prev }
+        selectedIds.forEach((id) => {
+          if (next[id]) {
+            next[id] = { ...next[id], scope }
+          }
+        })
+        return next
       })
-      return next
-    })
-    setSelectedIds(new Set())
-    setHasChanges(true)
-  }, [selectedIds])
+      setSelectedIds(new Set())
+      setHasChanges(true)
+    },
+    [selectedIds]
+  )
 
   const handleSelectAll = useCallback(() => {
     const ids = new Set(filteredRequirements.map((r) => r.id))
@@ -402,8 +418,8 @@ export function RequirementScoper({
             <CardTitle>Scope Requirements</CardTitle>
           </div>
           <CardDescription>
-            Categorize requirements into V1 (must have), V2 (nice to have),
-            or out-of-scope for your initial release.
+            Categorize requirements into V1 (must have), V2 (nice to have), or out-of-scope for your
+            initial release.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -499,7 +515,11 @@ export function RequirementScoper({
                       <Button size="sm" variant="secondary" onClick={() => handleBulkScope('v2')}>
                         V2
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleBulkScope('out_of_scope')}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleBulkScope('out_of_scope')}
+                      >
                         Out
                       </Button>
                     </>
@@ -572,11 +592,7 @@ export function RequirementScoper({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium">New Requirement</h4>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAddForm(false)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddForm(false)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>

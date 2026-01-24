@@ -58,9 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </div>
                 <div>
                   <CardTitle>Something went wrong</CardTitle>
-                  <CardDescription>
-                    The application encountered an unexpected error
-                  </CardDescription>
+                  <CardDescription>The application encountered an unexpected error</CardDescription>
                 </div>
               </div>
             </CardHeader>

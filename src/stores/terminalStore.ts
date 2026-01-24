@@ -74,11 +74,17 @@ function findPaneByTerminalId(node: PaneNode | null, terminalId: string): Termin
 }
 
 // Helper to find parent split pane of a terminal
-function findParentSplit(node: PaneNode | null, terminalId: string, parent: SplitPane | null = null): { parent: SplitPane | null; index: number } | null {
+function findParentSplit(
+  node: PaneNode | null,
+  terminalId: string,
+  parent: SplitPane | null = null
+): { parent: SplitPane | null; index: number } | null {
   if (!node) return null
   if (node.type === 'terminal') {
     if (node.terminalId === terminalId && parent) {
-      const index = parent.children.findIndex(c => c.type === 'terminal' && c.terminalId === terminalId)
+      const index = parent.children.findIndex(
+        (c) => c.type === 'terminal' && c.terminalId === terminalId
+      )
       return { parent, index }
     }
     return null
@@ -100,7 +106,7 @@ function replaceNode(root: PaneNode, targetId: string, newNode: PaneNode): PaneN
   if (root.type === 'terminal') return root
   return {
     ...root,
-    children: root.children.map(child => replaceNode(child, targetId, newNode))
+    children: root.children.map((child) => replaceNode(child, targetId, newNode)),
   }
 }
 
@@ -127,7 +133,7 @@ function removeTerminal(node: PaneNode, terminalId: string): PaneNode | null {
 
   // Normalize sizes
   const total = newSizes.reduce((a, b) => a + b, 0)
-  const normalizedSizes = newSizes.map(s => (s / total) * 100)
+  const normalizedSizes = newSizes.map((s) => (s / total) * 100)
 
   return { ...node, children: newChildren, sizes: normalizedSizes }
 }
@@ -206,7 +212,11 @@ export const useTerminalStore = create<TerminalStore>()(
         // Find new active terminal
         let newActiveId = activeTerminalId
         if (activeTerminalId === id) {
-          newActiveId = newRoot ? findAnyTerminal(newRoot) : (newTerminals.length > 0 ? newTerminals[0].id : null)
+          newActiveId = newRoot
+            ? findAnyTerminal(newRoot)
+            : newTerminals.length > 0
+              ? newTerminals[0].id
+              : null
         }
 
         // If the removed terminal was in a different tree, find its tree
@@ -232,7 +242,7 @@ export const useTerminalStore = create<TerminalStore>()(
         // If the terminal exists but is not in current pane tree,
         // we need to find/build its tree
         if (id) {
-          const terminal = terminals.find(t => t.id === id)
+          const terminal = terminals.find((t) => t.id === id)
           if (terminal && !findPaneByTerminalId(rootPane, id)) {
             // Terminal exists but not in current view - create a pane for it
             const newPane: TerminalPane = {
@@ -348,9 +358,7 @@ export const useTerminalStore = create<TerminalStore>()(
             }
 
             // Replace the terminal pane with the new split in parent
-            const newChildren = parent.children.map((child, i) =>
-              i === index ? newSplit : child
-            )
+            const newChildren = parent.children.map((child, i) => (i === index ? newSplit : child))
             const updatedParent: SplitPane = {
               ...parent,
               children: newChildren,
@@ -379,7 +387,7 @@ export const useTerminalStore = create<TerminalStore>()(
           }
           return {
             ...node,
-            children: node.children.map(updateSizes)
+            children: node.children.map(updateSizes),
           }
         }
 
@@ -478,18 +486,14 @@ export const useTerminalStore = create<TerminalStore>()(
         const { terminals } = get()
         set({
           terminals: terminals.map((t) =>
-            t.terminalType === 'agent' && t.agentId === agentId
-              ? { ...t, agentStatus: status }
-              : t
+            t.terminalType === 'agent' && t.agentId === agentId ? { ...t, agentStatus: status } : t
           ),
         })
       },
 
       getTerminalForAgent: (agentId: string) => {
         const { terminals } = get()
-        const terminal = terminals.find(
-          (t) => t.terminalType === 'agent' && t.agentId === agentId
-        )
+        const terminal = terminals.find((t) => t.terminalType === 'agent' && t.agentId === agentId)
         return terminal?.id || null
       },
     }),

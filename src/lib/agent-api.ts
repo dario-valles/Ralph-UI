@@ -33,7 +33,7 @@ export async function updateAgentMetrics(
   agentId: string,
   tokens: number,
   cost: number,
-  iterationCount: number,
+  iterationCount: number
 ): Promise<void> {
   return invoke('update_agent_metrics', { agentId, tokens, cost, iterationCount })
 }

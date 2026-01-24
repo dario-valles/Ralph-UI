@@ -1,102 +1,83 @@
-import React, { useEffect, useState } from "react";
-import { WorktreeInfo, gitApi } from "../../lib/git-api";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Input } from "../ui/input";
-import { RefreshCw, FolderGit2, Plus, Trash2, Lock, AlertCircle } from "lucide-react";
+import React, { useEffect, useState } from 'react'
+import { WorktreeInfo, gitApi } from '../../lib/git-api'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
+import { Input } from '../ui/input'
+import { RefreshCw, FolderGit2, Plus, Trash2, Lock, AlertCircle } from 'lucide-react'
 
 interface WorktreeManagerProps {
-  repoPath: string;
+  repoPath: string
 }
 
-export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
-  repoPath,
-}) => {
-  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [newBranchName, setNewBranchName] = useState("");
-  const [newWorktreePath, setNewWorktreePath] = useState("");
-  const [creating, setCreating] = useState(false);
+export const WorktreeManager: React.FC<WorktreeManagerProps> = ({ repoPath }) => {
+  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [newBranchName, setNewBranchName] = useState('')
+  const [newWorktreePath, setNewWorktreePath] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const loadWorktrees = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const worktreeList = await gitApi.listWorktrees(repoPath);
-      setWorktrees(worktreeList);
+      const worktreeList = await gitApi.listWorktrees(repoPath)
+      setWorktrees(worktreeList)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load worktrees"
-      );
+      setError(err instanceof Error ? err.message : 'Failed to load worktrees')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (repoPath) {
-      loadWorktrees();
+      loadWorktrees()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and repoPath change only
-  }, [repoPath]);
+  }, [repoPath])
 
   const handleCreateWorktree = async () => {
-    if (!newBranchName.trim() || !newWorktreePath.trim()) return;
+    if (!newBranchName.trim() || !newWorktreePath.trim()) return
 
-    setCreating(true);
-    setError(null);
+    setCreating(true)
+    setError(null)
 
     try {
-      await gitApi.createWorktree(
-        repoPath,
-        newBranchName.trim(),
-        newWorktreePath.trim()
-      );
-      setNewBranchName("");
-      setNewWorktreePath("");
-      await loadWorktrees();
+      await gitApi.createWorktree(repoPath, newBranchName.trim(), newWorktreePath.trim())
+      setNewBranchName('')
+      setNewWorktreePath('')
+      await loadWorktrees()
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to create worktree"
-      );
+      setError(err instanceof Error ? err.message : 'Failed to create worktree')
     } finally {
-      setCreating(false);
+      setCreating(false)
     }
-  };
+  }
 
   const handleRemoveWorktree = async (name: string) => {
     if (!confirm(`Are you sure you want to remove worktree "${name}"?`)) {
-      return;
+      return
     }
 
-    setError(null);
+    setError(null)
 
     try {
-      await gitApi.removeWorktree(repoPath, name);
-      await loadWorktrees();
+      await gitApi.removeWorktree(repoPath, name)
+      await loadWorktrees()
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to remove worktree"
-      );
+      setError(err instanceof Error ? err.message : 'Failed to remove worktree')
     }
-  };
+  }
 
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-xl font-bold">Worktrees</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={loadWorktrees}
-          disabled={loading}
-        >
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-          />
+        <Button variant="outline" size="sm" onClick={loadWorktrees} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </CardHeader>
@@ -129,9 +110,7 @@ export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
             />
             <Button
               onClick={handleCreateWorktree}
-              disabled={
-                !newBranchName.trim() || !newWorktreePath.trim() || creating
-              }
+              disabled={!newBranchName.trim() || !newWorktreePath.trim() || creating}
               className="w-full"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -143,22 +122,15 @@ export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
         {/* Worktree List */}
         <div className="space-y-2">
           {loading && !worktrees.length && (
-            <div className="text-center py-8 text-gray-500">
-              Loading worktrees...
-            </div>
+            <div className="text-center py-8 text-gray-500">Loading worktrees...</div>
           )}
 
           {!loading && worktrees.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No worktrees found
-            </div>
+            <div className="text-center py-8 text-gray-500">No worktrees found</div>
           )}
 
           {worktrees.map((worktree) => (
-            <div
-              key={worktree.name}
-              className="border rounded-lg p-4 hover:bg-gray-50"
-            >
+            <div key={worktree.name} className="border rounded-lg p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-3">
                   <FolderGit2 className="h-5 w-5 text-blue-500 mt-0.5" />
@@ -176,7 +148,7 @@ export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
                       <p className="font-mono text-xs">{worktree.path}</p>
                       {worktree.branch && (
                         <p className="mt-1">
-                          Branch:{" "}
+                          Branch:{' '}
                           <Badge variant="outline" className="ml-1">
                             {worktree.branch}
                           </Badge>
@@ -200,5 +172,5 @@ export const WorktreeManager: React.FC<WorktreeManagerProps> = ({
         </div>
       </CardContent>
     </Card>
-  );
-};
+  )
+}

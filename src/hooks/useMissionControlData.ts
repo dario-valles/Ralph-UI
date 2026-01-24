@@ -57,11 +57,13 @@ export function useGlobalStats(): GlobalStats & { loading: boolean; error: strin
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const projectState = useProjectStore(useShallow(s => ({
-    projects: s.projects,
-    loading: s.loading,
-    error: s.error
-  })))
+  const projectState = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      loading: s.loading,
+      error: s.error,
+    }))
+  )
 
   // Fetch active executions from backend
   useEffect(() => {
@@ -116,20 +118,22 @@ export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
   loading: boolean
   error: string | null
 } {
-  const projectState = useProjectStore(useShallow(s => ({
-    projects: s.projects,
-    loading: s.loading,
-    error: s.error
-  })))
+  const projectState = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      loading: s.loading,
+      error: s.error,
+    }))
+  )
 
   // Fallback to store state if activeProjectPaths not provided
-  const activeExecutionId = useRalphLoopStore(s => s.activeExecutionId)
-  const currentProjectPath = useRalphLoopStore(s => s.currentProjectPath)
+  const activeExecutionId = useRalphLoopStore((s) => s.activeExecutionId)
+  const currentProjectPath = useRalphLoopStore((s) => s.currentProjectPath)
 
   const projectStatuses = useMemo(() => {
     const { projects } = projectState
 
-    return projects.map(project => {
+    return projects.map((project) => {
       // Check if this project has an active Ralph Loop execution
       // First check the passed activeProjectPaths map (from API), then fallback to store
       const executionIdFromMap = activeProjectPaths?.get(project.path)
@@ -138,7 +142,7 @@ export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
 
       return {
         project,
-        health: activeExecId ? 'healthy' as const : 'idle' as const,
+        health: activeExecId ? ('healthy' as const) : ('idle' as const),
         lastActivity: getLastActivityDate(project),
         activeExecutionId: activeExecId ?? undefined,
       }
@@ -200,7 +204,7 @@ export function useVisibilityPolling(
  * Hook to create a refresh function for mission control data
  */
 export function useMissionControlRefresh() {
-  const loadProjects = useProjectStore(s => s.loadProjects)
+  const loadProjects = useProjectStore((s) => s.loadProjects)
 
   const refreshAll = useCallback(async () => {
     await loadProjects()
@@ -214,7 +218,11 @@ export function useMissionControlRefresh() {
  */
 export function useMissionControlData() {
   const globalStats = useGlobalStats()
-  const { projectStatuses, loading: projectsLoading, error: projectsError } = useProjectStatuses(globalStats.activeProjectPaths)
+  const {
+    projectStatuses,
+    loading: projectsLoading,
+    error: projectsError,
+  } = useProjectStatuses(globalStats.activeProjectPaths)
 
   const loading = globalStats.loading || projectsLoading
   const error = globalStats.error || projectsError

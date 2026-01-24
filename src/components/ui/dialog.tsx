@@ -43,10 +43,7 @@ const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="fixed inset-0 bg-black/50"
-        onClick={() => onOpenChange?.(false)}
-      />
+      <div className="fixed inset-0 bg-black/50" onClick={() => onOpenChange?.(false)} />
       <div className="relative z-50">{children}</div>
     </div>
   )
@@ -69,10 +66,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
 DialogContent.displayName = 'DialogContent'
 
 const DialogHeader = ({ className, ...props }: DialogHeaderProps) => (
-  <div
-    className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)}
-    {...props}
-  />
+  <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />
 )
 DialogHeader.displayName = 'DialogHeader'
 

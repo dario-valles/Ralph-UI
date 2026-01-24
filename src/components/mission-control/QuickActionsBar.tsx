@@ -13,12 +13,7 @@ export function QuickActionsBar({ onRefreshAll, isRefreshing }: QuickActionsBarP
     <div className="flex items-center gap-2">
       {/* Refresh All Button */}
       {onRefreshAll && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRefreshAll}
-          disabled={isRefreshing}
-        >
+        <Button variant="outline" size="sm" onClick={onRefreshAll} disabled={isRefreshing}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>

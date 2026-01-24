@@ -28,13 +28,15 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
           isUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'
         )}
       >
-        {isUser ? <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+        {isUser ? (
+          <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        ) : (
+          <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        )}
       </div>
       <div className="flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">
-            {isUser ? 'You' : 'Assistant'}
-          </span>
+          <span className="text-sm font-medium">{isUser ? 'You' : 'Assistant'}</span>
           <span className="text-xs text-muted-foreground">
             {timestamp.toLocaleTimeString([], {
               hour: '2-digit',
@@ -63,9 +65,7 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
                 code: ({ children, className }) => {
                   const isInline = !className
                   return isInline ? (
-                    <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">
-                      {children}
-                    </code>
+                    <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">{children}</code>
                   ) : (
                     <code className={className}>{children}</code>
                   )
@@ -78,15 +78,9 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
                   <ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>
                 ),
                 // Style headings
-                h1: ({ children }) => (
-                  <h1 className="text-lg font-bold mt-3 mb-1">{children}</h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="text-base font-bold mt-3 mb-1">{children}</h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>
-                ),
+                h1: ({ children }) => <h1 className="text-lg font-bold mt-3 mb-1">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>,
                 // Style paragraphs
                 p: ({ children }) => <p className="my-1.5">{children}</p>,
                 // Style tables
@@ -95,9 +89,7 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
                     <table className="min-w-full text-xs border-collapse">{children}</table>
                   </div>
                 ),
-                thead: ({ children }) => (
-                  <thead className="bg-muted/70">{children}</thead>
-                ),
+                thead: ({ children }) => <thead className="bg-muted/70">{children}</thead>,
                 tbody: ({ children }) => (
                   <tbody className="divide-y divide-border">{children}</tbody>
                 ),
@@ -105,7 +97,9 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
                   <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
                 ),
                 th: ({ children }) => (
-                  <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">
+                    {children}
+                  </th>
                 ),
                 td: ({ children }) => (
                   <td className="px-3 py-2 text-muted-foreground">{children}</td>

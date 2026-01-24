@@ -62,10 +62,9 @@ describe('useAvailableModels', () => {
   })
 
   it('reloads models when agent type changes', async () => {
-    const { result, rerender } = renderHook(
-      ({ agentType }) => useAvailableModels(agentType),
-      { initialProps: { agentType: 'claude' as const } }
-    )
+    const { result, rerender } = renderHook(({ agentType }) => useAvailableModels(agentType), {
+      initialProps: { agentType: 'claude' as const },
+    })
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)

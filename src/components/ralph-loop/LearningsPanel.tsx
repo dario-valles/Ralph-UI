@@ -464,16 +464,17 @@ export function LearningsPanel({
   }
 
   // Filter learnings by search query
-  const filteredEntries = learningsFile?.entries.filter((learning) => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      learning.content.toLowerCase().includes(query) ||
-      learning.learningType.toLowerCase().includes(query) ||
-      learning.codeExample?.toLowerCase().includes(query) ||
-      learning.storyId?.toLowerCase().includes(query)
-    )
-  }) ?? []
+  const filteredEntries =
+    learningsFile?.entries.filter((learning) => {
+      if (!searchQuery) return true
+      const query = searchQuery.toLowerCase()
+      return (
+        learning.content.toLowerCase().includes(query) ||
+        learning.learningType.toLowerCase().includes(query) ||
+        learning.codeExample?.toLowerCase().includes(query) ||
+        learning.storyId?.toLowerCase().includes(query)
+      )
+    }) ?? []
 
   // Group learnings by type
   const learningsByType = filteredEntries.reduce(
@@ -503,7 +504,8 @@ export function LearningsPanel({
                 Learnings
               </CardTitle>
               <CardDescription className="text-xs">
-                {learningsFile?.entries.length ?? 0} total ({manualCount} manual, {agentCount} agent)
+                {learningsFile?.entries.length ?? 0} total ({manualCount} manual, {agentCount}{' '}
+                agent)
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">

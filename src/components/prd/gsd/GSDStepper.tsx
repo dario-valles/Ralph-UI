@@ -22,11 +22,7 @@ interface GSDStepperProps {
   orientation?: 'horizontal' | 'vertical'
 }
 
-function getPhaseIcon(
-  phase: GsdPhaseInfo,
-  currentPhase: GsdPhase,
-  completedPhases: GsdPhase[]
-) {
+function getPhaseIcon(phase: GsdPhaseInfo, currentPhase: GsdPhase, completedPhases: GsdPhase[]) {
   const currentInfo = GSD_PHASES.find((p) => p.phase === currentPhase)
   const isCurrent = phase.phase === currentPhase
   const isCompleted = completedPhases.includes(phase.phase)
@@ -53,12 +49,7 @@ export function GSDStepper({
   const isVertical = orientation === 'vertical'
 
   return (
-    <div
-      className={cn(
-        'flex gap-1',
-        isVertical ? 'flex-col' : 'flex-row items-center flex-wrap'
-      )}
-    >
+    <div className={cn('flex gap-1', isVertical ? 'flex-col' : 'flex-row items-center flex-wrap')}>
       {GSD_PHASES.map((phase, index) => {
         const isCurrent = phase.phase === currentPhase
         const isCompleted = completedPhases.includes(phase.phase)
@@ -66,13 +57,7 @@ export function GSDStepper({
         const isClickable = !disabled && (isCompleted || isPast || isCurrent)
 
         return (
-          <div
-            key={phase.phase}
-            className={cn(
-              'flex items-center gap-2',
-              isVertical && 'py-2'
-            )}
-          >
+          <div key={phase.phase} className={cn('flex items-center gap-2', isVertical && 'py-2')}>
             {/* Step */}
             <button
               type="button"
@@ -90,10 +75,7 @@ export function GSDStepper({
               )}
             >
               {getPhaseIcon(phase, currentPhase, completedPhases)}
-              <span className={cn(
-                'hidden sm:inline',
-                isVertical && 'inline'
-              )}>
+              <span className={cn('hidden sm:inline', isVertical && 'inline')}>
                 {phase.displayName}
               </span>
             </button>
@@ -147,9 +129,7 @@ export function GSDStepperCompact({
               )}
               title={phase.displayName}
             />
-            {index < GSD_PHASES.length - 1 && (
-              <div className="w-2 h-0.5 bg-muted mx-0.5" />
-            )}
+            {index < GSD_PHASES.length - 1 && <div className="w-2 h-0.5 bg-muted mx-0.5" />}
           </div>
         )
       })}

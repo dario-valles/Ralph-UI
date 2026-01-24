@@ -29,17 +29,10 @@ export function LoadingState({
   switch (variant) {
     case 'page':
       return (
-        <div
-          className={cn(
-            'flex h-96 items-center justify-center',
-            className
-          )}
-        >
+        <div className={cn('flex h-96 items-center justify-center', className)}>
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            {text && (
-              <p className="text-sm text-muted-foreground">{text}</p>
-            )}
+            {text && <p className="text-sm text-muted-foreground">{text}</p>}
           </div>
         </div>
       )
@@ -48,9 +41,7 @@ export function LoadingState({
       return (
         <div className={cn('flex items-center gap-2', className)}>
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          {text && (
-            <span className="text-sm text-muted-foreground">{text}</span>
-          )}
+          {text && <span className="text-sm text-muted-foreground">{text}</span>}
         </div>
       )
 
@@ -64,9 +55,7 @@ export function LoadingState({
         >
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            {text && (
-              <p className="text-sm text-muted-foreground">{text}</p>
-            )}
+            {text && <p className="text-sm text-muted-foreground">{text}</p>}
           </div>
         </div>
       )

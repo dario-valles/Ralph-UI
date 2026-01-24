@@ -373,10 +373,7 @@ export interface ConversionResult {
 /**
  * Helper to get requirements by scope
  */
-export function getRequirementsByScope(
-  doc: RequirementsDoc,
-  scope: ScopeLevel
-): Requirement[] {
+export function getRequirementsByScope(doc: RequirementsDoc, scope: ScopeLevel): Requirement[] {
   return Object.values(doc.requirements).filter((r) => r.scope === scope)
 }
 
@@ -393,9 +390,7 @@ export function getRequirementsByCategory(
 /**
  * Helper to count requirements by scope
  */
-export function countRequirementsByScope(
-  doc: RequirementsDoc
-): Record<ScopeLevel, number> {
+export function countRequirementsByScope(doc: RequirementsDoc): Record<ScopeLevel, number> {
   const counts: Record<ScopeLevel, number> = {
     v1: 0,
     v2: 0,

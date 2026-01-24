@@ -6,7 +6,14 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AlertCircle, CheckCircle, RefreshCw, Lightbulb, AlertTriangle, ChevronDown } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle,
+  RefreshCw,
+  Lightbulb,
+  AlertTriangle,
+  ChevronDown,
+} from 'lucide-react'
 import type { QualityAssessment } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -66,7 +73,14 @@ function ScoreBar({ label, shortLabel, score }: ScoreBarProps) {
           style={{ width: `${score}%` }}
         />
       </div>
-      <span className={cn('text-[11px] font-semibold tabular-nums w-8 text-right shrink-0', getScoreColor(score))}>{score}%</span>
+      <span
+        className={cn(
+          'text-[11px] font-semibold tabular-nums w-8 text-right shrink-0',
+          getScoreColor(score)
+        )}
+      >
+        {score}%
+      </span>
     </div>
   )
 }
@@ -98,9 +112,7 @@ export function QualityScoreCard({
           </div>
         </CardHeader>
         <CardContent className={cn('pt-0', compact && 'py-2.5 px-3')}>
-          <p className="text-sm text-muted-foreground">
-            Add content to assess quality.
-          </p>
+          <p className="text-sm text-muted-foreground">Add content to assess quality.</p>
         </CardContent>
       </Card>
     )
@@ -108,7 +120,8 @@ export function QualityScoreCard({
 
   // Compact version for sidebar
   if (compact) {
-    const hasSuggestions = assessment.missingSections.length > 0 || assessment.suggestions.length > 0
+    const hasSuggestions =
+      assessment.missingSections.length > 0 || assessment.suggestions.length > 0
 
     return (
       <Card className={cn('w-full', className)}>
@@ -141,16 +154,29 @@ export function QualityScoreCard({
               <div className="mt-2 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-muted-foreground w-5 font-medium">C</span>
-                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.completeness))}>
+                  <div
+                    className={cn(
+                      'flex-1 h-1 rounded-full overflow-hidden',
+                      getProgressBgColor(assessment.completeness)
+                    )}
+                  >
                     <div
-                      className={cn('h-full rounded-full', getProgressColor(assessment.completeness))}
+                      className={cn(
+                        'h-full rounded-full',
+                        getProgressColor(assessment.completeness)
+                      )}
                       style={{ width: `${assessment.completeness}%` }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-muted-foreground w-5 font-medium">Cl</span>
-                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.clarity))}>
+                  <div
+                    className={cn(
+                      'flex-1 h-1 rounded-full overflow-hidden',
+                      getProgressBgColor(assessment.clarity)
+                    )}
+                  >
                     <div
                       className={cn('h-full rounded-full', getProgressColor(assessment.clarity))}
                       style={{ width: `${assessment.clarity}%` }}
@@ -159,9 +185,17 @@ export function QualityScoreCard({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-muted-foreground w-5 font-medium">A</span>
-                  <div className={cn('flex-1 h-1 rounded-full overflow-hidden', getProgressBgColor(assessment.actionability))}>
+                  <div
+                    className={cn(
+                      'flex-1 h-1 rounded-full overflow-hidden',
+                      getProgressBgColor(assessment.actionability)
+                    )}
+                  >
                     <div
-                      className={cn('h-full rounded-full', getProgressColor(assessment.actionability))}
+                      className={cn(
+                        'h-full rounded-full',
+                        getProgressColor(assessment.actionability)
+                      )}
                       style={{ width: `${assessment.actionability}%` }}
                     />
                   </div>
@@ -202,7 +236,11 @@ export function QualityScoreCard({
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {assessment.missingSections.map((section, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-[10px] font-normal">
+                            <Badge
+                              key={idx}
+                              variant="secondary"
+                              className="text-[10px] font-normal"
+                            >
                               {section}
                             </Badge>
                           ))}
@@ -219,7 +257,10 @@ export function QualityScoreCard({
                         </div>
                         <ul className="space-y-1.5">
                           {assessment.suggestions.slice(0, 3).map((suggestion, idx) => (
-                            <li key={idx} className="flex gap-1.5 text-xs text-muted-foreground leading-relaxed">
+                            <li
+                              key={idx}
+                              className="flex gap-1.5 text-xs text-muted-foreground leading-relaxed"
+                            >
                               <span className="text-amber-500 shrink-0">•</span>
                               <span>{suggestion}</span>
                             </li>

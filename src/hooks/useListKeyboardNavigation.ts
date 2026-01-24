@@ -60,11 +60,8 @@ export function useListKeyboardNavigation<T>({
   const itemRefs = useRef<Map<number, HTMLElement>>(new Map())
 
   // Compute clamped active index based on items length
-  const clampedActiveIndex = items.length === 0
-    ? -1
-    : activeIndex >= items.length
-      ? items.length - 1
-      : activeIndex
+  const clampedActiveIndex =
+    items.length === 0 ? -1 : activeIndex >= items.length ? items.length - 1 : activeIndex
 
   // Wrapper to set active index with bounds checking
   const setActiveIndex = (index: number) => {

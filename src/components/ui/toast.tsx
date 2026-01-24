@@ -69,10 +69,7 @@ function ActionButton({
   return (
     <button
       onClick={handleClick}
-      className={cn(
-        'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-        buttonStyle
-      )}
+      className={cn('rounded-md px-3 py-1.5 text-xs font-medium transition-colors', buttonStyle)}
     >
       {action.label}
     </button>

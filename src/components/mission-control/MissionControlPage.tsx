@@ -24,7 +24,7 @@ export function MissionControlPage() {
   const { projectStatuses, loading: projectsLoading } = useProjectStatuses()
 
   // Store actions for refreshing
-  const loadProjects = useProjectStore(s => s.loadProjects)
+  const loadProjects = useProjectStore((s) => s.loadProjects)
 
   // Initial data load
   useEffect(() => {
@@ -57,10 +57,7 @@ export function MissionControlPage() {
                 Overview of all projects and Ralph Loop activity
               </p>
             </div>
-            <QuickActionsBar
-              onRefreshAll={handleRefreshAll}
-              isRefreshing={isLoading}
-            />
+            <QuickActionsBar onRefreshAll={handleRefreshAll} isRefreshing={isLoading} />
           </div>
 
           {/* Ralph Loop Quick Access Card */}
@@ -84,17 +81,16 @@ export function MissionControlPage() {
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1">
                   <span className="font-medium">{globalStats.activeExecutionsCount}</span>
-                  <span className="text-muted-foreground">active execution{globalStats.activeExecutionsCount !== 1 ? 's' : ''}</span>
+                  <span className="text-muted-foreground">
+                    active execution{globalStats.activeExecutionsCount !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Projects Overview */}
-          <ProjectsOverview
-            projectStatuses={projectStatuses}
-            loading={projectsLoading}
-          />
+          <ProjectsOverview projectStatuses={projectStatuses} loading={projectsLoading} />
         </div>
       </div>
     </div>

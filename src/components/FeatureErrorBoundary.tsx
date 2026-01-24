@@ -64,12 +64,7 @@ export class FeatureErrorBoundary extends Component<Props, State> {
           <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="text-sm">{featureName} encountered an error</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={this.handleRetry}
-              className="ml-auto h-7"
-            >
+            <Button variant="ghost" size="sm" onClick={this.handleRetry} className="ml-auto h-7">
               <RefreshCw className="h-3 w-3 mr-1" />
               Retry
             </Button>

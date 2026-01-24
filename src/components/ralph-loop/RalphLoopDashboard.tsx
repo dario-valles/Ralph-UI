@@ -124,12 +124,7 @@ export function RalphLoopDashboard({
   const [detectedWorktreePath, setDetectedWorktreePath] = useState<string | null>(null)
 
   // Tree view settings (persists across dashboard reopens)
-  const {
-    isTreeVisible,
-    panelHeight,
-    toggleTreeView,
-    setPanelHeight,
-  } = useTreeViewSettings()
+  const { isTreeVisible, panelHeight, toggleTreeView, setPanelHeight } = useTreeViewSettings()
 
   // Resizable panel state
   const containerRef = useRef<HTMLDivElement>(null)
@@ -666,12 +661,18 @@ export function RalphLoopDashboard({
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-start sm:items-center gap-2 flex-wrap">
-                <CardTitle className="text-sm sm:text-base truncate max-w-[200px] sm:max-w-none">{prd.title}</CardTitle>
+                <CardTitle className="text-sm sm:text-base truncate max-w-[200px] sm:max-w-none">
+                  {prd.title}
+                </CardTitle>
                 <Badge
-                  variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
+                  variant={
+                    stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'
+                  }
                   className="text-[10px] sm:text-xs flex-shrink-0"
                 >
-                  <stateDisplay.icon className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${isRunning ? 'animate-spin' : ''}`} />
+                  <stateDisplay.icon
+                    className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${isRunning ? 'animate-spin' : ''}`}
+                  />
                   <span className="truncate max-w-[100px] sm:max-w-none">{stateDisplay.label}</span>
                 </Badge>
               </div>
@@ -698,7 +699,11 @@ export function RalphLoopDashboard({
           {/* Configuration */}
           <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="mt-2 sm:mt-3">
             <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-between h-8 sm:h-9 text-xs sm:text-sm">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-between h-8 sm:h-9 text-xs sm:text-sm"
+              >
                 <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
                   <span className="truncate">Loop Configuration</span>
@@ -786,9 +791,7 @@ export function RalphLoopDashboard({
                   <ModelSelector
                     id="model"
                     value={effectiveModel || getDefaultModel(effectiveAgent as AgentType)}
-                    onChange={(value) =>
-                      setConfigOverrides((prev) => ({ ...prev, model: value }))
-                    }
+                    onChange={(value) => setConfigOverrides((prev) => ({ ...prev, model: value }))}
                     models={availableModels}
                     loading={modelsLoading}
                     loadingText="Loading models..."
@@ -852,21 +855,40 @@ export function RalphLoopDashboard({
           {/* Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 mt-2 sm:mt-3">
             {isRunning ? (
-              <Button variant="destructive" size="sm" onClick={handleStopLoop} disabled={loading} className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleStopLoop}
+                disabled={loading}
+                className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none"
+              >
                 <StopCircle className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Stop Loop
               </Button>
             ) : (
-              <Button size="sm" onClick={handleStartLoop} disabled={loading || prdStatus?.allPass} className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none">
+              <Button
+                size="sm"
+                onClick={handleStartLoop}
+                disabled={loading || prdStatus?.allPass}
+                className="h-8 sm:h-9 text-xs sm:text-sm flex-1 sm:flex-none"
+              >
                 {loading ? (
                   <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                 ) : (
                   <Play className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 )}
-                <span className="truncate">{prdStatus?.allPass ? 'All Pass' : 'Start Ralph Loop'}</span>
+                <span className="truncate">
+                  {prdStatus?.allPass ? 'All Pass' : 'Start Ralph Loop'}
+                </span>
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => refreshAll()} disabled={loading} className="h-8 sm:h-9 text-xs sm:text-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refreshAll()}
+              disabled={loading}
+              className="h-8 sm:h-9 text-xs sm:text-sm"
+            >
               <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
               <span className="ml-1.5 sm:ml-2 hidden sm:inline">Refresh</span>
             </Button>
@@ -956,11 +978,15 @@ export function RalphLoopDashboard({
           {executionMetrics && (
             <div className="grid grid-cols-4 gap-1 sm:gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
               <div className="text-center">
-                <div className="text-sm sm:text-lg font-semibold">{executionMetrics.totalIterations ?? 0}</div>
+                <div className="text-sm sm:text-lg font-semibold">
+                  {executionMetrics.totalIterations ?? 0}
+                </div>
                 <div className="text-[8px] sm:text-[10px] text-muted-foreground">Iterations</div>
               </div>
               <div className="text-center">
-                <div className="text-sm sm:text-lg font-semibold">{executionMetrics.storiesCompleted ?? 0}</div>
+                <div className="text-sm sm:text-lg font-semibold">
+                  {executionMetrics.storiesCompleted ?? 0}
+                </div>
                 <div className="text-[8px] sm:text-[10px] text-muted-foreground">Done</div>
               </div>
               <div className="text-center">
@@ -969,7 +995,7 @@ export function RalphLoopDashboard({
                     ? `${(executionMetrics.totalTokens / 1000000).toFixed(1)}M`
                     : executionMetrics.totalTokens >= 1000
                       ? `${(executionMetrics.totalTokens / 1000).toFixed(0)}K`
-                      : executionMetrics.totalTokens ?? 0}
+                      : (executionMetrics.totalTokens ?? 0)}
                 </div>
                 <div className="text-[8px] sm:text-[10px] text-muted-foreground">Tokens</div>
               </div>
@@ -989,7 +1015,11 @@ export function RalphLoopDashboard({
 
       {/* Tabs for Stories, Progress, Terminal */}
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full min-h-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex flex-col h-full min-h-0"
+        >
           <div className="flex items-center justify-between border-b px-1 sm:px-2 flex-shrink-0 gap-1">
             {/* Horizontally scrollable tabs on mobile */}
             <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
@@ -999,14 +1029,16 @@ export function RalphLoopDashboard({
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
                 >
                   <CheckCircle2 className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden xs:inline">Stories </span>({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
+                  <span className="hidden xs:inline">Stories </span>({prdStatus?.passed ?? 0}/
+                  {prdStatus?.total ?? 0})
                 </TabsTrigger>
                 <TabsTrigger
                   value="progress"
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
                 >
                   <BookOpen className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden xs:inline">Progress </span>({progressSummary?.learningsCount ?? 0})
+                  <span className="hidden xs:inline">Progress </span>(
+                  {progressSummary?.learningsCount ?? 0})
                 </TabsTrigger>
                 <TabsTrigger
                   value="terminal"
@@ -1028,7 +1060,9 @@ export function RalphLoopDashboard({
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
                 >
                   <Clock className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden sm:inline">History ({iterationHistory?.length ?? 0})</span>
+                  <span className="hidden sm:inline">
+                    History ({iterationHistory?.length ?? 0})
+                  </span>
                   <span className="sm:hidden">{iterationHistory?.length ?? 0}</span>
                 </TabsTrigger>
                 <TabsTrigger
@@ -1125,11 +1159,7 @@ export function RalphLoopDashboard({
                       className="min-h-[100px] overflow-hidden"
                       data-testid="tree-panel"
                     >
-                      <AgentTree
-                        agentId={currentAgentId}
-                        maxHeight="100%"
-                        className="p-2 h-full"
-                      />
+                      <AgentTree agentId={currentAgentId} maxHeight="100%" className="p-2 h-full" />
                     </div>
 
                     {/* Resize Handle */}
@@ -1203,11 +1233,7 @@ export function RalphLoopDashboard({
 
           <TabsContent value="learnings" className="p-0 mt-0">
             <div className="p-4">
-              <LearningsPanel
-                projectPath={projectPath}
-                prdName={prdName}
-                stories={prd.stories}
-              />
+              <LearningsPanel projectPath={projectPath} prdName={prdName} stories={prd.stories} />
             </div>
           </TabsContent>
 
@@ -1240,14 +1266,12 @@ export function RalphLoopDashboard({
               Regenerate Stories
             </DialogTitle>
             <DialogDescription>
-              This will use AI to re-extract user stories from the PRD markdown. Any manual changes to stories will be lost.
+              This will use AI to re-extract user stories from the PRD markdown. Any manual changes
+              to stories will be lost.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setRegenerateConfirmOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setRegenerateConfirmOpen(false)}>
               Cancel
             </Button>
             <Button
@@ -1270,9 +1294,7 @@ export function RalphLoopDashboard({
               <FileDiff className="h-5 w-5" />
               Changes in Worktree
             </DialogTitle>
-            <DialogDescription>
-              Comparing worktree branch to main branch
-            </DialogDescription>
+            <DialogDescription>Comparing worktree branch to main branch</DialogDescription>
           </DialogHeader>
           <ScrollArea className="flex-1 min-h-0">
             {diffInfo && (
@@ -1322,9 +1344,7 @@ export function RalphLoopDashboard({
                 </div>
 
                 {diffInfo.files.length === 0 && (
-                  <div className="text-center text-muted-foreground py-8">
-                    No changes detected
-                  </div>
+                  <div className="text-center text-muted-foreground py-8">No changes detected</div>
                 )}
               </div>
             )}

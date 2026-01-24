@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-border: hsl(var(--border));
@@ -208,21 +208,32 @@
    ========================================================================== */
 
 :root {
-  --font-display: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Apply display font to headings for that control-room aesthetic */
-h1, h2, h3, .font-display {
+h1,
+h2,
+h3,
+.font-display {
   font-family: var(--font-display);
   letter-spacing: -0.025em;
-  font-feature-settings: "liga" 1, "calt" 1;
+  font-feature-settings:
+    'liga' 1,
+    'calt' 1;
   text-rendering: optimizeLegibility;
 }
 
 /* Enable ligatures for all monospace/code elements */
-code, pre, .font-mono, [class*="mono"] {
-  font-feature-settings: "liga" 1, "calt" 1;
+code,
+pre,
+.font-mono,
+[class*='mono'] {
+  font-feature-settings:
+    'liga' 1,
+    'calt' 1;
   text-rendering: optimizeLegibility;
 }
 
@@ -257,7 +268,8 @@ code, pre, .font-mono, [class*="mono"] {
 }
 
 @keyframes processing-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -284,7 +296,7 @@ code, pre, .font-mono, [class*="mono"] {
   transition: opacity 200ms ease-out;
 }
 
-.nav-active-indicator[data-active="true"]::before {
+.nav-active-indicator[data-active='true']::before {
   opacity: 1;
 }
 
@@ -303,7 +315,7 @@ a:focus-visible,
 /* Active/pressed state for touch devices */
 @media (hover: none) {
   button:active,
-  [role="button"]:active {
+  [role='button']:active {
     opacity: 0.8;
   }
 }

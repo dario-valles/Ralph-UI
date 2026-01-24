@@ -100,10 +100,7 @@ export function PRDFileExecutionDialog({
   } = useAvailableModels(initialAgentType)
 
   // Use the config hook
-  const { config, setConfig, handleAgentTypeChange } = usePRDExecutionConfig(
-    open,
-    defaultModelId
-  )
+  const { config, setConfig, handleAgentTypeChange } = usePRDExecutionConfig(open, defaultModelId)
 
   // Update models when agent type changes
   const {
@@ -181,7 +178,9 @@ export function PRDFileExecutionDialog({
       onSuccess?.()
 
       // Navigate to Ralph Loop page with the project path and PRD name
-      navigate(`/ralph-loop?project=${encodeURIComponent(file.projectPath)}&prd=${encodeURIComponent(prdName)}`)
+      navigate(
+        `/ralph-loop?project=${encodeURIComponent(file.projectPath)}&prd=${encodeURIComponent(prdName)}`
+      )
     } catch (err) {
       console.error('[PRD Execution] Failed:', err)
     } finally {
@@ -203,8 +202,8 @@ export function PRDFileExecutionDialog({
         <DialogHeader>
           <DialogTitle className="pr-8">Execute PRD: {file?.title}</DialogTitle>
           <DialogDescription>
-            Configure how the PRD will be executed using the Ralph Loop technique.
-            Progress persists in files with a fresh agent each iteration.
+            Configure how the PRD will be executed using the Ralph Loop technique. Progress persists
+            in files with a fresh agent each iteration.
           </DialogDescription>
         </DialogHeader>
 
@@ -287,7 +286,8 @@ export function PRDFileExecutionDialog({
             </Select>
             {selectedTemplateInfo && (
               <p className="text-xs text-muted-foreground">
-                {selectedTemplateInfo.description || `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
+                {selectedTemplateInfo.description ||
+                  `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
               </p>
             )}
           </div>
@@ -299,9 +299,7 @@ export function PRDFileExecutionDialog({
               <Select
                 id="max-iterations"
                 value={config.maxIterations.toString()}
-                onChange={(e) =>
-                  setConfig({ ...config, maxIterations: parseInt(e.target.value) })
-                }
+                onChange={(e) => setConfig({ ...config, maxIterations: parseInt(e.target.value) })}
               >
                 <option value="10">10</option>
                 <option value="20">20</option>
@@ -323,9 +321,7 @@ export function PRDFileExecutionDialog({
                 value={maxCost}
                 onChange={(e) => setMaxCost(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Stop when API costs exceed this limit
-              </p>
+              <p className="text-xs text-muted-foreground">Stop when API costs exceed this limit</p>
             </div>
           </div>
 
@@ -343,8 +339,8 @@ export function PRDFileExecutionDialog({
                   <span className="text-xs text-muted-foreground font-normal">(Recommended)</span>
                 </span>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Work happens in an isolated git worktree, keeping the main branch clean.
-                  The worktree is preserved after completion for review.
+                  Work happens in an isolated git worktree, keeping the main branch clean. The
+                  worktree is preserved after completion for review.
                 </p>
               </div>
             </label>
@@ -381,11 +377,21 @@ export function PRDFileExecutionDialog({
             <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               <li>• Agent: {config.agentType}</li>
               <li>• Model: {getModelName(displayModels, config.model || '')}</li>
-              <li>• Template: {selectedTemplate || 'default'}{selectedTemplateInfo ? ` (${formatTemplateSource(selectedTemplateInfo.source)})` : ''}</li>
+              <li>
+                • Template: {selectedTemplate || 'default'}
+                {selectedTemplateInfo
+                  ? ` (${formatTemplateSource(selectedTemplateInfo.source)})`
+                  : ''}
+              </li>
               <li>• Max iterations: {config.maxIterations}</li>
               <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
               <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
-              <li>• Quality gates: {[config.runTests && 'tests', config.runLint && 'lint'].filter(Boolean).join(', ') || 'none'}</li>
+              <li>
+                • Quality gates:{' '}
+                {[config.runTests && 'tests', config.runLint && 'lint']
+                  .filter(Boolean)
+                  .join(', ') || 'none'}
+              </li>
               <li className="text-green-600">• PRD file: {file?.filePath}</li>
               <li className="text-green-600">• Each iteration spawns a fresh agent</li>
             </ul>
@@ -393,17 +399,10 @@ export function PRDFileExecutionDialog({
         </div>
 
         <DialogFooter className="gap-2 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={executing}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={executing}>
             Cancel
           </Button>
-          <Button
-            onClick={handleExecute}
-            disabled={executing || !file}
-          >
+          <Button onClick={handleExecute} disabled={executing || !file}>
             {executing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

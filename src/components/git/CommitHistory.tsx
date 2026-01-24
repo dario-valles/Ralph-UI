@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { CommitInfo, gitApi, gitHelpers } from "../../lib/git-api";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { RefreshCw, GitCommit, User } from "lucide-react";
+import React, { useEffect, useState } from 'react'
+import { CommitInfo, gitApi, gitHelpers } from '../../lib/git-api'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
+import { RefreshCw, GitCommit, User } from 'lucide-react'
 
 interface CommitHistoryProps {
-  repoPath: string;
-  maxCount?: number;
-  onCommitSelect?: (commit: CommitInfo) => void;
+  repoPath: string
+  maxCount?: number
+  onCommitSelect?: (commit: CommitInfo) => void
 }
 
 export const CommitHistory: React.FC<CommitHistoryProps> = ({
@@ -16,50 +16,45 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
   maxCount = 50,
   onCommitSelect,
 }) => {
-  const [commits, setCommits] = useState<CommitInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
+  const [commits, setCommits] = useState<CommitInfo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(null)
 
   const loadCommits = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const history = await gitApi.getCommitHistory(repoPath, maxCount);
-      setCommits(history);
+      const history = await gitApi.getCommitHistory(repoPath, maxCount)
+      setCommits(history)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load commits");
+      setError(err instanceof Error ? err.message : 'Failed to load commits')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (repoPath) {
-      loadCommits();
+      loadCommits()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Load on mount and prop changes only
-  }, [repoPath, maxCount]);
+  }, [repoPath, maxCount])
 
   const handleCommitClick = (commit: CommitInfo) => {
-    setSelectedCommit(commit.id);
+    setSelectedCommit(commit.id)
     if (onCommitSelect) {
-      onCommitSelect(commit);
+      onCommitSelect(commit)
     }
-  };
+  }
 
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-xl font-bold">Commit History</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={loadCommits}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+        <Button variant="outline" size="sm" onClick={loadCommits} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </CardHeader>
@@ -72,15 +67,11 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
         )}
 
         {loading && !commits.length && (
-          <div className="text-center py-8 text-gray-500">
-            Loading commits...
-          </div>
+          <div className="text-center py-8 text-gray-500">Loading commits...</div>
         )}
 
         {!loading && !error && commits.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No commits found
-          </div>
+          <div className="text-center py-8 text-gray-500">No commits found</div>
         )}
 
         <div className="space-y-2 max-h-[600px] overflow-y-auto">
@@ -91,8 +82,8 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
                 border rounded-lg p-4 cursor-pointer transition-all
                 ${
                   selectedCommit === commit.id
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                 }
               `}
               onClick={() => handleCommitClick(commit)}
@@ -113,9 +104,9 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
                 <p className="font-medium text-gray-900">
                   {gitHelpers.formatCommitMessage(commit, 80)}
                 </p>
-                {commit.message.split("\n").length > 1 && (
+                {commit.message.split('\n').length > 1 && (
                   <p className="text-xs text-gray-500 mt-1">
-                    (+ {commit.message.split("\n").length - 1} more lines)
+                    (+ {commit.message.split('\n').length - 1} more lines)
                   </p>
                 )}
               </div>
@@ -146,5 +137,5 @@ export const CommitHistory: React.FC<CommitHistoryProps> = ({
         )}
       </CardContent>
     </Card>
-  );
-};
+  )
+}

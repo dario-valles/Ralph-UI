@@ -1,13 +1,7 @@
 // Individual project summary card for Mission Control
 
 import { Link } from 'react-router-dom'
-import {
-  FolderOpen,
-  Play,
-  Pause,
-  Clock,
-  ArrowRight,
-} from 'lucide-react'
+import { FolderOpen, Play, Pause, Clock, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -62,12 +56,7 @@ function formatLastActivity(date: Date | null): string {
 }
 
 export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCardProps) {
-  const {
-    project,
-    health,
-    lastActivity,
-    activeExecutionId,
-  } = projectStatus
+  const { project, health, lastActivity, activeExecutionId } = projectStatus
 
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
 

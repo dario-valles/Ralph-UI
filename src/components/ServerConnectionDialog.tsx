@@ -125,7 +125,8 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              The auth token is displayed when you run <code className="bg-muted px-1 rounded">bun run server</code>
+              The auth token is displayed when you run{' '}
+              <code className="bg-muted px-1 rounded">bun run server</code>
             </p>
           </div>
 
@@ -156,13 +157,10 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
 
           <div className="text-center text-xs text-muted-foreground">
             <p>Start the server with:</p>
-            <code className="bg-muted px-2 py-1 rounded mt-1 inline-block">
-              bun run server
-            </code>
+            <code className="bg-muted px-2 py-1 rounded mt-1 inline-block">bun run server</code>
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

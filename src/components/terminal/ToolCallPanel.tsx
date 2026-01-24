@@ -142,13 +142,13 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
           <span className="text-zinc-400 flex-shrink-0">{getToolIcon(toolCall.toolName)}</span>
 
           {/* Tool name */}
-          <span className="font-medium text-sm flex-shrink-0 text-zinc-100">{toolCall.toolName}</span>
+          <span className="font-medium text-sm flex-shrink-0 text-zinc-100">
+            {toolCall.toolName}
+          </span>
 
           {/* Input summary */}
           {inputSummary && (
-            <span className="text-xs text-zinc-400 truncate flex-1 font-mono">
-              {inputSummary}
-            </span>
+            <span className="text-xs text-zinc-400 truncate flex-1 font-mono">{inputSummary}</span>
           )}
 
           {/* Status indicator */}
@@ -157,7 +157,9 @@ function ToolCallItem({ toolCall }: ToolCallItemProps): React.JSX.Element {
               <span className="text-xs text-zinc-400">{formatDuration(toolCall.durationMs)}</span>
             )}
             {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />}
-            {toolCall.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />}
+            {toolCall.status === 'completed' && (
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+            )}
             {isFailed && <XCircle className="h-3.5 w-3.5 text-red-400" />}
           </span>
         </button>
@@ -254,11 +256,14 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
       })
 
       // Listen for tool call completed events
-      unlistenComplete = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
-        if (payload.agentId === agentId) {
-          completeToolCall(payload)
+      unlistenComplete = await subscribeEvent<ToolCallCompletedPayload>(
+        'tool:completed',
+        (payload) => {
+          if (payload.agentId === agentId) {
+            completeToolCall(payload)
+          }
         }
-      })
+      )
     }
 
     setup()
@@ -302,12 +307,18 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
               </Badge>
             )}
             {completedCount > 0 && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-green-500 border-green-500/30">
+              <Badge
+                variant="outline"
+                className="text-xs px-1.5 py-0 h-5 text-green-500 border-green-500/30"
+              >
                 {completedCount}
               </Badge>
             )}
             {failedCount > 0 && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-red-500 border-red-500/30">
+              <Badge
+                variant="outline"
+                className="text-xs px-1.5 py-0 h-5 text-red-500 border-red-500/30"
+              >
                 {failedCount}
               </Badge>
             )}
@@ -333,7 +344,9 @@ export function ToolCallPanel({ agentId, className }: ToolCallPanelProps): React
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Wrench className="h-10 w-10 text-zinc-600 mb-3" />
               <p className="text-sm text-zinc-400">No tool calls yet</p>
-              <p className="text-xs text-zinc-500 mt-1">Tool calls will appear here as the agent works</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                Tool calls will appear here as the agent works
+              </p>
             </div>
           ) : (
             agentToolCalls.map((toolCall, index) => (

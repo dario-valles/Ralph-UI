@@ -12,7 +12,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { VerificationResult, VerificationIssue, VerificationHistorySummary } from '@/types/planning'
+import type {
+  VerificationResult,
+  VerificationIssue,
+  VerificationHistorySummary,
+} from '@/types/planning'
 import {
   CheckCircle2,
   XCircle,
@@ -156,7 +160,9 @@ export function VerificationResults({
                 <div className="flex items-center gap-4 mb-2">
                   <span className="text-sm font-medium">Progress:</span>
                   {historySummary.improvementPercentage !== undefined && (
-                    <Badge variant={historySummary.improvementPercentage > 0 ? 'default' : 'secondary'}>
+                    <Badge
+                      variant={historySummary.improvementPercentage > 0 ? 'default' : 'secondary'}
+                    >
                       {historySummary.improvementPercentage > 0 ? '+' : ''}
                       {historySummary.improvementPercentage.toFixed(0)}% improvement
                     </Badge>
@@ -171,7 +177,7 @@ export function VerificationResults({
             </div>
 
             {/* Fixed/New issues in this iteration */}
-            {(issuesFixed && issuesFixed.length > 0) && (
+            {issuesFixed && issuesFixed.length > 0 && (
               <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle2 className="h-4 w-4" />
@@ -180,7 +186,7 @@ export function VerificationResults({
                 </div>
               </div>
             )}
-            {(newIssues && newIssues.length > 0) && (
+            {newIssues && newIssues.length > 0 && (
               <div className="mt-2">
                 <div className="flex items-center gap-2 text-orange-600">
                   <AlertTriangle className="h-4 w-4" />
@@ -213,9 +219,7 @@ export function VerificationResults({
               </div>
             </div>
             <div className="text-right">
-              <p className={`text-3xl font-bold ${coverageColor}`}>
-                {result.coveragePercentage}%
-              </p>
+              <p className={`text-3xl font-bold ${coverageColor}`}>{result.coveragePercentage}%</p>
               <p className="text-xs text-muted-foreground">Coverage</p>
             </div>
           </div>
@@ -310,21 +314,12 @@ export function VerificationResults({
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={onRerun}
-              disabled={isLoading}
-              className="gap-2"
-            >
+            <Button variant="outline" onClick={onRerun} disabled={isLoading} className="gap-2">
               <RefreshCw className="h-4 w-4" />
               Re-run Verification
             </Button>
 
-            <Button
-              onClick={onProceed}
-              disabled={isLoading || !canProceed}
-              className="gap-2"
-            >
+            <Button onClick={onProceed} disabled={isLoading || !canProceed} className="gap-2">
               {result.passed ? 'Export to Ralph' : 'Proceed Anyway'}
               <ArrowRight className="h-4 w-4" />
             </Button>

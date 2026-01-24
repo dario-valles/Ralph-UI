@@ -8,6 +8,7 @@ export interface CustomCommand {
   label: string
   command: string
   action: 'insert' | 'execute'
+  category: string
   createdAt: number
 }
 
@@ -16,9 +17,11 @@ interface CustomCommandsStore {
   commands: CustomCommand[]
 
   // Actions
-  addCommand: (label: string, command: string, action: 'insert' | 'execute') => void
+  addCommand: (label: string, command: string, action: 'insert' | 'execute', category: string) => void
   deleteCommand: (id: string) => void
   getCommands: () => CustomCommand[]
+  getCommandsByCategory: (category: string) => CustomCommand[]
+  getAllCategories: () => string[]
 }
 
 export const useCustomCommandsStore = create<CustomCommandsStore>()(
@@ -27,13 +30,14 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
       // Initial state
       commands: [],
 
-      addCommand: (label: string, command: string, action: 'insert' | 'execute') => {
+      addCommand: (label: string, command: string, action: 'insert' | 'execute', category: string) => {
         const { commands } = get()
         const newCommand: CustomCommand = {
           id: `cmd-${Date.now()}`,
           label,
           command,
           action,
+          category,
           createdAt: Date.now(),
         }
         set({ commands: [...commands, newCommand] })
@@ -46,6 +50,17 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
 
       getCommands: () => {
         return get().commands
+      },
+
+      getCommandsByCategory: (category: string) => {
+        const { commands } = get()
+        return commands.filter((c) => c.category === category)
+      },
+
+      getAllCategories: () => {
+        const { commands } = get()
+        const categories = new Set(commands.map((c) => c.category))
+        return Array.from(categories).sort()
       },
     }),
     {

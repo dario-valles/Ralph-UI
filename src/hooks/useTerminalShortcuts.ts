@@ -58,5 +58,13 @@ export function useTerminalShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [terminals, activeTerminalId, togglePanel, createTerminal, setActiveTerminal, panelMode, getActiveProject])
+  }, [
+    terminals,
+    activeTerminalId,
+    togglePanel,
+    createTerminal,
+    setActiveTerminal,
+    panelMode,
+    getActiveProject,
+  ])
 }

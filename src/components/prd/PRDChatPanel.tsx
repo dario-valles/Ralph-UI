@@ -341,7 +341,12 @@ export function PRDChatPanel() {
     openTypeSelector()
   }
 
-  const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, gsdMode?: boolean) => {
+  const handleTypeSelected = (
+    prdType: PRDTypeValue,
+    guidedMode: boolean,
+    projectPath?: string,
+    gsdMode?: boolean
+  ) => {
     // Register the project when starting a session
     if (projectPath) {
       registerProject(projectPath)
@@ -410,7 +415,10 @@ export function PRDChatPanel() {
       setExecutePrdFile(prdFile)
     } catch (err) {
       console.error('Failed to load PRD file:', err)
-      toast.error('Failed to load PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Failed to load PRD',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     }
   }
 
@@ -467,8 +475,8 @@ export function PRDChatPanel() {
         {/* Mobile Header - Clean two-row layout with auto-hide on scroll */}
         <div
           className={cn(
-            "lg:hidden flex-shrink-0 bg-card border-b transition-all duration-200 ease-in-out overflow-hidden",
-            scrollDirection === 'down' ? "max-h-0 opacity-0 border-b-0" : "max-h-32 opacity-100"
+            'lg:hidden flex-shrink-0 bg-card border-b transition-all duration-200 ease-in-out overflow-hidden',
+            scrollDirection === 'down' ? 'max-h-0 opacity-0 border-b-0' : 'max-h-32 opacity-100'
           )}
         >
           {/* Row 1: Session selector with new button */}
@@ -478,12 +486,14 @@ export function PRDChatPanel() {
               aria-label="Select session"
               value={currentSession?.id || ''}
               onChange={(e) => {
-                const session = sessions.find(s => s.id === e.target.value)
+                const session = sessions.find((s) => s.id === e.target.value)
                 if (session) handleSelectSession(session)
               }}
               className="flex-1 min-w-0 text-sm h-9 font-medium"
             >
-              <option value="" disabled>Select session...</option>
+              <option value="" disabled>
+                Select session...
+              </option>
               {sessions.map((session) => (
                 <option key={session.id} value={session.id}>
                   {session.title || 'Untitled Session'}
@@ -551,7 +561,12 @@ export function PRDChatPanel() {
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-md" disabled={streaming}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 rounded-md"
+                    disabled={streaming}
+                  >
                     <ChevronDown className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -728,10 +743,7 @@ export function PRDChatPanel() {
           {/* GSD Workflow Mode */}
           {currentSession?.gsdMode && currentSession.projectPath ? (
             <div className="flex-1 overflow-y-auto">
-              <GSDWorkflow
-                projectPath={currentSession.projectPath}
-                sessionId={currentSession.id}
-              />
+              <GSDWorkflow projectPath={currentSession.projectPath} sessionId={currentSession.id} />
             </div>
           ) : (
             <>
@@ -748,11 +760,20 @@ export function PRDChatPanel() {
                       Start a conversation to create your PRD
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto px-4 sm:px-0">
-                      <Button onClick={handleCreateSession} aria-label="New session" className="w-full sm:w-auto">
+                      <Button
+                        onClick={handleCreateSession}
+                        aria-label="New session"
+                        className="w-full sm:w-auto"
+                      >
                         <Plus className="h-4 w-4 mr-2" />
                         New Session
                       </Button>
-                      <Button variant="outline" onClick={handleQuickStart} aria-label="Quick start" className="w-full sm:w-auto">
+                      <Button
+                        variant="outline"
+                        onClick={handleQuickStart}
+                        aria-label="Quick start"
+                        className="w-full sm:w-auto"
+                      >
                         Quick Start
                       </Button>
                     </div>
@@ -819,7 +840,9 @@ export function PRDChatPanel() {
                   onSend={handleSendMessage}
                   disabled={isDisabled}
                   placeholder={
-                    !currentSession ? 'Create a session to start chatting...' : 'Type your message...'
+                    !currentSession
+                      ? 'Create a session to start chatting...'
+                      : 'Type your message...'
                   }
                 />
               </div>
@@ -878,12 +901,16 @@ export function PRDChatPanel() {
                       remarkPlugins={[remarkGfm]}
                       components={{
                         pre: ({ children }) => (
-                          <pre className="bg-secondary/50 rounded-md p-2 overflow-x-auto text-xs">{children}</pre>
+                          <pre className="bg-secondary/50 rounded-md p-2 overflow-x-auto text-xs">
+                            {children}
+                          </pre>
                         ),
                         code: ({ children, className }) => {
                           const isInline = !className
                           return isInline ? (
-                            <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">{children}</code>
+                            <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">
+                              {children}
+                            </code>
                           ) : (
                             <code className={className}>{children}</code>
                           )
@@ -897,8 +924,12 @@ export function PRDChatPanel() {
                         h1: ({ children }) => (
                           <h1 className="text-lg font-bold mt-4 mb-2 pb-1 border-b">{children}</h1>
                         ),
-                        h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
+                        h2: ({ children }) => (
+                          <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
+                        ),
                         p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
                         blockquote: ({ children }) => (
                           <blockquote className="border-l-2 border-primary/50 pl-3 my-2 italic text-muted-foreground">
@@ -906,7 +937,9 @@ export function PRDChatPanel() {
                           </blockquote>
                         ),
                         hr: () => <hr className="my-4 border-border" />,
-                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        strong: ({ children }) => (
+                          <strong className="font-semibold">{children}</strong>
+                        ),
                       }}
                     >
                       {watchedPlanContent}

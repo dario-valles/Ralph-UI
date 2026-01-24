@@ -43,11 +43,7 @@ const WORKFLOW_OPTIONS: WorkflowOption[] = [
     label: 'Guided Interview',
     description: 'AI asks structured questions to build your PRD step by step',
     icon: <MessageSquareText className="h-6 w-6" />,
-    features: [
-      'Type-specific questions',
-      'Iterative refinement',
-      'Quick for small tasks',
-    ],
+    features: ['Type-specific questions', 'Iterative refinement', 'Quick for small tasks'],
   },
   {
     id: 'gsd',
@@ -129,7 +125,12 @@ const PRD_TYPES: PRDTypeOption[] = [
 ]
 
 interface PRDTypeSelectorProps {
-  onSelect: (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, gsdMode?: boolean) => void
+  onSelect: (
+    prdType: PRDTypeValue,
+    guidedMode: boolean,
+    projectPath?: string,
+    gsdMode?: boolean
+  ) => void
   loading?: boolean
   className?: string
   defaultProjectPath?: string
@@ -185,9 +186,7 @@ export function PRDTypeSelector({
       <Card className={cn('w-full max-w-2xl mx-auto', className)}>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">How would you like to create your PRD?</CardTitle>
-          <CardDescription>
-            Choose a workflow that fits your project needs
-          </CardDescription>
+          <CardDescription>Choose a workflow that fits your project needs</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Workflow Mode Selection */}
@@ -207,12 +206,14 @@ export function PRDTypeSelector({
                 )}
               >
                 <div className="flex items-start gap-4">
-                  <div className={cn(
-                    'shrink-0 p-2 rounded-lg',
-                    selectedMode === option.id
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-muted text-muted-foreground'
-                  )}>
+                  <div
+                    className={cn(
+                      'shrink-0 p-2 rounded-lg',
+                      selectedMode === option.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted text-muted-foreground'
+                    )}
+                  >
                     {option.icon}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -224,12 +225,13 @@ export function PRDTypeSelector({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      {option.description}
-                    </p>
+                    <p className="text-sm text-muted-foreground mb-3">{option.description}</p>
                     <ul className="space-y-1">
                       {option.features.map((feature, i) => (
-                        <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <li
+                          key={i}
+                          className="flex items-center gap-2 text-sm text-muted-foreground"
+                        >
                           <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />
                           {feature}
                         </li>
@@ -282,11 +284,7 @@ export function PRDTypeSelector({
           {/* Continue Button (only for GSD mode, guided goes to next step automatically) */}
           {selectedMode === 'gsd' && (
             <div className="flex justify-end">
-              <Button
-                onClick={handleContinue}
-                disabled={loading}
-                className="gap-2"
-              >
+              <Button onClick={handleContinue} disabled={loading} className="gap-2">
                 {loading ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -325,9 +323,7 @@ export function PRDTypeSelector({
     <Card className={cn('w-full max-w-2xl mx-auto', className)}>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">What type of PRD are you creating?</CardTitle>
-        <CardDescription>
-          Select a type to get tailored questions and guidance
-        </CardDescription>
+        <CardDescription>Select a type to get tailored questions and guidance</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* PRD Type Grid */}
@@ -362,20 +358,11 @@ export function PRDTypeSelector({
 
         {/* Navigation */}
         <div className="flex justify-between items-center">
-          <Button
-            variant="ghost"
-            onClick={handleBack}
-            disabled={loading}
-            className="gap-2"
-          >
+          <Button variant="ghost" onClick={handleBack} disabled={loading} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
-          <Button
-            onClick={handleContinue}
-            disabled={!canContinue || loading}
-            className="gap-2"
-          >
+          <Button onClick={handleContinue} disabled={!canContinue || loading} className="gap-2">
             {loading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />

@@ -85,16 +85,13 @@ export function ProjectsOverview({
           className="flex items-center gap-2 text-left hover:text-primary transition-colors"
         >
           <h2 className="text-lg font-semibold">Projects</h2>
-          <span className="text-sm text-muted-foreground">
-            ({projectStatuses.length})
-          </span>
-          {onToggleCollapse && (
-            collapsed ? (
+          <span className="text-sm text-muted-foreground">({projectStatuses.length})</span>
+          {onToggleCollapse &&
+            (collapsed ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             ) : (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            )
-          )}
+            ))}
         </button>
 
         {!collapsed && onAddProject && projectStatuses.length > 0 && (
@@ -113,17 +110,16 @@ export function ProjectsOverview({
           ) : projectStatuses.length === 0 ? (
             <EmptyState onAddProject={onAddProject} />
           ) : (
-            <div className={cn(
-              "grid gap-4",
-              sortedProjects.length === 1 && "md:grid-cols-1 max-w-md",
-              sortedProjects.length === 2 && "md:grid-cols-2",
-              sortedProjects.length >= 3 && "md:grid-cols-2 lg:grid-cols-3"
-            )}>
+            <div
+              className={cn(
+                'grid gap-4',
+                sortedProjects.length === 1 && 'md:grid-cols-1 max-w-md',
+                sortedProjects.length === 2 && 'md:grid-cols-2',
+                sortedProjects.length >= 3 && 'md:grid-cols-2 lg:grid-cols-3'
+              )}
+            >
               {sortedProjects.map((projectStatus) => (
-                <ProjectStatusCard
-                  key={projectStatus.project.id}
-                  projectStatus={projectStatus}
-                />
+                <ProjectStatusCard key={projectStatus.project.id} projectStatus={projectStatus} />
               ))}
             </div>
           )}

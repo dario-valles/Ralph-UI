@@ -70,7 +70,7 @@
       "id": "US-3.2",
       "title": "Choose Insert vs Execute Action",
       "acceptance": "- Each command has action type: \"Insert\" or \"Execute\"\n- \"Insert\" pastes command text without newline\n- \"Execute\" pastes command and sends newline\n- Visual indicator shows action type for each command",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
@@ -78,7 +78,7 @@
       "id": "US-3.3",
       "title": "Organize Commands with Categories",
       "acceptance": "- Can assign category to each command\n- Commands grouped by category in the sheet\n- Can collapse/expand category groups\n- Can filter commands by category",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

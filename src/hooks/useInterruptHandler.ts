@@ -52,12 +52,7 @@ export interface InterruptHandlerActions {
 export function useInterruptHandler(
   config: InterruptHandlerConfig = {}
 ): InterruptHandlerState & InterruptHandlerActions {
-  const {
-    doublePressDuration = 1000,
-    enabled = true,
-    onForceQuit,
-    onGracefulStop,
-  } = config
+  const { doublePressDuration = 1000, enabled = true, onForceQuit, onGracefulStop } = config
 
   const [pendingInterrupt, setPendingInterrupt] = useState(false)
   const [lastInterruptTime, setLastInterruptTime] = useState(0)

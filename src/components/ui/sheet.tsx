@@ -88,11 +88,7 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
         ref={ref}
         role="dialog"
         aria-modal="true"
-        className={cn(
-          'fixed z-50 bg-background shadow-lg border',
-          slideVariants[side],
-          className
-        )}
+        className={cn('fixed z-50 bg-background shadow-lg border', slideVariants[side], className)}
         {...props}
       >
         {children}
@@ -111,20 +107,13 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
 SheetContent.displayName = 'SheetContent'
 
 const SheetHeader = ({ className, ...props }: SheetHeaderProps) => (
-  <div
-    className={cn('flex flex-col space-y-2 px-4 pt-4 pb-2', className)}
-    {...props}
-  />
+  <div className={cn('flex flex-col space-y-2 px-4 pt-4 pb-2', className)} {...props} />
 )
 SheetHeader.displayName = 'SheetHeader'
 
 const SheetTitle = React.forwardRef<HTMLHeadingElement, SheetTitleProps>(
   ({ className, ...props }, ref) => (
-    <h2
-      ref={ref}
-      className={cn('text-lg font-semibold text-foreground', className)}
-      {...props}
-    />
+    <h2 ref={ref} className={cn('text-lg font-semibold text-foreground', className)} {...props} />
   )
 )
 SheetTitle.displayName = 'SheetTitle'

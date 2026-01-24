@@ -138,7 +138,7 @@ export function shouldShowPastePreview(text: string): boolean {
 export function detectCodeLikelihood(text: string): { isCode: boolean; language: string | null } {
   // Check each language's patterns
   for (const [language, patterns] of Object.entries(CODE_PATTERNS)) {
-    const matches = patterns.filter(pattern => pattern.test(text))
+    const matches = patterns.filter((pattern) => pattern.test(text))
     // If more than half the patterns match, it's likely this language
     if (matches.length >= Math.ceil(patterns.length / 3)) {
       return { isCode: true, language }
@@ -155,7 +155,7 @@ export function detectCodeLikelihood(text: string): { isCode: boolean; language:
     /\$\{.*\}/, // Template literals
   ]
 
-  const generalMatches = codeIndicators.filter(pattern => pattern.test(text))
+  const generalMatches = codeIndicators.filter((pattern) => pattern.test(text))
   if (generalMatches.length >= 2) {
     return { isCode: true, language: null }
   }

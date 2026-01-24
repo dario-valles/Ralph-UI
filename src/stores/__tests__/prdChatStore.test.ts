@@ -61,7 +61,8 @@ describe('prdChatStore', () => {
     id: 'msg-2',
     sessionId: 'session-1',
     role: 'assistant',
-    content: 'I would be happy to help you create a PRD for a todo app. Let me ask you some questions...',
+    content:
+      'I would be happy to help you create a PRD for a todo app. Let me ask you some questions...',
     createdAt: new Date().toISOString(),
   }
 
@@ -87,7 +88,16 @@ describe('prdChatStore', () => {
       const store = usePRDChatStore.getState()
       await store.startSession({ agentType: 'claude', projectPath: '/test/project' })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, undefined, undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith(
+        'claude',
+        '/test/project',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined
+      )
       expect(usePRDChatStore.getState().currentSession).toEqual(mockSession)
       expect(usePRDChatStore.getState().sessions).toContainEqual(mockSession)
       // In guided mode (default), welcome message is loaded
@@ -99,7 +109,11 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockSession)
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude', projectPath: '/test/project', guidedMode: false })
+      await store.startSession({
+        agentType: 'claude',
+        projectPath: '/test/project',
+        guidedMode: false,
+      })
 
       expect(prdChatApi.getHistory).not.toHaveBeenCalled()
       expect(usePRDChatStore.getState().messages).toEqual([])
@@ -110,9 +124,22 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(sessionWithPrd)
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude', projectPath: '/test/project', prdId: 'prd-123' })
+      await store.startSession({
+        agentType: 'claude',
+        projectPath: '/test/project',
+        prdId: 'prd-123',
+      })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', 'prd-123', undefined, undefined, undefined, undefined, undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith(
+        'claude',
+        '/test/project',
+        'prd-123',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined
+      )
       expect(usePRDChatStore.getState().currentSession).toEqual(sessionWithPrd)
     })
 
@@ -175,7 +202,12 @@ describe('prdChatStore', () => {
       store.currentSession = mockSession
       await store.sendMessage('Help me create a PRD for a todo app')
 
-      expect(prdChatApi.sendMessage).toHaveBeenCalledWith('session-1', 'Help me create a PRD for a todo app', '/test/project', undefined)
+      expect(prdChatApi.sendMessage).toHaveBeenCalledWith(
+        'session-1',
+        'Help me create a PRD for a todo app',
+        '/test/project',
+        undefined
+      )
       expect(usePRDChatStore.getState().messages).toContainEqual(mockUserMessage)
       expect(usePRDChatStore.getState().messages).toContainEqual(mockAssistantMessage)
     })
@@ -621,7 +653,11 @@ describe('prdChatStore', () => {
 
       await store.setStructuredMode(false)
 
-      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-structured', '/test/project', false)
+      expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith(
+        'session-structured',
+        '/test/project',
+        false
+      )
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(false)
     })
 
@@ -634,7 +670,7 @@ describe('prdChatStore', () => {
 
       await store.setStructuredMode(true)
 
-      const updatedSession = usePRDChatStore.getState().sessions.find(s => s.id === 'session-1')
+      const updatedSession = usePRDChatStore.getState().sessions.find((s) => s.id === 'session-1')
       expect(updatedSession?.structuredMode).toBe(true)
     })
 
@@ -648,7 +684,9 @@ describe('prdChatStore', () => {
     })
 
     it('should handle errors when setting structured mode', async () => {
-      vi.mocked(prdChatApi.setStructuredMode).mockRejectedValue(new Error('Failed to set structured mode'))
+      vi.mocked(prdChatApi.setStructuredMode).mockRejectedValue(
+        new Error('Failed to set structured mode')
+      )
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockSession
@@ -668,7 +706,10 @@ describe('prdChatStore', () => {
 
       await store.clearExtractedStructure()
 
-      expect(prdChatApi.clearExtractedStructure).toHaveBeenCalledWith('session-structured', '/test/project')
+      expect(prdChatApi.clearExtractedStructure).toHaveBeenCalledWith(
+        'session-structured',
+        '/test/project'
+      )
     })
 
     it('should do nothing if no current session', async () => {
@@ -681,7 +722,9 @@ describe('prdChatStore', () => {
     })
 
     it('should handle errors when clearing extracted structure', async () => {
-      vi.mocked(prdChatApi.clearExtractedStructure).mockRejectedValue(new Error('Failed to clear extracted structure'))
+      vi.mocked(prdChatApi.clearExtractedStructure).mockRejectedValue(
+        new Error('Failed to clear extracted structure')
+      )
 
       const store = usePRDChatStore.getState()
       store.currentSession = mockStructuredSession
@@ -697,9 +740,22 @@ describe('prdChatStore', () => {
       vi.mocked(prdChatApi.startSession).mockResolvedValue(mockStructuredSession)
 
       const store = usePRDChatStore.getState()
-      await store.startSession({ agentType: 'claude', projectPath: '/test/project', structuredMode: true })
+      await store.startSession({
+        agentType: 'claude',
+        projectPath: '/test/project',
+        structuredMode: true,
+      })
 
-      expect(prdChatApi.startSession).toHaveBeenCalledWith('claude', '/test/project', undefined, undefined, undefined, undefined, true, undefined)
+      expect(prdChatApi.startSession).toHaveBeenCalledWith(
+        'claude',
+        '/test/project',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+        undefined
+      )
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(true)
     })
   })

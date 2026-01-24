@@ -18,11 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ResearchSummary } from './gsd/ResearchSummary'
 import { useGsdStore } from '@/stores/gsdStore'
 import { subscribeEvent } from '@/lib/events-client'
@@ -188,9 +184,7 @@ function AgentStatusCard({
               )}
             </div>
           </div>
-          {status.error && (
-            <p className="text-xs text-red-500 mt-2">{status.error}</p>
-          )}
+          {status.error && <p className="text-xs text-red-500 mt-2">{status.error}</p>}
         </div>
 
         <CollapsibleContent>
@@ -200,9 +194,7 @@ function AgentStatusCard({
               className="text-xs font-mono text-green-400 max-h-48 overflow-auto whitespace-pre-wrap"
             >
               {streamingOutput || (status.running ? 'Starting...' : 'No output')}
-              {status.running && (
-                <span className="animate-pulse">_</span>
-              )}
+              {status.running && <span className="animate-pulse">_</span>}
             </pre>
           </div>
         </CollapsibleContent>
@@ -251,25 +243,31 @@ export function ResearchProgress({
     const setupListeners = async () => {
       try {
         // Listen for streaming output chunks
-        unlistenOutput = await subscribeEvent<ResearchOutputEvent>('gsd:research_output', (payload) => {
-          if (payload.sessionId !== sessionId) return
+        unlistenOutput = await subscribeEvent<ResearchOutputEvent>(
+          'gsd:research_output',
+          (payload) => {
+            if (payload.sessionId !== sessionId) return
 
-          const agentKey = AGENT_KEY_MAP[payload.agentType.toLowerCase()] || payload.agentType
-          if (!payload.isComplete && payload.chunk) {
-            setAgentOutputs((prev) => ({
-              ...prev,
-              [agentKey]: (prev[agentKey] || '') + payload.chunk + '\n',
-            }))
+            const agentKey = AGENT_KEY_MAP[payload.agentType.toLowerCase()] || payload.agentType
+            if (!payload.isComplete && payload.chunk) {
+              setAgentOutputs((prev) => ({
+                ...prev,
+                [agentKey]: (prev[agentKey] || '') + payload.chunk + '\n',
+              }))
+            }
           }
-        })
+        )
 
         // Listen for status updates
-        unlistenStatus = await subscribeEvent<ResearchStatusEvent>('gsd:research_status', (payload) => {
-          if (payload.sessionId !== sessionId) return
-          // Status updates are handled by parent component through polling
-          // but we log them for debugging
-          console.log(`[Research] ${payload.agentType}: ${payload.status}`)
-        })
+        unlistenStatus = await subscribeEvent<ResearchStatusEvent>(
+          'gsd:research_status',
+          (payload) => {
+            if (payload.sessionId !== sessionId) return
+            // Status updates are handled by parent component through polling
+            // but we log them for debugging
+            console.log(`[Research] ${payload.agentType}: ${payload.status}`)
+          }
+        )
       } catch (err) {
         console.warn('Failed to set up research event listeners:', err)
       }
@@ -282,7 +280,6 @@ export function ResearchProgress({
       if (unlistenStatus) unlistenStatus()
     }
   }, [sessionId])
-
 
   // Calculate progress
   const agents = [
@@ -328,8 +325,8 @@ export function ResearchProgress({
             <CardTitle>Research Phase</CardTitle>
           </div>
           <CardDescription>
-            Parallel agents are researching architecture patterns, codebase structure,
-            best practices, and potential risks for your project.
+            Parallel agents are researching architecture patterns, codebase structure, best
+            practices, and potential risks for your project.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -463,10 +460,7 @@ export function ResearchProgress({
 
       {/* Research summary */}
       {shouldShowSummary && synthesis && (
-        <ResearchSummary
-          synthesis={synthesis}
-          onClose={() => setShowSummary(false)}
-        />
+        <ResearchSummary synthesis={synthesis} onClose={() => setShowSummary(false)} />
       )}
 
       {/* Selected result preview */}

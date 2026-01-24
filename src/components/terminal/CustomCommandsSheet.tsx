@@ -1,11 +1,12 @@
 // Custom commands side sheet for saving and using frequently used commands
 
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCustomCommandsStore } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { cn } from '@/lib/utils'
 
 interface CustomCommandsSheetProps {
   open: boolean
@@ -14,20 +15,54 @@ interface CustomCommandsSheetProps {
 
 export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetProps) {
   const { activeTerminalId } = useTerminalStore()
-  const { commands, addCommand, deleteCommand } = useCustomCommandsStore()
+  const { commands, addCommand, deleteCommand, getAllCategories } = useCustomCommandsStore()
   const [label, setLabel] = useState('')
   const [command, setCommand] = useState('')
   const [action, setAction] = useState<'insert' | 'execute'>('execute')
+  const [category, setCategory] = useState('Uncategorized')
   const [showForm, setShowForm] = useState(false)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Uncategorized']))
+  const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
+
+  const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
+
+  const groupedCommands = useMemo(() => {
+    const groups: Record<string, typeof commands> = {}
+    commands.forEach((cmd) => {
+      if (!groups[cmd.category]) {
+        groups[cmd.category] = []
+      }
+      groups[cmd.category].push(cmd)
+    })
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+  }, [commands])
+
+  const displayedGroups = useMemo(() => {
+    if (!selectedFilter) {
+      return groupedCommands
+    }
+    return groupedCommands.filter(([cat]) => cat === selectedFilter)
+  }, [groupedCommands, selectedFilter])
 
   const handleAddCommand = () => {
     if (label.trim() && command.trim()) {
-      addCommand(label, command, action)
+      addCommand(label, command, action, category)
       setLabel('')
       setCommand('')
       setAction('execute')
+      setCategory('Uncategorized')
       setShowForm(false)
     }
+  }
+
+  const toggleCategoryExpanded = (cat: string) => {
+    const newExpanded = new Set(expandedCategories)
+    if (newExpanded.has(cat)) {
+      newExpanded.delete(cat)
+    } else {
+      newExpanded.add(cat)
+    }
+    setExpandedCategories(newExpanded)
   }
 
   const handleUseCommand = (cmd: string, action: 'insert' | 'execute') => {
@@ -82,6 +117,35 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
               />
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Category:</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="flex-1 px-2 py-1 text-sm border rounded bg-background"
+                  >
+                    {['Uncategorized', ...allCategories.filter((c) => c !== 'Uncategorized')].map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="">+ New Category</option>
+                  </select>
+                </div>
+                {category === '' && (
+                  <input
+                    type="text"
+                    placeholder="Enter new category name"
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-2 py-1 text-sm border rounded bg-background"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddCommand()
+                      }
+                    }}
+                  />
+                )}
+                <div className="flex gap-2">
                   <label className="text-xs font-medium text-muted-foreground">Action:</label>
                   <select
                     value={action}
@@ -105,6 +169,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                       setLabel('')
                       setCommand('')
                       setAction('execute')
+                      setCategory('Uncategorized')
                     }}
                     className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
                   >
@@ -115,49 +180,110 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
             </div>
           )}
 
-          {/* Commands List */}
-          <div className="space-y-2 flex-1">
+          {/* Category Filter */}
+          {allCategories.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setSelectedFilter(null)}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  !selectedFilter
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                All ({commands.length})
+              </button>
+              {allCategories.map((cat) => {
+                const count = commands.filter((c) => c.category === cat).length
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedFilter(selectedFilter === cat ? null : cat)}
+                    className={cn(
+                      'px-2 py-1 text-xs rounded transition-colors',
+                      selectedFilter === cat
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    )}
+                  >
+                    {cat} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Commands List - Grouped by Category */}
+          <div className="space-y-3 flex-1">
             {commands.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No commands saved yet. Add one to get started!
               </div>
+            ) : displayedGroups.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No commands in this category.
+              </div>
             ) : (
-              commands.map((cmd) => (
-                <div
-                  key={cmd.id}
-                  className="border rounded p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <button
-                      onClick={() => handleUseCommand(cmd.command, cmd.action)}
-                      className="flex-1 text-left"
-                    >
-                      <div className="font-medium text-sm text-foreground hover:text-primary">
-                        {cmd.label}
-                      </div>
-                      <div className="text-xs text-muted-foreground font-mono break-words">
-                        {cmd.command}
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => deleteCommand(cmd.id)}
-                      className="flex items-center justify-center w-6 h-6 text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
-                      aria-label="Delete command"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="flex items-center">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
-                        cmd.action === 'execute'
-                          ? 'bg-primary/20 text-primary'
-                          : 'bg-secondary/20 text-secondary-foreground'
-                      }`}
-                    >
-                      {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
-                    </span>
-                  </div>
+              displayedGroups.map(([cat, categoryCommands]) => (
+                <div key={cat}>
+                  {/* Category Header */}
+                  <button
+                    onClick={() => toggleCategoryExpanded(cat)}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium rounded bg-muted/50 hover:bg-muted/70 transition-colors"
+                  >
+                    {expandedCategories.has(cat) ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                    <span className="flex-1 text-left">{cat}</span>
+                    <span className="text-xs text-muted-foreground">{categoryCommands.length}</span>
+                  </button>
+
+                  {/* Category Commands */}
+                  {expandedCategories.has(cat) && (
+                    <div className="ml-2 mt-2 space-y-2">
+                      {categoryCommands.map((cmd) => (
+                        <div
+                          key={cmd.id}
+                          className="border rounded p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <button
+                              onClick={() => handleUseCommand(cmd.command, cmd.action)}
+                              className="flex-1 text-left"
+                            >
+                              <div className="font-medium text-sm text-foreground hover:text-primary">
+                                {cmd.label}
+                              </div>
+                              <div className="text-xs text-muted-foreground font-mono break-words">
+                                {cmd.command}
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => deleteCommand(cmd.id)}
+                              className="flex items-center justify-center w-6 h-6 text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
+                              aria-label="Delete command"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="flex items-center">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                                cmd.action === 'execute'
+                                  ? 'bg-primary/20 text-primary'
+                                  : 'bg-secondary/20 text-secondary-foreground'
+                              }`}
+                            >
+                              {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}

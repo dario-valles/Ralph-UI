@@ -346,10 +346,14 @@ export function getMissingContextItems(
  */
 export function isResearchComplete(status: ResearchStatus): boolean {
   return (
-    (status.architecture.complete && !status.architecture.error) &&
-    (status.codebase.complete && !status.codebase.error) &&
-    (status.bestPractices.complete && !status.bestPractices.error) &&
-    (status.risks.complete && !status.risks.error)
+    status.architecture.complete &&
+    !status.architecture.error &&
+    status.codebase.complete &&
+    !status.codebase.error &&
+    status.bestPractices.complete &&
+    !status.bestPractices.error &&
+    status.risks.complete &&
+    !status.risks.error
   )
 }
 

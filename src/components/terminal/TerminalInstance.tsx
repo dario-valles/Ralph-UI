@@ -48,7 +48,8 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       cursorBlink: true,
       cursorStyle: 'block',
       fontSize: 13,
-      fontFamily: '"MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", "JetBrainsMono Nerd Font", Menlo, Monaco, "Courier New", monospace',
+      fontFamily:
+        '"MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", "JetBrainsMono Nerd Font", Menlo, Monaco, "Courier New", monospace',
       theme: {
         background: '#1a1a1a',
         foreground: '#e0e0e0',
@@ -233,7 +234,8 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         <div className="text-center p-4 max-w-md">
           <div className="text-red-400 text-lg mb-2">Terminal Unavailable</div>
           <div className="text-zinc-400 text-sm">
-            Terminal is not available. Connect to a Ralph UI server in browser mode or use the desktop app.
+            Terminal is not available. Connect to a Ralph UI server in browser mode or use the
+            desktop app.
           </div>
         </div>
       </div>

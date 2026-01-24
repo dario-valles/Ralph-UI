@@ -65,8 +65,8 @@ export function InterruptConfirmDialog({
               <DialogDescription className="mt-2 space-y-3">
                 <p>{description}</p>
                 <p className="text-xs text-muted-foreground">
-                  Progress will be saved. The agent will stop after completing
-                  its current operation.
+                  Progress will be saved. The agent will stop after completing its current
+                  operation.
                 </p>
                 <div className="rounded bg-muted/50 p-2 text-xs">
                   <span className="font-medium">Tip:</span> Press{' '}

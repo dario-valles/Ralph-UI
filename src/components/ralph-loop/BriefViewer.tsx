@@ -21,14 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  RefreshCw,
-  Copy,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  FileText,
-} from 'lucide-react'
+import { RefreshCw, Copy, CheckCircle2, AlertCircle, Loader2, FileText } from 'lucide-react'
 import { ralphLoopApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 
@@ -120,7 +113,9 @@ export function BriefViewer({
   const [regenerating, setRegenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [historicalBriefs, setHistoricalBriefs] = useState<Array<{ iteration: number; content: string }>>([])
+  const [historicalBriefs, setHistoricalBriefs] = useState<
+    Array<{ iteration: number; content: string }>
+  >([])
   const [selectedIteration, setSelectedIteration] = useState<string>('current')
 
   const loadHistoricalBriefs = useCallback(async () => {
@@ -133,32 +128,35 @@ export function BriefViewer({
     }
   }, [projectPath, prdName])
 
-  const loadBrief = useCallback(async (iteration?: string) => {
-    try {
-      setLoading(true)
-      setError(null)
+  const loadBrief = useCallback(
+    async (iteration?: string) => {
+      try {
+        setLoading(true)
+        setError(null)
 
-      let content: string
-      if (iteration && iteration !== 'current') {
-        // Load historical brief
-        const iterNum = parseInt(iteration)
-        const historical = historicalBriefs.find(b => b.iteration === iterNum)
-        if (historical) {
-          content = historical.content
+        let content: string
+        if (iteration && iteration !== 'current') {
+          // Load historical brief
+          const iterNum = parseInt(iteration)
+          const historical = historicalBriefs.find((b) => b.iteration === iterNum)
+          if (historical) {
+            content = historical.content
+          } else {
+            throw new Error('Brief not found')
+          }
         } else {
-          throw new Error('Brief not found')
+          // Load current brief
+          content = await ralphLoopApi.getBrief(projectPath, prdName)
         }
-      } else {
-        // Load current brief
-        content = await ralphLoopApi.getBrief(projectPath, prdName)
+        setBriefContent(content)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load brief')
+      } finally {
+        setLoading(false)
       }
-      setBriefContent(content)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load brief')
-    } finally {
-      setLoading(false)
-    }
-  }, [projectPath, prdName, historicalBriefs])
+    },
+    [projectPath, prdName, historicalBriefs]
+  )
 
   const handleRegenerate = useCallback(async () => {
     try {
@@ -258,7 +256,7 @@ export function BriefViewer({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="current">Current (Latest)</SelectItem>
-                  {historicalBriefs.map(brief => (
+                  {historicalBriefs.map((brief) => (
                     <SelectItem key={brief.iteration} value={String(brief.iteration)}>
                       Iteration {brief.iteration}
                     </SelectItem>

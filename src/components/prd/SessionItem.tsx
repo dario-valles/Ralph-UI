@@ -11,7 +11,13 @@ interface SessionItemProps {
   onDelete: () => void
 }
 
-export function SessionItem({ session, isActive, isProcessing, onSelect, onDelete }: SessionItemProps) {
+export function SessionItem({
+  session,
+  isActive,
+  isProcessing,
+  onSelect,
+  onDelete,
+}: SessionItemProps) {
   return (
     <div
       data-testid="session-item"

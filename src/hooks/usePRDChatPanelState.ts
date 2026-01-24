@@ -90,22 +90,25 @@ export function usePRDChatPanelState() {
   }, [])
 
   // Restore streaming state from session's pending operation timestamp (for page reload recovery)
-  const restoreStreamingFromSession = useCallback((pendingOperationStartedAt: string | undefined) => {
-    if (pendingOperationStartedAt) {
-      const startedAt = new Date(pendingOperationStartedAt)
-      const elapsedMs = Date.now() - startedAt.getTime()
-      const timeoutMs = 25 * 60 * 1000 // 25 minutes (AGENT_TIMEOUT_SECS)
+  const restoreStreamingFromSession = useCallback(
+    (pendingOperationStartedAt: string | undefined) => {
+      if (pendingOperationStartedAt) {
+        const startedAt = new Date(pendingOperationStartedAt)
+        const elapsedMs = Date.now() - startedAt.getTime()
+        const timeoutMs = 25 * 60 * 1000 // 25 minutes (AGENT_TIMEOUT_SECS)
 
-      if (elapsedMs < timeoutMs) {
-        setState((s) => ({
-          ...s,
-          streamingStartedAt: pendingOperationStartedAt,
-        }))
-        return true
+        if (elapsedMs < timeoutMs) {
+          setState((s) => ({
+            ...s,
+            streamingStartedAt: pendingOperationStartedAt,
+          }))
+          return true
+        }
       }
-    }
-    return false
-  }, [])
+      return false
+    },
+    []
+  )
 
   // Layout actions
   const togglePlanSidebar = useCallback(() => {

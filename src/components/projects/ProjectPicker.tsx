@@ -5,7 +5,16 @@ import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { FolderOpen, ChevronDown, Star, Clock, X, GitBranch, AlertCircle, Loader2 } from 'lucide-react'
+import {
+  FolderOpen,
+  ChevronDown,
+  Star,
+  Clock,
+  X,
+  GitBranch,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react'
 import { invoke } from '@/lib/invoke'
 
 interface ProjectPickerProps {
@@ -140,9 +149,7 @@ export function ProjectPicker({
               className="shrink-0"
               title="Select from recent projects"
             >
-              <ChevronDown
-                className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-              />
+              <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
             </Button>
           )}
 
@@ -252,7 +259,8 @@ export function ProjectPicker({
                 <div className="flex-1">
                   <p className="text-sm font-medium text-amber-700">Not a git repository</p>
                   <p className="text-xs text-amber-600 mt-0.5">
-                    Ralph UI works best with git-enabled projects. Initialize git to enable parallel execution with worktrees.
+                    Ralph UI works best with git-enabled projects. Initialize git to enable parallel
+                    execution with worktrees.
                   </p>
                   <Button
                     variant="outline"

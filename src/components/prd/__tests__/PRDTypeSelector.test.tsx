@@ -5,7 +5,15 @@ import { PRDTypeSelector } from '../PRDTypeSelector'
 
 // Mock ProjectPicker component
 vi.mock('@/components/projects/ProjectPicker', () => ({
-  ProjectPicker: ({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) => (
+  ProjectPicker: ({
+    value,
+    onChange,
+    label,
+  }: {
+    value: string
+    onChange: (v: string) => void
+    label: string
+  }) => (
     <div data-testid="project-picker">
       <label>{label}</label>
       <input
@@ -177,12 +185,7 @@ describe('PRDTypeSelector', () => {
       await user.click(screen.getByRole('button', { name: /Refactoring/i }))
       await user.click(screen.getByRole('button', { name: /Continue/i }))
 
-      expect(mockOnSelect).toHaveBeenCalledWith(
-        'refactoring',
-        true,
-        '/my/project',
-        false
-      )
+      expect(mockOnSelect).toHaveBeenCalledWith('refactoring', true, '/my/project', false)
     })
   })
 

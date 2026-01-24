@@ -37,16 +37,12 @@ function MarkdownContent({ content, className }: { content: string; className?: 
         remarkPlugins={[remarkGfm]}
         components={{
           pre: ({ children }) => (
-            <pre className="bg-secondary/50 rounded-md p-3 overflow-x-auto text-xs">
-              {children}
-            </pre>
+            <pre className="bg-secondary/50 rounded-md p-3 overflow-x-auto text-xs">{children}</pre>
           ),
           code: ({ children, className }) => {
             const isInline = !className
             return isInline ? (
-              <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">
-                {children}
-              </code>
+              <code className="bg-secondary/50 px-1 py-0.5 rounded text-xs">{children}</code>
             ) : (
               <code className={className}>{children}</code>
             )
@@ -60,42 +56,30 @@ function MarkdownContent({ content, className }: { content: string; className?: 
           h1: ({ children }) => (
             <h1 className="text-xl font-bold mt-6 mb-3 pb-2 border-b">{children}</h1>
           ),
-          h2: ({ children }) => (
-            <h2 className="text-lg font-bold mt-5 mb-2">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-base font-semibold mt-4 mb-1.5">{children}</h3>
-          ),
+          h2: ({ children }) => <h2 className="text-lg font-bold mt-5 mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-1.5">{children}</h3>,
           p: ({ children }) => <p className="my-2 text-sm leading-relaxed">{children}</p>,
           table: ({ children }) => (
             <div className="overflow-x-auto my-4 rounded-md border border-border">
               <table className="min-w-full text-sm border-collapse">{children}</table>
             </div>
           ),
-          thead: ({ children }) => (
-            <thead className="bg-muted/70">{children}</thead>
-          ),
-          tbody: ({ children }) => (
-            <tbody className="divide-y divide-border">{children}</tbody>
-          ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
-          ),
+          thead: ({ children }) => <thead className="bg-muted/70">{children}</thead>,
+          tbody: ({ children }) => <tbody className="divide-y divide-border">{children}</tbody>,
+          tr: ({ children }) => <tr className="hover:bg-muted/30 transition-colors">{children}</tr>,
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">{children}</th>
+            <th className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">
+              {children}
+            </th>
           ),
-          td: ({ children }) => (
-            <td className="px-3 py-2 text-muted-foreground">{children}</td>
-          ),
+          td: ({ children }) => <td className="px-3 py-2 text-muted-foreground">{children}</td>,
           blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-primary/50 pl-4 my-3 italic text-muted-foreground">
               {children}
             </blockquote>
           ),
           hr: () => <hr className="my-6 border-border" />,
-          strong: ({ children }) => (
-            <strong className="font-semibold">{children}</strong>
-          ),
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
         }}
       >
         {content}
@@ -154,7 +138,10 @@ export function PRDFileEditor() {
       setIsEditing(false)
     } catch (err) {
       console.error('Failed to save PRD file:', err)
-      toast.error('Failed to save PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Failed to save PRD',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     } finally {
       setSaving(false)
     }
@@ -196,7 +183,12 @@ export function PRDFileEditor() {
       <div className="mb-6 md:mb-8 space-y-4">
         {/* Top row: Cancel/Save buttons */}
         <div className="flex items-center justify-between gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/prds')} className="text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/prds')}
+            className="text-muted-foreground"
+          >
             ← Back to PRDs
           </Button>
           <div className="flex gap-2">
@@ -227,10 +219,14 @@ export function PRDFileEditor() {
               File PRD
             </Badge>
             {prdFile.hasRalphJson && (
-              <Badge variant="secondary" className="shrink-0">Ralph Loop Initialized</Badge>
+              <Badge variant="secondary" className="shrink-0">
+                Ralph Loop Initialized
+              </Badge>
             )}
             {prdFile.hasProgress && (
-              <Badge variant="secondary" className="shrink-0">Has Progress</Badge>
+              <Badge variant="secondary" className="shrink-0">
+                Has Progress
+              </Badge>
             )}
           </div>
           <h1 className="text-xl md:text-2xl lg:text-3xl font-bold leading-tight break-words">
@@ -250,7 +246,11 @@ export function PRDFileEditor() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/prds/chat?prdId=${encodeURIComponent(prdFile.id)}&project=${encodeURIComponent(projectPath)}`)}
+            onClick={() =>
+              navigate(
+                `/prds/chat?prdId=${encodeURIComponent(prdFile.id)}&project=${encodeURIComponent(projectPath)}`
+              )
+            }
           >
             <MessageSquare className="mr-2 h-4 w-4" />
             Continue in Chat
@@ -339,7 +339,9 @@ export function PRDFileEditor() {
                 </div>
               ) : (
                 <div className="border rounded-md p-8 bg-muted/30 text-center">
-                  <p className="text-muted-foreground">No content yet. Click "Edit" to start writing your PRD.</p>
+                  <p className="text-muted-foreground">
+                    No content yet. Click "Edit" to start writing your PRD.
+                  </p>
                 </div>
               )}
             </CardContent>

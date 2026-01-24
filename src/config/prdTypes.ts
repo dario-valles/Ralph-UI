@@ -73,7 +73,8 @@ export const PRD_TYPES: PRDTypeConfig[] = [
     icon: 'FileText',
     color: 'text-gray-500',
     supportedModes: ['guided'],
-    gsdWarning: 'General requirements are too vague for GSD workflow. Use Guided Interview instead.',
+    gsdWarning:
+      'General requirements are too vague for GSD workflow. Use Guided Interview instead.',
   },
 ]
 

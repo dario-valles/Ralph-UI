@@ -82,15 +82,16 @@ export function EmptyState({
   const defaults = getVariantDefaults()
 
   const content = (
-    <div className={cn(
-      'flex flex-col items-center justify-center py-8 md:py-12 px-4 text-center',
-      dashed && 'border border-dashed rounded-lg',
-      className
-    )}>
-      <div className={cn(
-        'mb-3',
-        variant === 'error' ? 'text-destructive' : 'text-muted-foreground'
-      )}>
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center py-8 md:py-12 px-4 text-center',
+        dashed && 'border border-dashed rounded-lg',
+        className
+      )}
+    >
+      <div
+        className={cn('mb-3', variant === 'error' ? 'text-destructive' : 'text-muted-foreground')}
+      >
         {defaults.icon}
       </div>
       <h3 className="font-medium mb-1 text-base md:text-lg">{defaults.title}</h3>
@@ -114,9 +115,7 @@ export function EmptyState({
 
   return (
     <Card>
-      <CardContent className="p-0">
-        {content}
-      </CardContent>
+      <CardContent className="p-0">{content}</CardContent>
     </Card>
   )
 }

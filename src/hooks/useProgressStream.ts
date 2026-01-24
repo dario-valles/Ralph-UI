@@ -130,7 +130,9 @@ export function useProgressStream(
 ): RalphProgressState & { reset: () => void } {
   const [progress, setProgress] = useState<RalphProgressEvent | null>(null)
   const [iterationStarted, setIterationStarted] = useState<RalphIterationStartedEvent | null>(null)
-  const [iterationCompleted, setIterationCompleted] = useState<RalphIterationCompletedEvent | null>(null)
+  const [iterationCompleted, setIterationCompleted] = useState<RalphIterationCompletedEvent | null>(
+    null
+  )
   const [loopCompleted, setLoopCompleted] = useState<RalphLoopCompletedEvent | null>(null)
   const [loopError, setLoopError] = useState<RalphLoopErrorEvent | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -149,12 +151,15 @@ export function useProgressStream(
     const setupListeners = async () => {
       try {
         // Listen to progress events
-        const unlistenProgress = await subscribeEvent<RalphProgressEvent>('ralph:progress', (payload) => {
-          // Filter by execution ID or PRD name if specified
-          if (executionId && payload.executionId !== executionId) return
-          if (prdName && payload.prdName !== prdName) return
-          setProgress(payload)
-        })
+        const unlistenProgress = await subscribeEvent<RalphProgressEvent>(
+          'ralph:progress',
+          (payload) => {
+            // Filter by execution ID or PRD name if specified
+            if (executionId && payload.executionId !== executionId) return
+            if (prdName && payload.prdName !== prdName) return
+            setProgress(payload)
+          }
+        )
         unlisteners.push(unlistenProgress)
 
         // Listen to iteration started events

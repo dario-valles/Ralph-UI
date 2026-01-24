@@ -85,24 +85,14 @@ vi.mock('@/stores/projectStore', () => ({
 
 describe('GSDStepper', () => {
   it('renders all 8 phases', () => {
-    render(
-      <GSDStepper
-        currentPhase="deep_questioning"
-        onPhaseClick={() => {}}
-      />
-    )
+    render(<GSDStepper currentPhase="deep_questioning" onPhaseClick={() => {}} />)
 
     // Check that all phase names are present (some may be hidden on small screens)
     expect(screen.getByText('Deep Questioning')).toBeInTheDocument()
   })
 
   it('highlights current phase', () => {
-    render(
-      <GSDStepper
-        currentPhase="research"
-        onPhaseClick={() => {}}
-      />
-    )
+    render(<GSDStepper currentPhase="research" onPhaseClick={() => {}} />)
 
     const researchButton = screen.getByText('Research').closest('button')
     expect(researchButton).toHaveClass('bg-primary/10')
@@ -110,12 +100,7 @@ describe('GSDStepper', () => {
 
   it('calls onPhaseClick when a phase is clicked', () => {
     const onPhaseClick = vi.fn()
-    render(
-      <GSDStepper
-        currentPhase="deep_questioning"
-        onPhaseClick={onPhaseClick}
-      />
-    )
+    render(<GSDStepper currentPhase="deep_questioning" onPhaseClick={onPhaseClick} />)
 
     const deepQuestioningButton = screen.getByText('Deep Questioning').closest('button')
     fireEvent.click(deepQuestioningButton!)
@@ -138,17 +123,11 @@ describe('GSDStepper', () => {
   })
 
   it('disables future phases when disabled prop is true', () => {
-    render(
-      <GSDStepper
-        currentPhase="deep_questioning"
-        onPhaseClick={() => {}}
-        disabled={true}
-      />
-    )
+    render(<GSDStepper currentPhase="deep_questioning" onPhaseClick={() => {}} disabled={true} />)
 
     // All buttons should be disabled
     const buttons = screen.getAllByRole('button')
-    buttons.forEach(button => {
+    buttons.forEach((button) => {
       expect(button).toBeDisabled()
     })
   })
@@ -156,24 +135,14 @@ describe('GSDStepper', () => {
 
 describe('GSDStepperCompact', () => {
   it('renders compact dots for all phases', () => {
-    render(
-      <GSDStepperCompact
-        currentPhase="requirements"
-        onPhaseClick={() => {}}
-      />
-    )
+    render(<GSDStepperCompact currentPhase="requirements" onPhaseClick={() => {}} />)
 
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(8)
   })
 
   it('highlights current phase with wider dot', () => {
-    render(
-      <GSDStepperCompact
-        currentPhase="research"
-        onPhaseClick={() => {}}
-      />
-    )
+    render(<GSDStepperCompact currentPhase="research" onPhaseClick={() => {}} />)
 
     const buttons = screen.getAllByRole('button')
     // Research is the 3rd phase (index 2)
@@ -188,11 +157,7 @@ describe('DeepQuestioning', () => {
 
   it('renders initial prompt', () => {
     render(
-      <DeepQuestioning
-        context={defaultContext}
-        onContextUpdate={() => {}}
-        onProceed={() => {}}
-      />
+      <DeepQuestioning context={defaultContext} onContextUpdate={() => {}} onProceed={() => {}} />
     )
 
     // New chat-based interface shows a different welcome message
@@ -201,11 +166,7 @@ describe('DeepQuestioning', () => {
 
   it('shows context badges', () => {
     render(
-      <DeepQuestioning
-        context={defaultContext}
-        onContextUpdate={() => {}}
-        onProceed={() => {}}
-      />
+      <DeepQuestioning context={defaultContext} onContextUpdate={() => {}} onProceed={() => {}} />
     )
 
     // Use getAllByText since these labels appear in both badges and form labels
@@ -217,11 +178,7 @@ describe('DeepQuestioning', () => {
 
   it('disables proceed button when context is incomplete', () => {
     render(
-      <DeepQuestioning
-        context={defaultContext}
-        onContextUpdate={() => {}}
-        onProceed={() => {}}
-      />
+      <DeepQuestioning context={defaultContext} onContextUpdate={() => {}} onProceed={() => {}} />
     )
 
     const proceedButton = screen.getByText(/Create PROJECT.md/).closest('button')
@@ -237,11 +194,7 @@ describe('DeepQuestioning', () => {
     }
 
     render(
-      <DeepQuestioning
-        context={completeContext}
-        onContextUpdate={() => {}}
-        onProceed={() => {}}
-      />
+      <DeepQuestioning context={completeContext} onContextUpdate={() => {}} onProceed={() => {}} />
     )
 
     const proceedButton = screen.getByText(/Create PROJECT.md/).closest('button')
@@ -250,11 +203,7 @@ describe('DeepQuestioning', () => {
 
   it('has chat input for describing project', () => {
     render(
-      <DeepQuestioning
-        context={defaultContext}
-        onContextUpdate={() => {}}
-        onProceed={() => {}}
-      />
+      <DeepQuestioning context={defaultContext} onContextUpdate={() => {}} onProceed={() => {}} />
     )
 
     // New chat-based interface uses ChatInput
@@ -305,11 +254,7 @@ describe('QuestioningGuide', () => {
     const onClose = vi.fn()
 
     render(
-      <QuestioningGuide
-        context={defaultContext}
-        onContextItemUpdate={() => {}}
-        onClose={onClose}
-      />
+      <QuestioningGuide context={defaultContext} onContextItemUpdate={() => {}} onClose={onClose} />
     )
 
     // Find the close button (has X icon)
@@ -329,12 +274,7 @@ describe('ResearchSummary', () => {
   }
 
   it('renders key themes as badges', () => {
-    render(
-      <ResearchSummary
-        synthesis={mockSynthesis}
-        onClose={() => {}}
-      />
-    )
+    render(<ResearchSummary synthesis={mockSynthesis} onClose={() => {}} />)
 
     expect(screen.getByText('Architecture')).toBeInTheDocument()
     expect(screen.getByText('Performance')).toBeInTheDocument()
@@ -342,12 +282,7 @@ describe('ResearchSummary', () => {
   })
 
   it('shows files included count', () => {
-    render(
-      <ResearchSummary
-        synthesis={mockSynthesis}
-        onClose={() => {}}
-      />
-    )
+    render(<ResearchSummary synthesis={mockSynthesis} onClose={() => {}} />)
 
     expect(screen.getByText('4')).toBeInTheDocument()
   })
@@ -358,24 +293,14 @@ describe('ResearchSummary', () => {
       missingFiles: ['CODEBASE.md'],
     }
 
-    render(
-      <ResearchSummary
-        synthesis={synthesisWithMissing}
-        onClose={() => {}}
-      />
-    )
+    render(<ResearchSummary synthesis={synthesisWithMissing} onClose={() => {}} />)
 
     expect(screen.getByText(/Some research files were not available/)).toBeInTheDocument()
     expect(screen.getByText('CODEBASE.md')).toBeInTheDocument()
   })
 
   it('renders summary content', () => {
-    render(
-      <ResearchSummary
-        synthesis={mockSynthesis}
-        onClose={() => {}}
-      />
-    )
+    render(<ResearchSummary synthesis={mockSynthesis} onClose={() => {}} />)
 
     expect(screen.getByText(/This is a test summary/)).toBeInTheDocument()
   })
@@ -402,12 +327,7 @@ describe('GSDWorkflow Integration', () => {
       }),
     }))
 
-    render(
-      <GSDWorkflow
-        projectPath="/test/path"
-        sessionId="test-session"
-      />
-    )
+    render(<GSDWorkflow projectPath="/test/path" sessionId="test-session" />)
 
     // Should show loading indicator
     expect(screen.queryByText(/Loading/)).toBeInTheDocument()

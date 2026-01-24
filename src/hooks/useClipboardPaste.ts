@@ -36,13 +36,7 @@ export interface UseClipboardPasteOptions {
 }
 
 export function useClipboardPaste(options: UseClipboardPasteOptions) {
-  const {
-    onTextPaste,
-    onMultilinePaste,
-    onImagePaste,
-    onPasteError,
-    disabled = false,
-  } = options
+  const { onTextPaste, onMultilinePaste, onImagePaste, onPasteError, disabled = false } = options
 
   const processingRef = useRef(false)
 
@@ -50,15 +44,14 @@ export function useClipboardPaste(options: UseClipboardPasteOptions) {
     async (event: React.ClipboardEvent | ClipboardEvent) => {
       if (disabled || processingRef.current) return
 
-      const clipboardData = 'clipboardData' in event
-        ? event.clipboardData
-        : (event as ClipboardEvent).clipboardData
+      const clipboardData =
+        'clipboardData' in event ? event.clipboardData : (event as ClipboardEvent).clipboardData
 
       if (!clipboardData) return
 
       // Check for images first
       const items = Array.from(clipboardData.items)
-      const imageItem = items.find(item => item.type.startsWith('image/'))
+      const imageItem = items.find((item) => item.type.startsWith('image/'))
 
       if (imageItem) {
         // Prevent default to avoid pasting image as text

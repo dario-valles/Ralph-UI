@@ -53,11 +53,9 @@ export interface AsyncActionOptions {
  * ```
  */
 export async function asyncAction<TState extends AsyncState, TResult = void>(
-  set: (
-    partial: Partial<TState> | ((state: TState) => Partial<TState>),
-  ) => void,
+  set: (partial: Partial<TState> | ((state: TState) => Partial<TState>)) => void,
   action: () => Promise<Partial<TState> & { __result?: TResult }>,
-  options?: AsyncActionOptions,
+  options?: AsyncActionOptions
 ): Promise<TResult | undefined> {
   // Only set loading state if not silent (for background polling, skip loading)
   if (!options?.silent) {
@@ -74,8 +72,7 @@ export async function asyncAction<TState extends AsyncState, TResult = void>(
     }
     return __result
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
     if (!options?.silent) {
       set({ error: errorMessage, loading: false } as Partial<TState>)
     }

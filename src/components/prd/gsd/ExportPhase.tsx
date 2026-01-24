@@ -88,7 +88,10 @@ export function ExportPhase({
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Execution Settings</span>
-              <Tooltip content="Configure execution settings to store with this PRD. These settings will override global config when running. Leave empty to use your global config." side="right">
+              <Tooltip
+                content="Configure execution settings to store with this PRD. These settings will override global config when running. Leave empty to use your global config."
+                side="right"
+              >
                 <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
               </Tooltip>
             </div>
@@ -113,9 +116,14 @@ export function ExportPhase({
                   </div>
                   <select
                     value={exportState.executionConfig.agentType || ''}
-                    onChange={(e) => onExportStateChange({
-                      executionConfig: { ...exportState.executionConfig, agentType: e.target.value || undefined }
-                    })}
+                    onChange={(e) =>
+                      onExportStateChange({
+                        executionConfig: {
+                          ...exportState.executionConfig,
+                          agentType: e.target.value || undefined,
+                        },
+                      })
+                    }
                     className="w-full mt-1 px-2 py-1.5 text-sm border rounded-md"
                   >
                     <option value="">Use global config</option>
@@ -135,9 +143,14 @@ export function ExportPhase({
                   <input
                     type="text"
                     value={exportState.executionConfig.model || ''}
-                    onChange={(e) => onExportStateChange({
-                      executionConfig: { ...exportState.executionConfig, model: e.target.value || undefined }
-                    })}
+                    onChange={(e) =>
+                      onExportStateChange({
+                        executionConfig: {
+                          ...exportState.executionConfig,
+                          model: e.target.value || undefined,
+                        },
+                      })
+                    }
                     placeholder="e.g., claude-sonnet-4-5"
                     className="w-full mt-1 px-2 py-1.5 text-sm border rounded-md"
                   />
@@ -147,7 +160,9 @@ export function ExportPhase({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center gap-1">
-                    <label className="text-xs font-medium text-muted-foreground">Max Iterations</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Max Iterations
+                    </label>
                     <Tooltip content="Maximum iterations before stopping" side="top">
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </Tooltip>
@@ -156,16 +171,23 @@ export function ExportPhase({
                     type="number"
                     min="1"
                     value={exportState.executionConfig.maxIterations || ''}
-                    onChange={(e) => onExportStateChange({
-                      executionConfig: { ...exportState.executionConfig, maxIterations: e.target.value ? parseInt(e.target.value) : undefined }
-                    })}
+                    onChange={(e) =>
+                      onExportStateChange({
+                        executionConfig: {
+                          ...exportState.executionConfig,
+                          maxIterations: e.target.value ? parseInt(e.target.value) : undefined,
+                        },
+                      })
+                    }
                     placeholder="Use global config"
                     className="w-full mt-1 px-2 py-1.5 text-sm border rounded-md"
                   />
                 </div>
                 <div>
                   <div className="flex items-center gap-1">
-                    <label className="text-xs font-medium text-muted-foreground">Max Cost ($)</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Max Cost ($)
+                    </label>
                     <Tooltip content="Maximum cost in dollars before stopping" side="top">
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </Tooltip>
@@ -175,9 +197,14 @@ export function ExportPhase({
                     min="0"
                     step="0.01"
                     value={exportState.executionConfig.maxCost || ''}
-                    onChange={(e) => onExportStateChange({
-                      executionConfig: { ...exportState.executionConfig, maxCost: e.target.value ? parseFloat(e.target.value) : undefined }
-                    })}
+                    onChange={(e) =>
+                      onExportStateChange({
+                        executionConfig: {
+                          ...exportState.executionConfig,
+                          maxCost: e.target.value ? parseFloat(e.target.value) : undefined,
+                        },
+                      })
+                    }
                     placeholder="No limit"
                     className="w-full mt-1 px-2 py-1.5 text-sm border rounded-md"
                   />
@@ -190,9 +217,14 @@ export function ExportPhase({
                     <input
                       type="checkbox"
                       checked={exportState.executionConfig.runTests ?? false}
-                      onChange={(e) => onExportStateChange({
-                        executionConfig: { ...exportState.executionConfig, runTests: e.target.checked || undefined }
-                      })}
+                      onChange={(e) =>
+                        onExportStateChange({
+                          executionConfig: {
+                            ...exportState.executionConfig,
+                            runTests: e.target.checked || undefined,
+                          },
+                        })
+                      }
                     />
                     <span>Run Tests</span>
                   </label>
@@ -202,9 +234,14 @@ export function ExportPhase({
                     <input
                       type="checkbox"
                       checked={exportState.executionConfig.runLint ?? false}
-                      onChange={(e) => onExportStateChange({
-                        executionConfig: { ...exportState.executionConfig, runLint: e.target.checked || undefined }
-                      })}
+                      onChange={(e) =>
+                        onExportStateChange({
+                          executionConfig: {
+                            ...exportState.executionConfig,
+                            runLint: e.target.checked || undefined,
+                          },
+                        })
+                      }
                     />
                     <span>Run Lint</span>
                   </label>
@@ -214,9 +251,14 @@ export function ExportPhase({
                     <input
                       type="checkbox"
                       checked={exportState.executionConfig.useWorktree ?? true}
-                      onChange={(e) => onExportStateChange({
-                        executionConfig: { ...exportState.executionConfig, useWorktree: e.target.checked }
-                      })}
+                      onChange={(e) =>
+                        onExportStateChange({
+                          executionConfig: {
+                            ...exportState.executionConfig,
+                            useWorktree: e.target.checked,
+                          },
+                        })
+                      }
                     />
                     <span>Use Worktree</span>
                   </label>
@@ -227,8 +269,9 @@ export function ExportPhase({
                 <div className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950 rounded-md text-xs text-amber-700 dark:text-amber-300">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                   <span>
-                    These settings will be stored with the PRD and used instead of your global config when executing.
-                    You can clear them by clicking "Configure" and resetting the values.
+                    These settings will be stored with the PRD and used instead of your global
+                    config when executing. You can clear them by clicking "Configure" and resetting
+                    the values.
                   </span>
                 </div>
               )}

@@ -73,22 +73,11 @@ export const CODE_PATTERNS = {
     /:=\s*$/m,
   ],
   /** JSON patterns */
-  json: [
-    /^\s*\{[\s\S]*"[\w-]+":/m,
-    /^\s*\[[\s\S]*\{/m,
-  ],
+  json: [/^\s*\{[\s\S]*"[\w-]+":/m, /^\s*\[[\s\S]*\{/m],
   /** YAML patterns */
-  yaml: [
-    /^\w+:\s*$/m,
-    /^\s*-\s+\w+:/m,
-    /^---\s*$/m,
-  ],
+  yaml: [/^\w+:\s*$/m, /^\s*-\s+\w+:/m, /^---\s*$/m],
   /** SQL patterns */
-  sql: [
-    /^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\s+/im,
-    /^FROM\s+\w+/im,
-    /^WHERE\s+/im,
-  ],
+  sql: [/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\s+/im, /^FROM\s+\w+/im, /^WHERE\s+/im],
   /** HTML patterns */
   html: [
     /^<!DOCTYPE\s+html/i,
@@ -104,11 +93,5 @@ export const CODE_PATTERNS = {
     /:\s*(px|em|rem|%|vh|vw)/,
   ],
   /** Bash/Shell patterns */
-  bash: [
-    /^#!/m,
-    /^\$\s*\w+=/m,
-    /^(if|for|while|case)\s+/m,
-    /\|\s*\w+/,
-    /&&\s*\w+/,
-  ],
+  bash: [/^#!/m, /^\$\s*\w+=/m, /^(if|for|while|case)\s+/m, /\|\s*\w+/, /&&\s*\w+/],
 } as const

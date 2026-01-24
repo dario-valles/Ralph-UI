@@ -137,7 +137,12 @@ export function PRDChatHeader({
           {/* Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 sm:h-8 gap-0.5 sm:gap-1 px-1.5 sm:px-2" disabled={streaming}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 sm:h-8 gap-0.5 sm:gap-1 px-1.5 sm:px-2"
+                disabled={streaming}
+              >
                 <span className="hidden xl:inline text-xs">Actions</span>
                 <ChevronDown className="h-3 w-3" />
               </Button>

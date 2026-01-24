@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  categorizeError,
-  getErrorCategoryInfo,
-  categorizeErrors,
-} from '../error-categorization'
+import { categorizeError, getErrorCategoryInfo, categorizeErrors } from '../error-categorization'
 
 describe('error-categorization', () => {
   describe('categorizeError', () => {

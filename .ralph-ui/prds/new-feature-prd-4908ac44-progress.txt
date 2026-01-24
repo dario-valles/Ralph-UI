@@ -296,3 +296,61 @@ When adding multiple components to TerminalKeyBar:
 </learning>
 
 [2026-01-24T12:40:30.000000+00:00] [Iter 8] [END] Iteration 8 completed successfully
+[2026-01-24T11:31:38.143409+00:00] [Iter 8] [END] Iteration 8 completed successfully
+[2026-01-24T11:31:38.147972+00:00] [Iter 9] [START] Starting iteration 9
+
+[2026-01-24T12:45:00.000000+00:00] [Iter 9] [US-3.2] Story Completed: Choose Insert vs Execute Action
+
+<learning type="pattern">
+Custom command action type implementation for terminal:
+- Add action: 'insert' | 'execute' field to CustomCommand interface
+- Store tracks action type along with label and command text
+- When creating commands, default action is 'execute' for convenience
+- Execute action sends newline (\r) after the command to run it
+- Insert action only pastes the command text without sending newline
+- Visual badge shows action type: "↵ Execute" (primary/blue) or "← Insert" (secondary)
+- Uses conditional className based on action type to differentiate styling
+</learning>
+
+<learning type="pattern">
+Form pattern for enum selection in React:
+- Use controlled input with select element
+- Pass action to handleAddCommand function
+- Reset action to default ('execute') on form cancel to avoid state leakage
+- Use TypeScript type casting: e.target.value as 'insert' | 'execute'
+- Show user-friendly labels in options ("Insert (no newline)" vs "Execute (with newline)")
+</learning>
+
+<learning type="gotcha">
+When implementing command execution with multiple behavior options:
+- Must track which action type was selected with the command
+- Store action type persistently so it applies when command is reused
+- Default to 'execute' since most users expect commands to run automatically
+- Visual indicator must be clear and discoverable (badge at bottom of command card)
+- Test that both actions work correctly: insert (no newline) and execute (with newline)
+</learning>
+[2026-01-24T12:45:30.000000+00:00] [Iter 9] [END] Iteration 9 completed successfully
+[2026-01-24T11:33:41.104011+00:00] [Iter 9] [END] Iteration 9 completed successfully
+[2026-01-24T11:33:41.106968+00:00] [Iter 10] [START] Starting iteration 10
+
+[2026-01-24T12:50:00.000000+00:00] [Iter 10] [US-3.3] Story Completed: Organize Commands with Categories
+
+<learning type="pattern">
+Command category system implementation for terminal:
+- Add category: string field to CustomCommand interface
+- Store methods: getCommandsByCategory(category) and getAllCategories() return filtered/unique categories
+- Sheet state: expandedCategories is Set<string> to track which categories are expanded
+- Grouping: Use useMemo to create groupedCommands Record<string, CustomCommand[]> with Object.entries().sort()
+- UI: Category headers with ChevronDown/ChevronRight icons toggle visibility, commands nested in container
+- Filtering: selectedFilter state with filter buttons showing counts per category
+- Form: Category select dropdown with special option for new categories (value="") then input field to enter name
+</learning>
+
+<learning type="gotcha">
+When implementing category features:
+- Must track expandedCategories as a Set, not array, for O(1) lookups when toggling visibility
+- Category selection form needs special handling for new categories: select value="" shows input field
+- Need to reset category back to 'Uncategorized' when closing form to avoid state leakage
+- getAllCategories() must use Set to deduplicate then sort alphabetically for consistent UI
+- groupedCommands needs proper Object.entries().sort() to ensure consistent ordering across renders
+</learning>

@@ -38,7 +38,12 @@ describe('model-api', () => {
 
   describe('getModelName', () => {
     const models: ModelInfo[] = [
-      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+      {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet 4.5',
+        provider: 'anthropic',
+        isDefault: true,
+      },
       { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', isDefault: false },
     ]
 

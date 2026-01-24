@@ -28,11 +28,7 @@ interface BreadcrumbProps {
  * />
  * ```
  */
-export function Breadcrumb({
-  items,
-  className,
-  showHomeIcon = true,
-}: BreadcrumbProps) {
+export function Breadcrumb({ items, className, showHomeIcon = true }: BreadcrumbProps) {
   if (items.length === 0) return null
 
   return (

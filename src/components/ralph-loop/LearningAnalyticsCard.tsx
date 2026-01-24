@@ -14,7 +14,16 @@ import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, RefreshCw, Loader2, Building2, Lightbulb, FlaskConical, Wrench, FileText } from 'lucide-react'
+import {
+  AlertTriangle,
+  RefreshCw,
+  Loader2,
+  Building2,
+  Lightbulb,
+  FlaskConical,
+  Wrench,
+  FileText,
+} from 'lucide-react'
 import { ralphLoopApi } from '@/lib/backend-api'
 import type { LearningType } from '@/types'
 
@@ -60,7 +69,6 @@ const LEARNING_TYPE_LABELS: Record<LearningType, string> = {
   tooling: 'Tooling',
   general: 'General',
 }
-
 
 interface LearningAnalyticsCardProps {
   projectPath: string
@@ -188,7 +196,9 @@ export function LearningAnalyticsCard({
                 >
                   <div className="flex items-center gap-1 mb-1">
                     <LearningTypeIcon type={type as LearningType} className="h-3 w-3" />
-                    <span className="text-xs font-medium">{LEARNING_TYPE_LABELS[type as LearningType]}</span>
+                    <span className="text-xs font-medium">
+                      {LEARNING_TYPE_LABELS[type as LearningType]}
+                    </span>
                   </div>
                   <div className="text-lg font-bold">{count}</div>
                 </div>
@@ -196,9 +206,7 @@ export function LearningAnalyticsCard({
             })}
           </div>
           {stats.total === 0 && (
-            <div className="text-xs text-muted-foreground text-center py-4">
-              No learnings yet
-            </div>
+            <div className="text-xs text-muted-foreground text-center py-4">No learnings yet</div>
           )}
         </div>
 

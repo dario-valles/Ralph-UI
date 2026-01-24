@@ -36,7 +36,9 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
         className={cn(
           'p-2 rounded-lg border cursor-pointer transition-colors hover:border-primary/50',
           story.passes && 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-900',
-          !story.passes && isNext && 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-900',
+          !story.passes &&
+            isNext &&
+            'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-900',
           !story.passes && !isNext && 'bg-card border-border'
         )}
       >
@@ -70,7 +72,9 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               >
                 {story.title}
               </h4>
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{story.acceptance}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                {story.acceptance}
+              </p>
               {story.tags && story.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {story.tags.map((tag) => (

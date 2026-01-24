@@ -55,7 +55,7 @@ export function StreamingIndicator({
   useEffect(() => {
     setElapsedSeconds(initialValues.elapsed)
     setState(initialValues.state)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startedAt])
 
   useEffect(() => {
@@ -109,8 +109,8 @@ export function StreamingIndicator({
           <span className="font-medium">Response taking too long</span>
         </div>
         <p className="text-sm text-muted-foreground">
-          The AI agent has been processing for {formatElapsed(elapsedSeconds)}.
-          The process may have stopped or encountered an issue.
+          The AI agent has been processing for {formatElapsed(elapsedSeconds)}. The process may have
+          stopped or encountered an issue.
         </p>
         <div className="flex gap-2">
           {onRetry && (
@@ -148,20 +148,13 @@ export function StreamingIndicator({
             <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
               Still processing...
             </span>
-            <span className="text-xs text-muted-foreground">
-              {formatElapsed(elapsedSeconds)}
-            </span>
+            <span className="text-xs text-muted-foreground">{formatElapsed(elapsedSeconds)}</span>
           </div>
           <p className="text-xs text-muted-foreground">
             This is taking longer than usual. The agent may be handling a complex request.
           </p>
           {onCancel && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onCancel}
-              className="mt-2 h-7 text-xs"
-            >
+            <Button size="sm" variant="ghost" onClick={onCancel} className="mt-2 h-7 text-xs">
               Cancel request
             </Button>
           )}
@@ -186,9 +179,18 @@ export function StreamingIndicator({
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span
+              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+              style={{ animationDelay: '0ms' }}
+            />
+            <span
+              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+              style={{ animationDelay: '150ms' }}
+            />
+            <span
+              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+              style={{ animationDelay: '300ms' }}
+            />
           </div>
           <span className="text-xs text-muted-foreground ml-2">
             {formatElapsed(elapsedSeconds)}
@@ -222,18 +224,36 @@ export function StreamingIndicator({
           </pre>
           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
             <div className="flex gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
             <span>Streaming...</span>
           </div>
         </div>
       ) : (
         <div className="flex gap-1">
-          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-          <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+          <span
+            className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '0ms' }}
+          />
+          <span
+            className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '150ms' }}
+          />
+          <span
+            className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '300ms' }}
+          />
         </div>
       )}
     </div>

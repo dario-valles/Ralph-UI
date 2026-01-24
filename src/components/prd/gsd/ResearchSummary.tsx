@@ -101,9 +101,7 @@ export function ResearchSummary({ synthesis, onClose }: ResearchSummaryProps) {
         <div>
           <h4 className="text-sm font-medium mb-2">Full Summary (SUMMARY.md)</h4>
           <ScrollArea className="h-[300px] w-full rounded border">
-            <pre className="text-xs whitespace-pre-wrap font-mono p-4">
-              {synthesis.content}
-            </pre>
+            <pre className="text-xs whitespace-pre-wrap font-mono p-4">{synthesis.content}</pre>
           </ScrollArea>
         </div>
       </CardContent>

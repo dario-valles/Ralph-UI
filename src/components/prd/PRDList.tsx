@@ -69,7 +69,10 @@ export function PRDList() {
       setPrdFiles(files)
     } catch (err) {
       console.error('Failed to scan PRD files:', err)
-      toast.error('Failed to load PRDs', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Failed to load PRDs',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     } finally {
       setLoading(false)
     }
@@ -103,7 +106,9 @@ export function PRDList() {
   // Navigate to file editor
   const handleEditFile = (file: PRDFile) => {
     const prdName = file.id.replace('file:', '')
-    navigate(`/prds/file?project=${encodeURIComponent(file.projectPath)}&name=${encodeURIComponent(prdName)}`)
+    navigate(
+      `/prds/file?project=${encodeURIComponent(file.projectPath)}&name=${encodeURIComponent(prdName)}`
+    )
   }
 
   // Delete a file-based PRD and all related resources
@@ -138,7 +143,10 @@ export function PRDList() {
       loadPrdFiles()
     } catch (err) {
       console.error('Failed to delete PRD file:', err)
-      toast.error('Failed to delete PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Failed to delete PRD',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     } finally {
       setDeleting(null)
     }
@@ -188,9 +196,7 @@ export function PRDList() {
             <p className="text-muted-foreground text-center mb-4">
               Select a project from the sidebar to view and manage its PRDs.
             </p>
-            <Button onClick={() => navigate('/projects')}>
-              Select Project
-            </Button>
+            <Button onClick={() => navigate('/projects')}>Select Project</Button>
           </CardContent>
         </Card>
       </div>
@@ -343,9 +349,7 @@ export function PRDList() {
                   </TableCell>
                   <TableCell>{getStatusBadge(file)}</TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      {formatBackendDateOnly(file.modifiedAt)}
-                    </div>
+                    <div className="text-sm">{formatBackendDateOnly(file.modifiedAt)}</div>
                     <div className="text-xs text-muted-foreground">
                       {formatBackendTime(file.modifiedAt)}
                     </div>
@@ -400,13 +404,16 @@ export function PRDList() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirmFile} onOpenChange={(open) => !open && setDeleteConfirmFile(null)}>
+      <Dialog
+        open={!!deleteConfirmFile}
+        onOpenChange={(open) => !open && setDeleteConfirmFile(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete PRD</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{deleteConfirmFile?.title}&quot;?
-              This will also delete associated worktrees and branches.
+              Are you sure you want to delete &quot;{deleteConfirmFile?.title}&quot;? This will also
+              delete associated worktrees and branches.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

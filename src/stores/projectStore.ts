@@ -72,9 +72,7 @@ export const useProjectStore = create<ProjectStore>()(
             if (existing) {
               // Update existing project
               return {
-                projects: state.projects.map((p) =>
-                  p.id === project.id ? project : p
-                ),
+                projects: state.projects.map((p) => (p.id === project.id ? project : p)),
               }
             } else {
               // Add new project
@@ -126,9 +124,7 @@ export const useProjectStore = create<ProjectStore>()(
         try {
           await projectApi.updateName(projectId, name)
           set((state) => ({
-            projects: state.projects.map((p) =>
-              p.id === projectId ? { ...p, name } : p
-            ),
+            projects: state.projects.map((p) => (p.id === projectId ? { ...p, name } : p)),
           }))
         } catch (error) {
           set({ error: errorToString(error) })

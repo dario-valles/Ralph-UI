@@ -34,14 +34,22 @@ export function TitleBar() {
   }
 
   return (
-    <div data-tauri-drag-region className="flex items-center h-10 md:h-9 border-b bg-card select-none">
+    <div
+      data-tauri-drag-region
+      className="flex items-center h-10 md:h-9 border-b bg-card select-none"
+    >
       {/* Left section - hamburger (mobile) or sidebar toggle (desktop) */}
       <div className="flex items-center pl-2 md:pl-[70px] pr-2">
-        <Tooltip content={isMobile ? 'Menu' : (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar')} side="bottom">
+        <Tooltip
+          content={isMobile ? 'Menu' : sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          side="bottom"
+        >
           <button
             onClick={handleMenuClick}
             className="flex items-center justify-center w-9 h-9 md:w-6 md:h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring"
-            aria-label={isMobile ? 'Open menu' : (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+            aria-label={
+              isMobile ? 'Open menu' : sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
+            }
           >
             {isMobile ? (
               <Menu className="h-5 w-5" />

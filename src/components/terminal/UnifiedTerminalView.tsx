@@ -157,7 +157,9 @@ function InlineToolCallItem({ toolCall }: InlineToolCallItemProps): React.JSX.El
 
             {/* Input summary */}
             {inputSummary && (
-              <span className="text-xs text-zinc-400 truncate flex-1 font-mono">{inputSummary}</span>
+              <span className="text-xs text-zinc-400 truncate flex-1 font-mono">
+                {inputSummary}
+              </span>
             )}
 
             {/* Status indicator */}
@@ -412,27 +414,36 @@ export function UnifiedTerminalView({
       }
 
       // Listen for PTY data events
-      unlistenPty = await subscribeEvent<{ agentId: string; data: number[] }>('agent-pty-data', (payload) => {
-        if (payload.agentId === agentId) {
-          const data = new Uint8Array(payload.data)
-          const decoded = decodeTerminalData(data)
-          addTextToStream(decoded)
+      unlistenPty = await subscribeEvent<{ agentId: string; data: number[] }>(
+        'agent-pty-data',
+        (payload) => {
+          if (payload.agentId === agentId) {
+            const data = new Uint8Array(payload.data)
+            const decoded = decodeTerminalData(data)
+            addTextToStream(decoded)
+          }
         }
-      })
+      )
 
       // Listen for tool call started events
-      unlistenToolStart = await subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
-        if (payload.agentId === agentId) {
-          handleToolStart(payload)
+      unlistenToolStart = await subscribeEvent<ToolCallStartedPayload>(
+        'tool:started',
+        (payload) => {
+          if (payload.agentId === agentId) {
+            handleToolStart(payload)
+          }
         }
-      })
+      )
 
       // Listen for tool call completed events
-      unlistenToolComplete = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
-        if (payload.agentId === agentId) {
-          handleToolComplete(payload)
+      unlistenToolComplete = await subscribeEvent<ToolCallCompletedPayload>(
+        'tool:completed',
+        (payload) => {
+          if (payload.agentId === agentId) {
+            handleToolComplete(payload)
+          }
         }
-      })
+      )
 
       // Periodic flush for any remaining buffered text
       flushInterval = setInterval(flushTextBuffer, 200)

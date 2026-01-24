@@ -4,17 +4,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  FolderOpen,
-  ChevronDown,
-  Star,
-  Clock,
-  Plus,
-  Check,
-  X,
-  Pencil,
-  Trash2,
-} from 'lucide-react'
+import { FolderOpen, ChevronDown, Star, Clock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react'
 import { RemoteFolderBrowser } from './RemoteFolderBrowser'
 
 interface ProjectSwitcherProps {
@@ -23,7 +13,11 @@ interface ProjectSwitcherProps {
   className?: string
 }
 
-export function ProjectSwitcher({ collapsed = false, compact = false, className }: ProjectSwitcherProps) {
+export function ProjectSwitcher({
+  collapsed = false,
+  compact = false,
+  className,
+}: ProjectSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -134,9 +128,7 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'flex items-center justify-center w-full p-2 rounded-lg transition-colors',
-          activeProject
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-accent',
+          activeProject ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
           className
         )}
       >
@@ -162,20 +154,17 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
           'flex items-center w-full border transition-colors cursor-pointer',
           'hover:bg-accent text-left',
           activeProject ? 'bg-accent/50' : 'bg-background',
-          compact
-            ? 'gap-1.5 px-2.5 py-1 rounded-full text-xs'
-            : 'gap-2 px-3 py-2 rounded-lg'
+          compact ? 'gap-1.5 px-2.5 py-1 rounded-full text-xs' : 'gap-2 px-3 py-2 rounded-lg'
         )}
       >
-        <FolderOpen className={cn('shrink-0 text-muted-foreground', compact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+        <FolderOpen
+          className={cn('shrink-0 text-muted-foreground', compact ? 'h-3.5 w-3.5' : 'h-4 w-4')}
+        />
         <span className={cn('flex-1 truncate', compact ? 'text-xs' : 'text-sm')}>
           {activeProject ? getDisplayName(activeProject) : 'Select Project'}
         </span>
         {activeProject && (
-          <button
-            onClick={handleClearProject}
-            className="p-0.5 rounded hover:bg-background"
-          >
+          <button onClick={handleClearProject} className="p-0.5 rounded hover:bg-background">
             <X className={cn('text-muted-foreground', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
           </button>
         )}
@@ -211,43 +200,15 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
 
           {/* Project list - hidden when browser is shown */}
           {!showBrowser && (
-          <div className="max-h-64 overflow-y-auto">
-            {/* Favorites Section */}
-            {favoriteProjects.length > 0 && (
-              <div className="p-1">
-                <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Star className="h-3 w-3" />
-                  Favorites
-                </div>
-                {favoriteProjects.map((project) => (
-                  <ProjectItem
-                    key={project.id}
-                    project={project}
-                    isActive={project.id === activeProjectId}
-                    isEditing={editingProjectId === project.id}
-                    editingName={editingName}
-                    onSelect={() => handleSelectProject(project)}
-                    onToggleFavorite={(e) => handleToggleFavorite(e, project.id)}
-                    onStartEdit={(e) => handleStartEdit(e, project)}
-                    onSaveEdit={handleSaveEdit}
-                    onCancelEdit={handleCancelEdit}
-                    onDelete={(e) => handleDeleteProject(e, project.id)}
-                    onEditNameChange={setEditingName}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Recent Section */}
-            {recentProjects.length > 0 && (
-              <div className="p-1">
-                <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Recent
-                </div>
-                {recentProjects
-                  .filter((p) => !p.isFavorite)
-                  .map((project) => (
+            <div className="max-h-64 overflow-y-auto">
+              {/* Favorites Section */}
+              {favoriteProjects.length > 0 && (
+                <div className="p-1">
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    Favorites
+                  </div>
+                  {favoriteProjects.map((project) => (
                     <ProjectItem
                       key={project.id}
                       project={project}
@@ -263,16 +224,44 @@ export function ProjectSwitcher({ collapsed = false, compact = false, className 
                       onEditNameChange={setEditingName}
                     />
                   ))}
-              </div>
-            )}
+                </div>
+              )}
 
-            {/* Empty State */}
-            {projects.length === 0 && (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                No projects yet. Add a folder to get started.
-              </div>
-            )}
-          </div>
+              {/* Recent Section */}
+              {recentProjects.length > 0 && (
+                <div className="p-1">
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Recent
+                  </div>
+                  {recentProjects
+                    .filter((p) => !p.isFavorite)
+                    .map((project) => (
+                      <ProjectItem
+                        key={project.id}
+                        project={project}
+                        isActive={project.id === activeProjectId}
+                        isEditing={editingProjectId === project.id}
+                        editingName={editingName}
+                        onSelect={() => handleSelectProject(project)}
+                        onToggleFavorite={(e) => handleToggleFavorite(e, project.id)}
+                        onStartEdit={(e) => handleStartEdit(e, project)}
+                        onSaveEdit={handleSaveEdit}
+                        onCancelEdit={handleCancelEdit}
+                        onDelete={(e) => handleDeleteProject(e, project.id)}
+                        onEditNameChange={setEditingName}
+                      />
+                    ))}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {projects.length === 0 && (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  No projects yet. Add a folder to get started.
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -368,18 +357,10 @@ function ProjectItem({
             )}
           />
         </button>
-        <button
-          onClick={onStartEdit}
-          className="p-1 rounded hover:bg-background"
-          title="Rename"
-        >
+        <button onClick={onStartEdit} className="p-1 rounded hover:bg-background" title="Rename">
           <Pencil className="h-3 w-3 text-muted-foreground" />
         </button>
-        <button
-          onClick={onDelete}
-          className="p-1 rounded hover:bg-background"
-          title="Remove"
-        >
+        <button onClick={onDelete} className="p-1 rounded hover:bg-background" title="Remove">
           <Trash2 className="h-3 w-3 text-destructive" />
         </button>
       </div>

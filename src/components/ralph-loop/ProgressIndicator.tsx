@@ -42,11 +42,7 @@ export function ProgressIndicator({
   compact = false,
 }: ProgressIndicatorProps): React.JSX.Element {
   if (!progress && !isRunning) {
-    return (
-      <div className="text-sm text-muted-foreground">
-        No execution in progress
-      </div>
-    )
+    return <div className="text-sm text-muted-foreground">No execution in progress</div>
   }
 
   const phase = progress?.phase ?? 'starting'
@@ -99,9 +95,7 @@ export function ProgressIndicator({
       <div className="space-y-1">
         <Progress value={overallProgress} className="h-2" />
         {progress?.message && (
-          <p className="text-xs text-muted-foreground truncate">
-            {progress.message}
-          </p>
+          <p className="text-xs text-muted-foreground truncate">{progress.message}</p>
         )}
       </div>
 
@@ -116,10 +110,7 @@ export function ProgressIndicator({
       {/* Phase Progress */}
       {progress && progress.progress > 0 && progress.progress < 1 && (
         <div className="flex items-center gap-2">
-          <Progress
-            value={progress.progress * 100}
-            className="h-1 flex-1 opacity-50"
-          />
+          <Progress value={progress.progress * 100} className="h-1 flex-1 opacity-50" />
           <span className="text-xs text-muted-foreground w-12 text-right">
             {Math.round(progress.progress * 100)}%
           </span>

@@ -41,12 +41,7 @@ type ExportDialogState = ExportPhaseState & {
   isOpen: boolean
 }
 
-export function GSDWorkflow({
-  projectPath,
-  sessionId,
-  onComplete,
-  onBack,
-}: GSDWorkflowProps) {
+export function GSDWorkflow({ projectPath, sessionId, onComplete, onBack }: GSDWorkflowProps) {
   // Global store state
   const {
     workflowState,
@@ -113,19 +108,22 @@ export function GSDWorkflow({
   }, [projectPath, sessionId, loadGsdState, startGsdSession, setError])
 
   // Phase navigation
-  const handlePhaseChange = useCallback(async (phase: GsdPhase) => {
-    if (!projectPath || !sessionId) return
+  const handlePhaseChange = useCallback(
+    async (phase: GsdPhase) => {
+      if (!projectPath || !sessionId) return
 
-    setLoading(true)
-    try {
-      await gsdApi.updatePhase(projectPath, sessionId, phase)
-      setPhase(phase)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update phase')
-    } finally {
-      setLoading(false)
-    }
-  }, [projectPath, sessionId, setLoading, setError, setPhase])
+      setLoading(true)
+      try {
+        await gsdApi.updatePhase(projectPath, sessionId, phase)
+        setPhase(phase)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update phase')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [projectPath, sessionId, setLoading, setError, setPhase]
+  )
 
   const handleNext = useCallback(async () => {
     if (!state || !projectPath || !sessionId) return
@@ -173,19 +171,22 @@ export function GSDWorkflow({
   }, [state, handlePhaseChange])
 
   // Research handlers
-  const handleStartResearch = useCallback(async (context: string, agentType?: string) => {
-    if (!projectPath || !sessionId) return
+  const handleStartResearch = useCallback(
+    async (context: string, agentType?: string) => {
+      if (!projectPath || !sessionId) return
 
-    setIsResearchRunning(true)
-    try {
-      await gsdApi.startResearch(projectPath, sessionId, context, agentType)
-      // Research status will be updated via polling or events
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start research')
-    } finally {
-      setIsResearchRunning(false)
-    }
-  }, [projectPath, sessionId, setError])
+      setIsResearchRunning(true)
+      try {
+        await gsdApi.startResearch(projectPath, sessionId, context, agentType)
+        // Research status will be updated via polling or events
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to start research')
+      } finally {
+        setIsResearchRunning(false)
+      }
+    },
+    [projectPath, sessionId, setError]
+  )
 
   const handleSynthesizeResearch = useCallback(async () => {
     if (!projectPath || !sessionId) return
@@ -202,60 +203,75 @@ export function GSDWorkflow({
   }, [projectPath, sessionId, setError])
 
   // Requirements handlers
-  const handleApplyScope = useCallback(async (selection: import('@/types/planning').ScopeSelection) => {
-    if (!projectPath || !sessionId) return
+  const handleApplyScope = useCallback(
+    async (selection: import('@/types/planning').ScopeSelection) => {
+      if (!projectPath || !sessionId) return
 
-    setLoading(true)
-    try {
-      const updated = await gsdApi.scopeRequirements(projectPath, sessionId, selection)
-      setRequirementsDoc(updated)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply scope')
-    } finally {
-      setLoading(false)
-    }
-  }, [projectPath, sessionId, setLoading, setError, setRequirementsDoc])
+      setLoading(true)
+      try {
+        const updated = await gsdApi.scopeRequirements(projectPath, sessionId, selection)
+        setRequirementsDoc(updated)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to apply scope')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [projectPath, sessionId, setLoading, setError, setRequirementsDoc]
+  )
 
-  const handleAddRequirement = useCallback(async (
-    category: import('@/types/planning').RequirementCategory,
-    title: string,
-    description: string
-  ) => {
-    if (!projectPath || !sessionId) {
-      throw new Error('Project path and session ID required')
-    }
+  const handleAddRequirement = useCallback(
+    async (
+      category: import('@/types/planning').RequirementCategory,
+      title: string,
+      description: string
+    ) => {
+      if (!projectPath || !sessionId) {
+        throw new Error('Project path and session ID required')
+      }
 
-    const newReq = await gsdApi.addRequirement(projectPath, sessionId, category, title, description)
-    // Update requirements state in store
-    if (requirementsDoc) {
-      setRequirementsDoc({
-        ...requirementsDoc,
-        requirements: { ...requirementsDoc.requirements, [newReq.id]: newReq }
-      })
-    }
-    return newReq
-  }, [projectPath, sessionId, requirementsDoc, setRequirementsDoc])
-
-  // Roadmap handlers
-  const handleUpdateRoadmap = useCallback(async (updated: RoadmapDoc) => {
-    if (!projectPath || !sessionId) return
-
-    setLoading(true)
-    try {
-      // Save the updated roadmap
-      await gsdApi.savePlanningFile(
+      const newReq = await gsdApi.addRequirement(
         projectPath,
         sessionId,
-        'roadmap',
-        JSON.stringify(updated, null, 2)
+        category,
+        title,
+        description
       )
-      setRoadmapDoc(updated)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update roadmap')
-    } finally {
-      setLoading(false)
-    }
-  }, [projectPath, sessionId, setLoading, setError, setRoadmapDoc])
+      // Update requirements state in store
+      if (requirementsDoc) {
+        setRequirementsDoc({
+          ...requirementsDoc,
+          requirements: { ...requirementsDoc.requirements, [newReq.id]: newReq },
+        })
+      }
+      return newReq
+    },
+    [projectPath, sessionId, requirementsDoc, setRequirementsDoc]
+  )
+
+  // Roadmap handlers
+  const handleUpdateRoadmap = useCallback(
+    async (updated: RoadmapDoc) => {
+      if (!projectPath || !sessionId) return
+
+      setLoading(true)
+      try {
+        // Save the updated roadmap
+        await gsdApi.savePlanningFile(
+          projectPath,
+          sessionId,
+          'roadmap',
+          JSON.stringify(updated, null, 2)
+        )
+        setRoadmapDoc(updated)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update roadmap')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [projectPath, sessionId, setLoading, setError, setRoadmapDoc]
+  )
 
   // Verification handlers
   const handleRunVerification = useCallback(async () => {
@@ -449,9 +465,7 @@ export function GSDWorkflow({
         return (
           <Card className="m-4">
             <CardContent className="pt-6">
-              <p className="text-muted-foreground">
-                Generating roadmap from requirements...
-              </p>
+              <p className="text-muted-foreground">Generating roadmap from requirements...</p>
               <Loader2 className="h-6 w-6 animate-spin mt-4" />
             </CardContent>
           </Card>
@@ -479,9 +493,7 @@ export function GSDWorkflow({
                 Ready to verify your plans for completeness.
               </p>
               <Button onClick={handleRunVerification} disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : null}
+                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Run Verification
               </Button>
             </CardContent>
@@ -528,9 +540,7 @@ export function GSDWorkflow({
       </div>
 
       {/* Phase content */}
-      <div className="flex-1 overflow-auto">
-        {renderPhaseContent()}
-      </div>
+      <div className="flex-1 overflow-auto">{renderPhaseContent()}</div>
     </div>
   )
 }

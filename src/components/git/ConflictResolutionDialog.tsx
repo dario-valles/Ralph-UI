@@ -11,20 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
-import {
-  Loader2,
-  GitMerge,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Bot,
-} from 'lucide-react'
-import {
-  gitApi,
-  ConflictInfo,
-  MergeResolutionResult,
-  ConflictResolverAgent,
-} from '@/lib/git-api'
+import { Loader2, GitMerge, CheckCircle2, XCircle, AlertTriangle, Bot } from 'lucide-react'
+import { gitApi, ConflictInfo, MergeResolutionResult, ConflictResolverAgent } from '@/lib/git-api'
 
 interface ConflictResolutionDialogProps {
   repoPath: string
@@ -118,8 +106,8 @@ export function ConflictResolutionDialog({
             Resolve Merge Conflicts with AI
           </DialogTitle>
           <DialogDescription>
-            {conflicts.length} file{conflicts.length !== 1 ? 's' : ''} have
-            merge conflicts. Use AI to automatically resolve them.
+            {conflicts.length} file{conflicts.length !== 1 ? 's' : ''} have merge conflicts. Use AI
+            to automatically resolve them.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,10 +117,7 @@ export function ConflictResolutionDialog({
             <Label>Conflicted Files</Label>
             <div className="max-h-40 overflow-y-auto rounded border bg-muted/50 p-2">
               {conflicts.map((conflict, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 py-1 text-sm"
-                >
+                <div key={index} className="flex items-center gap-2 py-1 text-sm">
                   <AlertTriangle className="h-3 w-3 text-yellow-500" />
                   <code className="text-xs">{conflict.path}</code>
                   {result?.resolutions[index]?.success === true && (
@@ -153,9 +138,7 @@ export function ConflictResolutionDialog({
               <Select
                 id="agent-type"
                 value={agentType}
-                onChange={(e) =>
-                  setAgentType(e.target.value as ConflictResolverAgent)
-                }
+                onChange={(e) => setAgentType(e.target.value as ConflictResolverAgent)}
                 disabled={resolving}
               >
                 <option value="claude">Claude Code</option>
@@ -166,8 +149,8 @@ export function ConflictResolutionDialog({
                 <option value="droid">Droid</option>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Select the AI agent to use for conflict resolution. Ensure the
-                agent CLI is installed.
+                Select the AI agent to use for conflict resolution. Ensure the agent CLI is
+                installed.
               </p>
             </div>
           )}
@@ -181,8 +164,7 @@ export function ConflictResolutionDialog({
               </div>
               <Progress value={progress} className="h-2" />
               <p className="text-xs text-muted-foreground">
-                AI is analyzing and resolving each conflict. This may take a few
-                minutes.
+                AI is analyzing and resolving each conflict. This may take a few minutes.
               </p>
             </div>
           )}
@@ -194,16 +176,13 @@ export function ConflictResolutionDialog({
                 {result.failedCount === 0 ? (
                   <>
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
-                    <span className="font-medium text-green-700">
-                      All conflicts resolved!
-                    </span>
+                    <span className="font-medium text-green-700">All conflicts resolved!</span>
                   </>
                 ) : (
                   <>
                     <AlertTriangle className="h-5 w-5 text-yellow-500" />
                     <span className="font-medium text-yellow-700">
-                      {result.resolvedCount} of {result.resolutions.length}{' '}
-                      resolved
+                      {result.resolvedCount} of {result.resolutions.length} resolved
                     </span>
                   </>
                 )}
@@ -241,11 +220,7 @@ export function ConflictResolutionDialog({
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           {!result && (
             <>
-              <Button
-                variant="outline"
-                onClick={handleAbort}
-                disabled={resolving}
-              >
+              <Button variant="outline" onClick={handleAbort} disabled={resolving}>
                 Abort Merge
               </Button>
               <Button onClick={handleResolve} disabled={resolving}>

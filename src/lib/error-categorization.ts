@@ -46,8 +46,8 @@ const ERROR_PATTERNS: Array<{
       /module\s+not\s+found/i,
       /type\s+error/i,
       /syntax\s+error/i,
-      /TS\d{4}:/i,  // TypeScript error codes
-      /error\[E\d{4}\]/,  // Rust error codes
+      /TS\d{4}:/i, // TypeScript error codes
+      /error\[E\d{4}\]/, // Rust error codes
       /error:\s+cannot\s+find/i,
     ],
     suggestedFix: 'Fix the compilation errors by addressing type mismatches or missing imports',
@@ -61,7 +61,8 @@ const ERROR_PATTERNS: Array<{
       /operation\s+took\s+too\s+long/i,
       /max\s+iterations\s+reached/i,
     ],
-    suggestedFix: 'The task took too long. Consider breaking it into smaller subtasks or increasing the timeout',
+    suggestedFix:
+      'The task took too long. Consider breaking it into smaller subtasks or increasing the timeout',
   },
   {
     category: 'crash',
@@ -76,7 +77,8 @@ const ERROR_PATTERNS: Array<{
       /process\s+exited\s+unexpectedly/i,
       /panic/i,
     ],
-    suggestedFix: 'The process crashed unexpectedly. Check for infinite loops, excessive memory usage, or resource exhaustion',
+    suggestedFix:
+      'The process crashed unexpectedly. Check for infinite loops, excessive memory usage, or resource exhaustion',
   },
   {
     category: 'rate_limit',
@@ -99,7 +101,8 @@ const ERROR_PATTERNS: Array<{
       /cannot\s+merge/i,
       /conflict:\s+/i,
     ],
-    suggestedFix: 'Git merge conflict detected. Resolve conflicts manually or use the conflict resolution tool',
+    suggestedFix:
+      'Git merge conflict detected. Resolve conflicts manually or use the conflict resolution tool',
   },
   {
     category: 'dependency',
@@ -122,10 +125,10 @@ const ERROR_PATTERNS: Array<{
 function extractLocation(error: string): { file?: string; line?: number } {
   // Common patterns for file:line references
   const patterns = [
-    /([^\s:]+):(\d+):\d+/,  // file:line:column
-    /([^\s:]+):(\d+)/,       // file:line
-    /at\s+([^\s:]+):(\d+)/,  // at file:line
-    /in\s+([^\s:]+)\s+line\s+(\d+)/i,  // in file line N
+    /([^\s:]+):(\d+):\d+/, // file:line:column
+    /([^\s:]+):(\d+)/, // file:line
+    /at\s+([^\s:]+):(\d+)/, // at file:line
+    /in\s+([^\s:]+)\s+line\s+(\d+)/i, // in file line N
   ]
 
   for (const pattern of patterns) {
@@ -143,7 +146,7 @@ function extractLocation(error: string): { file?: string; line?: number } {
 
 // Extract first meaningful error message (skip stack traces)
 function extractMessage(error: string): string {
-  const lines = error.split('\n').filter(line => line.trim())
+  const lines = error.split('\n').filter((line) => line.trim())
 
   // Find the first line that looks like an error message
   for (const line of lines) {

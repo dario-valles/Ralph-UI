@@ -71,7 +71,9 @@ export const configApi = {
   /**
    * Update validation configuration
    */
-  updateValidation: async (config: Partial<RalphValidationConfig>): Promise<RalphValidationConfig> => {
+  updateValidation: async (
+    config: Partial<RalphValidationConfig>
+  ): Promise<RalphValidationConfig> => {
     return await invoke('update_validation_config', {
       runTests: config.runTests,
       runLint: config.runLint,
@@ -83,7 +85,9 @@ export const configApi = {
   /**
    * Update fallback configuration
    */
-  updateFallback: async (config: Partial<RalphFallbackSettings>): Promise<RalphFallbackSettings> => {
+  updateFallback: async (
+    config: Partial<RalphFallbackSettings>
+  ): Promise<RalphFallbackSettings> => {
     return await invoke('update_fallback_config', {
       enabled: config.enabled,
       baseBackoffMs: config.baseBackoffMs,

@@ -145,9 +145,9 @@ export function createMockRalphLoopApi() {
 /**
  * Assert that a store is in loading state.
  */
-export function expectLoading<T extends { loading: boolean; error: string | null }>(
-  store: { getState: () => T }
-): void {
+export function expectLoading<T extends { loading: boolean; error: string | null }>(store: {
+  getState: () => T
+}): void {
   const state = store.getState()
   expect(state.loading).toBe(true)
   expect(state.error).toBeNull()
@@ -156,9 +156,9 @@ export function expectLoading<T extends { loading: boolean; error: string | null
 /**
  * Assert that a store has completed loading successfully.
  */
-export function expectSuccess<T extends { loading: boolean; error: string | null }>(
-  store: { getState: () => T }
-): void {
+export function expectSuccess<T extends { loading: boolean; error: string | null }>(store: {
+  getState: () => T
+}): void {
   const state = store.getState()
   expect(state.loading).toBe(false)
   expect(state.error).toBeNull()

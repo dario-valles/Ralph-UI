@@ -110,86 +110,78 @@ function PastePreviewDialogContent({
 
   return (
     <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {wrapInCode ? (
-              <Code className="h-5 w-5 text-primary" />
-            ) : (
-              <FileText className="h-5 w-5 text-muted-foreground" />
-            )}
-            Paste Preview
-          </DialogTitle>
-          <DialogDescription>
-            {lineCount} lines pasted. Choose how to format this content.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          {wrapInCode ? (
+            <Code className="h-5 w-5 text-primary" />
+          ) : (
+            <FileText className="h-5 w-5 text-muted-foreground" />
+          )}
+          Paste Preview
+        </DialogTitle>
+        <DialogDescription>
+          {lineCount} lines pasted. Choose how to format this content.
+        </DialogDescription>
+      </DialogHeader>
 
-        {/* Preview area */}
-        <div className="flex-1 overflow-hidden">
-          <pre
-            className={cn(
-              'p-3 rounded-md text-xs font-mono overflow-auto max-h-[300px]',
-              'bg-muted border',
-              wrapInCode && 'bg-secondary/50'
-            )}
-          >
-            <code>{previewContent}</code>
-          </pre>
+      {/* Preview area */}
+      <div className="flex-1 overflow-hidden">
+        <pre
+          className={cn(
+            'p-3 rounded-md text-xs font-mono overflow-auto max-h-[300px]',
+            'bg-muted border',
+            wrapInCode && 'bg-secondary/50'
+          )}
+        >
+          <code>{previewContent}</code>
+        </pre>
+      </div>
+
+      {/* Options */}
+      <div className="flex flex-col gap-4 py-2">
+        {/* Code block toggle */}
+        <div className="flex items-center justify-between">
+          <Label htmlFor="wrap-code" className="flex items-center gap-2 cursor-pointer">
+            <Code className="h-4 w-4" />
+            Wrap in code block
+            {isCode && <span className="text-xs text-muted-foreground">(auto-detected)</span>}
+          </Label>
+          <Switch id="wrap-code" checked={wrapInCode} onCheckedChange={setWrapInCode} />
         </div>
 
-        {/* Options */}
-        <div className="flex flex-col gap-4 py-2">
-          {/* Code block toggle */}
+        {/* Language selector (only when code block is enabled) */}
+        {wrapInCode && (
           <div className="flex items-center justify-between">
-            <Label htmlFor="wrap-code" className="flex items-center gap-2 cursor-pointer">
-              <Code className="h-4 w-4" />
-              Wrap in code block
-              {isCode && (
-                <span className="text-xs text-muted-foreground">(auto-detected)</span>
+            <Label htmlFor="language" className="text-sm">
+              Language
+              {detectedLanguage && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  (detected: {detectedLanguage})
+                </span>
               )}
             </Label>
-            <Switch
-              id="wrap-code"
-              checked={wrapInCode}
-              onCheckedChange={setWrapInCode}
-            />
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger id="language" className="w-[180px]">
+                <SelectValue placeholder="Auto-detect" />
+              </SelectTrigger>
+              <SelectContent>
+                {CODE_LANGUAGES.map((lang) => (
+                  <SelectItem key={lang.value} value={lang.value}>
+                    {lang.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+        )}
+      </div>
 
-          {/* Language selector (only when code block is enabled) */}
-          {wrapInCode && (
-            <div className="flex items-center justify-between">
-              <Label htmlFor="language" className="text-sm">
-                Language
-                {detectedLanguage && (
-                  <span className="text-xs text-muted-foreground ml-2">
-                    (detected: {detectedLanguage})
-                  </span>
-                )}
-              </Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger id="language" className="w-[180px]">
-                  <SelectValue placeholder="Auto-detect" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CODE_LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.value} value={lang.value}>
-                      {lang.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm}>
-            Paste
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      <DialogFooter>
+        <Button variant="outline" onClick={handleCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleConfirm}>Paste</Button>
+      </DialogFooter>
+    </DialogContent>
   )
 }

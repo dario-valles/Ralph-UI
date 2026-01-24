@@ -1,43 +1,39 @@
-import React, { useState } from "react";
-import { CommitInfo } from "../../lib/git-api";
-import { BranchManager } from "./BranchManager";
-import { CommitHistory } from "./CommitHistory";
-import { DiffViewer } from "./DiffViewer";
-import { WorktreeManager } from "./WorktreeManager";
-import { Input } from "../ui/input";
-import { Button } from "../ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { FolderOpen } from "lucide-react";
+import React, { useState } from 'react'
+import { CommitInfo } from '../../lib/git-api'
+import { BranchManager } from './BranchManager'
+import { CommitHistory } from './CommitHistory'
+import { DiffViewer } from './DiffViewer'
+import { WorktreeManager } from './WorktreeManager'
+import { Input } from '../ui/input'
+import { Button } from '../ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
+import { FolderOpen } from 'lucide-react'
 
 export const GitPage: React.FC = () => {
-  const [repoPath, setRepoPath] = useState("");
-  const [activeRepoPath, setActiveRepoPath] = useState("");
-  const [selectedCommit, setSelectedCommit] = useState<CommitInfo | null>(null);
-  const [diffFromCommit, setDiffFromCommit] = useState<string | undefined>(
-    undefined
-  );
-  const [diffToCommit, setDiffToCommit] = useState<string | undefined>(
-    undefined
-  );
+  const [repoPath, setRepoPath] = useState('')
+  const [activeRepoPath, setActiveRepoPath] = useState('')
+  const [selectedCommit, setSelectedCommit] = useState<CommitInfo | null>(null)
+  const [diffFromCommit, setDiffFromCommit] = useState<string | undefined>(undefined)
+  const [diffToCommit, setDiffToCommit] = useState<string | undefined>(undefined)
 
   const handleSetRepo = () => {
     if (repoPath.trim()) {
-      setActiveRepoPath(repoPath.trim());
+      setActiveRepoPath(repoPath.trim())
     }
-  };
+  }
 
   const handleCommitSelect = (commit: CommitInfo) => {
-    setSelectedCommit(commit);
+    setSelectedCommit(commit)
     // Set diff to show changes from this commit's parent to this commit
     if (commit.parent_ids.length > 0) {
-      setDiffFromCommit(commit.parent_ids[0]);
-      setDiffToCommit(commit.id);
+      setDiffFromCommit(commit.parent_ids[0])
+      setDiffToCommit(commit.id)
     } else {
       // First commit, show all files as new
-      setDiffFromCommit(undefined);
-      setDiffToCommit(commit.id);
+      setDiffFromCommit(undefined)
+      setDiffToCommit(commit.id)
     }
-  };
+  }
 
   return (
     <div className="container mx-auto py-4 md:py-8 px-4">
@@ -54,8 +50,8 @@ export const GitPage: React.FC = () => {
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
               onKeyPress={(e) => {
-                if (e.key === "Enter") {
-                  handleSetRepo();
+                if (e.key === 'Enter') {
+                  handleSetRepo()
                 }
               }}
               className="pl-10"
@@ -69,7 +65,7 @@ export const GitPage: React.FC = () => {
         {activeRepoPath && (
           <div className="bg-muted border px-4 py-2 rounded">
             <p className="text-sm">
-              <strong>Active Repository:</strong>{" "}
+              <strong>Active Repository:</strong>{' '}
               <code className="bg-muted-foreground/10 px-2 py-1 rounded text-xs sm:text-sm break-all">
                 {activeRepoPath}
               </code>
@@ -81,10 +77,18 @@ export const GitPage: React.FC = () => {
       {activeRepoPath && (
         <Tabs defaultValue="branches" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="branches" className="text-xs sm:text-sm">Branches</TabsTrigger>
-            <TabsTrigger value="commits" className="text-xs sm:text-sm">Commits</TabsTrigger>
-            <TabsTrigger value="diff" className="text-xs sm:text-sm">Diff</TabsTrigger>
-            <TabsTrigger value="worktrees" className="text-xs sm:text-sm">Worktrees</TabsTrigger>
+            <TabsTrigger value="branches" className="text-xs sm:text-sm">
+              Branches
+            </TabsTrigger>
+            <TabsTrigger value="commits" className="text-xs sm:text-sm">
+              Commits
+            </TabsTrigger>
+            <TabsTrigger value="diff" className="text-xs sm:text-sm">
+              Diff
+            </TabsTrigger>
+            <TabsTrigger value="worktrees" className="text-xs sm:text-sm">
+              Worktrees
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="branches" className="space-y-6">
@@ -93,10 +97,7 @@ export const GitPage: React.FC = () => {
 
           <TabsContent value="commits" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CommitHistory
-                repoPath={activeRepoPath}
-                onCommitSelect={handleCommitSelect}
-              />
+              <CommitHistory repoPath={activeRepoPath} onCommitSelect={handleCommitSelect} />
 
               <div>
                 {selectedCommit ? (
@@ -104,32 +105,22 @@ export const GitPage: React.FC = () => {
                     <h3 className="text-lg font-bold mb-4">Commit Details</h3>
                     <div className="space-y-3">
                       <div>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          ID:
-                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">ID:</span>
                         <code className="ml-2 bg-muted px-2 py-1 rounded text-sm font-mono">
                           {selectedCommit.id}
                         </code>
                       </div>
 
                       <div>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Author:
-                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">Author:</span>
                         <span className="ml-2">{selectedCommit.author}</span>
-                        <span className="text-muted-foreground ml-1">
-                          ({selectedCommit.email})
-                        </span>
+                        <span className="text-muted-foreground ml-1">({selectedCommit.email})</span>
                       </div>
 
                       <div>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Date:
-                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">Date:</span>
                         <span className="ml-2">
-                          {new Date(
-                            selectedCommit.timestamp * 1000
-                          ).toLocaleString()}
+                          {new Date(selectedCommit.timestamp * 1000).toLocaleString()}
                         </span>
                       </div>
 
@@ -145,7 +136,7 @@ export const GitPage: React.FC = () => {
                       {selectedCommit.parent_ids.length > 0 && (
                         <div>
                           <span className="text-sm font-medium text-muted-foreground block mb-1">
-                            Parent{selectedCommit.parent_ids.length > 1 ? "s" : ""}:
+                            Parent{selectedCommit.parent_ids.length > 1 ? 's' : ''}:
                           </span>
                           {selectedCommit.parent_ids.map((parentId, i) => (
                             <code
@@ -189,5 +180,5 @@ export const GitPage: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}

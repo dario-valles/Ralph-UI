@@ -71,11 +71,7 @@ export function FileConflictWarning({
 
   return (
     <Alert variant={variant} className={className}>
-      {hasConflicts ? (
-        <AlertTriangle className="h-4 w-4" />
-      ) : (
-        <Info className="h-4 w-4" />
-      )}
+      {hasConflicts ? <AlertTriangle className="h-4 w-4" /> : <Info className="h-4 w-4" />}
       <AlertTitle className="flex items-center justify-between">
         <span>
           {hasConflicts
@@ -100,9 +96,7 @@ export function FileConflictWarning({
           <CollapsibleContent className="mt-2 space-y-3">
             {hasConflicts && (
               <div className="space-y-2">
-                <p className="text-sm font-medium text-destructive">
-                  These files have conflicts:
-                </p>
+                <p className="text-sm font-medium text-destructive">These files have conflicts:</p>
                 {conflicts.map((conflict, idx) => (
                   <div
                     key={`${conflict.path}-${idx}`}
@@ -110,7 +104,8 @@ export function FileConflictWarning({
                   >
                     <code className="text-xs font-mono block">{conflict.path}</code>
                     <span className="text-xs text-muted-foreground">
-                      In use by {conflict.conflictingAgentType} agent ({conflict.conflictingStoryId})
+                      In use by {conflict.conflictingAgentType} agent ({conflict.conflictingStoryId}
+                      )
                     </span>
                   </div>
                 ))}
@@ -127,9 +122,7 @@ export function FileConflictWarning({
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <FileWarning className="h-3 w-3" />
-                      <span className="text-sm font-medium">
-                        {agent.agentType} agent
-                      </span>
+                      <span className="text-sm font-medium">{agent.agentType} agent</span>
                       <Badge variant="secondary" className="text-xs">
                         {agent.storyId}
                       </Badge>
@@ -147,7 +140,8 @@ export function FileConflictWarning({
             )}
 
             <p className="text-xs text-muted-foreground">
-              Avoid modifying these files to prevent merge conflicts. The BRIEF.md file includes a complete list of files to avoid.
+              Avoid modifying these files to prevent merge conflicts. The BRIEF.md file includes a
+              complete list of files to avoid.
             </p>
           </CollapsibleContent>
         </Collapsible>

@@ -151,7 +151,9 @@ function AttachmentImage({ attachment }: AttachmentImageProps) {
       >
         <ImageIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
         <span className="truncate">{attachment.filename || 'Image'}</span>
-        <span className="text-white/70 ml-auto hidden sm:inline">{formatFileSize(attachment.size)}</span>
+        <span className="text-white/70 ml-auto hidden sm:inline">
+          {formatFileSize(attachment.size)}
+        </span>
       </div>
     </a>
   )

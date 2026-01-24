@@ -48,8 +48,10 @@ function getAudioContext(): AudioContext | null {
 
   if (!audioContext) {
     try {
-      audioContext = new (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      audioContext = new (
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      )()
     } catch (e) {
       console.warn('[Audio] Failed to create AudioContext:', e)
       return null

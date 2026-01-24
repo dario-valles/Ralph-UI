@@ -25,7 +25,11 @@ import {
   Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSubagentEvents, type SubagentNode, type SubagentStatus } from '@/hooks/useSubagentEvents'
+import {
+  useSubagentEvents,
+  type SubagentNode,
+  type SubagentStatus,
+} from '@/hooks/useSubagentEvents'
 
 // Duration in ms for which a node is considered "new" (shows highlight animation)
 const NEW_NODE_HIGHLIGHT_DURATION = 2000
@@ -262,7 +266,9 @@ function AgentTreeNode({
               // Selected state
               isSelected && 'ring-2 ring-primary bg-primary/5',
               // New node highlight animation
-              isNew && !isSelected && 'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
+              isNew &&
+                !isSelected &&
+                'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
             )}
             style={{ paddingLeft: `${depth * 16 + 8}px` }}
             data-new-node={isNew ? 'true' : undefined}

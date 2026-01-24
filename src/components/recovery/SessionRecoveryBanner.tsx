@@ -192,8 +192,8 @@ export function SessionRecoveryBanner({
             Session Recovery Required
           </DialogTitle>
           <DialogDescription>
-            The following sessions appear to have crashed or were not properly closed.
-            You can recover them to unassign any tasks that were in progress.
+            The following sessions appear to have crashed or were not properly closed. You can
+            recover them to unassign any tasks that were in progress.
           </DialogDescription>
         </DialogHeader>
 
@@ -271,7 +271,8 @@ export function SessionRecoveryBanner({
                     </div>
                   </div>
                   <Badge variant={result.success ? 'success' : 'destructive'}>
-                    {result.tasksUnassigned} task{result.tasksUnassigned !== 1 ? 's' : ''} unassigned
+                    {result.tasksUnassigned} task{result.tasksUnassigned !== 1 ? 's' : ''}{' '}
+                    unassigned
                   </Badge>
                 </div>
               </Card>
@@ -494,7 +495,8 @@ export function SessionRecoveryModal({
                     </div>
                   </div>
                   <Badge variant={result.success ? 'success' : 'destructive'}>
-                    {result.tasksUnassigned} task{result.tasksUnassigned !== 1 ? 's' : ''} unassigned
+                    {result.tasksUnassigned} task{result.tasksUnassigned !== 1 ? 's' : ''}{' '}
+                    unassigned
                   </Badge>
                 </div>
               </Card>
@@ -632,11 +634,7 @@ export function SessionRecoverySection({ projectPath }: { projectPath: string })
                     </div>
                   ))}
                 </div>
-                <Button
-                  className="w-full"
-                  onClick={handleRecoverAll}
-                  disabled={isRecovering}
-                >
+                <Button className="w-full" onClick={handleRecoverAll} disabled={isRecovering}>
                   {isRecovering ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />

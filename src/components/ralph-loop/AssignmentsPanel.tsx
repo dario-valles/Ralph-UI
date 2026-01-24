@@ -78,7 +78,9 @@ interface AssignmentsPanelProps {
 }
 
 /** Get status badge variant based on assignment status */
-function getStatusBadgeVariant(status: AssignmentStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+function getStatusBadgeVariant(
+  status: AssignmentStatus
+): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case 'active':
       return 'default'
@@ -123,9 +125,7 @@ function AssignmentCard({
 
   // Find conflicting files (files also in use by other agents)
   const conflictingFiles = filesInUse.filter(
-    (f) =>
-      f.agentId !== assignment.agentId &&
-      assignment.estimatedFiles.includes(f.path)
+    (f) => f.agentId !== assignment.agentId && assignment.estimatedFiles.includes(f.path)
   )
 
   const hasConflicts = conflictingFiles.length > 0
@@ -251,8 +251,8 @@ function AssignmentCard({
               <div className="flex items-center gap-2 text-xs text-yellow-600">
                 <AlertTriangle className="h-3 w-3" />
                 <span>
-                  {conflictingFiles.length} file{conflictingFiles.length > 1 ? 's' : ''} may conflict
-                  with other agents
+                  {conflictingFiles.length} file{conflictingFiles.length > 1 ? 's' : ''} may
+                  conflict with other agents
                 </span>
               </div>
             </div>
@@ -461,9 +461,7 @@ export function AssignmentsPanel({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        {error && (
-          <div className="text-sm text-destructive mb-3">{error}</div>
-        )}
+        {error && <div className="text-sm text-destructive mb-3">{error}</div>}
 
         {/* Manual Assignment Section (US-4.3) */}
         {showManualAssign && availableStories.length > 0 && (
@@ -588,11 +586,7 @@ export function AssignmentsPanel({
               <ScrollArea className="h-[200px] mt-2">
                 <div className="space-y-2 pr-4">
                   {historicalAssignments.map((assignment) => (
-                    <AssignmentCard
-                      key={assignment.id}
-                      assignment={assignment}
-                      filesInUse={[]}
-                    />
+                    <AssignmentCard key={assignment.id} assignment={assignment} filesInUse={[]} />
                   ))}
                 </div>
               </ScrollArea>

@@ -67,7 +67,12 @@ vi.mock('@/lib/env-check', () => ({
 vi.mock('@/hooks/useAvailableModels', () => ({
   useAvailableModels: vi.fn(() => ({
     models: [
-      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+      {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet 4.5',
+        provider: 'anthropic',
+        isDefault: true,
+      },
       { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', isDefault: false },
     ],
     loading: false,
@@ -114,7 +119,11 @@ const mockTemplates: TemplateInfo[] = [
   { name: 'task_prompt', source: 'builtin', description: 'Built-in template' },
   { name: 'bug_fix', source: 'builtin', description: 'Built-in template' },
   { name: 'my_custom', source: 'project', description: 'Project template (.ralph-ui/templates/)' },
-  { name: 'global_template', source: 'global', description: 'Global template (~/.ralph-ui/templates/)' },
+  {
+    name: 'global_template',
+    source: 'global',
+    description: 'Global template (~/.ralph-ui/templates/)',
+  },
 ]
 
 const mockTemplateContent = `# Task Prompt
@@ -354,7 +363,7 @@ describe('SettingsPage', () => {
     const mockPreviewResultError = {
       success: false,
       output: null,
-      error: "Syntax error: expected `endfor` on line 5",
+      error: 'Syntax error: expected `endfor` on line 5',
       errorLine: 5,
       variablesUsed: ['task'],
       variablesUnused: ['acceptance_criteria', 'prd_content'],

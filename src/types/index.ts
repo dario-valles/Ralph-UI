@@ -1135,12 +1135,7 @@ export interface FileConflict {
 }
 
 /** Type of assignment change event */
-export type AssignmentChangeType =
-  | 'created'
-  | 'completed'
-  | 'failed'
-  | 'released'
-  | 'files_updated'
+export type AssignmentChangeType = 'created' | 'completed' | 'failed' | 'released' | 'files_updated'
 
 /** Payload for assignment changed events */
 export interface AssignmentChangedPayload {
@@ -1178,13 +1173,7 @@ export interface AgentFileUse {
 // ============================================================================
 
 /** Type/category of a learning */
-export type LearningType =
-  | 'architecture'
-  | 'gotcha'
-  | 'pattern'
-  | 'testing'
-  | 'tooling'
-  | 'general'
+export type LearningType = 'architecture' | 'gotcha' | 'pattern' | 'testing' | 'tooling' | 'general'
 
 /** A single learning entry */
 export interface LearningEntry {

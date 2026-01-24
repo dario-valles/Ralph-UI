@@ -49,11 +49,20 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
               Start a conversation to create your PRD
             </p>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button onClick={onCreateSession} aria-label="New session" className="w-full sm:w-auto">
+              <Button
+                onClick={onCreateSession}
+                aria-label="New session"
+                className="w-full sm:w-auto"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 New Session
               </Button>
-              <Button variant="outline" onClick={onQuickStart} aria-label="Quick start" className="w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={onQuickStart}
+                aria-label="Quick start"
+                className="w-full sm:w-auto"
+              >
                 Quick Start
               </Button>
             </div>
@@ -82,21 +91,21 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
               <Badge
                 variant="secondary"
                 className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
-                onClick={() => onSendMessage("Help me create a PRD")}
+                onClick={() => onSendMessage('Help me create a PRD')}
               >
                 Help me create a PRD
               </Badge>
               <Badge
                 variant="secondary"
                 className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
-                onClick={() => onSendMessage("What should my PRD include?")}
+                onClick={() => onSendMessage('What should my PRD include?')}
               >
                 What should my PRD include?
               </Badge>
               <Badge
                 variant="secondary"
                 className="cursor-pointer hover:bg-secondary/80 text-xs px-2 py-1"
-                onClick={() => onSendMessage("PRD best practices")}
+                onClick={() => onSendMessage('PRD best practices')}
               >
                 PRD best practices
               </Badge>

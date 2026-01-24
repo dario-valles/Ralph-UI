@@ -12,19 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import {
-  Loader2,
-  Github,
-  CheckCircle2,
-  AlertTriangle,
-  Tag,
-  FileText,
-} from 'lucide-react'
-import {
-  githubApi,
-  Issue,
-  IssueImportResult,
-} from '@/lib/git-api'
+import { Loader2, Github, CheckCircle2, AlertTriangle, Tag, FileText } from 'lucide-react'
+import { githubApi, Issue, IssueImportResult } from '@/lib/git-api'
 
 interface ImportGitHubIssuesDialogProps {
   projectPath: string
@@ -69,17 +58,21 @@ export function ImportGitHubIssuesDialog({
       const fetchedIssues = await githubApi.listIssues(token, owner, repo, 'open')
 
       // Filter by label if specified
-      const labels = labelFilter.split(',').map(l => l.trim()).filter(Boolean)
-      const filtered = labels.length > 0
-        ? fetchedIssues.filter(issue =>
-            labels.some(label =>
-              issue.labels.some(l => l.toLowerCase() === label.toLowerCase())
+      const labels = labelFilter
+        .split(',')
+        .map((l) => l.trim())
+        .filter(Boolean)
+      const filtered =
+        labels.length > 0
+          ? fetchedIssues.filter((issue) =>
+              labels.some((label) =>
+                issue.labels.some((l) => l.toLowerCase() === label.toLowerCase())
+              )
             )
-          )
-        : fetchedIssues
+          : fetchedIssues
 
       setIssues(filtered)
-      setSelectedIssues(new Set(filtered.map(i => i.number)))
+      setSelectedIssues(new Set(filtered.map((i) => i.number)))
       setStep('preview')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -94,7 +87,10 @@ export function ImportGitHubIssuesDialog({
     setStep('importing')
     try {
       // Get the selected labels for filtering
-      const labels = labelFilter.split(',').map(l => l.trim()).filter(Boolean)
+      const labels = labelFilter
+        .split(',')
+        .map((l) => l.trim())
+        .filter(Boolean)
 
       const importResult = await githubApi.importIssuesToPrd(
         token,
@@ -361,10 +357,7 @@ export function ImportGitHubIssuesDialog({
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleFetchIssues}
-                disabled={loading || !token || !owner || !repo}
-              >
+              <Button onClick={handleFetchIssues} disabled={loading || !token || !owner || !repo}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -382,20 +375,13 @@ export function ImportGitHubIssuesDialog({
               <Button variant="outline" onClick={() => setStep('config')}>
                 Back
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={loading || selectedIssues.size === 0}
-              >
+              <Button onClick={handleImport} disabled={loading || selectedIssues.size === 0}>
                 Import {selectedIssues.size} Issues
               </Button>
             </>
           )}
 
-          {step === 'done' && (
-            <Button onClick={handleClose}>
-              Done
-            </Button>
-          )}
+          {step === 'done' && <Button onClick={handleClose}>Done</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

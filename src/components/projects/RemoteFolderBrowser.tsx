@@ -98,7 +98,13 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
       <div className="p-3 border-b space-y-2">
         <div className="text-sm font-medium">Browse Server Folders</div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={navigateHome} title="Home">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={navigateHome}
+            title="Home"
+          >
             <Home className="h-4 w-4" />
           </Button>
           <Button
@@ -120,7 +126,13 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
             placeholder="/path/to/folder"
             className="h-8 text-sm flex-1"
           />
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => loadDirectory(currentPath)} title="Refresh">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => loadDirectory(currentPath)}
+            title="Refresh"
+          >
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
           </Button>
           <Button
@@ -145,13 +157,20 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-destructive p-4 text-center">
             <div className="text-sm">{error}</div>
-            <Button variant="ghost" size="sm" className="mt-2" onClick={() => loadDirectory(currentPath)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() => loadDirectory(currentPath)}
+            >
               Retry
             </Button>
           </div>
         ) : visibleEntries.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            {showHidden ? 'No folders in this directory' : 'No visible folders (try showing hidden)'}
+            {showHidden
+              ? 'No folders in this directory'
+              : 'No visible folders (try showing hidden)'}
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -185,7 +204,12 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
             <X className="h-4 w-4 mr-1" />
             Cancel
           </Button>
-          <Button variant="default" size="sm" onClick={() => onSelect(currentPath)} disabled={!currentPath}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => onSelect(currentPath)}
+            disabled={!currentPath}
+          >
             <Check className="h-4 w-4 mr-1" />
             Select This Folder
           </Button>

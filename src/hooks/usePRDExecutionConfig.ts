@@ -35,10 +35,7 @@ interface UsePRDExecutionConfigReturn {
 /**
  * Merge saved config with defaults
  */
-function mergeWithSavedConfig(
-  prev: ExecutionConfig,
-  savedConfig: RalphConfig
-): ExecutionConfig {
+function mergeWithSavedConfig(prev: ExecutionConfig, savedConfig: RalphConfig): ExecutionConfig {
   return {
     ...prev,
     agentType: (savedConfig.execution.agentType as AgentType) || prev.agentType,

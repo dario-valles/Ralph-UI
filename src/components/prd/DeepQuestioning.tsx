@@ -108,36 +108,37 @@ export function DeepQuestioning({
   const isReadyToProceed = contextItemsCount >= 3
 
   // Handle sending a message
-  const handleSendMessage = useCallback(async (content: string, attachments?: ChatAttachment[]) => {
-    if (!content.trim() && (!attachments || attachments.length === 0)) return
+  const handleSendMessage = useCallback(
+    async (content: string, attachments?: ChatAttachment[]) => {
+      if (!content.trim() && (!attachments || attachments.length === 0)) return
 
-    // Add optimistic user message
-    const userMessage: ChatMessage = {
-      id: `local-${Date.now()}`,
-      sessionId: sessionId || '',
-      role: 'user',
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-      attachments,
-    }
-    setLocalMessages(prev => [...prev, userMessage])
+      // Add optimistic user message
+      const userMessage: ChatMessage = {
+        id: `local-${Date.now()}`,
+        sessionId: sessionId || '',
+        role: 'user',
+        content: content.trim(),
+        createdAt: new Date().toISOString(),
+        attachments,
+      }
+      setLocalMessages((prev) => [...prev, userMessage])
 
-    try {
-      // Send through the chat system if connected
-      if (currentSession) {
-        await sendMessage(content.trim(), attachments)
-      } else {
-        // Fallback: just add the message locally and use it as a note
-        onContextUpdate({
-          notes: [...(context.notes || []), content.trim()],
-        })
+      try {
+        // Send through the chat system if connected
+        if (currentSession) {
+          await sendMessage(content.trim(), attachments)
+        } else {
+          // Fallback: just add the message locally and use it as a note
+          onContextUpdate({
+            notes: [...(context.notes || []), content.trim()],
+          })
 
-        // Add a simulated assistant response
-        const assistantMessage: ChatMessage = {
-          id: `local-response-${Date.now()}`,
-          sessionId: sessionId || '',
-          role: 'assistant',
-          content: `Thanks for sharing! I've added that to your project context.
+          // Add a simulated assistant response
+          const assistantMessage: ChatMessage = {
+            id: `local-response-${Date.now()}`,
+            sessionId: sessionId || '',
+            role: 'assistant',
+            content: `Thanks for sharing! I've added that to your project context.
 
 Based on what you've told me so far, could you tell me more about:
 ${!hasWhat ? '\n- **What** specifically are you building?' : ''}
@@ -146,14 +147,26 @@ ${!hasWho ? '\n- **Who** will use this?' : ''}
 ${!hasDone ? '\n- **What does "done" look like?** How will you know it\'s complete?' : ''}
 
 Feel free to elaborate on any of these, or continue describing your idea.`,
-          createdAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          }
+          setLocalMessages((prev) => [...prev, assistantMessage])
         }
-        setLocalMessages(prev => [...prev, assistantMessage])
+      } catch (error) {
+        console.error('Failed to send message:', error)
       }
-    } catch (error) {
-      console.error('Failed to send message:', error)
-    }
-  }, [currentSession, sendMessage, sessionId, context.notes, onContextUpdate, hasWhat, hasWhy, hasWho, hasDone])
+    },
+    [
+      currentSession,
+      sendMessage,
+      sessionId,
+      context.notes,
+      onContextUpdate,
+      hasWhat,
+      hasWhy,
+      hasWho,
+      hasDone,
+    ]
+  )
 
   const handleProceed = useCallback(() => {
     onProceed()
@@ -169,8 +182,8 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
             <CardTitle>Deep Questioning</CardTitle>
           </div>
           <CardDescription>
-            Describe your idea naturally. I&apos;ll help you clarify the key aspects
-            and extract the essential context for planning.
+            Describe your idea naturally. I&apos;ll help you clarify the key aspects and extract the
+            essential context for planning.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -209,9 +222,18 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
                 {streaming && (
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <div className="animate-pulse flex gap-1">
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <div
+                        className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      />
+                      <div
+                        className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      />
+                      <div
+                        className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      />
                     </div>
                     <span>Thinking...</span>
                   </div>
@@ -278,7 +300,8 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
 
           {!isReadyToProceed && (
             <p className="text-sm text-muted-foreground mt-2">
-              Fill in at least 3 context items in the sidebar, or keep chatting to discover more details.
+              Fill in at least 3 context items in the sidebar, or keep chatting to discover more
+              details.
             </p>
           )}
         </CardContent>

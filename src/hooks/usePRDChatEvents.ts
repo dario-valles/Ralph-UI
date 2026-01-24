@@ -97,17 +97,13 @@ export function usePRDChatEvents({
   }, [])
 
   // Listen for PRD file update events
-  useEventSubscription<PRDFileUpdatedPayload>(
-    'prd:file_updated',
-    sessionId,
-    (payload) => onPlanUpdated(payload.content, payload.path)
+  useEventSubscription<PRDFileUpdatedPayload>('prd:file_updated', sessionId, (payload) =>
+    onPlanUpdated(payload.content, payload.path)
   )
 
   // Listen for PRD chat streaming chunk events
-  useEventSubscription<PRDChatChunkPayload>(
-    'prd:chat_chunk',
-    sessionId,
-    (payload) => setStreamingContent((prev) => prev + payload.content + '\n')
+  useEventSubscription<PRDChatChunkPayload>('prd:chat_chunk', sessionId, (payload) =>
+    setStreamingContent((prev) => prev + payload.content + '\n')
   )
 
   return {

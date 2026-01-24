@@ -30,9 +30,7 @@ export const MODELS_BY_AGENT: Record<AgentType, ModelOption[]> = {
     { value: 'qwen-coder-32b', label: 'Qwen Coder 32B' },
     { value: 'qwen-coder-7b', label: 'Qwen Coder 7B' },
   ],
-  droid: [
-    { value: 'default', label: 'Default' },
-  ],
+  droid: [{ value: 'default', label: 'Default' }],
 }
 
 // Get default model for an agent type

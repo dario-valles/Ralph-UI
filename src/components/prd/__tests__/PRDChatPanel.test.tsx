@@ -7,11 +7,7 @@ import type { ChatSession, ChatMessage } from '@/types'
 
 // Wrapper component for Router context
 function renderWithRouter(ui: React.ReactElement, { route = '/' } = {}) {
-  return render(
-    <MemoryRouter initialEntries={[route]}>
-      {ui}
-    </MemoryRouter>
-  )
+  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>)
 }
 
 // Mock scrollIntoView (not available in jsdom)
@@ -56,7 +52,12 @@ vi.mock('@/lib/events-client', () => ({
 vi.mock('@/hooks/useAvailableModels', () => ({
   useAvailableModels: () => ({
     models: [
-      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
+      {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet 4.5',
+        provider: 'anthropic',
+        isDefault: true,
+      },
       { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'anthropic', isDefault: false },
     ],
     loading: false,
@@ -112,7 +113,8 @@ const mockMessages: ChatMessage[] = [
     id: 'msg-2',
     sessionId: 'session-1',
     role: 'assistant',
-    content: 'I would be happy to help you create a PRD for a todo app. Let me ask you some clarifying questions...',
+    content:
+      'I would be happy to help you create a PRD for a todo app. Let me ask you some clarifying questions...',
     createdAt: '2024-01-01T10:00:05.000Z',
   },
 ]
@@ -642,7 +644,7 @@ describe('PRDChatPanel', () => {
 
       // Find the session item in the sidebar (not the header title)
       const sessionItems = screen.getAllByTestId('session-item')
-      const activeSession = sessionItems.find(item => item.getAttribute('data-active') === 'true')
+      const activeSession = sessionItems.find((item) => item.getAttribute('data-active') === 'true')
       expect(activeSession).toBeInTheDocument()
       expect(activeSession).toHaveTextContent('Todo App PRD')
     })

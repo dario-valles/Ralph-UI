@@ -90,7 +90,9 @@ class EventsClient {
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++
             const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-            console.log(`[EventsClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`)
+            console.log(
+              `[EventsClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
+            )
             setTimeout(() => this.connect().catch(console.error), delay)
           }
         }

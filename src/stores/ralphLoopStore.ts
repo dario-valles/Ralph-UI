@@ -146,18 +146,26 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Load PRD from .ralph-ui/prds/{prdName}.json
   loadPrd: async (projectPath: string, prdName: string, silent?: boolean) => {
-    await asyncAction(set, async () => {
-      const prd = await ralphLoopApi.getPrd(projectPath, prdName)
-      return { prd, currentProjectPath: projectPath, currentPrdName: prdName }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const prd = await ralphLoopApi.getPrd(projectPath, prdName)
+        return { prd, currentProjectPath: projectPath, currentPrdName: prdName }
+      },
+      { silent }
+    )
   },
 
   // Load PRD status
   loadPrdStatus: async (projectPath: string, prdName: string, silent?: boolean) => {
-    await asyncAction(set, async () => {
-      const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
-      return { prdStatus }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const prdStatus = await ralphLoopApi.getPrdStatus(projectPath, prdName)
+        return { prdStatus }
+      },
+      { silent }
+    )
   },
 
   // Initialize a new Ralph PRD (legacy - creates in .ralph/ format)
@@ -261,10 +269,14 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
 
   // Load progress summary
   loadProgressSummary: async (projectPath: string, prdName: string, silent?: boolean) => {
-    await asyncAction(set, async () => {
-      const progressSummary = await ralphLoopApi.getProgressSummary(projectPath, prdName)
-      return { progressSummary }
-    }, { silent })
+    await asyncAction(
+      set,
+      async () => {
+        const progressSummary = await ralphLoopApi.getProgressSummary(projectPath, prdName)
+        return { progressSummary }
+      },
+      { silent }
+    )
   },
 
   // Add a note to progress.txt

@@ -65,11 +65,7 @@ const CONTEXT_ITEMS: ContextItemConfig[] = [
   },
 ]
 
-export function QuestioningGuide({
-  context,
-  onContextItemUpdate,
-  onClose,
-}: QuestioningGuideProps) {
+export function QuestioningGuide({ context, onContextItemUpdate, onClose }: QuestioningGuideProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showProbing, setShowProbing] = useState<string | null>(null)
@@ -78,14 +74,14 @@ export function QuestioningGuide({
   // Get a probing question for an area (memoized per area)
   const getProbingForArea = (key: 'what' | 'why' | 'who' | 'done'): ProbingQuestion => {
     if (!currentProbing[key]) {
-      setCurrentProbing(prev => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
+      setCurrentProbing((prev) => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
       return getRandomProbingQuestion(key)
     }
     return currentProbing[key]
   }
 
   const refreshProbing = (key: 'what' | 'why' | 'who' | 'done') => {
-    setCurrentProbing(prev => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
+    setCurrentProbing((prev) => ({ ...prev, [key]: getRandomProbingQuestion(key) }))
   }
 
   const handleStartEdit = (key: string, currentValue?: string) => {
@@ -125,9 +121,7 @@ export function QuestioningGuide({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {completedCount}/4 items completed
-        </p>
+        <p className="text-xs text-muted-foreground">{completedCount}/4 items completed</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {CONTEXT_ITEMS.map((item) => {
@@ -178,11 +172,16 @@ export function QuestioningGuide({
                           {getProbingForArea(item.key).question}
                         </p>
                         <div className="mt-1 space-y-1">
-                          {getProbingForArea(item.key).examples.slice(0, 2).map((ex, i) => (
-                            <p key={i} className="text-xs text-amber-600/80 dark:text-amber-400/80 italic">
-                              &ldquo;{ex}&rdquo;
-                            </p>
-                          ))}
+                          {getProbingForArea(item.key)
+                            .examples.slice(0, 2)
+                            .map((ex, i) => (
+                              <p
+                                key={i}
+                                className="text-xs text-amber-600/80 dark:text-amber-400/80 italic"
+                              >
+                                &ldquo;{ex}&rdquo;
+                              </p>
+                            ))}
                         </div>
                         <Button
                           variant="ghost"
@@ -246,7 +245,10 @@ export function QuestioningGuide({
                       </p>
                       <div className="space-y-1">
                         {getProbingForArea(item.key).examples.map((ex, i) => (
-                          <p key={i} className="text-xs text-amber-600/80 dark:text-amber-400/80 italic">
+                          <p
+                            key={i}
+                            className="text-xs text-amber-600/80 dark:text-amber-400/80 italic"
+                          >
                             &ldquo;{ex}&rdquo;
                           </p>
                         ))}
@@ -270,8 +272,8 @@ export function QuestioningGuide({
 
         <div className="pt-2 border-t">
           <p className="text-xs text-muted-foreground">
-            Tip: You can also add context by typing in the main input area.
-            The guide helps ensure you cover the essentials.
+            Tip: You can also add context by typing in the main input area. The guide helps ensure
+            you cover the essentials.
           </p>
         </div>
       </CardContent>

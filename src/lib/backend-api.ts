@@ -64,7 +64,16 @@ export const prdChatApi = {
     gsdMode?: boolean
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
-      request: { agentType, projectPath, prdId, prdType, guidedMode, templateId, structuredMode, gsdMode },
+      request: {
+        agentType,
+        projectPath,
+        prdId,
+        prdType,
+        guidedMode,
+        templateId,
+        structuredMode,
+        gsdMode,
+      },
     })
   },
 
@@ -567,10 +576,7 @@ export const ralphLoopApi = {
    * updating the PRD JSON while preserving pass/fail status.
    * @returns Updated RalphPrd with regenerated acceptance criteria
    */
-  regenerateAcceptanceCriteria: async (
-    projectPath: string,
-    prdName: string
-  ): Promise<RalphPrd> => {
+  regenerateAcceptanceCriteria: async (projectPath: string, prdName: string): Promise<RalphPrd> => {
     return await invoke('regenerate_ralph_prd_acceptance', {
       request: { projectPath, prdName },
     })
@@ -756,10 +762,7 @@ export const gsdApi = {
   },
 
   /** Generate PROJECT.md from questioning context */
-  generateProjectDocument: async (
-    projectPath: string,
-    sessionId: string
-  ): Promise<string> => {
+  generateProjectDocument: async (projectPath: string, sessionId: string): Promise<string> => {
     return await invoke('generate_project_document', { projectPath, sessionId })
   },
 
@@ -774,10 +777,7 @@ export const gsdApi = {
   },
 
   /** Get research results for a session */
-  getResearchResults: async (
-    projectPath: string,
-    sessionId: string
-  ): Promise<ResearchResult[]> => {
+  getResearchResults: async (projectPath: string, sessionId: string): Promise<ResearchResult[]> => {
     return await invoke('get_research_results', { projectPath, sessionId })
   },
 
@@ -853,12 +853,18 @@ export const gsdApi = {
   },
 
   /** Verify plans for completeness (with iteration tracking) */
-  verifyPlans: async (projectPath: string, sessionId: string): Promise<VerificationIterationResult> => {
+  verifyPlans: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<VerificationIterationResult> => {
     return await invoke('verify_gsd_plans', { projectPath, sessionId })
   },
 
   /** Get verification history for a session */
-  getVerificationHistory: async (projectPath: string, sessionId: string): Promise<VerificationHistory | null> => {
+  getVerificationHistory: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<VerificationHistory | null> => {
     return await invoke('get_verification_history', { projectPath, sessionId })
   },
 
@@ -876,7 +882,14 @@ export const gsdApi = {
     includeV2?: boolean,
     executionConfig?: PrdExecutionConfig
   ): Promise<ConversionResult> => {
-    return await invoke('export_gsd_to_ralph', { projectPath, sessionId, prdName, branch, includeV2, executionConfig })
+    return await invoke('export_gsd_to_ralph', {
+      projectPath,
+      sessionId,
+      prdName,
+      branch,
+      includeV2,
+      executionConfig,
+    })
   },
 
   /** Save a planning file (generic) */

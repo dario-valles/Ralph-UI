@@ -5,7 +5,11 @@ import { Send, Paperclip, Image as ImageIcon, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatAttachment } from '@/types'
 import { ATTACHMENT_LIMITS } from '@/types'
-import { useClipboardPaste, extractImagesFromDataTransfer, type PasteResult } from '@/hooks/useClipboardPaste'
+import {
+  useClipboardPaste,
+  extractImagesFromDataTransfer,
+  type PasteResult,
+} from '@/hooks/useClipboardPaste'
 import { fileToAttachment, validateAttachments } from '@/lib/chat-utils'
 import { AttachmentPreview } from './AttachmentPreview'
 import { PastePreviewDialog } from './PastePreviewDialog'
@@ -72,7 +76,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
   // Add attachment (with validation)
   const addAttachment = useCallback((attachment: ChatAttachment) => {
-    setAttachments(prev => {
+    setAttachments((prev) => {
       if (prev.length >= ATTACHMENT_LIMITS.MAX_COUNT) {
         setError(`Maximum ${ATTACHMENT_LIMITS.MAX_COUNT} attachments allowed`)
         return prev
@@ -83,7 +87,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
   // Remove attachment
   const removeAttachment = useCallback((id: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== id))
+    setAttachments((prev) => prev.filter((a) => a.id !== id))
   }, [])
 
   // Handle clipboard paste
@@ -105,36 +109,42 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
   // Handle paste preview dialog confirmation
   const handlePasteConfirm = useCallback((text: string) => {
-    setValue(prev => prev + text)
+    setValue((prev) => prev + text)
     setPastePreview(null)
   }, [])
 
   // Handle file input change
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files
+      if (!files || files.length === 0) return
 
-    for (const file of Array.from(files)) {
-      try {
-        const attachment = await fileToAttachment(file)
-        addAttachment(attachment)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to process file')
+      for (const file of Array.from(files)) {
+        try {
+          const attachment = await fileToAttachment(file)
+          addAttachment(attachment)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to process file')
+        }
       }
-    }
 
-    // Reset input value so the same file can be selected again
-    e.target.value = ''
-  }, [addAttachment])
+      // Reset input value so the same file can be selected again
+      e.target.value = ''
+    },
+    [addAttachment]
+  )
 
   // Drag and drop handlers
-  const handleDragOver = useCallback((e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!disabled) {
-      setIsDragOver(true)
-    }
-  }, [disabled])
+  const handleDragOver = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!disabled) {
+        setIsDragOver(true)
+      }
+    },
+    [disabled]
+  )
 
   const handleDragLeave = useCallback((e: DragEvent) => {
     e.preventDefault()
@@ -142,23 +152,28 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     setIsDragOver(false)
   }, [])
 
-  const handleDrop = useCallback(async (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragOver(false)
+  const handleDrop = useCallback(
+    async (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragOver(false)
 
-    if (disabled) return
+      if (disabled) return
 
-    const { attachments: newAttachments, errors } = await extractImagesFromDataTransfer(e.dataTransfer)
+      const { attachments: newAttachments, errors } = await extractImagesFromDataTransfer(
+        e.dataTransfer
+      )
 
-    for (const attachment of newAttachments) {
-      addAttachment(attachment)
-    }
+      for (const attachment of newAttachments) {
+        addAttachment(attachment)
+      }
 
-    if (errors.length > 0) {
-      setError(errors[0])
-    }
-  }, [disabled, addAttachment])
+      if (errors.length > 0) {
+        setError(errors[0])
+      }
+    },
+    [disabled, addAttachment]
+  )
 
   const canSend = !disabled && (value.trim() !== '' || attachments.length > 0)
 
