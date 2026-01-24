@@ -126,25 +126,28 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
           let keyValue = keyDef.value
           let prefix = ''
 
-          // Apply modifier combinations
-          if (modifierState.ctrl !== 'inactive') {
-            // For Ctrl+key combinations, send character with control bit set
-            // e.g., Ctrl+C = 0x03, Ctrl+Z = 0x1A, etc.
-            if (keyDef.label === '^C') {
-              keyValue = '\x03' // Ctrl+C
-            } else if (keyDef.value && keyDef.value.length === 1) {
-              // Single character - apply Ctrl
-              const charCode = keyDef.value.charCodeAt(0)
-              // Ctrl modifier clears bits 5-6, making lowercase letters map to 1-26
-              if (charCode >= 97 && charCode <= 122) {
-                // lowercase letter: a-z -> Ctrl+a-z (1-26)
-                keyValue = String.fromCharCode(charCode - 96)
+          // Special handling for ^C: always send interrupt signal, ignore active modifiers
+          if (keyDef.label === '^C') {
+            keyValue = '\x03' // Always send Ctrl+C interrupt signal
+          } else {
+            // Apply modifier combinations for non-interrupt keys
+            if (modifierState.ctrl !== 'inactive') {
+              // For Ctrl+key combinations, send character with control bit set
+              // e.g., Ctrl+Z = 0x1A, etc.
+              if (keyDef.value && keyDef.value.length === 1) {
+                // Single character - apply Ctrl
+                const charCode = keyDef.value.charCodeAt(0)
+                // Ctrl modifier clears bits 5-6, making lowercase letters map to 1-26
+                if (charCode >= 97 && charCode <= 122) {
+                  // lowercase letter: a-z -> Ctrl+a-z (1-26)
+                  keyValue = String.fromCharCode(charCode - 96)
+                }
               }
             }
-          }
 
-          if (modifierState.alt !== 'inactive') {
-            prefix = '\x1b' // ESC prefix for Alt
+            if (modifierState.alt !== 'inactive') {
+              prefix = '\x1b' // ESC prefix for Alt
+            }
           }
 
           // Send prefix and key
