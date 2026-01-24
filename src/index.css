@@ -125,6 +125,23 @@
     @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md;
   }
 
+  /* Dynamic viewport height for mobile keyboard handling */
+  /* Fallback pattern ensures compatibility with older browsers */
+  .h-dvh {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .min-h-dvh {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .max-h-dvh {
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+
   /* Improved focus ring for accessibility */
   .focus-ring {
     @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none;

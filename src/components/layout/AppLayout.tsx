@@ -10,7 +10,7 @@ export function AppLayout() {
   useTerminalShortcuts()
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-dvh md:h-screen bg-background">
       {/* Skip link for accessibility */}
       <a href="#main" className="skip-link">
         Skip to main content

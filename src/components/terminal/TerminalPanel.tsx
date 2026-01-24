@@ -181,7 +181,7 @@ export function TerminalPanel() {
     <div
       className={cn(
         'flex flex-col bg-card border-t safe-bottom',
-        effectiveFullScreen && 'fixed inset-0 z-50',
+        effectiveFullScreen && 'fixed inset-0 z-50 h-dvh',
         isMinimized && 'h-auto'
       )}
       style={{
