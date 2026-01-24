@@ -1936,6 +1936,20 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         }
 
         // =====================================================================
+        // Terminal Commands
+        // =====================================================================
+        "save_project_commands" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let commands: Vec<serde_json::Value> = get_arg(&args, "commands")?;
+            route_async!(cmd, commands::terminal::save_project_commands(project_path, commands))
+        }
+
+        "load_project_commands" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::terminal::load_project_commands(project_path))
+        }
+
+        // =====================================================================
         // Unknown command
         // =====================================================================
         _ => Err(format!("Unknown command: {}", cmd)),

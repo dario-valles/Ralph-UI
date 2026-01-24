@@ -15,11 +15,12 @@ interface CustomCommandsSheetProps {
 
 export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetProps) {
   const { activeTerminalId } = useTerminalStore()
-  const { commands, addCommand, deleteCommand, editCommand, getAllCategories, reorderCommands } = useCustomCommandsStore()
+  const { commands, addCommand, deleteCommand, editCommand, getAllCategories, reorderCommands, projectPath } = useCustomCommandsStore()
   const [label, setLabel] = useState('')
   const [command, setCommand] = useState('')
   const [action, setAction] = useState<'insert' | 'execute'>('execute')
   const [category, setCategory] = useState('Uncategorized')
+  const [scope, setScope] = useState<'local' | 'project' | 'global'>('local')
   const [showForm, setShowForm] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Uncategorized']))
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
@@ -27,6 +28,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
 
@@ -58,19 +60,27 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     return sorted.filter(([cat]) => cat === selectedFilter)
   }, [filteredCommands, selectedFilter])
 
-  const handleAddCommand = () => {
+  const handleAddCommand = async () => {
     if (label.trim() && command.trim()) {
-      if (editingId) {
-        editCommand(editingId, label, command, action, category)
-        setEditingId(null)
-      } else {
-        addCommand(label, command, action, category)
+      setIsSaving(true)
+      try {
+        if (editingId) {
+          await editCommand(editingId, label, command, action, category, scope)
+          setEditingId(null)
+        } else {
+          await addCommand(label, command, action, category, scope)
+        }
+        setLabel('')
+        setCommand('')
+        setAction('execute')
+        setCategory('Uncategorized')
+        setScope('local')
+        setShowForm(false)
+      } catch (error) {
+        console.error('Failed to save command:', error)
+      } finally {
+        setIsSaving(false)
       }
-      setLabel('')
-      setCommand('')
-      setAction('execute')
-      setCategory('Uncategorized')
-      setShowForm(false)
     }
   }
 
@@ -79,6 +89,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     setCommand(cmd.command)
     setAction(cmd.action)
     setCategory(cmd.category)
+    setScope(cmd.scope)
     setEditingId(cmd.id)
     setShowForm(true)
   }
@@ -89,12 +100,20 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     setCommand('')
     setAction('execute')
     setCategory('Uncategorized')
+    setScope('local')
     setEditingId(null)
   }
 
-  const handleDeleteCommand = (id: string) => {
-    deleteCommand(id)
-    setDeleteConfirmId(null)
+  const handleDeleteCommand = async (id: string) => {
+    setIsSaving(true)
+    try {
+      await deleteCommand(id)
+      setDeleteConfirmId(null)
+    } catch (error) {
+      console.error('Failed to delete command:', error)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleDragStart = (index: number) => {
@@ -106,7 +125,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     e.dataTransfer.dropEffect = 'move'
   }
 
-  const handleDropCommand = (targetIndex: number) => {
+  const handleDropCommand = async (targetIndex: number) => {
     if (draggedIndex === null || draggedIndex === targetIndex) {
       setDraggedIndex(null)
       return
@@ -116,8 +135,15 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     const draggedCmd = newCommands[draggedIndex]
     newCommands.splice(draggedIndex, 1)
     newCommands.splice(targetIndex, 0, draggedCmd)
-    reorderCommands(newCommands)
-    setDraggedIndex(null)
+    setIsSaving(true)
+    try {
+      await reorderCommands(newCommands)
+    } catch (error) {
+      console.error('Failed to reorder commands:', error)
+    } finally {
+      setIsSaving(false)
+      setDraggedIndex(null)
+    }
   }
 
   const toggleCategoryExpanded = (cat: string) => {
@@ -247,15 +273,34 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                   </select>
                 </div>
                 <div className="flex gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Scope:</label>
+                  <select
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value as 'local' | 'project' | 'global')}
+                    className="flex-1 px-2 py-1 text-sm border rounded bg-background"
+                    disabled={scope === 'project' && !projectPath}
+                  >
+                    <option value="local">Local (this device only)</option>
+                    <option value="project" disabled={!projectPath}>
+                      Project (shared via git)
+                    </option>
+                    <option value="global" disabled>
+                      Global (all projects) - Coming soon
+                    </option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
                   <button
                     onClick={handleAddCommand}
-                    className="flex-1 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                    disabled={isSaving}
+                    className="flex-1 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Save
+                    {isSaving ? 'Saving...' : 'Save'}
                   </button>
                   <button
                     onClick={handleCancelForm}
-                    className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
+                    disabled={isSaving}
+                    className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Cancel
                   </button>
@@ -372,7 +417,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                                 </button>
                               </div>
                             </div>
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-2">
                               <span
                                 className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
                                   cmd.action === 'execute'
@@ -381,6 +426,17 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                                 }`}
                               >
                                 {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                                  cmd.scope === 'project'
+                                    ? 'bg-blue/20 text-blue'
+                                    : cmd.scope === 'global'
+                                    ? 'bg-purple/20 text-purple'
+                                    : 'bg-muted/20 text-muted-foreground'
+                                }`}
+                              >
+                                {cmd.scope === 'project' ? '🔄 Project' : cmd.scope === 'global' ? '🌐 Global' : '📱 Local'}
                               </span>
                             </div>
                             {/* Delete Confirmation */}
