@@ -8,12 +8,14 @@ mod events;
 mod file_watcher;
 mod proxy;
 mod pty;
+pub mod pty_registry;
 mod state;
 
 pub use auth::{generate_auth_token, AuthLayer};
 pub use events::{EventBroadcaster, ServerEvent};
 pub use file_watcher::{ServerFileWatcher, WatchFileResponse};
 pub use proxy::invoke_handler;
+pub use pty_registry::PtyRegistry;
 pub use state::ServerAppState;
 
 use axum::{
@@ -41,6 +43,11 @@ pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<
         .route("/api/invoke", post(proxy::invoke_handler))
         .route("/ws/events", get(events::ws_handler))
         .route("/ws/pty/:terminal_id", get(pty::pty_ws_handler))
+        // PTY reconnection endpoint (US-3)
+        .route(
+            "/ws/pty/:terminal_id/reconnect/:session_id",
+            get(pty::pty_reconnect_handler),
+        )
         .route("/health", get(health_handler))
         .route("/", get(index_handler))
         .layer(AuthLayer::new(state.auth_token.clone()))

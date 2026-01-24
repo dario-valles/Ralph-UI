@@ -1,8 +1,15 @@
 // Terminal API wrapper for WebSocket PTY
 // Provides an abstraction layer for browser-based terminal emulation
+// Supports session persistence and reconnection for mobile resilience (US-3, US-4)
 
 import type { SpawnOptions } from '@/types/terminal'
-import { createWebSocketPty, getServerConnection } from '@/lib/websocket-pty'
+import {
+  createWebSocketPty,
+  reconnectWebSocketPty,
+  getServerConnection,
+  getStoredPtySession,
+  clearStoredPtySession,
+} from '@/lib/websocket-pty'
 
 // Unified PTY interface
 export interface UnifiedPty {
@@ -93,6 +100,52 @@ export function killTerminal(terminalId: string): void {
   }
   pty.kill()
   ptyInstances.delete(terminalId)
+  // Clear stored session so we don't try to reconnect to a killed process
+  clearStoredPtySession(terminalId)
+}
+
+/**
+ * Attempt to reconnect to an existing PTY session
+ * Returns the PTY if reconnection succeeds, null otherwise
+ */
+export async function reconnectTerminal(terminalId: string): Promise<UnifiedPty | null> {
+  const connection = getServerConnection()
+  if (!connection) {
+    console.warn('No server connection available for PTY reconnection')
+    return null
+  }
+
+  // Check if we have a stored session for this terminal
+  const sessionId = getStoredPtySession(terminalId)
+  if (!sessionId) {
+    console.log(`No stored session found for terminal ${terminalId}`)
+    return null
+  }
+
+  try {
+    console.log(`Attempting to reconnect terminal ${terminalId} to session ${sessionId}`)
+    const wsPty = await reconnectWebSocketPty({
+      serverUrl: connection.url,
+      token: connection.token,
+      terminalId,
+      sessionId,
+    })
+
+    ptyInstances.set(terminalId, wsPty)
+    return wsPty
+  } catch (error) {
+    console.error('Failed to reconnect to PTY session:', error)
+    // Clear the stored session since reconnection failed
+    clearStoredPtySession(terminalId)
+    return null
+  }
+}
+
+/**
+ * Check if a terminal has a stored session that can be reconnected
+ */
+export function hasStoredSession(terminalId: string): boolean {
+  return getStoredPtySession(terminalId) !== null
 }
 
 /**

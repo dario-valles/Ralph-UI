@@ -363,7 +363,7 @@ export function AgentTerminalInstance({
     <div
       ref={containerRef}
       className="w-full h-full bg-[#1a1a1a]"
-      style={{ display: isActive ? 'block' : 'none' }}
+      style={{ display: isActive ? 'block' : 'none', touchAction: 'pan-y pinch-zoom' }}
     />
   )
 }

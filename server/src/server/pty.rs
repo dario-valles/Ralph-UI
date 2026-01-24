@@ -1,6 +1,7 @@
 //! WebSocket PTY handler for browser-based terminal access
 //!
 //! Provides interactive terminal sessions over WebSocket for browser clients.
+//! Supports session persistence and reconnection for mobile resilience (US-3, US-4).
 
 use axum::{
     extract::{
@@ -10,12 +11,11 @@ use axum::{
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use serde::Deserialize;
-use std::io::{Read, Write};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use super::pty_registry::SessionState;
 use super::ServerAppState;
 
 /// PTY session setup request (first message from client)
@@ -44,42 +44,81 @@ enum ClientMessage {
     Input { data: String },
 }
 
+/// Response with session info
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionInfo {
+    session_id: String,
+    terminal_id: String,
+}
+
 /// Query parameters for PTY WebSocket
 #[derive(Debug, Deserialize)]
 pub struct PtyQuery {
     token: Option<String>,
 }
 
-/// WebSocket upgrade handler for PTY
+/// Path parameters for reconnect endpoint
+#[derive(Debug, Deserialize)]
+pub struct ReconnectPath {
+    terminal_id: String,
+    session_id: String,
+}
+
+/// WebSocket upgrade handler for new PTY sessions
 pub async fn pty_ws_handler(
     ws: WebSocketUpgrade,
     Path(terminal_id): Path<String>,
     Query(query): Query<PtyQuery>,
     State(state): State<ServerAppState>,
 ) -> impl IntoResponse {
-    // Validate token from query parameter (WebSocket can't use headers easily)
+    // Validate token from query parameter
     if let Some(token) = query.token {
         if token != state.auth_token {
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                "Invalid token",
-            )
-                .into_response();
+            return (axum::http::StatusCode::UNAUTHORIZED, "Invalid token").into_response();
         }
     } else {
+        return (axum::http::StatusCode::UNAUTHORIZED, "Missing token").into_response();
+    }
+
+    ws.on_upgrade(move |socket| handle_new_pty_session(socket, terminal_id, state))
+        .into_response()
+}
+
+/// WebSocket upgrade handler for PTY reconnection
+pub async fn pty_reconnect_handler(
+    ws: WebSocketUpgrade,
+    Path(path): Path<ReconnectPath>,
+    Query(query): Query<PtyQuery>,
+    State(state): State<ServerAppState>,
+) -> impl IntoResponse {
+    // Validate token
+    if let Some(token) = query.token {
+        if token != state.auth_token {
+            return (axum::http::StatusCode::UNAUTHORIZED, "Invalid token").into_response();
+        }
+    } else {
+        return (axum::http::StatusCode::UNAUTHORIZED, "Missing token").into_response();
+    }
+
+    // Check if session exists
+    let session = state.pty_registry.get_session(&path.session_id).await;
+    if session.is_none() {
         return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            "Missing token",
+            axum::http::StatusCode::NOT_FOUND,
+            "Session not found or expired",
         )
             .into_response();
     }
 
-    ws.on_upgrade(move |socket| handle_pty_session(socket, terminal_id, state))
-        .into_response()
+    ws.on_upgrade(move |socket| {
+        handle_pty_reconnection(socket, path.terminal_id, path.session_id, state)
+    })
+    .into_response()
 }
 
-/// Handle a PTY WebSocket session
-async fn handle_pty_session(socket: WebSocket, terminal_id: String, _state: ServerAppState) {
+/// Handle a new PTY WebSocket session
+async fn handle_new_pty_session(socket: WebSocket, terminal_id: String, state: ServerAppState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
     log::info!("PTY WebSocket client connected: {}", terminal_id);
@@ -87,24 +126,22 @@ async fn handle_pty_session(socket: WebSocket, terminal_id: String, _state: Serv
     // Wait for setup message
     let setup: PtySetup = loop {
         match ws_receiver.next().await {
-            Some(Ok(Message::Text(text))) => {
-                match serde_json::from_str::<ClientMessage>(&text) {
-                    Ok(ClientMessage::Setup(setup)) => break setup,
-                    Ok(_) => {
-                        log::warn!("Expected setup message, got something else");
-                        continue;
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to parse setup message: {}", e);
-                        let _ = ws_sender
-                            .send(Message::Text(
-                                format!("{{\"error\": \"Invalid setup message: {}\"}}", e).into(),
-                            ))
-                            .await;
-                        return;
-                    }
+            Some(Ok(Message::Text(text))) => match serde_json::from_str::<ClientMessage>(&text) {
+                Ok(ClientMessage::Setup(setup)) => break setup,
+                Ok(_) => {
+                    log::warn!("Expected setup message, got something else");
+                    continue;
                 }
-            }
+                Err(e) => {
+                    log::warn!("Failed to parse setup message: {}", e);
+                    let _ = ws_sender
+                        .send(Message::Text(
+                            format!("{{\"error\": \"Invalid setup message: {}\"}}", e).into(),
+                        ))
+                        .await;
+                    return;
+                }
+            },
             Some(Ok(Message::Close(_))) | None => {
                 log::info!("PTY client disconnected before setup");
                 return;
@@ -117,139 +154,157 @@ async fn handle_pty_session(socket: WebSocket, terminal_id: String, _state: Serv
         }
     };
 
-    // Create PTY
-    let pty_system = native_pty_system();
-    let pair = match pty_system.openpty(PtySize {
-        rows: setup.rows,
-        cols: setup.cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    }) {
-        Ok(pair) => pair,
+    // Create session in registry
+    let session = match state
+        .pty_registry
+        .create_session(terminal_id.clone(), setup.cols, setup.rows, setup.cwd)
+        .await
+    {
+        Ok(session) => session,
         Err(e) => {
-            log::error!("Failed to open PTY: {}", e);
+            log::error!("Failed to create PTY session: {}", e);
             let _ = ws_sender
-                .send(Message::Text(
-                    format!("{{\"error\": \"Failed to open PTY: {}\"}}", e).into(),
-                ))
+                .send(Message::Text(format!("{{\"error\": \"{}\"}}", e).into()))
                 .await;
             return;
         }
     };
 
-    // Get the default shell
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "cmd.exe".to_string()
-        } else {
-            "/bin/bash".to_string()
-        }
-    });
-
-    // Build command
-    let mut cmd = CommandBuilder::new(&shell);
-    if let Some(cwd) = setup.cwd {
-        cmd.cwd(&cwd);
+    // Send session info to client
+    let session_info = SessionInfo {
+        session_id: session.id.clone(),
+        terminal_id: terminal_id.clone(),
+    };
+    if let Ok(info_json) = serde_json::to_string(&session_info) {
+        let _ = ws_sender
+            .send(Message::Text(
+                format!("{{\"type\": \"session\", \"data\": {}}}", info_json).into(),
+            ))
+            .await;
     }
 
-    // Spawn the shell process
-    let child = match pair.slave.spawn_command(cmd) {
-        Ok(child) => child,
-        Err(e) => {
-            log::error!("Failed to spawn shell: {}", e);
+    // Handle the session
+    handle_pty_io(ws_sender, ws_receiver, session, state).await;
+}
+
+/// Handle PTY reconnection
+async fn handle_pty_reconnection(
+    socket: WebSocket,
+    terminal_id: String,
+    session_id: String,
+    state: ServerAppState,
+) {
+    let (mut ws_sender, ws_receiver) = socket.split();
+
+    log::info!(
+        "PTY WebSocket reconnecting: terminal={}, session={}",
+        terminal_id,
+        session_id
+    );
+
+    // Get the session
+    let session = match state.pty_registry.get_session(&session_id).await {
+        Some(s) => s,
+        None => {
+            log::warn!("Session not found for reconnection: {}", session_id);
             let _ = ws_sender
                 .send(Message::Text(
-                    format!("{{\"error\": \"Failed to spawn shell: {}\"}}", e).into(),
+                    "{\"error\": \"Session not found or expired\"}".into(),
                 ))
                 .await;
             return;
         }
     };
 
-    // Drop the slave - we only need the master
-    drop(pair.slave);
+    // Check session state
+    let session_state = session.get_state().await;
+    if session_state == SessionState::Closing {
+        log::warn!("Session is closing, cannot reconnect: {}", session_id);
+        let _ = ws_sender
+            .send(Message::Text("{\"error\": \"Session is closing\"}".into()))
+            .await;
+        return;
+    }
 
-    // Get reader and writer from master
-    let reader = match pair.master.try_clone_reader() {
-        Ok(r) => r,
-        Err(e) => {
-            log::error!("Failed to clone PTY reader: {}", e);
-            return;
-        }
+    // Mark as connected
+    state.pty_registry.mark_connected(&session_id).await;
+
+    // Send session info
+    let session_info = SessionInfo {
+        session_id: session.id.clone(),
+        terminal_id: terminal_id.clone(),
     };
+    if let Ok(info_json) = serde_json::to_string(&session_info) {
+        let _ = ws_sender
+            .send(Message::Text(
+                format!("{{\"type\": \"session\", \"data\": {}}}", info_json).into(),
+            ))
+            .await;
+    }
 
-    let writer = match pair.master.take_writer() {
-        Ok(w) => w,
-        Err(e) => {
-            log::error!("Failed to get PTY writer: {}", e);
-            return;
-        }
-    };
+    // Send buffered output for replay
+    let buffered = session.get_buffered_output().await;
+    if !buffered.is_empty() {
+        let data = String::from_utf8_lossy(&buffered).to_string();
+        log::info!(
+            "Sending {} bytes of buffered output for session {}",
+            buffered.len(),
+            session_id
+        );
+        let _ = ws_sender
+            .send(Message::Text(
+                format!(
+                    "{{\"type\": \"replay\", \"data\": {}}}",
+                    serde_json::to_string(&data).unwrap_or_default()
+                )
+                .into(),
+            ))
+            .await;
+    }
 
-    // Wrap in Arc<Mutex> for sharing between tasks
-    let master = Arc::new(Mutex::new(pair.master));
-    let writer = Arc::new(Mutex::new(writer));
+    // Handle the session
+    handle_pty_io(ws_sender, ws_receiver, session, state).await;
+}
 
-    // Task: Read from PTY and send to WebSocket
+/// Handle PTY I/O for a session (shared between new and reconnect)
+async fn handle_pty_io(
+    ws_sender: futures_util::stream::SplitSink<WebSocket, Message>,
+    mut ws_receiver: futures_util::stream::SplitStream<WebSocket>,
+    session: Arc<super::pty_registry::PtySession>,
+    state: ServerAppState,
+) {
+    let session_id = session.id.clone();
     let ws_sender = Arc::new(Mutex::new(ws_sender));
+
+    // Subscribe to output
+    let mut output_rx = session.subscribe();
     let ws_sender_clone = ws_sender.clone();
 
-    let read_task = tokio::task::spawn_blocking(move || {
-        let mut reader = reader;
-        let mut buf = [0u8; 4096];
-
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => {
-                    log::info!("PTY EOF");
-                    break;
-                }
-                Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let sender = ws_sender_clone.clone();
-
-                    // Send to WebSocket (need to block on async)
-                    let rt = tokio::runtime::Handle::current();
-                    rt.block_on(async {
-                        let mut sender = sender.lock().await;
-                        if sender.send(Message::Text(data.into())).await.is_err() {
-                            return;
-                        }
-                    });
-                }
-                Err(e) => {
-                    log::warn!("PTY read error: {}", e);
-                    break;
-                }
+    // Task: Forward PTY output to WebSocket
+    let output_task = tokio::spawn(async move {
+        while let Ok(data) = output_rx.recv().await {
+            let text = String::from_utf8_lossy(&data).to_string();
+            let mut sender = ws_sender_clone.lock().await;
+            if sender.send(Message::Text(text.into())).await.is_err() {
+                break;
             }
         }
     });
 
-    // Task: Read from WebSocket and write to PTY
-    let master_clone = master.clone();
-    let writer_clone = writer.clone();
-
+    // Handle input from WebSocket
     while let Some(result) = ws_receiver.next().await {
         match result {
             Ok(Message::Text(text)) => {
                 // Try to parse as a command message
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(ClientMessage::Input { data }) => {
-                        let mut writer = writer_clone.lock().await;
-                        if let Err(e) = writer.write_all(data.as_bytes()) {
+                        if let Err(e) = session.write(data.as_bytes()).await {
                             log::warn!("Failed to write to PTY: {}", e);
                             break;
                         }
-                        let _ = writer.flush();
                     }
                     Ok(ClientMessage::Resize(resize)) => {
-                        let master = master_clone.lock().await;
-                        if let Err(e) = master.resize(PtySize {
-                            rows: resize.rows,
-                            cols: resize.cols,
-                            pixel_width: 0,
-                            pixel_height: 0,
-                        }) {
+                        if let Err(e) = session.resize(resize.cols, resize.rows).await {
                             log::warn!("Failed to resize PTY: {}", e);
                         }
                     }
@@ -258,26 +313,21 @@ async fn handle_pty_session(socket: WebSocket, terminal_id: String, _state: Serv
                     }
                     Err(_) => {
                         // Not a JSON message, treat as raw input
-                        let mut writer = writer_clone.lock().await;
-                        if let Err(e) = writer.write_all(text.as_bytes()) {
+                        if let Err(e) = session.write(text.as_bytes()).await {
                             log::warn!("Failed to write to PTY: {}", e);
                             break;
                         }
-                        let _ = writer.flush();
                     }
                 }
             }
             Ok(Message::Binary(data)) => {
-                // Binary data goes directly to PTY
-                let mut writer = writer_clone.lock().await;
-                if let Err(e) = writer.write_all(&data) {
+                if let Err(e) = session.write(&data).await {
                     log::warn!("Failed to write binary to PTY: {}", e);
                     break;
                 }
-                let _ = writer.flush();
             }
             Ok(Message::Close(_)) => {
-                log::info!("PTY WebSocket client requested close");
+                log::info!("PTY WebSocket client requested close: {}", session_id);
                 break;
             }
             Err(e) => {
@@ -288,13 +338,14 @@ async fn handle_pty_session(socket: WebSocket, terminal_id: String, _state: Serv
         }
     }
 
-    // Clean up
-    read_task.abort();
+    // Client disconnected - mark session as disconnected but keep it alive
+    output_task.abort();
+    state.pty_registry.mark_disconnected(&session_id).await;
 
-    // Kill the child process
-    drop(child);
-
-    log::info!("PTY session ended: {}", terminal_id);
+    log::info!(
+        "PTY client disconnected, session preserved: {}",
+        session_id
+    );
 }
 
 #[cfg(test)]
@@ -314,5 +365,16 @@ mod tests {
         let input = r#"{"type": "input", "data": "ls -la\n"}"#;
         let msg: ClientMessage = serde_json::from_str(input).unwrap();
         assert!(matches!(msg, ClientMessage::Input { .. }));
+    }
+
+    #[test]
+    fn test_session_info_serialization() {
+        let info = SessionInfo {
+            session_id: "abc123".to_string(),
+            terminal_id: "term-1".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("sessionId"));
+        assert!(json.contains("terminalId"));
     }
 }

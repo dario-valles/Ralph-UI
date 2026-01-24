@@ -3,11 +3,16 @@ import { Sidebar } from './Sidebar'
 import { TitleBar } from './TitleBar'
 import { MobileSidebarDrawer } from './MobileSidebarDrawer'
 import { TerminalPanel } from '@/components/terminal'
+import { OfflineIndicator } from '@/components/shared/OfflineBanner'
 import { useTerminalShortcuts } from '@/hooks/useTerminalShortcuts'
+import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 
 export function AppLayout() {
   // Register terminal keyboard shortcuts
   useTerminalShortcuts()
+
+  // Register network and visibility status listeners for mobile resilience
+  useNetworkStatus()
 
   return (
     <div className="flex flex-col h-dvh md:h-screen bg-background">
@@ -31,6 +36,9 @@ export function AppLayout() {
           <TerminalPanel />
         </div>
       </div>
+
+      {/* Offline indicator - floating at bottom when offline */}
+      <OfflineIndicator />
     </div>
   )
 }

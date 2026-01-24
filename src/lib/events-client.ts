@@ -3,9 +3,23 @@
  *
  * Provides a subscription-based event system for real-time updates from the server.
  * Connects to the server's WebSocket endpoint at /ws/events.
+ *
+ * Mobile Resilience (US-1, US-6):
+ * - Extended reconnection duration (5+ minutes)
+ * - Exponential backoff with jitter
+ * - Connection state tracking via Zustand store
+ * - Reconnection notifications (US-6)
+ * - Background-aware keepalive (US-6)
  */
 
 import { getServerConfig } from './invoke'
+import {
+  useConnectionStore,
+  calculateReconnectDelay,
+  shouldContinueReconnecting,
+  RECONNECTION_CONFIG,
+} from '@/stores/connectionStore'
+import { toast } from '@/stores/toastStore'
 
 /**
  * Event payload from the server
@@ -25,17 +39,28 @@ type EventHandler<T> = (payload: T) => void
  */
 export type UnlistenFn = () => void
 
+// Keepalive intervals (US-6)
+const KEEPALIVE_FOREGROUND_MS = 30000 // 30 seconds when visible
+const KEEPALIVE_BACKGROUND_MS = 60000 // 60 seconds when backgrounded
+const PONG_TIMEOUT_MS = 90000 // 90 seconds without pong = stale
+
+// Notification debounce (US-6)
+const NOTIFICATION_DEBOUNCE_MS = 5000 // 5 seconds between notifications
+
 /**
- * WebSocket-based event client
+ * WebSocket-based event client with mobile-resilient reconnection
  */
 class EventsClient {
   private ws: WebSocket | null = null
   private handlers = new Map<string, Set<EventHandler<unknown>>>()
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 1000
   private isConnecting = false
   private connectionPromise: Promise<void> | null = null
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+  private keepaliveInterval: ReturnType<typeof setInterval> | null = null
+  private lastPongTime: number = 0
+  private lastNotificationTime: number = 0
+  private wasReconnecting: boolean = false
+  private visibilityHandler: (() => void) | null = null
 
   /**
    * Connect to the WebSocket server
@@ -54,7 +79,17 @@ class EventsClient {
       throw new Error('Server configuration not set. Cannot connect to WebSocket.')
     }
 
+    const store = useConnectionStore.getState()
+
+    // Check if device is online
+    if (!navigator.onLine) {
+      store.setOnline(false)
+      throw new Error('Device is offline')
+    }
+
     this.isConnecting = true
+    store.setStatus('connecting')
+
     this.connectionPromise = new Promise((resolve, reject) => {
       try {
         // Convert http(s) to ws(s)
@@ -63,14 +98,31 @@ class EventsClient {
 
         this.ws.onopen = () => {
           console.log('[EventsClient] WebSocket connected')
-          this.reconnectAttempts = 0
           this.isConnecting = false
+
+          // Show reconnection notification if we were reconnecting (US-6)
+          if (this.wasReconnecting && this.canShowNotification()) {
+            toast.success('Reconnected', 'Connection to server restored')
+            this.lastNotificationTime = Date.now()
+          }
+          this.wasReconnecting = false
+
+          useConnectionStore.getState().markConnected()
+          this.startKeepalive()
+          this.startVisibilityListener()
           resolve()
         }
 
         this.ws.onmessage = (event) => {
           try {
             const data: ServerEvent = JSON.parse(event.data)
+
+            // Handle pong messages for keepalive
+            if (data.event === 'pong') {
+              this.lastPongTime = Date.now()
+              return
+            }
+
             this.dispatchEvent(data.event, data.payload)
           } catch (e) {
             console.warn('[EventsClient] Failed to parse WebSocket message:', e)
@@ -85,19 +137,35 @@ class EventsClient {
           console.log('[EventsClient] WebSocket closed:', event.code, event.reason)
           this.ws = null
           this.isConnecting = false
+          this.stopKeepalive()
 
-          // Attempt reconnection if not a clean close
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++
-            const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-            console.log(
-              `[EventsClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
-            )
-            setTimeout(() => this.connect().catch(console.error), delay)
+          const store = useConnectionStore.getState()
+
+          // Don't reconnect if it was a clean close (code 1000) or auth failure (4001)
+          if (event.code === 1000) {
+            store.markDisconnected()
+            return
           }
+
+          if (event.code === 4001) {
+            store.markDisconnected('Authentication failed', 'auth')
+            return
+          }
+
+          // Start reconnection if not already in progress
+          if (store.reconnectStartTime === null) {
+            store.startReconnecting()
+          }
+
+          this.wasReconnecting = true
+          this.scheduleReconnect()
         }
       } catch (e) {
         this.isConnecting = false
+        useConnectionStore.getState().markDisconnected(
+          e instanceof Error ? e.message : 'Connection failed',
+          'unknown'
+        )
         reject(e)
       }
     })
@@ -106,15 +174,124 @@ class EventsClient {
   }
 
   /**
+   * Schedule a reconnection attempt with exponential backoff and jitter
+   */
+  private scheduleReconnect(): void {
+    const store = useConnectionStore.getState()
+
+    // Check if we should continue reconnecting
+    if (!shouldContinueReconnecting(store.reconnectStartTime)) {
+      console.log('[EventsClient] Max reconnection duration exceeded, giving up')
+      store.markDisconnected('Connection timeout after 5 minutes', 'timeout')
+      return
+    }
+
+    // Check if device is offline
+    if (!navigator.onLine) {
+      console.log('[EventsClient] Device offline, waiting for online event')
+      store.setOnline(false)
+      return
+    }
+
+    // Calculate delay with jitter
+    const delay = calculateReconnectDelay(store.reconnectAttempts)
+    store.incrementReconnectAttempts()
+
+    const remainingSeconds = Math.round(
+      (RECONNECTION_CONFIG.maxReconnectDurationMs -
+        (Date.now() - (store.reconnectStartTime || Date.now()))) /
+        1000
+    )
+
+    console.log(
+      `[EventsClient] Reconnecting in ${delay}ms (attempt ${store.reconnectAttempts}, ${remainingSeconds}s remaining)`
+    )
+
+    // Clear any existing timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout)
+    }
+
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null
+      this.connect().catch((error) => {
+        console.error('[EventsClient] Reconnection failed:', error)
+        // Will trigger onclose which will schedule another attempt
+      })
+    }, delay)
+  }
+
+  /**
+   * Start keepalive ping/pong to detect stale connections
+   */
+  private startKeepalive(): void {
+    this.stopKeepalive()
+    this.lastPongTime = Date.now()
+
+    // Send ping every 30 seconds
+    this.keepaliveInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        // Check if we received a pong recently (within 60 seconds)
+        if (Date.now() - this.lastPongTime > 60000) {
+          console.warn('[EventsClient] No pong received, connection may be stale')
+          this.ws.close(4000, 'Keepalive timeout')
+          return
+        }
+
+        // Send ping
+        this.ws.send(JSON.stringify({ event: 'ping', payload: { timestamp: Date.now() } }))
+      }
+    }, 30000)
+  }
+
+  /**
+   * Stop keepalive interval
+   */
+  private stopKeepalive(): void {
+    if (this.keepaliveInterval) {
+      clearInterval(this.keepaliveInterval)
+      this.keepaliveInterval = null
+    }
+  }
+
+  /**
    * Disconnect from the WebSocket server
    */
   disconnect(): void {
+    // Clear reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout)
+      this.reconnectTimeout = null
+    }
+
+    this.stopKeepalive()
+
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect')
       this.ws = null
     }
+
     this.handlers.clear()
-    this.reconnectAttempts = this.maxReconnectAttempts // Prevent auto-reconnect
+    useConnectionStore.getState().markDisconnected()
+  }
+
+  /**
+   * Force immediate reconnection (used when app returns to foreground)
+   */
+  forceReconnect(): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return // Already connected
+    }
+
+    // Clear any pending reconnect
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout)
+      this.reconnectTimeout = null
+    }
+
+    // Reset reconnection state and try immediately
+    useConnectionStore.getState().startReconnecting()
+    this.connect().catch(console.error)
   }
 
   /**
@@ -219,4 +396,12 @@ export function disconnectEvents(): void {
  */
 export function isEventsConnected(): boolean {
   return eventsClient.isConnected()
+}
+
+/**
+ * Force immediate reconnection.
+ * Useful when returning from background on mobile.
+ */
+export function forceEventsReconnect(): void {
+  eventsClient.forceReconnect()
 }

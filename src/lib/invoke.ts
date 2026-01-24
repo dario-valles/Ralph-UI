@@ -3,7 +3,15 @@
  *
  * Provides a consistent interface for calling backend commands via HTTP.
  * All commands are routed through the /api/invoke endpoint on the Axum server.
+ * Supports offline queueing for mobile resilience (US-5).
  */
+
+import {
+  useOfflineQueueStore,
+  isQueueableCommand,
+  cleanupOldActions,
+} from '@/stores/offlineQueueStore'
+import { useConnectionStore } from '@/stores/connectionStore'
 
 /**
  * Server configuration for browser mode
@@ -52,10 +60,23 @@ export function isBrowserMode(): boolean {
 }
 
 /**
+ * Options for invoke calls
+ */
+interface InvokeOptions {
+  /** If true, skip offline queueing and fail immediately */
+  skipQueue?: boolean
+}
+
+/**
  * Invoke a backend command via HTTP
  * All commands are routed through POST /api/invoke
+ * Queueable commands will be queued when offline (US-5)
  */
-export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+  options?: InvokeOptions
+): Promise<T> {
   const config = getServerConfig()
   if (!config) {
     throw new Error(
@@ -63,50 +84,153 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     )
   }
 
-  const response = await fetch(`${config.url}/api/invoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.token}`,
-    },
-    body: JSON.stringify({ cmd, args: args || {} }),
-  })
+  // Check if we're offline
+  const connectionStatus = useConnectionStore.getState().status
+  const isOffline = connectionStatus === 'offline' || connectionStatus === 'disconnected'
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    if (response.status === 401) {
-      throw new Error('Unauthorized: Invalid or expired auth token')
-    }
-    throw new Error(`Server error (${response.status}): ${errorText}`)
-  }
+  // If offline and command is queueable, queue it
+  if (isOffline && !options?.skipQueue && isQueueableCommand(cmd)) {
+    const store = useOfflineQueueStore.getState()
+    store.queueAction(cmd, args || {})
 
-  // Handle empty responses (void commands)
-  const text = await response.text()
-  if (!text || text === 'null') {
+    // Return a "queued" placeholder - the caller should handle this
+    // For most write operations, undefined is acceptable
     return undefined as T
   }
 
+  // If offline and not queueable, throw an error
+  if (isOffline) {
+    throw new Error('Currently offline. Please wait for reconnection.')
+  }
+
   try {
-    const parsed = JSON.parse(text)
+    const response = await fetch(`${config.url}/api/invoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.token}`,
+      },
+      body: JSON.stringify({ cmd, args: args || {} }),
+    })
 
-    // Server wraps responses in {success: true, data: ...} format
-    // Extract the data field for successful responses
-    if (parsed && typeof parsed === 'object' && 'success' in parsed) {
-      if (!parsed.success) {
-        throw new Error(parsed.error || 'Command failed')
+    if (!response.ok) {
+      const errorText = await response.text()
+      if (response.status === 401) {
+        throw new Error('Unauthorized: Invalid or expired auth token')
       }
-      // Return the data field (or undefined for void commands)
-      return parsed.data as T
+      throw new Error(`Server error (${response.status}): ${errorText}`)
     }
 
-    // Fallback: return parsed response directly
-    return parsed as T
-  } catch (e) {
-    // Re-throw if it's our error
-    if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
-      throw e
+    // Handle empty responses (void commands)
+    const text = await response.text()
+    if (!text || text === 'null') {
+      return undefined as T
     }
-    // If it's not valid JSON, return as-is (for string responses)
-    return text as T
+
+    try {
+      const parsed = JSON.parse(text)
+
+      // Server wraps responses in {success: true, data: ...} format
+      // Extract the data field for successful responses
+      if (parsed && typeof parsed === 'object' && 'success' in parsed) {
+        if (!parsed.success) {
+          throw new Error(parsed.error || 'Command failed')
+        }
+        // Return the data field (or undefined for void commands)
+        return parsed.data as T
+      }
+
+      // Fallback: return parsed response directly
+      return parsed as T
+    } catch (e) {
+      // Re-throw if it's our error
+      if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+        throw e
+      }
+      // If it's not valid JSON, return as-is (for string responses)
+      return text as T
+    }
+  } catch (e) {
+    // Network error - if queueable, try to queue
+    if (
+      !options?.skipQueue &&
+      isQueueableCommand(cmd) &&
+      e instanceof Error &&
+      (e.message.includes('fetch') || e.message.includes('network'))
+    ) {
+      const store = useOfflineQueueStore.getState()
+      store.queueAction(cmd, args || {})
+      // Update connection status
+      useConnectionStore.getState().setStatus('disconnected')
+      return undefined as T
+    }
+    throw e
+  }
+}
+
+/**
+ * Sync queued actions when back online
+ * Called automatically when connection is restored
+ */
+export async function syncQueuedActions(): Promise<{
+  synced: number
+  failed: number
+}> {
+  const store = useOfflineQueueStore.getState()
+  const queue = [...store.queue]
+
+  if (queue.length === 0) {
+    return { synced: 0, failed: 0 }
+  }
+
+  // Clean up old actions first
+  cleanupOldActions()
+
+  store.setSyncStatus('syncing')
+  console.log(`Syncing ${queue.length} queued actions...`)
+
+  let synced = 0
+  let failed = 0
+
+  for (const action of queue) {
+    try {
+      // Execute the action with skipQueue to avoid re-queueing
+      await invoke(action.cmd, action.args, { skipQueue: true })
+      store.removeAction(action.id)
+      synced++
+      console.log(`Synced action: ${action.cmd} (${action.id})`)
+    } catch (error) {
+      console.error(`Failed to sync action ${action.cmd}:`, error)
+      store.markActionFailed(action, error instanceof Error ? error.message : 'Unknown error')
+      failed++
+    }
+  }
+
+  store.setSyncStatus(failed > 0 ? 'error' : 'idle')
+  console.log(`Sync complete: ${synced} synced, ${failed} failed`)
+
+  return { synced, failed }
+}
+
+/**
+ * Retry a single failed action
+ */
+export async function retryFailedAction(actionId: string): Promise<boolean> {
+  const store = useOfflineQueueStore.getState()
+  const action = store.failedActions.find((a) => a.id === actionId)
+
+  if (!action) {
+    console.warn(`Action ${actionId} not found in failed actions`)
+    return false
+  }
+
+  try {
+    await invoke(action.cmd, action.args, { skipQueue: true })
+    // Remove from failed actions on success
+    store.clearFailedActions()
+    return true
+  } catch (error) {
+    console.error(`Retry failed for action ${action.cmd}:`, error)
+    return false
   }
 }

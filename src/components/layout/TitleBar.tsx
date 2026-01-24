@@ -5,6 +5,8 @@ import { useUIStore } from '@/stores/uiStore'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { ProjectSwitcher } from '@/components/projects/ProjectSwitcher'
+import { ConnectionIndicatorCompact } from '@/components/shared/ConnectionIndicator'
+import { PendingActionsIndicatorCompact } from '@/components/shared/PendingActionsIndicator'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 
@@ -65,8 +67,13 @@ export function TitleBar() {
         <ProjectSwitcher compact />
       </div>
 
-      {/* Right section - Terminal and Settings */}
+      {/* Right section - Connection, Terminal and Settings */}
       <div className="flex items-center gap-1 pr-2 md:pr-3">
+        {/* Pending actions indicator - shows when actions are queued (US-5) */}
+        <PendingActionsIndicatorCompact />
+        {/* Connection indicator - only shows when disconnected/reconnecting */}
+        <ConnectionIndicatorCompact className="mr-1" />
+
         <Tooltip content="Terminal" side="bottom">
           <button
             onClick={handleTerminalClick}

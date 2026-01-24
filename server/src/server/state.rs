@@ -2,6 +2,7 @@
 
 use super::events::EventBroadcaster;
 use super::file_watcher::ServerFileWatcher;
+use super::pty_registry::PtyRegistry;
 use crate::agents::AgentManager;
 use crate::commands::config::ConfigState;
 use crate::commands::git::GitState;
@@ -50,6 +51,9 @@ pub struct ServerAppState {
 
     /// File watcher for PRD plan files
     pub file_watcher: Arc<ServerFileWatcher>,
+
+    /// PTY session registry for mobile resilience (US-3)
+    pub pty_registry: Arc<PtyRegistry>,
 }
 
 impl ServerAppState {
@@ -68,6 +72,10 @@ impl ServerAppState {
     ) -> Self {
         let broadcaster = Arc::new(EventBroadcaster::new());
         let file_watcher = Arc::new(ServerFileWatcher::new(broadcaster.clone()));
+        let pty_registry = Arc::new(PtyRegistry::new());
+
+        // Start the PTY cleanup task for stale sessions
+        PtyRegistry::start_cleanup_task(pty_registry.clone());
 
         Self {
             auth_token,
@@ -82,6 +90,7 @@ impl ServerAppState {
             rate_limit_sender,
             completion_sender,
             file_watcher,
+            pty_registry,
         }
     }
 }
