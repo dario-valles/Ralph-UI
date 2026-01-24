@@ -305,7 +305,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
     <>
       <div
         className={cn(
-          'bg-muted/80 border-t px-2 py-2 flex flex-wrap gap-1 safe-bottom',
+          'bg-muted/80 border-b px-2 py-2 flex flex-wrap gap-1',
           'transition-all duration-300 ease-in-out',
           !isVisible && 'opacity-0 pointer-events-none max-h-0 overflow-hidden',
           isVisible && 'opacity-100 pointer-events-auto',

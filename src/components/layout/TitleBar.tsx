@@ -36,7 +36,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="flex items-center h-10 md:h-9 border-b bg-card select-none"
+      className="sticky top-0 z-50 flex items-center h-10 md:h-9 border-b bg-card select-none"
     >
       {/* Left section - hamburger (mobile) or sidebar toggle (desktop) */}
       <div className="flex items-center pl-2 md:pl-[70px] pr-2">
