@@ -18,6 +18,12 @@ import type {
   RalphLoopSnapshot,
   AgentType,
   DeletePrdResult,
+  AssignmentsFile,
+  FileInUse,
+  LearningsFile,
+  LearningEntry,
+  AddLearningInput,
+  UpdateLearningInput,
 } from '@/types'
 import { invoke } from './invoke'
 
@@ -583,6 +589,115 @@ export const ralphLoopApi = {
     return await invoke('regenerate_ralph_prd_stories', {
       request: { projectPath, prdName, agentType, model },
     })
+  },
+
+  // ============================================================================
+  // Assignment API (US-2.3: View Parallel Progress)
+  // ============================================================================
+
+  /** Get all assignments for a PRD */
+  getAssignments: async (projectPath: string, prdName: string): Promise<AssignmentsFile> => {
+    return await invoke('get_ralph_assignments', { projectPath, prdName })
+  },
+
+  /** Get files currently in use by active agents */
+  getFilesInUse: async (projectPath: string, prdName: string): Promise<FileInUse[]> => {
+    return await invoke('get_ralph_files_in_use', { projectPath, prdName })
+  },
+
+  /** Manually assign a story to an agent (US-4.3: Manual Story Assignment) */
+  manuallyAssignStory: async (
+    projectPath: string,
+    prdName: string,
+    agentId: string,
+    agentType: string,
+    storyId: string,
+    force: boolean = false,
+    estimatedFiles?: string[]
+  ): Promise<Assignment> => {
+    return await invoke('manual_assign_ralph_story', {
+      projectPath,
+      prdName,
+      input: {
+        agent_id: agentId,
+        agent_type: agentType,
+        story_id: storyId,
+        force,
+        estimated_files: estimatedFiles,
+      },
+    })
+  },
+
+  /** Release a story assignment back to the pool (US-4.3: Manual Story Assignment) */
+  releaseStoryAssignment: async (
+    projectPath: string,
+    prdName: string,
+    storyId: string
+  ): Promise<boolean> => {
+    return await invoke('release_ralph_story_assignment', { projectPath, prdName, storyId })
+  },
+
+  // ============================================================================
+  // Brief Viewing API (US-6.1: View Current Brief)
+  // ============================================================================
+
+  /** Get the current BRIEF.md content for a PRD */
+  getBrief: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('get_ralph_brief', { projectPath, prdName })
+  },
+
+  /** Regenerate the BRIEF.md file for a PRD */
+  regenerateBrief: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('regenerate_ralph_brief', { projectPath, prdName })
+  },
+
+  /** Get historical briefs for a PRD */
+  getHistoricalBriefs: async (
+    projectPath: string,
+    prdName: string
+  ): Promise<Array<{ iteration: number; content: string }>> => {
+    return await invoke('get_ralph_historical_briefs', { projectPath, prdName })
+  },
+
+  // ============================================================================
+  // Learnings API (US-3.3: Manual Learning Entry)
+  // ============================================================================
+
+  /** Get all learnings for a PRD */
+  getLearnings: async (projectPath: string, prdName: string): Promise<LearningsFile> => {
+    return await invoke('get_ralph_learnings', { projectPath, prdName })
+  },
+
+  /** Add a manual learning entry */
+  addLearning: async (
+    projectPath: string,
+    prdName: string,
+    input: AddLearningInput
+  ): Promise<LearningEntry> => {
+    return await invoke('add_ralph_learning', { projectPath, prdName, input })
+  },
+
+  /** Update an existing learning entry */
+  updateLearning: async (
+    projectPath: string,
+    prdName: string,
+    input: UpdateLearningInput
+  ): Promise<LearningEntry> => {
+    return await invoke('update_ralph_learning', { projectPath, prdName, input })
+  },
+
+  /** Delete a learning entry */
+  deleteLearning: async (
+    projectPath: string,
+    prdName: string,
+    learningId: string
+  ): Promise<boolean> => {
+    return await invoke('delete_ralph_learning', { projectPath, prdName, learningId })
+  },
+
+  /** Export learnings to markdown (US-6.3: Learning Analytics) */
+  exportLearnings: async (projectPath: string, prdName: string): Promise<string> => {
+    return await invoke('export_ralph_learnings', { projectPath, prdName })
   },
 }
 

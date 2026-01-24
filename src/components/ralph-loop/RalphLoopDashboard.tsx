@@ -35,6 +35,8 @@ import {
   PanelTopClose,
   PanelTop,
   GripHorizontal,
+  Users,
+  FileText,
 } from 'lucide-react'
 import type { RalphStory, RalphLoopState, AgentType } from '@/types'
 import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
@@ -55,6 +57,10 @@ import { AgentTree } from '@/components/ralph-loop/AgentTree'
 import { StoryCard } from '@/components/ralph-loop/StoryCard'
 import { ProgressViewer } from '@/components/ralph-loop/ProgressViewer'
 import { CommitCard } from '@/components/ralph-loop/CommitCard'
+import { AssignmentsPanel } from '@/components/ralph-loop/AssignmentsPanel'
+import { LearningsPanel } from '@/components/ralph-loop/LearningsPanel'
+import { BriefViewer } from '@/components/ralph-loop/BriefViewer'
+import { LearningAnalyticsCard } from '@/components/ralph-loop/LearningAnalyticsCard'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
@@ -978,6 +984,9 @@ export function RalphLoopDashboard({
         </CardContent>
       </Card>
 
+      {/* Learning Analytics */}
+      <LearningAnalyticsCard projectPath={projectPath} prdName={prdName} />
+
       {/* Tabs for Stories, Progress, Terminal */}
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full min-h-0">
@@ -1021,6 +1030,27 @@ export function RalphLoopDashboard({
                   <Clock className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
                   <span className="hidden sm:inline">History ({iterationHistory?.length ?? 0})</span>
                   <span className="sm:hidden">{iterationHistory?.length ?? 0}</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="agents"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <Users className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  Agents
+                </TabsTrigger>
+                <TabsTrigger
+                  value="learnings"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <BookOpen className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  Learnings
+                </TabsTrigger>
+                <TabsTrigger
+                  value="brief"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                >
+                  <FileText className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  Brief
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -1156,6 +1186,34 @@ export function RalphLoopDashboard({
           <TabsContent value="history" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
             <div className="h-full overflow-y-auto p-4">
               <IterationHistoryView iterations={iterationHistory ?? []} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="agents" className="p-0 mt-0">
+            <div className="p-4">
+              <AssignmentsPanel
+                projectPath={projectPath}
+                prdName={prdName}
+                stories={prd?.stories ?? []}
+                autoRefresh={!!activeExecutionId}
+                refreshInterval={3000}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="learnings" className="p-0 mt-0">
+            <div className="p-4">
+              <LearningsPanel
+                projectPath={projectPath}
+                prdName={prdName}
+                stories={prd.stories}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="brief" className="p-0 mt-0">
+            <div className="p-4">
+              <BriefViewer projectPath={projectPath} prdName={prdName} />
             </div>
           </TabsContent>
         </Tabs>

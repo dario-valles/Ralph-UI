@@ -1088,6 +1088,163 @@ export interface RalphWorktreeInfo {
 }
 
 // ============================================================================
+// Multi-Agent Assignment Types (US-2.2: Avoid File Conflicts)
+// ============================================================================
+
+/** Assignment status for multi-agent coordination */
+export type AssignmentStatus = 'active' | 'completed' | 'failed' | 'released'
+
+/** An assignment of a story to an agent */
+export interface Assignment {
+  id: string
+  agentId: string
+  agentType: AgentType
+  storyId: string
+  status: AssignmentStatus
+  estimatedFiles: string[]
+  iterationStart?: number
+  iterationEnd?: number
+  errorMessage?: string
+  assignedAt: string
+  updatedAt?: string
+}
+
+/** The complete assignments file structure (US-2.3: View Parallel Progress) */
+export interface AssignmentsFile {
+  assignments: Assignment[]
+  createdAt: string
+  lastUpdated: string
+  currentIteration: number
+  executionId?: string
+}
+
+/** A file currently in use by an agent */
+export interface FileInUse {
+  path: string
+  agentId: string
+  agentType: AgentType
+  storyId: string
+}
+
+/** A potential file conflict between agents */
+export interface FileConflict {
+  path: string
+  conflictingAgentId: string
+  conflictingAgentType: AgentType
+  conflictingStoryId: string
+}
+
+/** Type of assignment change event */
+export type AssignmentChangeType =
+  | 'created'
+  | 'completed'
+  | 'failed'
+  | 'released'
+  | 'files_updated'
+
+/** Payload for assignment changed events */
+export interface AssignmentChangedPayload {
+  changeType: AssignmentChangeType
+  agentId: string
+  agentType: string
+  storyId: string
+  prdName: string
+  estimatedFiles: string[]
+  timestamp: string
+}
+
+/** Payload for file conflict detection events */
+export interface FileConflictDetectedPayload {
+  conflictingFiles: FileConflictInfo[]
+  prdName: string
+  timestamp: string
+}
+
+/** Information about a single file conflict */
+export interface FileConflictInfo {
+  path: string
+  agents: AgentFileUse[]
+}
+
+/** Information about an agent using a file */
+export interface AgentFileUse {
+  agentId: string
+  agentType: string
+  storyId: string
+}
+
+// ============================================================================
+// Learnings Types (US-3.3: Manual Learning Entry)
+// ============================================================================
+
+/** Type/category of a learning */
+export type LearningType =
+  | 'architecture'
+  | 'gotcha'
+  | 'pattern'
+  | 'testing'
+  | 'tooling'
+  | 'general'
+
+/** A single learning entry */
+export interface LearningEntry {
+  /** Unique identifier */
+  id: string
+  /** Which iteration this learning was discovered in */
+  iteration: number
+  /** Type/category of the learning */
+  learningType: LearningType
+  /** The learning content (description) */
+  content: string
+  /** Associated story ID (if any) */
+  storyId?: string
+  /** Optional code example */
+  codeExample?: string
+  /** When this learning was recorded */
+  timestamp: string
+  /** Source of this learning (agent or human) */
+  source: string
+}
+
+/** The complete learnings file structure */
+export interface LearningsFile {
+  /** List of all learnings */
+  entries: LearningEntry[]
+  /** When this file was created */
+  createdAt: string
+  /** When this file was last updated */
+  lastUpdated: string
+  /** Total iterations that have contributed learnings */
+  totalIterations: number
+}
+
+/** Input for adding a manual learning */
+export interface AddLearningInput {
+  /** Type/category of the learning */
+  learningType: string
+  /** The learning content (description) */
+  content: string
+  /** Optional code example */
+  codeExample?: string
+  /** Optional associated story ID */
+  storyId?: string
+}
+
+/** Input for updating an existing learning */
+export interface UpdateLearningInput {
+  /** ID of the learning to update */
+  id: string
+  /** Updated type/category (optional) */
+  learningType?: string
+  /** Updated content (optional) */
+  content?: string
+  /** Updated code example (optional, empty string to remove) */
+  codeExample?: string
+  /** Updated story ID (optional, empty string to remove) */
+  storyId?: string
+}
+
+// ============================================================================
 // GSD (Get Stuff Done) Types - Re-export from dedicated files
 // ============================================================================
 

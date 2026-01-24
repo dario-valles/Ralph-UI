@@ -7,6 +7,112 @@
 
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use uuid::Uuid;
+
+/// Assignment strategy for multi-agent scenarios (US-4.2)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum AssignmentStrategy {
+    /// Assign stories in priority order (default, higher priority = lower number)
+    Priority,
+    /// Assign story with lowest overlap with in-progress work
+    MinimalConflict,
+}
+
+impl Default for AssignmentStrategy {
+    fn default() -> Self {
+        Self::Priority
+    }
+}
+
+/// Merge strategy for collaborative mode (US-5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeStrategy {
+    /// Never merge automatically - manual merge only
+    Never,
+    /// Merge only when all stories are complete
+    OnSuccess,
+    /// Merge at regular intervals (configured via merge_interval)
+    Periodic,
+    /// Always attempt merge at the end, regardless of outcome
+    Always,
+}
+
+impl Default for MergeStrategy {
+    fn default() -> Self {
+        Self::Never
+    }
+}
+
+/// Conflict resolution strategy for merged conflicts (US-5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictResolution {
+    /// Stop all agents if a merge conflict is detected
+    StopOnConflict,
+    /// Continue agents even if a merge conflict is detected
+    ContinueOnConflict,
+}
+
+impl Default for ConflictResolution {
+    fn default() -> Self {
+        Self::StopOnConflict
+    }
+}
+
+/// Selection strategy for competitive execution (US-5.3)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompetitiveSelectionStrategy {
+    /// Use the first completed solution
+    FirstComplete,
+    /// Use the solution with best code coverage
+    BestCoverage,
+    /// Use the solution with minimal code changes
+    MinimalCode,
+    /// Wait for human review and selection
+    HumanReview,
+}
+
+impl Default for CompetitiveSelectionStrategy {
+    fn default() -> Self {
+        Self::FirstComplete
+    }
+}
+
+/// Execution mode for Ralph loop (US-5.2, US-5.3)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    /// Single agent execution (default)
+    SingleAgent,
+    /// Hierarchical team execution with primary and assistants (US-5.2)
+    Hierarchical {
+        /// Agent type/model tier for primary agent (e.g., "claude-opus-4-5")
+        primary_model: String,
+        /// Agent type/model tier for assistants (e.g., "claude-sonnet-4-5")
+        assistant_models: Vec<String>,
+        /// Whether primary agent reviews completed work before merge
+        requires_primary_review: bool,
+    },
+    /// Competitive execution with multiple parallel attempts (US-5.3)
+    Competitive {
+        /// Number of parallel attempts (2-4)
+        parallel_attempts: u32,
+        /// Strategy for selecting the winning solution
+        selection_strategy: CompetitiveSelectionStrategy,
+        /// Timeout in seconds for forcing selection (0 = unlimited)
+        selection_timeout_secs: u64,
+    },
+}
+
+impl Default for ExecutionMode {
+    fn default() -> Self {
+        Self::SingleAgent
+    }
+}
 
 /// Generate a consistent PRD filename from title and ID
 ///
@@ -81,6 +187,42 @@ pub struct RalphStory {
     /// Optional estimated effort (S/M/L/XL)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+
+    /// Subtasks created by primary agent (US-5.2 hierarchical teams)
+    /// These are smaller units of work that can be assigned to assistants
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtasks: Vec<RalphSubtask>,
+
+    /// Whether this story requires primary agent review before merge (US-5.2)
+    #[serde(default)]
+    pub requires_primary_review: bool,
+}
+
+/// A subtask created by the primary agent (US-5.2)
+///
+/// Primary agents can break stories into subtasks and assign them to assistants.
+/// This enables parallel work while maintaining hierarchical oversight.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RalphSubtask {
+    /// Unique identifier for the subtask (e.g., "US-1.1-ST-1")
+    pub id: String,
+
+    /// Title of the subtask
+    pub title: String,
+
+    /// Description of what needs to be done
+    pub description: String,
+
+    /// Whether this subtask is completed
+    pub passes: bool,
+
+    /// Optional ID of the assistant agent assigned to this subtask
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_to: Option<String>,
+
+    /// Agent type of the assistant (e.g., "claude-sonnet-4-5")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_agent_model: Option<String>,
 }
 
 fn default_priority() -> u32 {
@@ -100,6 +242,8 @@ impl RalphStory {
             dependencies: Vec::new(),
             tags: Vec::new(),
             effort: None,
+            subtasks: Vec::new(),
+            requires_primary_review: false,
         }
     }
 
@@ -112,6 +256,34 @@ impl RalphStory {
                 .map(|s| s.passes)
                 .unwrap_or(false)
         })
+    }
+
+    /// Check if all subtasks are completed (US-5.2)
+    pub fn all_subtasks_complete(&self) -> bool {
+        if self.subtasks.is_empty() {
+            return true;
+        }
+        self.subtasks.iter().all(|st| st.passes)
+    }
+}
+
+impl RalphSubtask {
+    /// Create a new subtask
+    pub fn new(id: impl Into<String>, title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            description: description.into(),
+            passes: false,
+            assigned_to: None,
+            assigned_agent_model: None,
+        }
+    }
+
+    /// Assign this subtask to an agent
+    pub fn assign_to(&mut self, agent_id: impl Into<String>, agent_model: impl Into<String>) {
+        self.assigned_to = Some(agent_id.into());
+        self.assigned_agent_model = Some(agent_model.into());
     }
 }
 
@@ -168,6 +340,26 @@ pub struct PrdExecutionConfig {
     /// Create PRs as drafts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub draft_prs: Option<bool>,
+
+    /// Merge strategy for collaborative mode (US-5.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_strategy: Option<String>,
+
+    /// Merge interval in iterations (US-5.1) - merge every N iterations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_interval: Option<u32>,
+
+    /// Conflict resolution strategy (US-5.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_resolution: Option<String>,
+
+    /// Target branch for merges (US-5.1) - defaults to main
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_target_branch: Option<String>,
+
+    /// Execution mode for hierarchical teams (US-5.2)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_mode: Option<ExecutionMode>,
 }
 
 impl Default for PrdExecutionConfig {
@@ -184,6 +376,11 @@ impl Default for PrdExecutionConfig {
             template_name: None,
             auto_create_prs: None,
             draft_prs: None,
+            merge_strategy: None,
+            merge_interval: None,
+            conflict_resolution: None,
+            merge_target_branch: None,
+            execution_mode: None,
         }
     }
 }
@@ -231,6 +428,11 @@ impl PrdExecutionConfig {
             || self.template_name.is_some()
             || self.auto_create_prs.is_some()
             || self.draft_prs.is_some()
+            || self.merge_strategy.is_some()
+            || self.merge_interval.is_some()
+            || self.conflict_resolution.is_some()
+            || self.merge_target_branch.is_some()
+            || self.execution_mode.is_some()
     }
 }
 
@@ -342,6 +544,144 @@ impl std::fmt::Display for ExecutionStatus {
     }
 }
 
+/// A single competitive attempt (one of potentially multiple parallel attempts)
+///
+/// Used in competitive execution mode to track metrics and results for each attempt
+/// so the system can score and select the best one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompetitiveAttempt {
+    /// Unique attempt ID
+    pub id: String,
+
+    /// Attempt number (1-based)
+    pub attempt_number: u32,
+
+    /// Agent type used for this attempt
+    pub agent_type: AgentType,
+
+    /// Model used for this attempt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Worktree path for this isolated attempt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_path: Option<String>,
+
+    /// Stories completed by this attempt
+    pub stories_completed: u32,
+
+    /// Stories remaining after this attempt
+    pub stories_remaining: u32,
+
+    /// Total duration in seconds
+    pub duration_secs: f64,
+
+    /// Total cost incurred
+    #[serde(default)]
+    pub cost: f64,
+
+    /// Total lines of code changed (for MinimalCode scoring)
+    #[serde(default)]
+    pub lines_changed: u32,
+
+    /// Code coverage percentage (for BestCoverage scoring)
+    #[serde(default)]
+    pub coverage_percent: f64,
+
+    /// Whether this was selected as the winner
+    #[serde(default)]
+    pub selected: bool,
+
+    /// Reason for selection (e.g. "First Complete", "Best Coverage")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection_reason: Option<String>,
+
+    /// When this attempt started
+    pub started_at: String,
+
+    /// When this attempt completed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+
+    /// Error message if this attempt failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+impl CompetitiveAttempt {
+    /// Create a new competitive attempt
+    pub fn new(
+        attempt_number: u32,
+        agent_type: AgentType,
+        model: Option<String>,
+    ) -> Self {
+        Self {
+            id: format!("attempt-{}-{}", attempt_number, Uuid::new_v4()),
+            attempt_number,
+            agent_type,
+            model,
+            worktree_path: None,
+            stories_completed: 0,
+            stories_remaining: 0,
+            duration_secs: 0.0,
+            cost: 0.0,
+            lines_changed: 0,
+            coverage_percent: 0.0,
+            selected: false,
+            selection_reason: None,
+            started_at: chrono::Utc::now().to_rfc3339(),
+            completed_at: None,
+            error_message: None,
+        }
+    }
+
+    /// Mark this attempt as completed
+    pub fn mark_completed(&mut self, stories_completed: u32, stories_remaining: u32) {
+        self.stories_completed = stories_completed;
+        self.stories_remaining = stories_remaining;
+        self.completed_at = Some(chrono::Utc::now().to_rfc3339());
+    }
+
+    /// Mark this attempt as failed
+    pub fn mark_failed(&mut self, error: impl Into<String>) {
+        self.error_message = Some(error.into());
+        self.completed_at = Some(chrono::Utc::now().to_rfc3339());
+    }
+
+    /// Mark this attempt as the selected winner
+    pub fn mark_selected(&mut self, reason: impl Into<String>) {
+        self.selected = true;
+        self.selection_reason = Some(reason.into());
+    }
+
+    /// Calculate score for selection based on strategy
+    pub fn calculate_score(&self, strategy: CompetitiveSelectionStrategy) -> f64 {
+        match strategy {
+            CompetitiveSelectionStrategy::FirstComplete => {
+                // Earlier completion = lower score = better
+                // Use negative timestamp so earlier attempts score lower
+                -chrono::DateTime::parse_from_rfc3339(&self.started_at)
+                    .unwrap_or_default()
+                    .timestamp() as f64
+            }
+            CompetitiveSelectionStrategy::BestCoverage => {
+                // Higher coverage = higher score
+                self.coverage_percent
+            }
+            CompetitiveSelectionStrategy::MinimalCode => {
+                // Lower lines changed = lower score = better
+                // Use negative so fewer changes score better
+                -(self.lines_changed as f64)
+            }
+            CompetitiveSelectionStrategy::HumanReview => {
+                // No automatic scoring - human decides
+                0.0
+            }
+        }
+    }
+}
+
 /// A single PRD execution with embedded iteration history
 ///
 /// This replaces the database tables:
@@ -400,6 +740,14 @@ pub struct PrdExecution {
     /// Iteration history embedded in the execution
     #[serde(default)]
     pub iterations: Vec<IterationRecord>,
+
+    /// Competitive attempts for US-5.3 (if using competitive execution mode)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub competitive_attempts: Vec<CompetitiveAttempt>,
+
+    /// Selected attempt ID for competitive mode (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_attempt_id: Option<String>,
 }
 
 impl PrdExecution {
@@ -420,6 +768,8 @@ impl PrdExecution {
             stories_remaining: 0,
             error_message: None,
             iterations: Vec::new(),
+            competitive_attempts: Vec::new(),
+            selected_attempt_id: None,
         }
     }
 
@@ -472,6 +822,52 @@ impl PrdExecution {
         }
 
         stats
+    }
+
+    /// Add a competitive attempt to this execution
+    pub fn add_competitive_attempt(&mut self, attempt: CompetitiveAttempt) {
+        self.competitive_attempts.push(attempt);
+    }
+
+    /// Get the selected attempt, if any
+    pub fn get_selected_attempt(&self) -> Option<&CompetitiveAttempt> {
+        self.selected_attempt_id.as_ref().and_then(|id| {
+            self.competitive_attempts.iter().find(|a| a.id == *id)
+        })
+    }
+
+    /// Select a winning attempt by ID
+    pub fn select_competitive_attempt(&mut self, attempt_id: impl Into<String>, reason: impl Into<String>) -> Result<(), String> {
+        let attempt_id = attempt_id.into();
+
+        // Find and mark the selected attempt
+        if let Some(attempt) = self.competitive_attempts.iter_mut().find(|a| a.id == attempt_id) {
+            attempt.mark_selected(reason);
+            self.selected_attempt_id = Some(attempt_id);
+            Ok(())
+        } else {
+            Err(format!("Attempt {} not found", attempt_id))
+        }
+    }
+
+    /// Get all completed attempts (sorted by completion time)
+    pub fn get_completed_attempts(&self) -> Vec<&CompetitiveAttempt> {
+        let mut attempts: Vec<_> = self.competitive_attempts
+            .iter()
+            .filter(|a| a.completed_at.is_some())
+            .collect();
+        attempts.sort_by(|a, b| {
+            a.completed_at.cmp(&b.completed_at)
+        });
+        attempts
+    }
+
+    /// Get all failed attempts
+    pub fn get_failed_attempts(&self) -> Vec<&CompetitiveAttempt> {
+        self.competitive_attempts
+            .iter()
+            .filter(|a| a.error_message.is_some())
+            .collect()
     }
 }
 
@@ -533,6 +929,48 @@ impl RalphPrd {
             .min_by_key(|s| s.priority)
     }
 
+    /// Get the next available story for assignment (US-2.1: Multiple Agents on Same PRD)
+    ///
+    /// This method returns the highest priority story that:
+    /// - Is not completed (passes == false)
+    /// - Has all dependencies satisfied
+    /// - Is NOT already assigned to another agent
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    pub fn next_available_story(&self, assigned_story_ids: &[String]) -> Option<&RalphStory> {
+        self.stories
+            .iter()
+            .filter(|s| {
+                !s.passes
+                    && s.dependencies_satisfied(&self.stories)
+                    && !assigned_story_ids.contains(&s.id)
+            })
+            .min_by_key(|s| s.priority)
+    }
+
+    /// Get all available stories for assignment (US-2.1)
+    ///
+    /// Returns all stories that are available for assignment, sorted by priority.
+    /// A story is available if it's not completed, not assigned, and has satisfied dependencies.
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    pub fn available_stories(&self, assigned_story_ids: &[String]) -> Vec<&RalphStory> {
+        let mut available: Vec<&RalphStory> = self
+            .stories
+            .iter()
+            .filter(|s| {
+                !s.passes
+                    && s.dependencies_satisfied(&self.stories)
+                    && !assigned_story_ids.contains(&s.id)
+            })
+            .collect();
+
+        available.sort_by_key(|s| s.priority);
+        available
+    }
+
     /// Mark a story as passing
     pub fn mark_story_passing(&mut self, story_id: &str) -> bool {
         if let Some(story) = self.stories.iter_mut().find(|s| s.id == story_id) {
@@ -552,6 +990,70 @@ impl RalphPrd {
     pub fn progress(&self) -> (usize, usize) {
         let passed = self.stories.iter().filter(|s| s.passes).count();
         (passed, self.stories.len())
+    }
+
+    /// Get the next available story using the specified strategy (US-4.2)
+    ///
+    /// This method selects the next story to assign based on the assignment strategy:
+    /// - Priority: Selects highest priority (lowest priority number)
+    /// - MinimalConflict: Selects story with lowest overlap with in-progress work
+    ///
+    /// # Arguments
+    /// * `assigned_story_ids` - List of story IDs that are currently assigned to other agents
+    /// * `strategy` - The assignment strategy to use (Priority or MinimalConflict)
+    /// * `estimated_files_map` - Map of story_id -> Vec<estimated_files> for conflict scoring
+    pub fn next_available_story_with_strategy(
+        &self,
+        assigned_story_ids: &[String],
+        strategy: AssignmentStrategy,
+        estimated_files_map: &HashMap<String, Vec<String>>,
+    ) -> Option<&RalphStory> {
+        let available = self.available_stories(assigned_story_ids);
+        if available.is_empty() {
+            return None;
+        }
+
+        match strategy {
+            AssignmentStrategy::Priority => {
+                // Priority strategy: return highest priority available story
+                available.first().copied()
+            }
+            AssignmentStrategy::MinimalConflict => {
+                // MinimalConflict strategy: return story with lowest file overlap
+                available
+                    .into_iter()
+                    .min_by_key(|story| self.score_story_by_conflict(&story.id, estimated_files_map))
+            }
+        }
+    }
+
+    /// Score a story by its file conflict potential (US-4.2)
+    ///
+    /// Lower scores are better. Returns the number of files that would conflict
+    /// with in-progress work if this story were assigned.
+    ///
+    /// # Arguments
+    /// * `story_id` - The story ID to score
+    /// * `estimated_files_map` - Map of story_id -> Vec<estimated_files>
+    fn score_story_by_conflict(&self, story_id: &str, estimated_files_map: &HashMap<String, Vec<String>>) -> usize {
+        let story_files = match estimated_files_map.get(story_id) {
+            Some(files) => files,
+            None => return 0, // No estimated files = no conflict
+        };
+
+        // Count conflicts: how many files are used by other assigned stories
+        let mut conflict_count = 0;
+        for (other_story_id, other_files) in estimated_files_map {
+            if other_story_id != story_id {
+                for file in story_files {
+                    if other_files.contains(file) {
+                        conflict_count += 1;
+                    }
+                }
+            }
+        }
+
+        conflict_count
     }
 
     // =========================================================================
@@ -1553,6 +2055,11 @@ mod tests {
             template_name: Some("default".to_string()),
             auto_create_prs: Some(true),
             draft_prs: Some(false),
+            merge_strategy: None,
+            merge_interval: None,
+            conflict_resolution: None,
+            merge_target_branch: None,
+            execution_mode: None,
         });
 
         let json = serde_json::to_string_pretty(&prd).unwrap();
@@ -1610,5 +2117,432 @@ mod tests {
         assert!(config.agent_type.is_none());
         assert!(config.model.is_none());
         assert!(config.max_cost.is_none());
+    }
+
+    // =========================================================================
+    // US-2.1: Multiple Agents on Same PRD Tests
+    // =========================================================================
+
+    #[test]
+    fn test_next_available_story_excludes_assigned() {
+        // US-2.1: System assigns different stories to each agent
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "First story", "Acceptance 1");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Second story", "Acceptance 2");
+        s2.priority = 100;
+        let mut s3 = RalphStory::new("US-1.3", "Third story", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // With no assignments, first story is returned
+        let assigned: Vec<String> = vec![];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.1");
+
+        // With US-1.1 assigned, US-1.2 is returned
+        let assigned = vec!["US-1.1".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+
+        // With US-1.1 and US-1.2 assigned, US-1.3 is returned
+        let assigned = vec!["US-1.1".to_string(), "US-1.2".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3");
+
+        // With all assigned, no story available
+        let assigned = vec![
+            "US-1.1".to_string(),
+            "US-1.2".to_string(),
+            "US-1.3".to_string(),
+        ];
+        assert!(prd.next_available_story(&assigned).is_none());
+    }
+
+    #[test]
+    fn test_next_available_story_respects_dependencies() {
+        // US-2.1: Assignment respects story dependencies
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "First story", "Acceptance 1");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Second story", "Acceptance 2");
+        s2.priority = 100;
+        s2.dependencies = vec!["US-1.1".to_string()]; // Depends on US-1.1
+        let mut s3 = RalphStory::new("US-1.3", "Third story", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // US-1.1 is assigned to agent 1
+        let assigned = vec!["US-1.1".to_string()];
+
+        // US-1.2 depends on US-1.1 (not passed yet), so US-1.3 should be returned
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3"); // Not US-1.2 because dependency not satisfied
+
+        // After US-1.1 passes, US-1.2 becomes available
+        prd.mark_story_passing("US-1.1");
+        let assigned: Vec<String> = vec![]; // Agent 1 finished
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+    }
+
+    #[test]
+    fn test_next_available_story_respects_priority() {
+        // US-2.1: System assigns by priority
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Low priority", "Acceptance 1");
+        s1.priority = 200;
+        let mut s2 = RalphStory::new("US-1.2", "High priority", "Acceptance 2");
+        s2.priority = 50;
+        let mut s3 = RalphStory::new("US-1.3", "Medium priority", "Acceptance 3");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // High priority (US-1.2) should be returned first
+        let assigned: Vec<String> = vec![];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.2");
+
+        // With US-1.2 assigned, medium priority (US-1.3) should be next
+        let assigned = vec!["US-1.2".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-1.3");
+    }
+
+    #[test]
+    fn test_available_stories_returns_all_unassigned() {
+        // US-2.1: Can get all available stories
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.priority = 50;
+        let mut s3 = RalphStory::new("US-1.3", "Story 3", "A");
+        s3.priority = 150;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // All available, sorted by priority
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 3);
+        assert_eq!(available[0].id, "US-1.2"); // Priority 50
+        assert_eq!(available[1].id, "US-1.1"); // Priority 100
+        assert_eq!(available[2].id, "US-1.3"); // Priority 150
+
+        // With one assigned
+        let assigned = vec!["US-1.2".to_string()];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2);
+        assert!(!available.iter().any(|s| s.id == "US-1.2"));
+    }
+
+    #[test]
+    fn test_available_stories_excludes_completed() {
+        // US-2.1: Completed stories are not available
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.passes = true; // Already completed
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.passes = false;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.2");
+    }
+
+    #[test]
+    fn test_available_stories_excludes_blocked() {
+        // US-2.1: Blocked stories (unsatisfied dependencies) are not available
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        let mut s1 = RalphStory::new("US-1.1", "Story 1", "A");
+        s1.passes = false;
+        let mut s2 = RalphStory::new("US-1.2", "Story 2", "A");
+        s2.passes = false;
+        s2.dependencies = vec!["US-1.1".to_string()]; // Blocked
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.1");
+
+        // After US-1.1 passes, US-1.2 becomes available
+        prd.mark_story_passing("US-1.1");
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].id, "US-1.2");
+    }
+
+    #[test]
+    fn test_multi_agent_scenario() {
+        // US-2.1: Full multi-agent scenario
+        let mut prd = RalphPrd::new("Multi-Agent PRD", "feature/multi");
+
+        // 5 stories with various dependencies
+        let mut s1 = RalphStory::new("US-1", "Foundation", "A");
+        s1.priority = 100;
+        let mut s2 = RalphStory::new("US-2", "Feature A", "A");
+        s2.priority = 100;
+        s2.dependencies = vec!["US-1".to_string()];
+        let mut s3 = RalphStory::new("US-3", "Feature B", "A");
+        s3.priority = 100;
+        s3.dependencies = vec!["US-1".to_string()];
+        let mut s4 = RalphStory::new("US-4", "Integration", "A");
+        s4.priority = 100;
+        s4.dependencies = vec!["US-2".to_string(), "US-3".to_string()];
+        let mut s5 = RalphStory::new("US-5", "Independent", "A");
+        s5.priority = 200; // Lower priority
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+        prd.add_story(s4);
+        prd.add_story(s5);
+
+        // Initially: US-1 and US-5 are available (others blocked by deps)
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2);
+
+        // Agent 1 takes US-1 (higher priority)
+        let assigned = vec!["US-1".to_string()];
+        let next = prd.next_available_story(&assigned).unwrap();
+        assert_eq!(next.id, "US-5"); // Only US-5 left that's not blocked
+
+        // Agent 1 completes US-1
+        prd.mark_story_passing("US-1");
+
+        // Now US-2 and US-3 are unblocked
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 3); // US-2, US-3, US-5 (US-4 still blocked)
+
+        // Agent 1 takes US-2, Agent 2 takes US-3
+        let assigned = vec!["US-2".to_string(), "US-3".to_string()];
+        let next = prd.next_available_story(&assigned);
+        assert_eq!(next.unwrap().id, "US-5"); // Only US-5 available (US-4 blocked)
+
+        // Both agents complete their work
+        prd.mark_story_passing("US-2");
+        prd.mark_story_passing("US-3");
+
+        // Now US-4 is available
+        let assigned: Vec<String> = vec![];
+        let available = prd.available_stories(&assigned);
+        assert_eq!(available.len(), 2); // US-4 and US-5
+    }
+
+    // =========================================================================
+    // Assignment Strategy Tests (US-4.2)
+    // =========================================================================
+
+    #[test]
+    fn test_assignment_strategy_default() {
+        let strategy = AssignmentStrategy::default();
+        assert_eq!(strategy, AssignmentStrategy::Priority);
+    }
+
+    #[test]
+    fn test_next_available_story_with_priority_strategy() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let mut s1 = RalphStory::new("US-1", "First", "A");
+        s1.priority = 50;
+
+        let mut s2 = RalphStory::new("US-2", "Second", "B");
+        s2.priority = 100;
+
+        let mut s3 = RalphStory::new("US-3", "Third", "C");
+        s3.priority = 25; // Highest priority
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        let assigned: Vec<String> = vec![];
+        let estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Priority strategy should pick US-3 (priority 25)
+        let next = prd.next_available_story_with_strategy(
+            &assigned,
+            AssignmentStrategy::Priority,
+            &estimated_files,
+        );
+        assert_eq!(next.unwrap().id, "US-3");
+    }
+
+    #[test]
+    fn test_next_available_story_with_minimal_conflict_strategy() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let mut s1 = RalphStory::new("US-1", "Frontend", "A");
+        s1.priority = 100;
+
+        let mut s2 = RalphStory::new("US-2", "Backend", "B");
+        s2.priority = 100;
+
+        let mut s3 = RalphStory::new("US-3", "Config", "C");
+        s3.priority = 100;
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+        prd.add_story(s3);
+
+        // Build estimated files map showing in-progress work
+        // "In-progress" assignments are represented by having files in the map
+        // US-2 (in progress) has 3 files
+        // US-3 (in progress) has 2 files
+        // US-1 (candidate) needs files:
+        //   - overlaps 2 files with US-2 (high conflict)
+        //   - overlaps 1 file with US-3 (lower conflict)
+        // Total conflicts for US-1: 3
+        //
+        // Let's make US-2 have 5 files so it has more conflicts with US-1
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // These are "in-progress" assignments (already assigned to other agents)
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/components/Card.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/uiStore.ts".to_string(),
+                "src/stores/sessionStore.ts".to_string(),
+            ],
+        );
+        estimated_files.insert(
+            "US-3".to_string(),
+            vec!["config.json".to_string(), "server/src/models.rs".to_string()],
+        );
+
+        // US-1 (candidate story) has these files:
+        // overlaps with US-2: Button.tsx, Card.tsx (2 conflicts)
+        // overlaps with US-3: none (0 conflicts)
+        // Total: 2 conflicts
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/components/Card.tsx".to_string(),
+                "src/pages/Home.tsx".to_string(),
+            ],
+        );
+
+        let assigned: Vec<String> = vec![];
+
+        // MinimalConflict strategy should pick US-3 (0 conflicts is minimal)
+        let next = prd.next_available_story_with_strategy(
+            &assigned,
+            AssignmentStrategy::MinimalConflict,
+            &estimated_files,
+        );
+        assert_eq!(next.unwrap().id, "US-3");
+    }
+
+    #[test]
+    fn test_score_story_by_conflict() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        let s2 = RalphStory::new("US-2", "Story 2", "B");
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        // Create a map where US-1 has 3 overlapping files with US-2
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/store.ts".to_string(),
+            ],
+        );
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec![
+                "src/components/Button.tsx".to_string(),
+                "src/lib/api.ts".to_string(),
+                "src/stores/store.ts".to_string(),
+                "server/src/auth.rs".to_string(),
+            ],
+        );
+
+        // Score US-1 against US-2's files
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 3); // 3 files overlap
+
+        // Score US-2 against US-1's files
+        let score = prd.score_story_by_conflict("US-2", &estimated_files);
+        assert_eq!(score, 3); // 3 files overlap
+    }
+
+    #[test]
+    fn test_score_story_no_overlap() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        let s2 = RalphStory::new("US-2", "Story 2", "B");
+
+        prd.add_story(s1);
+        prd.add_story(s2);
+
+        // Create a map where stories have no overlapping files
+        let mut estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+        estimated_files.insert(
+            "US-1".to_string(),
+            vec!["src/components/Button.tsx".to_string()],
+        );
+        estimated_files.insert(
+            "US-2".to_string(),
+            vec!["server/src/auth.rs".to_string()],
+        );
+
+        // Score should be 0 (no overlap)
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 0);
+
+        let score = prd.score_story_by_conflict("US-2", &estimated_files);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_score_story_no_estimated_files() {
+        let mut prd = RalphPrd::new("Test PRD", "feature/test");
+
+        let s1 = RalphStory::new("US-1", "Story 1", "A");
+        prd.add_story(s1);
+
+        let estimated_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Score should be 0 when no estimated files
+        let score = prd.score_story_by_conflict("US-1", &estimated_files);
+        assert_eq!(score, 0);
     }
 }

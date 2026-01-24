@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 // Re-export types needed for proxy commands
 use crate::commands::ralph_loop::RalphStoryInput;
-use crate::ralph_loop::{ExecutionSnapshot, RalphConfig};
+use crate::ralph_loop::{ConflictResolution, ExecutionSnapshot, MergeStrategy, RalphConfig};
 
 /// Request body for /api/invoke endpoint
 #[derive(Debug, Deserialize)]
@@ -965,6 +965,168 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         "get_ralph_config" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             route_sync!(commands::ralph_loop::get_ralph_config(project_path))
+        }
+
+        // US-2.3: View Parallel Progress - Assignment Commands
+        "get_ralph_assignments" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_assignments(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "get_ralph_files_in_use" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_files_in_use(
+                project_path,
+                prd_name
+            ))
+        }
+
+        // US-4.1: Priority-Based Assignment - Manual Override
+        "manual_assign_ralph_story" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::ManualAssignStoryInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::manual_assign_ralph_story(
+                project_path,
+                prd_name,
+                input,
+                Some(state.broadcaster.clone())
+            ))
+        }
+
+        "release_ralph_story_assignment" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let story_id: String = get_arg(&args, "storyId")?;
+            route_sync!(commands::ralph_loop::release_ralph_story_assignment(
+                project_path,
+                prd_name,
+                story_id,
+                Some(state.broadcaster.clone())
+            ))
+        }
+
+        // US-6.1: View Current Brief
+        "get_ralph_brief" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_brief(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "regenerate_ralph_brief" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::regenerate_ralph_brief(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "get_ralph_historical_briefs" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_historical_briefs(
+                project_path,
+                prd_name
+            ))
+        }
+
+        // US-5.3: Competitive Execution
+        "get_ralph_competitive_attempts" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_competitive_attempts(
+                project_path,
+                prd_name,
+                execution_id
+            ))
+        }
+
+        "select_ralph_competitive_attempt" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            let attempt_id: String = get_arg(&args, "attemptId")?;
+            let reason: String = get_arg(&args, "reason")?;
+            route_unit!(commands::ralph_loop::select_ralph_competitive_attempt(
+                project_path,
+                prd_name,
+                execution_id,
+                attempt_id,
+                reason
+            ))
+        }
+
+        "get_ralph_selected_competitive_attempt" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let execution_id: String = get_arg(&args, "executionId")?;
+            route_sync!(commands::ralph_loop::get_ralph_selected_competitive_attempt(
+                project_path,
+                prd_name,
+                execution_id
+            ))
+        }
+
+        // US-3.3: Manual Learning Entry
+        "get_ralph_learnings" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::get_ralph_learnings(
+                project_path,
+                prd_name
+            ))
+        }
+
+        "add_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::AddLearningInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::add_ralph_learning(
+                project_path,
+                prd_name,
+                input
+            ))
+        }
+
+        "update_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let input: commands::ralph_loop::UpdateLearningInput = get_arg(&args, "input")?;
+            route_sync!(commands::ralph_loop::update_ralph_learning(
+                project_path,
+                prd_name,
+                input
+            ))
+        }
+
+        "delete_ralph_learning" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            let learning_id: String = get_arg(&args, "learningId")?;
+            route_sync!(commands::ralph_loop::delete_ralph_learning(
+                project_path,
+                prd_name,
+                learning_id
+            ))
+        }
+
+        "export_ralph_learnings" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let prd_name: String = get_arg(&args, "prdName")?;
+            route_sync!(commands::ralph_loop::export_ralph_learnings(
+                project_path,
+                prd_name
+            ))
         }
 
         "list_ralph_loop_executions" => {
@@ -2376,6 +2538,10 @@ async fn start_ralph_loop_server(
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        merge_strategy: MergeStrategy::default(),
+        merge_interval: 0,
+        conflict_resolution: ConflictResolution::default(),
+        merge_target_branch: "main".to_string(),
     };
 
     // Create orchestrator

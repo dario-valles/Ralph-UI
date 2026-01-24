@@ -8,18 +8,32 @@
 //!
 //! Key insight from Theo: "The Ralph loop controls Claude Code, not Claude Code controlling the Ralph loop"
 
+mod assignments_manager;
+mod brief_builder;
+mod competitive_manager;
 mod completion;
 mod config;
 pub mod fallback_orchestrator;
+mod hierarchical_team_manager;
+mod learnings_manager;
+mod merge_manager;
 mod prd_executor;
 mod progress_tracker;
 mod prompt_builder;
 pub mod retry;
 mod types;
 
+pub use assignments_manager::*;
+pub use brief_builder::*;
+pub use competitive_manager::{CompetitiveExecutionManager};
 pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
+pub use hierarchical_team_manager::{
+    HierarchicalSubtaskAssignment, HierarchicalTeamAssignment, HierarchicalTeamManager, PrimaryReview,
+};
+pub use learnings_manager::*;
+pub use merge_manager::{MergeConfig, MergeManager, MergeAttemptResult};
 pub use prd_executor::*;
 pub use progress_tracker::*;
 pub use prompt_builder::*;
@@ -88,6 +102,14 @@ pub struct RalphLoopConfig {
     /// Template name to use for prompt generation (US-014)
     /// If None, uses the default hardcoded prompt
     pub template_name: Option<String>,
+    /// Merge strategy for collaborative mode (US-5.1)
+    pub merge_strategy: MergeStrategy,
+    /// Merge interval in iterations - merge every N iterations (US-5.1)
+    pub merge_interval: u32,
+    /// Conflict resolution strategy (US-5.1)
+    pub conflict_resolution: ConflictResolution,
+    /// Target branch for merges (US-5.1) - defaults to "main"
+    pub merge_target_branch: String,
 }
 
 impl Default for RalphLoopConfig {
@@ -109,6 +131,10 @@ impl Default for RalphLoopConfig {
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
             prd_name: String::new(), // Must be set before use
             template_name: None, // Use default prompt
+            merge_strategy: MergeStrategy::default(),
+            merge_interval: 0, // Default: no periodic merges (0 = disabled)
+            conflict_resolution: ConflictResolution::default(),
+            merge_target_branch: "main".to_string(),
         }
     }
 }
@@ -240,6 +266,12 @@ pub struct RalphLoopOrchestrator {
     progress_tracker: ProgressTracker,
     /// Prompt builder for generating iteration prompts
     prompt_builder: PromptBuilder,
+    /// Brief builder for generating BRIEF.md (US-1.1: Resume After Rate Limit)
+    brief_builder: BriefBuilder,
+    /// Assignments manager for crash recovery (US-1.2)
+    assignments_manager: AssignmentsManager,
+    /// Learnings manager for structured learnings (US-1.2)
+    learnings_manager: LearningsManager,
     /// Completion detector
     completion_detector: CompletionDetector,
     /// Cumulative metrics
@@ -283,11 +315,19 @@ impl RalphLoopOrchestrator {
         let prd_executor = PrdExecutor::new(&config.project_path, &config.prd_name);
         let progress_tracker = ProgressTracker::new(&config.project_path, &config.prd_name);
         let prompt_builder = PromptBuilder::new(&config.project_path, &config.prd_name);
+        let brief_builder = BriefBuilder::new(&config.project_path, &config.prd_name);
+
+        // Create managers for crash recovery (US-1.2: Resume After Crash)
+        let assignments_manager = AssignmentsManager::new(&config.project_path, &config.prd_name);
+        let learnings_manager = LearningsManager::new(&config.project_path, &config.prd_name);
 
         Self {
             prd_executor,
             progress_tracker,
             prompt_builder,
+            brief_builder,
+            assignments_manager,
+            learnings_manager,
             completion_detector: CompletionDetector::new(&completion_promise),
             config,
             execution_id,
@@ -405,10 +445,82 @@ impl RalphLoopOrchestrator {
         // Generate initial prompt file
         self.prompt_builder.generate_prompt(&self.config)?;
 
+        // Generate initial BRIEF.md (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
+        // Use learnings manager for structured learnings from all agents
+        self.brief_builder.generate_brief_with_learnings_manager(prd, &self.learnings_manager, Some(1))?;
+
+        // Initialize crash recovery state (US-1.2: Resume After Crash)
+        self.assignments_manager.initialize(&self.execution_id)?;
+        self.learnings_manager.initialize()?;
+
         self.state = RalphLoopState::Idle;
         self.emit_status();
 
         Ok(())
+    }
+
+    /// Check if this PRD execution can be resumed after a crash
+    ///
+    /// Returns true if there's existing assignment state that can be restored.
+    pub fn can_resume(&self) -> bool {
+        self.assignments_manager.can_resume()
+    }
+
+    /// Load existing state for crash recovery (US-1.2: Resume After Crash)
+    ///
+    /// Returns the iteration to resume from if state exists.
+    pub fn load_state_for_resume(&mut self) -> Result<Option<u32>, String> {
+        if !self.assignments_manager.can_resume() {
+            return Ok(None);
+        }
+
+        // Load the last saved iteration
+        let iteration = self.assignments_manager.get_current_iteration()?;
+
+        if iteration == 0 {
+            return Ok(None);
+        }
+
+        log::info!(
+            "[RalphLoop] Found existing state for crash recovery. Last iteration: {}",
+            iteration
+        );
+
+        // Log completed stories from assignments
+        let completed = self.assignments_manager.get_completed_story_ids()?;
+        log::info!("[RalphLoop] Completed stories from crash recovery: {:?}", completed);
+
+        // Check learnings
+        if self.learnings_manager.has_learnings()? {
+            let count = self.learnings_manager.count()?;
+            log::info!("[RalphLoop] Found {} learnings from previous execution", count);
+        }
+
+        Ok(Some(iteration))
+    }
+
+    /// Save current iteration state for crash recovery
+    fn save_iteration_state(&self, iteration: u32) -> Result<(), String> {
+        self.assignments_manager.set_iteration(iteration)?;
+        Ok(())
+    }
+
+    /// Get the assignments manager for external access
+    pub fn assignments_manager(&self) -> &AssignmentsManager {
+        &self.assignments_manager
+    }
+
+    /// Get the learnings manager for external access
+    pub fn learnings_manager(&self) -> &LearningsManager {
+        &self.learnings_manager
+    }
+
+    /// Get the current story ID being worked on (from PRD)
+    fn get_current_story_id(&self) -> Option<String> {
+        self.prd_executor
+            .read_prd()
+            .ok()
+            .and_then(|prd| prd.next_story().map(|s| s.id.clone()))
     }
 
     /// Run the Ralph loop with a shared agent manager (Arc-wrapped sync Mutex).
@@ -434,6 +546,21 @@ impl RalphLoopOrchestrator {
             log::debug!("[RalphLoop] Worktree setup complete");
         } else {
             log::debug!("[RalphLoop] Skipping worktree setup (use_worktree=false)");
+        }
+
+        // US-1.2: Try to load existing state for crash recovery
+        if let Ok(Some(resume_iter)) = self.load_state_for_resume() {
+            // Resume from the next iteration (the one that was interrupted)
+            iteration = resume_iter + 1;
+            log::info!("[RalphLoop] Resuming from iteration {} after crash", iteration);
+        } else {
+            // Initialize fresh state for new execution
+            if let Err(e) = self.assignments_manager.initialize(&self.execution_id) {
+                log::warn!("[RalphLoop] Failed to initialize assignments: {}", e);
+            }
+            if let Err(e) = self.learnings_manager.initialize() {
+                log::warn!("[RalphLoop] Failed to initialize learnings: {}", e);
+            }
         }
 
         log::debug!("[RalphLoop] Entering main loop, iteration {}", iteration);
@@ -521,9 +648,17 @@ impl RalphLoopOrchestrator {
                 }
             };
             let prd_status = self.prd_executor.get_status(&prd);
-            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}", 
+            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}",
                 prd_status.passed, prd_status.total, prd_status.progress_percent as u32,
                 prd_status.all_pass, prd_status.incomplete_story_ids);
+
+            // Generate BRIEF.md for this iteration (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
+            // Use structured learnings manager to include accumulated learnings from all agents
+            if let Err(e) = self.brief_builder.generate_brief_with_learnings_manager(&prd, &self.learnings_manager, Some(iteration)) {
+                log::warn!("[RalphLoop] Failed to generate BRIEF.md: {}", e);
+            } else {
+                log::debug!("[RalphLoop] Generated BRIEF.md for iteration {}", iteration);
+            }
 
             // Check if all stories pass
             if prd_status.all_pass {
@@ -635,6 +770,11 @@ impl RalphLoopOrchestrator {
             // This ensures progress is persisted even if the app crashes or restarts
             if let Err(e) = self.sync_prd_to_main() {
                 log::warn!("[RalphLoop] Failed to sync PRD after iteration {}: {}", iteration, e);
+            }
+
+            // US-1.2: Save iteration state for crash recovery
+            if let Err(e) = self.save_iteration_state(iteration) {
+                log::warn!("[RalphLoop] Failed to save iteration state: {}", e);
             }
 
             log::info!("[RalphLoop] Continuing to iteration {}", iteration + 1);
@@ -922,6 +1062,25 @@ impl RalphLoopOrchestrator {
 
             // Record end of iteration in progress.txt
             self.progress_tracker.end_iteration(iteration, exit_code == 0)?;
+
+            // US-3.1: Extract learnings from agent output using structured protocol
+            // The <learning> tags in the output are parsed and saved to learnings.json
+            let story_id_ref = self.get_current_story_id();
+            match self.learnings_manager.extract_and_save_learnings(
+                &output_str,
+                iteration,
+                story_id_ref.as_deref(),
+            ) {
+                Ok(count) if count > 0 => {
+                    log::info!("[RalphLoop] Extracted {} learning(s) from agent output", count);
+                }
+                Ok(_) => {
+                    log::debug!("[RalphLoop] No learnings found in agent output");
+                }
+                Err(e) => {
+                    log::warn!("[RalphLoop] Failed to extract learnings: {}", e);
+                }
+            }
 
             // Note: We intentionally keep current_agent_id set and don't unregister the PTY yet.
             // This allows the terminal to continue displaying the agent's output after it completes.
@@ -1267,6 +1426,9 @@ impl RalphLoopOrchestrator {
         self.prd_executor = PrdExecutor::new(&worktree_path, &self.config.prd_name);
         self.progress_tracker = ProgressTracker::new(&worktree_path, &self.config.prd_name);
         self.prompt_builder = PromptBuilder::new(&worktree_path, &self.config.prd_name);
+        self.brief_builder = BriefBuilder::new(&worktree_path, &self.config.prd_name);
+        self.assignments_manager = AssignmentsManager::new(&worktree_path, &self.config.prd_name);
+        self.learnings_manager = LearningsManager::new(&worktree_path, &self.config.prd_name);
 
         // Store the execution branch (different from the base PRD branch)
         self.config.branch = Some(execution_branch);

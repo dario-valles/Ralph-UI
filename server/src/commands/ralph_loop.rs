@@ -5,10 +5,11 @@
 use crate::commands::ConfigState;
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    ErrorStrategy, ExecutionSnapshot, FallbackChainConfig, PrdExecutor, PrdStatus,
-    ProgressSummary, ProgressTracker, PromptBuilder, RalphConfig, RalphLoopConfig,
-    RalphLoopMetrics, RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RalphPrd,
-    RalphStory, RetryConfig, SnapshotStore,
+    AssignmentsFile, AssignmentsManager, ConflictResolution, ErrorStrategy, ExecutionSnapshot,
+    FallbackChainConfig, FileInUse, LearningEntry, LearningType, LearningsFile, LearningsManager,
+    MergeStrategy, PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder,
+    RalphConfig, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
+    RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory, RetryConfig, SnapshotStore,
 };
 use crate::utils::{as_path, prds_dir, ralph_ui_dir, to_path_buf};
 use serde::{Deserialize, Serialize};
@@ -438,6 +439,320 @@ pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String)
     prompt_builder(&project_path, &prd_name).write_prompt(&content)
 }
 
+// =============================================================================
+// Assignment Commands (US-2.3: View Parallel Progress)
+// =============================================================================
+
+/// Get all assignments for a PRD (US-2.3: View Parallel Progress)
+///
+/// Returns the assignments file containing all current and historical assignments
+/// for the specified PRD. This enables the UI to display:
+/// - All current agent assignments
+/// - Each assignment's agent ID, story, start time, estimated files
+/// - Assignment status (active, completed, failed, released)
+pub fn get_ralph_assignments(project_path: String, prd_name: String) -> Result<AssignmentsFile, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.read()
+}
+
+/// Get files currently in use by active agents (US-2.3: View Parallel Progress)
+///
+/// Returns a list of files that are currently being modified by active agents.
+/// This is used to display visual indicators for potential conflict zones.
+pub fn get_ralph_files_in_use(project_path: String, prd_name: String) -> Result<Vec<FileInUse>, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.get_files_in_use()
+}
+
+// =============================================================================
+// US-4.1: Priority-Based Assignment - Manual Override Commands
+// =============================================================================
+
+/// Input for manually assigning a story to an agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualAssignStoryInput {
+    /// Agent identifier
+    pub agent_id: String,
+    /// Agent type (claude, opencode, cursor, codex)
+    pub agent_type: String,
+    /// Story ID to assign
+    pub story_id: String,
+    /// If true, releases any existing assignment and reassigns
+    #[serde(default)]
+    pub force: bool,
+    /// Optional estimated files for conflict detection
+    pub estimated_files: Option<Vec<String>>,
+}
+
+/// Manually assign a story to an agent (US-4.1: Priority-Based Assignment)
+///
+/// This provides a manual override for exceptional cases where a specific
+/// story needs to be assigned regardless of priority order. Use cases include:
+/// - Debugging a specific story issue
+/// - Prioritizing urgent work that bypasses normal priority
+/// - Reassigning work after an agent failure
+///
+/// If the story is already assigned and `force` is false, returns an error.
+/// If `force` is true, releases the existing assignment first.
+pub fn manual_assign_ralph_story(
+    project_path: String,
+    prd_name: String,
+    input: ManualAssignStoryInput,
+    broadcaster: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
+) -> Result<crate::ralph_loop::Assignment, String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+
+    // Parse agent type
+    let agent_type: AgentType = input
+        .agent_type
+        .parse()
+        .map_err(|_| format!("Invalid agent type: {}", input.agent_type))?;
+
+    // Use appropriate method based on whether files are provided
+    let result = match input.estimated_files {
+        Some(files) => manager.manual_assign_story_with_files(
+            &input.agent_id,
+            agent_type,
+            &input.story_id,
+            files,
+            input.force,
+        ),
+        None => manager.manual_assign_story(&input.agent_id, agent_type, &input.story_id, input.force),
+    };
+
+    // Emit event on successful assignment (US-6.2: Real-Time Assignment Updates)
+    if let Ok(assignment) = &result {
+        if let Some(bc) = broadcaster {
+            use crate::events::{AssignmentChangedPayload, AssignmentChangeType};
+            let payload = AssignmentChangedPayload {
+                change_type: AssignmentChangeType::Created,
+                agent_id: input.agent_id.clone(),
+                agent_type: input.agent_type.clone(),
+                story_id: input.story_id.clone(),
+                prd_name: prd_name.clone(),
+                estimated_files: assignment.estimated_files.clone(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            bc.broadcast(
+                "assignment:changed",
+                &payload,
+            );
+        }
+    }
+
+    result
+}
+
+/// Release a story assignment back to the pool (US-4.1: Priority-Based Assignment)
+///
+/// This allows manually releasing a story that was assigned to an agent,
+/// making it available for automatic assignment to another agent.
+pub fn release_ralph_story_assignment(
+    project_path: String,
+    prd_name: String,
+    story_id: String,
+    broadcaster: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
+) -> Result<(), String> {
+    let manager = AssignmentsManager::new(&to_path_buf(&project_path), &prd_name);
+    let result = manager.release_story(&story_id);
+
+    // Emit event on successful release (US-6.2: Real-Time Assignment Updates)
+    if result.is_ok() {
+        if let Some(bc) = broadcaster {
+            use crate::events::{AssignmentChangedPayload, AssignmentChangeType};
+            let payload = AssignmentChangedPayload {
+                change_type: AssignmentChangeType::Released,
+                agent_id: String::new(),
+                agent_type: String::new(),
+                story_id: story_id.clone(),
+                prd_name: prd_name.clone(),
+                estimated_files: Vec::new(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            bc.broadcast(
+                "assignment:changed",
+                &payload,
+            );
+        }
+    }
+
+    result
+}
+
+// =============================================================================
+// US-3.3: Manual Learning Entry - CRUD commands for learnings
+// =============================================================================
+
+/// Get all learnings for a PRD (US-3.3: Manual Learning Entry)
+///
+/// Returns the learnings file containing all accumulated learnings for the specified PRD.
+pub fn get_ralph_learnings(project_path: String, prd_name: String) -> Result<LearningsFile, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.read()
+}
+
+/// Input for adding a manual learning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddLearningInput {
+    /// Type/category of the learning
+    pub learning_type: String,
+    /// The learning content (description)
+    pub content: String,
+    /// Optional code example
+    pub code_example: Option<String>,
+    /// Optional associated story ID
+    pub story_id: Option<String>,
+}
+
+/// Add a manual learning entry (US-3.3: Manual Learning Entry)
+///
+/// Allows users to add learnings with type, content, and optional code.
+/// Manual learnings are integrated with agent-reported learnings.
+pub fn add_ralph_learning(
+    project_path: String,
+    prd_name: String,
+    input: AddLearningInput,
+) -> Result<LearningEntry, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+
+    // Parse learning type
+    let learning_type: LearningType = input
+        .learning_type
+        .parse()
+        .unwrap_or(LearningType::General);
+
+    // Get current iteration from learnings file (or default to 0 for manual entries)
+    let file = manager.read()?;
+    let iteration = file.total_iterations;
+
+    // Create the learning entry
+    let mut entry = LearningEntry::with_type(iteration, learning_type, &input.content).from_human();
+
+    if let Some(story_id) = input.story_id {
+        entry = entry.for_story(story_id);
+    }
+
+    if let Some(code) = input.code_example {
+        entry = entry.with_code(code);
+    }
+
+    // Save the ID before adding (entry will be moved)
+    let entry_id = entry.id.clone();
+
+    // Add to file
+    manager.add_learning(entry)?;
+
+    // Return the created entry by reading it back
+    let file = manager.read()?;
+    file.entries
+        .into_iter()
+        .find(|e| e.id == entry_id)
+        .ok_or_else(|| "Failed to find created learning entry".to_string())
+}
+
+/// Input for updating an existing learning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLearningInput {
+    /// ID of the learning to update
+    pub id: String,
+    /// Updated type/category (optional)
+    pub learning_type: Option<String>,
+    /// Updated content (optional)
+    pub content: Option<String>,
+    /// Updated code example (optional, None to keep, Some("") to remove)
+    pub code_example: Option<String>,
+    /// Updated story ID (optional, None to keep, Some("") to remove)
+    pub story_id: Option<String>,
+}
+
+/// Update an existing learning entry (US-3.3: Manual Learning Entry)
+///
+/// Edit capabilities for manual learnings.
+pub fn update_ralph_learning(
+    project_path: String,
+    prd_name: String,
+    input: UpdateLearningInput,
+) -> Result<LearningEntry, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+    let mut file = manager.read()?;
+
+    // Find the entry to update
+    let entry_idx = file
+        .entries
+        .iter()
+        .position(|e| e.id == input.id)
+        .ok_or_else(|| format!("Learning with id '{}' not found", input.id))?;
+
+    // Update fields
+    if let Some(learning_type_str) = input.learning_type {
+        file.entries[entry_idx].learning_type = learning_type_str
+            .parse()
+            .unwrap_or(LearningType::General);
+    }
+
+    if let Some(content) = input.content {
+        file.entries[entry_idx].content = content;
+    }
+
+    if let Some(code) = input.code_example {
+        file.entries[entry_idx].code_example = if code.is_empty() { None } else { Some(code) };
+    }
+
+    if let Some(story_id) = input.story_id {
+        file.entries[entry_idx].story_id = if story_id.is_empty() {
+            None
+        } else {
+            Some(story_id)
+        };
+    }
+
+    // Update timestamp
+    file.last_updated = chrono::Utc::now().to_rfc3339();
+
+    manager.write(&file)?;
+
+    Ok(file.entries[entry_idx].clone())
+}
+
+/// Delete a learning entry (US-3.3: Manual Learning Entry)
+///
+/// Delete capabilities for manual learnings.
+pub fn delete_ralph_learning(
+    project_path: String,
+    prd_name: String,
+    learning_id: String,
+) -> Result<bool, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+    let mut file = manager.read()?;
+
+    let initial_len = file.entries.len();
+    file.entries.retain(|e| e.id != learning_id);
+
+    if file.entries.len() == initial_len {
+        return Ok(false); // Entry not found
+    }
+
+    file.last_updated = chrono::Utc::now().to_rfc3339();
+    manager.write(&file)?;
+
+    Ok(true)
+}
+
+/// Export learnings to markdown (US-6.3: Learning Analytics)
+///
+/// Exports all learnings in a PRD to a markdown-formatted string for documentation.
+/// Includes learning type grouping, syntax highlighting, and metadata.
+pub fn export_ralph_learnings(
+    project_path: String,
+    prd_name: String,
+) -> Result<String, String> {
+    let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
+    manager.export_markdown()
+}
+
 /// Heartbeat interval in seconds (30 seconds)
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
@@ -642,6 +957,10 @@ pub async fn start_ralph_loop(
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        merge_strategy: MergeStrategy::default(),
+        merge_interval: 0,
+        conflict_resolution: ConflictResolution::default(),
+        merge_target_branch: "main".to_string(),
     };
 
     // Create orchestrator
@@ -2591,4 +2910,194 @@ Show analytics.
         assert_eq!(stories[1].id, "task-2");
         assert_eq!(stories[1].title, "Dashboard");
     }
+}
+
+/// Get the current BRIEF.md content for a PRD (US-6.1: View Current Brief)
+pub fn get_ralph_brief(project_path: String, prd_name: String) -> Result<String, String> {
+    let briefs_path = format!(".ralph-ui/briefs/{}/BRIEF.md", prd_name);
+    let full_path = std::path::PathBuf::from(&project_path)
+        .join(&briefs_path);
+
+    match std::fs::read_to_string(&full_path) {
+        Ok(content) => Ok(content),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("BRIEF.md not found at {}", briefs_path))
+        }
+        Err(e) => Err(format!("Failed to read BRIEF.md: {}", e)),
+    }
+}
+
+/// Regenerate the BRIEF.md file for a PRD (US-6.1: View Current Brief)
+pub fn regenerate_ralph_brief(
+    project_path: String,
+    prd_name: String,
+) -> Result<String, String> {
+    use crate::ralph_loop::{BriefBuilder, LearningsManager, PrdExecutor};
+    use std::path::Path;
+
+    let project_path_ref = Path::new(&project_path);
+
+    // Load the PRD
+    let prd_executor = PrdExecutor::new(project_path_ref, &prd_name);
+    let prd = prd_executor.read_prd()
+        .map_err(|e| format!("Failed to load PRD: {}", e))?;
+
+    // Load learnings
+    let learnings_manager = LearningsManager::new(project_path_ref, &prd_name);
+
+    // Generate brief (no iteration for current brief)
+    let brief_builder = BriefBuilder::new(project_path_ref, &prd_name);
+    brief_builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, None)
+        .map_err(|e| format!("Failed to generate brief: {}", e))?;
+
+    // Return the generated content
+    get_ralph_brief(project_path, prd_name)
+}
+
+/// Get historical briefs for a PRD (US-6.1: View Current Brief - historical briefs)
+#[derive(serde::Serialize)]
+pub struct HistoricalBrief {
+    pub iteration: u32,
+    pub content: String,
+}
+
+pub fn get_ralph_historical_briefs(
+    project_path: String,
+    prd_name: String,
+) -> Result<Vec<HistoricalBrief>, String> {
+    use crate::ralph_loop::BriefBuilder;
+    use std::path::Path;
+
+    let brief_builder = BriefBuilder::new(Path::new(&project_path), &prd_name);
+    let briefs = brief_builder.list_historical_briefs()?;
+
+    Ok(briefs
+        .into_iter()
+        .map(|(iteration, content)| HistoricalBrief { iteration, content })
+        .collect())
+}
+
+/// Get competitive attempts for a PRD execution (US-5.3)
+pub fn get_ralph_competitive_attempts(
+    project_path: String,
+    prd_name: String,
+    execution_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let project_path_buf = to_path_buf(&project_path);
+    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
+
+    // Read the PRD file
+    let prd = prd_executor
+        .read_prd()
+        .map_err(|e| format!("Failed to load PRD: {}", e))?;
+
+    // Find the execution by ID
+    let execution = prd
+        .executions
+        .iter()
+        .find(|e| e.id == execution_id)
+        .ok_or_else(|| format!("Execution {} not found", execution_id))?;
+
+    // Return competitive attempts as JSON
+    let attempts = execution
+        .competitive_attempts
+        .iter()
+        .map(|a| {
+            serde_json::json!({
+                "id": a.id,
+                "attemptNumber": a.attempt_number,
+                "agentType": a.agent_type,
+                "model": a.model,
+                "storiesCompleted": a.stories_completed,
+                "storiesRemaining": a.stories_remaining,
+                "durationSecs": a.duration_secs,
+                "cost": a.cost,
+                "linesChanged": a.lines_changed,
+                "coveragePercent": a.coverage_percent,
+                "selected": a.selected,
+                "selectionReason": a.selection_reason,
+                "startedAt": a.started_at,
+                "completedAt": a.completed_at,
+                "errorMessage": a.error_message,
+            })
+        })
+        .collect();
+
+    Ok(attempts)
+}
+
+/// Select a winning competitive attempt (US-5.3)
+pub fn select_ralph_competitive_attempt(
+    project_path: String,
+    prd_name: String,
+    execution_id: String,
+    attempt_id: String,
+    reason: String,
+) -> Result<(), String> {
+    let project_path_buf = to_path_buf(&project_path);
+    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
+
+    // Read the PRD file
+    let mut prd = prd_executor
+        .read_prd()
+        .map_err(|e| format!("Failed to load PRD: {}", e))?;
+
+    // Find and update the execution
+    if let Some(execution) = prd.executions.iter_mut().find(|e| e.id == execution_id) {
+        execution.select_competitive_attempt(&attempt_id, &reason)?;
+
+        // Write back to disk
+        prd_executor
+            .write_prd(&prd)
+            .map_err(|e| format!("Failed to save PRD: {}", e))?;
+
+        Ok(())
+    } else {
+        Err(format!("Execution {} not found", execution_id))
+    }
+}
+
+/// Get the selected attempt for an execution (US-5.3)
+pub fn get_ralph_selected_competitive_attempt(
+    project_path: String,
+    prd_name: String,
+    execution_id: String,
+) -> Result<Option<serde_json::Value>, String> {
+    let project_path_buf = to_path_buf(&project_path);
+    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
+
+    // Read the PRD file
+    let prd = prd_executor
+        .read_prd()
+        .map_err(|e| format!("Failed to load PRD: {}", e))?;
+
+    // Find the execution
+    let execution = prd
+        .executions
+        .iter()
+        .find(|e| e.id == execution_id)
+        .ok_or_else(|| format!("Execution {} not found", execution_id))?;
+
+    // Return selected attempt if any
+    let result = execution.get_selected_attempt().map(|a| {
+        serde_json::json!({
+            "id": a.id,
+            "attemptNumber": a.attempt_number,
+            "agentType": a.agent_type,
+            "model": a.model,
+            "storiesCompleted": a.stories_completed,
+            "storiesRemaining": a.stories_remaining,
+            "durationSecs": a.duration_secs,
+            "cost": a.cost,
+            "linesChanged": a.lines_changed,
+            "coveragePercent": a.coverage_percent,
+            "selected": a.selected,
+            "selectionReason": a.selection_reason,
+            "startedAt": a.started_at,
+            "completedAt": a.completed_at,
+            "errorMessage": a.error_message,
+        })
+    });
+
+    Ok(result)
 }
