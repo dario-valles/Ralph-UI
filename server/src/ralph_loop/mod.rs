@@ -94,6 +94,12 @@ pub struct RalphLoopConfig {
     /// Template name to use for prompt generation (US-014)
     /// If None, uses the default hardcoded prompt
     pub template_name: Option<String>,
+    /// Custom test command (e.g., "npm test", "cargo test")
+    /// If None, auto-detect based on project type
+    pub test_command: Option<String>,
+    /// Custom lint command (e.g., "npm run lint", "cargo clippy")
+    /// If None, auto-detect based on project type
+    pub lint_command: Option<String>,
 }
 
 impl Default for RalphLoopConfig {
@@ -115,6 +121,8 @@ impl Default for RalphLoopConfig {
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
             prd_name: String::new(), // Must be set before use
             template_name: None, // Use default prompt
+            test_command: None, // Auto-detect based on project type
+            lint_command: None, // Auto-detect based on project type
         }
     }
 }

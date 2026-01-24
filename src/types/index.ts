@@ -1063,6 +1063,12 @@ export interface StartRalphLoopRequest {
    * When undefined, the legacy `.ralph/prd.json` path is used.
    */
   prdName?: string
+  /** Template name to use for prompt generation */
+  templateName?: string
+  /** Custom test command (e.g., "npm test", "cargo test") */
+  testCommand?: string
+  /** Custom lint command (e.g., "npm run lint", "cargo clippy") */
+  lintCommand?: string
 }
 
 /** Request to convert a database PRD to Ralph format */

@@ -333,6 +333,14 @@ pub struct PrdExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_name: Option<String>,
 
+    /// Custom test command (e.g., "npm test", "cargo test")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_command: Option<String>,
+
+    /// Custom lint command (e.g., "npm run lint", "cargo clippy")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint_command: Option<String>,
+
     /// Automatically create PRs for completed stories
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_create_prs: Option<bool>,
@@ -374,6 +382,8 @@ impl Default for PrdExecutionConfig {
             use_worktree: None,
             agent_timeout_secs: None,
             template_name: None,
+            test_command: None,
+            lint_command: None,
             auto_create_prs: None,
             draft_prs: None,
             merge_strategy: None,
@@ -2053,6 +2063,8 @@ mod tests {
             use_worktree: Some(true),
             agent_timeout_secs: Some(1800),
             template_name: Some("default".to_string()),
+            test_command: Some("npm test".to_string()),
+            lint_command: Some("npm run lint".to_string()),
             auto_create_prs: Some(true),
             draft_prs: Some(false),
             merge_strategy: None,

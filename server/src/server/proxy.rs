@@ -2414,7 +2414,25 @@ async fn start_ralph_loop_server(
     let resolved_template = request
         .template_name
         .clone()
-        .or_else(|| prd_config.and_then(|c| c.template_name.clone()));
+        .or_else(|| prd_config.and_then(|c| c.template_name.clone()))
+        .or_else(|| user_config.as_ref().and_then(|c| c.templates.default_template.clone()));
+
+    let resolved_test_command = request
+        .test_command
+        .clone()
+        .or_else(|| prd_config.and_then(|c| c.test_command.clone()))
+        .or_else(|| user_config.as_ref().and_then(|c| c.validation.test_command.clone()));
+
+    let resolved_lint_command = request
+        .lint_command
+        .clone()
+        .or_else(|| prd_config.and_then(|c| c.lint_command.clone()))
+        .or_else(|| user_config.as_ref().and_then(|c| c.validation.lint_command.clone()));
+
+    let resolved_max_retries = user_config
+        .as_ref()
+        .map(|c| c.execution.max_retries as u32)
+        .unwrap_or(3);
 
     log::info!(
         "[start_ralph_loop_server] Resolved config: agent={:?}, model={:?}, max_iterations={}, max_cost={:?}, run_tests={}, run_lint={}, use_worktree={}, agent_timeout={}",
@@ -2505,6 +2523,12 @@ async fn start_ralph_loop_server(
         })
         .unwrap_or_default();
 
+    // Build RetryConfig using resolved max_retries from settings
+    let retry_config = RetryConfig {
+        max_attempts: resolved_max_retries,
+        ..RetryConfig::default()
+    };
+
     // Build RalphLoopConfig
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
@@ -2517,12 +2541,14 @@ async fn start_ralph_loop_server(
         completion_promise: request.completion_promise,
         max_cost: resolved_max_cost,
         use_worktree: resolved_use_worktree,
-        retry_config: RetryConfig::default(),
+        retry_config,
         error_strategy,
         fallback_config,
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        test_command: resolved_test_command,
+        lint_command: resolved_lint_command,
     };
 
     // Create orchestrator

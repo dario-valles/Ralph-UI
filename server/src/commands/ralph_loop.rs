@@ -163,6 +163,10 @@ pub struct StartRalphLoopRequest {
     pub prd_name: String,
     /// Template name to use for prompt generation (US-014)
     pub template_name: Option<String>,
+    /// Custom test command (e.g., "npm test", "cargo test")
+    pub test_command: Option<String>,
+    /// Custom lint command (e.g., "npm run lint", "cargo clippy")
+    pub lint_command: Option<String>,
 }
 
 /// Response from starting a Ralph loop
@@ -849,8 +853,27 @@ pub async fn start_ralph_loop(
     let resolved_template = resolve_config_opt(
         request.template_name.clone(),
         prd_config.and_then(|c| c.template_name.clone()),
-        None, // No global config for template
+        user_config.as_ref().and_then(|c| c.templates.default_template.clone()), // Fall back to default_template
     );
+
+    // Resolve test and lint commands with config precedence
+    let resolved_test_command = resolve_config_opt(
+        request.test_command.clone(),
+        prd_config.and_then(|c| c.test_command.clone()),
+        user_config.as_ref().and_then(|c| c.validation.test_command.clone()),
+    );
+
+    let resolved_lint_command = resolve_config_opt(
+        request.lint_command.clone(),
+        prd_config.and_then(|c| c.lint_command.clone()),
+        user_config.as_ref().and_then(|c| c.validation.lint_command.clone()),
+    );
+
+    // Resolve max_retries from config (for RetryConfig)
+    let resolved_max_retries = user_config
+        .as_ref()
+        .map(|c| c.execution.max_retries as u32)
+        .unwrap_or(3);
 
     log::info!(
         "[start_ralph_loop] Resolved config: agent={:?}, model={:?}, max_iterations={}, max_cost={:?}, run_tests={}, run_lint={}, use_worktree={}, agent_timeout={}",
@@ -939,6 +962,12 @@ pub async fn start_ralph_loop(
         })
         .unwrap_or_default();
 
+    // Build RetryConfig using resolved max_retries from settings
+    let retry_config = RetryConfig {
+        max_attempts: resolved_max_retries,
+        ..RetryConfig::default()
+    };
+
     // Build RalphLoopConfig using resolved values (respecting config precedence)
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
@@ -951,12 +980,14 @@ pub async fn start_ralph_loop(
         completion_promise: request.completion_promise,
         max_cost: resolved_max_cost,
         use_worktree: resolved_use_worktree,
-        retry_config: RetryConfig::default(),
+        retry_config,  // Use config value instead of hardcoded default
         error_strategy,  // Use config value instead of hardcoded default
         fallback_config,
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
+        test_command: resolved_test_command,
+        lint_command: resolved_lint_command,
     };
 
     // Create orchestrator
