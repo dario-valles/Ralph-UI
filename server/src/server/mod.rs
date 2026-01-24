@@ -19,6 +19,10 @@ pub use pty_registry::PtyRegistry;
 pub use state::ServerAppState;
 
 use axum::{
+    http::{
+        header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+        HeaderValue,
+    },
     routing::{get, post},
     Router,
 };
@@ -27,13 +31,36 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 /// Run the HTTP/WebSocket server
-pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<(), String> {
-    // Build CORS layer - permissive for development
+pub async fn run_server(
+    port: u16,
+    bind: &str,
+    state: ServerAppState,
+    cors_origins: Option<Vec<String>>,
+) -> Result<(), String> {
+    // Build CORS layer
     // Must be the outermost layer to handle preflight OPTIONS requests before auth
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Note: Using explicit headers instead of Any to avoid browser deprecation warnings
+    // when Authorization header is used with wildcard
+    let cors = match &cors_origins {
+        Some(origins) if !origins.is_empty() => {
+            // Restricted CORS: only allow specified origins
+            let allowed_origins: Vec<HeaderValue> = origins
+                .iter()
+                .filter_map(|o| o.parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(allowed_origins)
+                .allow_methods(Any)
+                .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT])
+        }
+        _ => {
+            // Permissive CORS: allow any origin (default for development)
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT])
+        }
+    };
 
     // Build the router
     // Layer order: cors (outer) -> auth -> handler
@@ -58,6 +85,11 @@ pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<
         .parse()
         .map_err(|e| format!("Invalid address: {}", e))?;
 
+    let cors_display = match &cors_origins {
+        Some(origins) if !origins.is_empty() => origins.join(", "),
+        _ => "*".to_string(),
+    };
+
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    Ralph UI Server Mode                       ║");
     println!("╠══════════════════════════════════════════════════════════════╣");
@@ -65,6 +97,8 @@ pub async fn run_server(port: u16, bind: &str, state: ServerAppState) -> Result<
     println!("║  Server URL: http://{}:{:<24}  ║", bind, port);
     println!("║                                                               ║");
     println!("║  Auth Token: {}  ║", state.auth_token);
+    println!("║                                                               ║");
+    println!("║  CORS Origins: {:<45}║", cors_display);
     println!("║                                                               ║");
     println!("║  Endpoints:                                                   ║");
     println!("║    POST /api/invoke      - Command proxy                     ║");

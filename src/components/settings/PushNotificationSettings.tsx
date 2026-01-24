@@ -9,7 +9,6 @@ import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
   Bell,
@@ -161,16 +160,13 @@ export function PushNotificationSettings() {
             <div className="flex items-center gap-3">
               <MessageSquare className="h-4 w-4 text-blue-500" />
               <div>
-                <Label htmlFor="push-chat" className="font-medium">
-                  Chat Responses
-                </Label>
+                <span className="text-sm font-medium">Chat Responses</span>
                 <p className="text-xs text-muted-foreground">
                   When AI finishes responding in PRD chat
                 </p>
               </div>
             </div>
             <Switch
-              id="push-chat"
               checked={settings.chatResponse}
               onCheckedChange={(checked) => updateSetting('chatResponse', checked)}
               disabled={!isSubscribed || isLoading}
@@ -182,16 +178,13 @@ export function PushNotificationSettings() {
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <div>
-                <Label htmlFor="push-task" className="font-medium">
-                  Task Completions
-                </Label>
+                <span className="text-sm font-medium">Task Completions</span>
                 <p className="text-xs text-muted-foreground">
                   When tasks are marked as completed
                 </p>
               </div>
             </div>
             <Switch
-              id="push-task"
               checked={settings.taskCompleted}
               onCheckedChange={(checked) => updateSetting('taskCompleted', checked)}
               disabled={!isSubscribed || isLoading}
@@ -203,16 +196,13 @@ export function PushNotificationSettings() {
             <div className="flex items-center gap-3">
               <Bot className="h-4 w-4 text-purple-500" />
               <div>
-                <Label htmlFor="push-agent" className="font-medium">
-                  Agent Status Changes
-                </Label>
+                <span className="text-sm font-medium">Agent Status Changes</span>
                 <p className="text-xs text-muted-foreground">
                   When agents start, stop, or encounter errors
                 </p>
               </div>
             </div>
             <Switch
-              id="push-agent"
               checked={settings.agentStatus}
               onCheckedChange={(checked) => updateSetting('agentStatus', checked)}
               disabled={!isSubscribed || isLoading}
@@ -224,16 +214,13 @@ export function PushNotificationSettings() {
             <div className="flex items-center gap-3">
               <RefreshCw className="h-4 w-4 text-orange-500" />
               <div>
-                <Label htmlFor="push-ralph" className="font-medium">
-                  Ralph Loop Iterations
-                </Label>
+                <span className="text-sm font-medium">Ralph Loop Iterations</span>
                 <p className="text-xs text-muted-foreground">
                   When Ralph Loop completes an iteration (can be frequent)
                 </p>
               </div>
             </div>
             <Switch
-              id="push-ralph"
               checked={settings.ralphIteration}
               onCheckedChange={(checked) => updateSetting('ralphIteration', checked)}
               disabled={!isSubscribed || isLoading}
@@ -245,16 +232,13 @@ export function PushNotificationSettings() {
             <div className="flex items-center gap-3">
               <Wifi className="h-4 w-4 text-cyan-500" />
               <div>
-                <Label htmlFor="push-connection" className="font-medium">
-                  Connection Status
-                </Label>
+                <span className="text-sm font-medium">Connection Status</span>
                 <p className="text-xs text-muted-foreground">
                   When connection is lost or restored
                 </p>
               </div>
             </div>
             <Switch
-              id="push-connection"
               checked={settings.connectionStatus}
               onCheckedChange={(checked) => updateSetting('connectionStatus', checked)}
               disabled={!isSubscribed || isLoading}

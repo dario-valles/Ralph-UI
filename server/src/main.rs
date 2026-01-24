@@ -21,14 +21,19 @@ struct Cli {
     /// If not provided, a random token is generated on each startup
     #[arg(long, env = "RALPH_SERVER_TOKEN")]
     token: Option<String>,
+
+    /// Allowed CORS origins (can be specified multiple times, or set RALPH_CORS_ORIGINS as comma-separated list)
+    /// If not provided, all origins are allowed
+    #[arg(long = "cors-origin", env = "RALPH_CORS_ORIGINS", value_delimiter = ',')]
+    cors_origins: Option<Vec<String>>,
 }
 
 fn main() {
     let cli = Cli::parse();
-    run_server(cli.port, &cli.bind, cli.token);
+    run_server(cli.port, &cli.bind, cli.token, cli.cors_origins);
 }
 
-fn run_server(port: u16, bind: &str, token: Option<String>) {
+fn run_server(port: u16, bind: &str, token: Option<String>, cors_origins: Option<Vec<String>>) {
     // Initialize logger
     env_logger::init();
 
@@ -122,7 +127,7 @@ fn run_server(port: u16, bind: &str, token: Option<String>) {
         tokio::spawn(forward_tool_call_complete_events(broadcaster, tool_call_complete_rx));
 
         // Run the server
-        if let Err(e) = server::run_server(port, bind, state).await {
+        if let Err(e) = server::run_server(port, bind, state, cors_origins).await {
             eprintln!("Server error: {}", e);
             std::process::exit(1);
         }

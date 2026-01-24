@@ -158,17 +158,52 @@ export async function subscribeToPush(
   }
 
   // Register service worker
-  const registration = await registerServiceWorker()
+  let registration: ServiceWorkerRegistration
+  try {
+    registration = await registerServiceWorker()
+  } catch (error) {
+    console.error('[Push] Service worker registration failed:', error)
+    throw new Error('Failed to register service worker')
+  }
 
   // Get VAPID public key
-  const vapidPublicKey = await getVapidPublicKey()
-  const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
+  let vapidPublicKey: string
+  try {
+    vapidPublicKey = await getVapidPublicKey()
+  } catch (error) {
+    console.error('[Push] Failed to get VAPID key:', error)
+    throw new Error('Failed to get server push key')
+  }
+
+  // Convert to Uint8Array for browser API
+  let applicationServerKey: Uint8Array
+  try {
+    applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
+  } catch (error) {
+    console.error('[Push] Failed to convert VAPID key:', error)
+    throw new Error('Invalid server push key format')
+  }
 
   // Subscribe to push
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true, // Required: notifications must be visible to user
-    applicationServerKey,
-  })
+  let subscription: PushSubscription
+  try {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true, // Required: notifications must be visible to user
+      applicationServerKey,
+    })
+  } catch (error) {
+    console.error('[Push] Push subscription failed:', error)
+    // Provide more specific error messages
+    if (error instanceof DOMException) {
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Push notifications not allowed')
+      }
+      if (error.name === 'AbortError') {
+        throw new Error('Push subscription was aborted')
+      }
+    }
+    throw new Error('Failed to subscribe to push service')
+  }
 
   // Extract keys
   const p256dh = subscription.getKey('p256dh')
