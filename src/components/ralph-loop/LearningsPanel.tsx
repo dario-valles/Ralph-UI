@@ -45,7 +45,7 @@ import {
   User,
   Bot,
 } from 'lucide-react'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import type {
   LearningsFile,
   LearningEntry,

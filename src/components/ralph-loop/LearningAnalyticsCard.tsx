@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, RefreshCw, Loader2, Building2, Lightbulb, FlaskConical, Wrench, FileText } from 'lucide-react'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import type { LearningType } from '@/types'
 
 interface LearningStats {

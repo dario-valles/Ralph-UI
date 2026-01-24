@@ -29,7 +29,7 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 
 interface BriefViewerProps {

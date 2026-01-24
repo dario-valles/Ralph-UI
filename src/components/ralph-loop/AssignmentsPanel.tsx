@@ -30,7 +30,7 @@ import {
   GripVertical,
   Trash2,
 } from 'lucide-react'
-import { ralphLoopApi } from '@/lib/tauri-api'
+import { ralphLoopApi } from '@/lib/backend-api'
 import { subscribeEvent } from '@/lib/events-client'
 import { toast } from '@/stores/toastStore'
 import type {
