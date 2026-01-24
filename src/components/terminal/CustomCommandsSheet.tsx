@@ -284,9 +284,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                     <option value="project" disabled={!projectPath}>
                       Project (shared via git)
                     </option>
-                    <option value="global" disabled>
-                      Global (all projects) - Coming soon
-                    </option>
+                    <option value="global">Global (all projects)</option>
                   </select>
                 </div>
                 <div className="flex gap-2">

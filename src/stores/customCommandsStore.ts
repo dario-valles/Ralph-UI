@@ -29,6 +29,7 @@ interface CustomCommandsStore {
   reorderCommands: (commands: CustomCommand[]) => Promise<void>
   setProjectPath: (path: string | null) => void
   loadProjectCommands: (projectPath: string) => Promise<void>
+  loadGlobalCommands: () => Promise<void>
   getCommands: () => CustomCommand[]
   getCommandsByCategory: (category: string) => CustomCommand[]
   getAllCategories: () => string[]
@@ -68,6 +69,18 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           }
         }
 
+        // If saving to global scope, sync with backend
+        if (scope === 'global') {
+          try {
+            await invoke('save_global_commands', {
+              commands: [...commands.filter((c) => c.scope === 'global'), newCommand],
+            })
+          } catch (error) {
+            console.error('Failed to save global commands:', error)
+            throw error
+          }
+        }
+
         set({ commands: [...commands, newCommand] })
       },
 
@@ -85,6 +98,18 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
             })
           } catch (error) {
             console.error('Failed to save project commands:', error)
+            throw error
+          }
+        }
+
+        // If deleting from global scope, sync with backend
+        if (commandToDelete?.scope === 'global') {
+          try {
+            await invoke('save_global_commands', {
+              commands: updatedCommands.filter((c) => c.scope === 'global'),
+            })
+          } catch (error) {
+            console.error('Failed to save global commands:', error)
             throw error
           }
         }
@@ -114,6 +139,18 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           }
         }
 
+        // If editing a global command, sync with backend
+        if (newScope === 'global') {
+          try {
+            await invoke('save_global_commands', {
+              commands: updatedCommands.filter((c) => c.scope === 'global'),
+            })
+          } catch (error) {
+            console.error('Failed to save global commands:', error)
+            throw error
+          }
+        }
+
         set({ commands: updatedCommands })
       },
 
@@ -134,6 +171,19 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           }
         }
 
+        // Sync global commands with backend if any exist
+        const globalCommands = reorderedCommands.filter((c) => c.scope === 'global')
+        if (globalCommands.length > 0) {
+          try {
+            await invoke('save_global_commands', {
+              commands: globalCommands,
+            })
+          } catch (error) {
+            console.error('Failed to save global commands:', error)
+            throw error
+          }
+        }
+
         set({ commands: reorderedCommands })
       },
 
@@ -147,16 +197,33 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           const projectCommands = await invoke<CustomCommand[]>('load_project_commands', {
             projectPath,
           })
+          const globalCommands = await invoke<CustomCommand[]>('load_global_commands', {})
           const { commands } = get()
-          // Merge project commands with local commands
+          // Merge local, project, and global commands
           const mergedCommands = [
             ...commands.filter((c) => c.scope === 'local'),
+            ...globalCommands,
             ...projectCommands,
           ]
           set({ commands: mergedCommands, loading: false })
         } catch (error) {
           console.error('Failed to load project commands:', error)
           set({ loading: false })
+        }
+      },
+
+      loadGlobalCommands: async () => {
+        try {
+          const globalCommands = await invoke<CustomCommand[]>('load_global_commands', {})
+          const { commands } = get()
+          // Merge global commands with local commands
+          const mergedCommands = [
+            ...commands.filter((c) => c.scope === 'local'),
+            ...globalCommands,
+          ]
+          set({ commands: mergedCommands })
+        } catch (error) {
+          console.error('Failed to load global commands:', error)
         }
       },
 

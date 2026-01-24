@@ -432,3 +432,43 @@ When adding multiple buttons (edit/delete) to command cards:
 [2026-01-24T11:39:42.000000+00:00] [Iter 12] [END] Iteration 12 completed successfully
 [2026-01-24T11:39:02.179644+00:00] [Iter 12] [END] Iteration 12 completed successfully
 [2026-01-24T11:39:02.183810+00:00] [Iter 13] [START] Starting iteration 13
+
+[2026-01-24T12:60:00.000000+00:00] [Iter 13] [US-4.1] Story Completed: Sync Commands Within a Project
+
+<learning type="pattern">
+Project-scoped command storage implementation:
+- Add scope field to CustomCommand interface: 'local' | 'project' | 'global'
+- Create dedicated backend module (server/src/commands/terminal.rs) for terminal commands
+- Implement two async functions: save_project_commands and load_project_commands
+- Store project commands in {projectPath}/.ralph-ui/terminal/commands.json for git tracking
+- Use atomic writes (write to temp, rename) for safe file operations
+- Zustand store handles merging local + project commands on load
+</learning>
+
+<learning type="pattern">
+Backend command routing pattern:
+- Add new command handlers to server/src/server/proxy.rs route_command match statement
+- Use route_async! macro for async commands that return values
+- Register new modules in server/src/commands/mod.rs (both pub mod and pub use)
+- Frontend invoke() calls automatically route to backend handlers
+- All backend functions return Result<T, String> or Result<Value, String>
+</learning>
+
+<learning type="pattern">
+Frontend scope selection UI:
+- Add scope state to form component alongside existing action, category, label, command
+- Create select dropdown with three options: Local, Project (disabled if no projectPath), Global (disabled, coming soon)
+- Show visual scope badges on command cards with different colors (📱 Local, 🔄 Project, 🌐 Global)
+- Make save/cancel buttons disabled during async operations to prevent double-submit
+</learning>
+
+<learning type="gotcha">
+When implementing scope feature:
+- Must pass scope parameter through all store methods: addCommand, editCommand, deleteCommand, reorderCommands
+- All store methods become async because they may need to sync with backend
+- Need to track projectPath in store and only attempt save if projectPath is set
+- Default scope should be 'local' unless editing existing command with different scope
+- Each scope-specific operation filters commands before syncing to backend
+</learning>
+
+[2026-01-24T12:62:00.000000+00:00] [Iter 13] [END] Iteration 13 completed successfully

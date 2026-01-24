@@ -102,7 +102,7 @@
       "id": "US-4.1",
       "title": "Sync Commands Within a Project",
       "acceptance": "- Can save command to \"Project\" scope\n- Commands saved to `.ralph-ui/terminal/commands.json`\n- Project commands available to all project contributors\n- Project commands tracked in git",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
