@@ -3,7 +3,7 @@
 //! Stores sessions with embedded tasks in `.ralph-ui/sessions/{id}.json`
 //! This replaces SQLite storage for sessions and tasks.
 
-use super::index::{update_index_entry, SessionIndexEntry};
+use super::index::{read_index, update_index_entry, write_index, IndexFile, SessionIndexEntry};
 use super::{atomic_write, ensure_dir, get_ralph_ui_dir, read_json, FileResult};
 use crate::models::{Session, SessionConfig, SessionStatus, Task, TaskStatus};
 use chrono::{DateTime, Utc};
@@ -232,7 +232,8 @@ pub fn delete_session(project_path: &Path, session_id: &str) -> FileResult<()> {
     Ok(())
 }
 
-/// List all sessions from files
+/// List all sessions from files (legacy - reads all files)
+/// Use `list_sessions_from_index()` for better performance.
 pub fn list_sessions(project_path: &Path) -> FileResult<Vec<Session>> {
     let sessions_dir = get_sessions_dir(project_path);
 
@@ -269,6 +270,90 @@ pub fn list_sessions(project_path: &Path) -> FileResult<Vec<Session>> {
     sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     Ok(sessions)
+}
+
+/// List sessions using the index (fast path - single file read)
+/// Falls back to rebuilding index if empty but directory has files.
+pub fn list_sessions_from_index(project_path: &Path) -> FileResult<Vec<SessionIndexEntry>> {
+    let index: IndexFile<SessionIndexEntry> = read_index(project_path, "sessions")?;
+
+    // If index is empty, check if we need to rebuild it
+    if index.entries.is_empty() {
+        let sessions_dir = get_sessions_dir(project_path);
+        if sessions_dir.exists() {
+            // Check if there are any session files
+            let has_files = fs::read_dir(&sessions_dir)
+                .map(|entries| {
+                    entries.filter_map(Result::ok).any(|e| {
+                        let path = e.path();
+                        path.extension().map_or(false, |ext| ext == "json")
+                            && path.file_name().map_or(true, |name| name != "index.json")
+                    })
+                })
+                .unwrap_or(false);
+
+            if has_files {
+                log::info!("Index empty but session files exist, rebuilding index for {:?}", project_path);
+                return rebuild_session_index(project_path);
+            }
+        }
+    }
+
+    let mut entries = index.entries;
+    // Sort by updated_at descending (most recent first)
+    entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(entries)
+}
+
+/// Rebuild the session index from individual session files
+/// Used when index is missing/corrupted or after external file changes
+pub fn rebuild_session_index(project_path: &Path) -> FileResult<Vec<SessionIndexEntry>> {
+    let sessions_dir = get_sessions_dir(project_path);
+
+    if !sessions_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&sessions_dir)
+        .map_err(|e| format!("Failed to read sessions directory: {}", e))?;
+
+    let mut index_entries = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        // Skip non-JSON files and index.json
+        if path.extension().map_or(true, |ext| ext != "json") {
+            continue;
+        }
+        if path.file_name().map_or(false, |name| name == "index.json") {
+            continue;
+        }
+
+        match read_json::<SessionFile>(&path) {
+            Ok(file) => {
+                index_entries.push(file.to_index_entry());
+            }
+            Err(e) => {
+                log::warn!("Failed to read session file {:?}: {}", path, e);
+            }
+        }
+    }
+
+    // Sort by updated_at descending
+    index_entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+
+    // Write the rebuilt index
+    write_index(project_path, "sessions", index_entries.clone())?;
+
+    log::info!(
+        "Rebuilt session index for {:?}: {} entries",
+        project_path,
+        index_entries.len()
+    );
+
+    Ok(index_entries)
 }
 
 /// Get all unique project paths from session files
@@ -651,5 +736,111 @@ mod tests {
             assert_eq!(task.status, TaskStatus::Pending);
             assert!(task.assigned_agent.is_none());
         }
+    }
+
+    // =========================================================================
+    // Index-based listing tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_sessions_from_index_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        let entries = list_sessions_from_index(temp_dir.path()).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_list_sessions_from_index_with_sessions() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        // Create sessions (save_session updates the index)
+        for i in 1..=3 {
+            let mut session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            session.tasks.push(create_test_task(&format!("task-{}", i)));
+            save_session(temp_dir.path(), &session).unwrap();
+        }
+
+        // List from index
+        let entries = list_sessions_from_index(temp_dir.path()).unwrap();
+        assert_eq!(entries.len(), 3);
+
+        // Verify index entry fields
+        for entry in &entries {
+            assert!(entry.id.starts_with("session-"));
+            assert_eq!(entry.name, "Test Session");
+            assert_eq!(entry.status, "active");
+            assert_eq!(entry.task_count, 1);
+            assert_eq!(entry.completed_task_count, 0);
+        }
+    }
+
+    #[test]
+    fn test_rebuild_session_index() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        // Create sessions
+        for i in 1..=2 {
+            let session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            save_session(temp_dir.path(), &session).unwrap();
+        }
+
+        // Delete the index file to simulate corruption
+        let index_path = super::super::index::get_index_path(temp_dir.path(), "sessions");
+        std::fs::remove_file(&index_path).unwrap();
+
+        // Rebuild should recreate the index
+        let entries = rebuild_session_index(temp_dir.path()).unwrap();
+        assert_eq!(entries.len(), 2);
+
+        // Verify index file was recreated
+        assert!(index_path.exists());
+    }
+
+    #[test]
+    fn test_list_sessions_from_index_auto_rebuild() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        // Create sessions
+        for i in 1..=2 {
+            let session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            save_session(temp_dir.path(), &session).unwrap();
+        }
+
+        // Delete the index file
+        let index_path = super::super::index::get_index_path(temp_dir.path(), "sessions");
+        std::fs::remove_file(&index_path).unwrap();
+
+        // list_sessions_from_index should auto-rebuild
+        let entries = list_sessions_from_index(temp_dir.path()).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn test_index_updated_on_delete() {
+        let temp_dir = TempDir::new().unwrap();
+        super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
+
+        // Create sessions
+        let session1 = create_test_session("session-1", temp_dir.path().to_str().unwrap());
+        let session2 = create_test_session("session-2", temp_dir.path().to_str().unwrap());
+        save_session(temp_dir.path(), &session1).unwrap();
+        save_session(temp_dir.path(), &session2).unwrap();
+
+        // Verify both in index
+        let entries = list_sessions_from_index(temp_dir.path()).unwrap();
+        assert_eq!(entries.len(), 2);
+
+        // Delete one session
+        delete_session(temp_dir.path(), "session-1").unwrap();
+
+        // Verify index updated
+        let entries = list_sessions_from_index(temp_dir.path()).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "session-2");
     }
 }

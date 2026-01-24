@@ -224,6 +224,11 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_async!(cmd, commands::sessions::get_sessions(project_path))
         }
 
+        "get_sessions_index" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::sessions::get_sessions_index(project_path))
+        }
+
         "get_session" => {
             let id: String = get_arg(&args, "id")?;
             let project_path: String = get_arg(&args, "projectPath")?;

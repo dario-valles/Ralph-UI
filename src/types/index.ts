@@ -84,6 +84,24 @@ export interface Session {
   totalTokens: number
 }
 
+/**
+ * Lightweight session index entry for efficient session listings.
+ * Use this for list views where full task details aren't needed.
+ * Matches Rust's SessionIndexEntry in server/src/file_storage/index.rs
+ */
+export interface SessionIndexEntry {
+  id: string
+  name: string
+  /** Session status as lowercase string (e.g., "active", "paused", "completed") */
+  status: string
+  /** Last update timestamp (RFC3339) */
+  updatedAt: string
+  /** Total number of tasks in the session */
+  taskCount: number
+  /** Number of completed tasks */
+  completedTaskCount: number
+}
+
 export type AgentStatus =
   | 'idle'
   | 'thinking'

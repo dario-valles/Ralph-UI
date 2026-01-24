@@ -9,7 +9,12 @@ use crate::utils::as_path;
 
 /// Get activity feed for Mission Control dashboard
 /// Aggregates events from tasks and sessions across all projects
-
+///
+/// Performance notes:
+/// - Reads full session data because activity events need task-level details
+///   (task.started_at, task.completed_at, task.title, task.status)
+/// - Session index doesn't contain this task-level information
+/// - Future optimization: Store recent activity events in a separate activity log
 pub fn get_activity_feed(
     limit: Option<i32>,
     _offset: Option<i32>,
@@ -102,7 +107,12 @@ pub fn get_activity_feed(
 }
 
 /// Get global statistics for Mission Control dashboard
-
+///
+/// Performance notes:
+/// - Uses session index for `active_projects_count` (fast - single file read per project)
+/// - Still reads full sessions for task-level stats (tasks_in_progress, tasks_completed_today)
+///   because task details aren't stored in the session index
+/// - Future optimization: Add a separate task index for task-level aggregations
 pub fn get_global_stats() -> Result<GlobalStats, String> {
     // Get all registered projects
     let projects = project_storage::get_all_projects().unwrap_or_default();
@@ -131,15 +141,19 @@ pub fn get_global_stats() -> Result<GlobalStats, String> {
             total_cost_today += agent.cost;
         }
 
-        // Get sessions and count tasks
+        // Use index for session-level checks (fast path)
+        let session_entries = session_storage::list_sessions_from_index(project_path).unwrap_or_default();
+
+        // Check if project has any active sessions (from index - no task data needed)
+        let project_has_active_session = session_entries.iter().any(|e| e.status == "active");
+        if project_has_active_session {
+            active_projects_count += 1;
+        }
+
+        // For task-level stats, we need to read full sessions
+        // (Index only has task_count/completed_task_count, not in_progress or completion timestamps)
         let sessions = session_storage::list_sessions(project_path).unwrap_or_default();
-        let mut project_has_active_session = false;
-
         for session in sessions {
-            if matches!(session.status, SessionStatus::Active) {
-                project_has_active_session = true;
-            }
-
             for task in &session.tasks {
                 // Count tasks in progress
                 if matches!(task.status, TaskStatus::InProgress) {
@@ -155,10 +169,6 @@ pub fn get_global_stats() -> Result<GlobalStats, String> {
                     }
                 }
             }
-        }
-
-        if project_has_active_session {
-            active_projects_count += 1;
         }
     }
 
