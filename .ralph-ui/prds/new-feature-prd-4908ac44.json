@@ -62,7 +62,7 @@
       "id": "US-3.1",
       "title": "Save Frequently Used Commands",
       "acceptance": "- Can open custom commands side sheet\n- Can add new command with label and command string\n- Command appears in the list immediately\n- Can tap command to use it",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

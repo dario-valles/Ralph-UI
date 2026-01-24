@@ -254,3 +254,45 @@ When implementing preset switching:
 - Be careful with preset IDs - use consistent naming scheme for builtin (preset-{name}) vs custom (preset-custom-{timestamp})
 </learning>
 [2026-01-24T12:35:30.000000+00:00] [Iter 7] [END] Iteration 7 completed successfully
+[2026-01-24T11:29:09.507687+00:00] [Iter 7] [END] Iteration 7 completed successfully
+[2026-01-24T11:29:09.511374+00:00] [Iter 8] [START] Starting iteration 8
+
+[2026-01-24T12:40:00.000000+00:00] [Iter 8] [US-3.1] Story Completed: Save Frequently Used Commands
+
+<learning type="pattern">
+Custom commands store implementation for terminal:
+- Create dedicated Zustand store with localStorage persistence (useCustomCommandsStore)
+- Store interface: CustomCommand with id, label, command, createdAt timestamp
+- Store actions: addCommand, deleteCommand, getCommands
+- Command IDs use format 'cmd-{timestamp}' for unique identification
+- All store data is serializable (no React components)
+</learning>
+
+<learning type="pattern">
+Custom commands side sheet UI architecture:
+- CustomCommandsSheet component wraps mobile-friendly sheet UI for command management
+- Includes form for adding commands with label and command text inputs
+- Shows all saved commands in a scrollable list
+- Each command has a clickable label/command area to execute and delete button
+- Uses writeToTerminal(activeTerminalId, command) to execute saved commands
+- Empty state message when no commands exist
+</learning>
+
+<learning type="pattern">
+Integration with TerminalKeyBar:
+- Add CustomCommandsSheet import and state (isCommandsSheetOpen)
+- Add custom commands button (BookOpen icon) at the end of the key bar
+- Button opens sheet via onClick handler
+- Sheet is rendered as sibling to key bar div to avoid z-index issues
+- Fragment wrapper needed when returning both key bar and sheet
+</learning>
+
+<learning type="gotcha">
+When adding multiple components to TerminalKeyBar:
+- Must wrap in Fragment (<>) when returning multiple JSX elements
+- Import additional icons needed for new buttons (BookOpen for custom commands)
+- Clean up unused imports to pass linting (cn was imported but not used initially)
+- All button styling should follow existing patterns (min-h-[32px] min-w-[40px])
+</learning>
+
+[2026-01-24T12:40:30.000000+00:00] [Iter 8] [END] Iteration 8 completed successfully

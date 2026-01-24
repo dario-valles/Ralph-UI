@@ -3,12 +3,13 @@
 // Supports modifier keys (CTRL/ALT) with sticky/lock modes
 
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete } from 'lucide-react'
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useKeyBarLayoutStore } from '@/stores/keyBarLayoutStore'
 import { useIsMobile } from '@/hooks/useMediaQuery'
+import { CustomCommandsSheet } from './CustomCommandsSheet'
 
 interface KeyDefinition {
   label: string
@@ -47,6 +48,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
     alt: 'inactive',
   })
   const [isVisible, setIsVisible] = useState(true)
+  const [isCommandsSheetOpen, setIsCommandsSheetOpen] = useState(false)
   const lastClickRef = useRef<{ label: string; time: number } | null>(null)
   const stickyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -235,61 +237,86 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   }
 
   return (
-    <div
-      className={cn(
-        'bg-muted/80 border-t px-2 py-2 flex flex-wrap gap-1 safe-bottom',
-        'transition-all duration-300 ease-in-out',
-        !isVisible && 'opacity-0 pointer-events-none max-h-0 overflow-hidden',
-        isVisible && 'opacity-100 pointer-events-auto',
-        className
-      )}
-    >
-      {keys.map((keyDef) => {
-        const modifierKey =
-          keyDef.label === 'CTRL' ? 'ctrl' : keyDef.label === 'ALT' ? 'alt' : null
-        const isModifierActive = !!(modifierKey && modifierState[modifierKey] !== 'inactive')
-        const isModifierLocked = modifierKey && modifierState[modifierKey] === 'locked'
+    <>
+      <div
+        className={cn(
+          'bg-muted/80 border-t px-2 py-2 flex flex-wrap gap-1 safe-bottom',
+          'transition-all duration-300 ease-in-out',
+          !isVisible && 'opacity-0 pointer-events-none max-h-0 overflow-hidden',
+          isVisible && 'opacity-100 pointer-events-auto',
+          className
+        )}
+      >
+        {keys.map((keyDef) => {
+          const modifierKey =
+            keyDef.label === 'CTRL' ? 'ctrl' : keyDef.label === 'ALT' ? 'alt' : null
+          const isModifierActive = !!(modifierKey && modifierState[modifierKey] !== 'inactive')
+          const isModifierLocked = modifierKey && modifierState[modifierKey] === 'locked'
 
-        return (
-          <button
-            key={keyDef.label}
-            onClick={() => handleKeyPress(keyDef)}
-            aria-label={keyDef.ariaLabel || keyDef.label}
-            aria-pressed={keyDef.isModifier ? isModifierActive : undefined}
-            className={cn(
-              'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
-              'bg-background rounded border transition-all duration-75',
-              'hover:bg-accent hover:text-accent-foreground',
-              'active:bg-accent active:scale-95',
-              'touch-manipulation',
-              'min-h-[32px] min-w-[40px]',
-              // Modifier key styling
-              keyDef.isModifier && [
-                'border-border',
-                isModifierActive && [
-                  'bg-accent text-accent-foreground',
-                  isModifierLocked && 'border-accent border-2 animate-pulse',
-                ],
-              ],
-              // Interrupt button styling
-              keyDef.label === '^C' && 'bg-destructive/10 text-destructive hover:bg-destructive/20',
-              // Regular key styling
-              !keyDef.isModifier &&
-                keyDef.label !== '^C' && [
+          return (
+            <button
+              key={keyDef.label}
+              onClick={() => handleKeyPress(keyDef)}
+              aria-label={keyDef.ariaLabel || keyDef.label}
+              aria-pressed={keyDef.isModifier ? isModifierActive : undefined}
+              className={cn(
+                'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
+                'bg-background rounded border transition-all duration-75',
+                'hover:bg-accent hover:text-accent-foreground',
+                'active:bg-accent active:scale-95',
+                'touch-manipulation',
+                'min-h-[32px] min-w-[40px]',
+                // Modifier key styling
+                keyDef.isModifier && [
                   'border-border',
-                  (modifierState.ctrl !== 'inactive' || modifierState.alt !== 'inactive') &&
-                    'border-accent/50',
-                ]
-            )}
-          >
-            {keyDef.icon ? (
-              <span className="flex items-center justify-center">{keyDef.icon}</span>
-            ) : (
-              keyDef.label
-            )}
-          </button>
-        )
-      })}
-    </div>
+                  isModifierActive && [
+                    'bg-accent text-accent-foreground',
+                    isModifierLocked && 'border-accent border-2 animate-pulse',
+                  ],
+                ],
+                // Interrupt button styling
+                keyDef.label === '^C' && 'bg-destructive/10 text-destructive hover:bg-destructive/20',
+                // Regular key styling
+                !keyDef.isModifier &&
+                  keyDef.label !== '^C' && [
+                    'border-border',
+                    (modifierState.ctrl !== 'inactive' || modifierState.alt !== 'inactive') &&
+                      'border-accent/50',
+                  ]
+              )}
+            >
+              {keyDef.icon ? (
+                <span className="flex items-center justify-center">{keyDef.icon}</span>
+              ) : (
+                keyDef.label
+              )}
+            </button>
+          )
+        })}
+
+        {/* Custom commands button */}
+        <button
+          onClick={() => setIsCommandsSheetOpen(true)}
+          aria-label="Open custom commands"
+          className={cn(
+            'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
+            'bg-background rounded border transition-all duration-75',
+            'hover:bg-accent hover:text-accent-foreground',
+            'active:bg-accent active:scale-95',
+            'touch-manipulation',
+            'min-h-[32px] min-w-[40px]',
+            'border-border'
+          )}
+        >
+          <BookOpen className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Custom commands side sheet */}
+      <CustomCommandsSheet
+        open={isCommandsSheetOpen}
+        onOpenChange={setIsCommandsSheetOpen}
+      />
+    </>
   )
 }
