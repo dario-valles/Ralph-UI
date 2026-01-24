@@ -48,8 +48,8 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   })
   const [isVisible, setIsVisible] = useState(true)
   const lastClickRef = useRef<{ label: string; time: number } | null>(null)
-  const stickyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const stickyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Get custom layout from store and convert icon names to components
   const keys = useMemo(() => {
@@ -247,7 +247,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
       {keys.map((keyDef) => {
         const modifierKey =
           keyDef.label === 'CTRL' ? 'ctrl' : keyDef.label === 'ALT' ? 'alt' : null
-        const isModifierActive = modifierKey && modifierState[modifierKey] !== 'inactive'
+        const isModifierActive = !!(modifierKey && modifierState[modifierKey] !== 'inactive')
         const isModifierLocked = modifierKey && modifierState[modifierKey] === 'locked'
 
         return (
@@ -255,7 +255,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
             key={keyDef.label}
             onClick={() => handleKeyPress(keyDef)}
             aria-label={keyDef.ariaLabel || keyDef.label}
-            aria-pressed={isModifierActive}
+            aria-pressed={keyDef.isModifier ? isModifierActive : undefined}
             className={cn(
               'flex items-center justify-center px-2 py-1.5 text-xs font-medium',
               'bg-background rounded border transition-all duration-75',
