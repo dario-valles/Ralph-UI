@@ -180,12 +180,15 @@ export function TerminalPanel() {
   return (
     <div
       className={cn(
-        'flex flex-col bg-card border-t safe-bottom overflow-hidden',
-        effectiveFullScreen && 'fixed inset-0 z-50 h-dvh',
+        'flex flex-col bg-card border-t overflow-hidden',
+        effectiveFullScreen && 'fixed inset-0 z-50',
+        !effectiveFullScreen && 'safe-bottom',
         isMinimized && 'h-auto'
       )}
       style={{
         height: isMinimized ? 'auto' : effectiveFullScreen ? '100%' : `${panelHeight}%`,
+        overscrollBehavior: 'contain',
+        touchAction: 'none',
       }}
     >
       {/* Resize handle - hidden on mobile */}
@@ -194,7 +197,7 @@ export function TerminalPanel() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px] shrink-0">
+      <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px] shrink-0 select-none">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Terminal</span>
           {!isMinimized && <TerminalTabs className="flex-1 min-w-0" />}
@@ -271,11 +274,11 @@ export function TerminalPanel() {
       </div>
 
       {/* Mobile key bar - outside scrollable area, stays fixed */}
-      {!isMinimized && isMobile && <TerminalKeyBar className="shrink-0" />}
+      {!isMinimized && isMobile && <TerminalKeyBar className="shrink-0 select-none" />}
 
       {/* Terminal content */}
       {!isMinimized && (
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden" style={{ touchAction: 'pan-y' }}>
           {!rootPane ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               No terminals open
