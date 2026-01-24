@@ -1,12 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { MissionControlPage } from './components/mission-control'
-import { SettingsPage } from './components/settings/SettingsPage'
 import { PRDList } from './components/prd/PRDList'
 import { PRDFileEditor } from './components/prd/PRDFileEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
-import { RalphLoopPage } from './components/ralph-loop'
 import { ToastContainer } from './components/ui/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ServerConnectionDialog } from './components/ServerConnectionDialog'
@@ -14,6 +12,16 @@ import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/backend-api'
 import { useRalphLoopNotifications } from './hooks/useRalphLoopNotifications'
+
+// Lazy-loaded routes for better code splitting
+const RalphLoopPage = lazy(() =>
+  import('./components/ralph-loop').then((m) => ({ default: m.RalphLoopPage }))
+)
+const SettingsPage = lazy(() =>
+  import('./components/settings/SettingsPage').then((m) => ({
+    default: m.SettingsPage,
+  }))
+)
 
 /** Component that mounts global notification listeners inside the router */
 function GlobalNotificationListener(): null {
@@ -83,8 +91,22 @@ function App() {
             <Route path="prds/new" element={<Navigate to="/prds/chat" replace />} />
             <Route path="prds/chat" element={<PRDChatPanel />} />
             <Route path="prds/file" element={<PRDFileEditor />} />
-            <Route path="ralph-loop" element={<RalphLoopPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route
+              path="ralph-loop"
+              element={
+                <Suspense fallback={<div className="p-4">Loading...</div>}>
+                  <RalphLoopPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <Suspense fallback={<div className="p-4">Loading...</div>}>
+                  <SettingsPage />
+                </Suspense>
+              }
+            />
           </Route>
         </Routes>
         <ToastContainer />

@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import reactCompiler from 'eslint-plugin-react-compiler'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
@@ -16,6 +17,7 @@ export default tseslint.config(
     plugins: {
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+      'react-compiler': reactCompiler,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -23,6 +25,8 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      // React Compiler plugin available but rule disabled (existing eslint-disable comments cause component-level warnings)
+      'react-compiler/react-compiler': 'off',
     },
   },
 )

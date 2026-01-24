@@ -9,7 +9,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [['babel-plugin-react-compiler', {}]],
+      },
+    }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -39,6 +46,21 @@ export default defineConfig(async () => ({
         path.resolve(__dirname, '.ralph-ui'),
         path.resolve(__dirname, '.worktrees'),
       ],
+    },
+  },
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-terminal': [
+            '@xterm/xterm',
+            '@xterm/addon-fit',
+            '@xterm/addon-webgl',
+          ],
+        },
+      },
     },
   },
 }))

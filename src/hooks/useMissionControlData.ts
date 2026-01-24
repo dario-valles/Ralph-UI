@@ -140,7 +140,7 @@ export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
         project,
         health: activeExecId ? 'healthy' as const : 'idle' as const,
         lastActivity: getLastActivityDate(project),
-        activeExecutionId: activeExecId,
+        activeExecutionId: activeExecId ?? undefined,
       }
     })
   }, [projectState, activeExecutionId, currentProjectPath, activeProjectPaths])

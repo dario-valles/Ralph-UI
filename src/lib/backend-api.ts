@@ -18,6 +18,7 @@ import type {
   RalphLoopSnapshot,
   AgentType,
   DeletePrdResult,
+  Assignment,
   AssignmentsFile,
   FileInUse,
   LearningsFile,
