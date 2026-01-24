@@ -7,6 +7,7 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 
 interface KeyDefinition {
   label: string
@@ -55,12 +56,15 @@ interface TerminalKeyBarProps {
 
 export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const { activeTerminalId } = useTerminalStore()
+  const isMobile = useIsMobile()
   const [modifierState, setModifierState] = useState<ModifierState>({
     ctrl: 'inactive',
     alt: 'inactive',
   })
+  const [isVisible, setIsVisible] = useState(true)
   const lastClickRef = useRef<{ label: string; time: number } | null>(null)
   const stickyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const keys = useMemo(() => DEFAULT_KEYS, [])
 
@@ -173,11 +177,63 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
     [activeTerminalId, modifierState, clearStickyModifier]
   )
 
+  // Detect physical keyboard activity and hide/show key bar
+  useEffect(() => {
+    if (!isMobile || !activeTerminalId) return
+
+    const handlePhysicalKeyDown = (event: KeyboardEvent) => {
+      // Detect physical keyboard activity:
+      // Physical keyboards have a valid event.code property
+      // Virtual keyboards typically don't trigger with a code or have empty code
+      // Also exclude events from input/textarea elements that might trigger virtual keyboard
+      const target = event.target as HTMLElement
+      const isFromInput = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA'
+      const isPhysicalKeyboard = !!event.code && event.code !== ''
+
+      if (isPhysicalKeyboard && !isFromInput) {
+        setIsVisible(false)
+
+        // Clear existing hide timeout
+        if (hideTimeoutRef.current) {
+          clearTimeout(hideTimeoutRef.current)
+        }
+
+        // Set a new timeout to check if keyboard is still active
+        // If no more keyboard events within 2 seconds, assume physical keyboard is disconnected
+        hideTimeoutRef.current = setTimeout(() => {
+          setIsVisible(true)
+        }, 2000)
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      // Show key bar when user might need it again (focus lost/regained)
+      if (document.hidden) {
+        setIsVisible(true)
+      }
+    }
+
+    // Listen for keyboard events (physical keyboard activity)
+    window.addEventListener('keydown', handlePhysicalKeyDown)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('keydown', handlePhysicalKeyDown)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current)
+      }
+    }
+  }, [isMobile, activeTerminalId])
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (stickyTimeoutRef.current) {
         clearTimeout(stickyTimeoutRef.current)
+      }
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current)
       }
     }
   }, [])
@@ -188,7 +244,13 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
 
   return (
     <div
-      className={cn('bg-muted/80 border-t px-2 py-2 flex flex-wrap gap-1 safe-bottom', className)}
+      className={cn(
+        'bg-muted/80 border-t px-2 py-2 flex flex-wrap gap-1 safe-bottom',
+        'transition-all duration-300 ease-in-out',
+        !isVisible && 'opacity-0 pointer-events-none max-h-0 overflow-hidden',
+        isVisible && 'opacity-100 pointer-events-auto',
+        className
+      )}
     >
       {keys.map((keyDef) => {
         const modifierKey =
