@@ -132,11 +132,6 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
       if (!activeTerminalId) return
 
       try {
-        // Provide haptic feedback if available
-        if (navigator.vibrate) {
-          navigator.vibrate(10) // 10ms light haptic
-        }
-
         if (keyDef.isModifier) {
           // Handle modifier key press
           const modifierKey = keyDef.label === 'CTRL' ? 'ctrl' : 'alt'
@@ -146,6 +141,10 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
           // Check for double tap (within 300ms)
           if (lastClick && lastClick.label === keyDef.label && now - lastClick.time < 300) {
             // Double tap: toggle lock mode
+            // Provide medium haptic for modifier toggle if enabled
+            if (settings.enableHaptics && navigator.vibrate) {
+              navigator.vibrate(20) // 20ms medium haptic for modifier toggle
+            }
             setModifierState((prev) => ({
               ...prev,
               [modifierKey]: prev[modifierKey] === 'locked' ? 'inactive' : 'locked',
@@ -158,6 +157,10 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
             }
           } else {
             // Single tap: activate sticky mode (if not already locked)
+            // Provide medium haptic for modifier toggle if enabled
+            if (settings.enableHaptics && navigator.vibrate) {
+              navigator.vibrate(20) // 20ms medium haptic for modifier toggle
+            }
             setModifierState((prev) => ({
               ...prev,
               [modifierKey]: prev[modifierKey] === 'locked' ? 'inactive' : 'sticky',
@@ -178,6 +181,11 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
           }
         } else {
           // Handle regular key press
+          // Provide light haptic for normal key press if enabled
+          if (settings.enableHaptics && navigator.vibrate) {
+            navigator.vibrate(10) // 10ms light haptic
+          }
+
           let keyValue = keyDef.value
           let prefix = ''
 
@@ -225,7 +233,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
         console.error('Failed to send key to terminal:', error)
       }
     },
-    [activeTerminalId, modifierState, clearStickyModifier]
+    [activeTerminalId, modifierState, clearStickyModifier, settings.enableHaptics]
   )
 
   // Detect physical keyboard activity and hide/show key bar

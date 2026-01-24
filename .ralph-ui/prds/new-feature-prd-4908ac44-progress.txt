@@ -789,3 +789,89 @@ React Hook dependencies with gesture settings:
 [2026-01-24T13:30:30.000000+00:00] [Iter 20] [END] Iteration 20 completed successfully
 [2026-01-24T12:00:34.266387+00:00] [Iter 20] [END] Iteration 20 completed successfully
 [2026-01-24T12:00:34.269685+00:00] [Iter 21] [START] Starting iteration 21
+
+[2026-01-24T13:35:00.000000+00:00] [Iter 21] [US-5.5] Story Completed: Adjust Terminal Font Size
+
+<learning type="pattern">
+Pinch gesture detection implementation in useGestureDetection hook:
+- Track both touch points separately: touchStartRef, touchSecondStartRef for initial positions
+- Calculate initial distance between two fingers using getDistance helper function
+- In handleTouchMove, detect two-finger gesture by checking e.touches.length === 2
+- Calculate scale as currentDistance / initialPinchDistance (ratio between current and initial)
+- Scale > 1.0 means pinch out (zoom in), scale < 1.0 means pinch in (zoom out)
+- Return scale in gestureState so handlers can determine direction and magnitude
+</learning>
+
+<learning type="pattern">
+Font size management in gesture store:
+- Store terminalFontSize, minFontSize, maxFontSize in settings interface
+- Initialize defaults: fontSize=13px, min=8px, max=32px
+- setTerminalFontSize method clamps value: Math.max(min, Math.min(value, max))
+- Zustand persist middleware automatically saves to localStorage with name 'ralph-gesture-settings'
+- Enable pinch feature with enablePinchZoom=true by default so feature works immediately
+</learning>
+
+<learning type="pattern">
+TerminalInstance integration with pinch gestures:
+- Create useCallback handlers (handlePinchIn, handlePinchOut) with proper dependencies
+- Use scale parameter directly: newFontSize = Math.round(currentFontSize * scale)
+- After setting font size in store, update xterm: terminalRef.current.options.fontSize = newSize
+- Call fitAddonRef.current?.fit() after changing fontSize to recalculate terminal dimensions
+- Add separate effect (useEffect) for font size updates to avoid reinitializing terminal
+- Include settings.terminalFontSize in initialization effect dependency to load stored size on mount
+</learning>
+
+<learning type="pattern">
+GestureSettings UI component for font size and other gesture controls:
+- Import all toggle and setter functions from gesture store
+- Create separate card sections for each gesture feature (Command History, Cursor Movement, Page Scroll, Extended Arrows, Pinch Zoom)
+- Each section has toggle switch + conditionally rendered controls (show only when enabled)
+- Font size slider: min=minFontSize, max=maxFontSize, step=1 for granular control
+- Show visual feedback: labels display current values (e.g., "Terminal Font Size: 13px")
+- Provide slider bounds documentation to help users understand sensitivity ranges
+</learning>
+
+<learning type="gotcha">
+When implementing pinch detection alongside swipe gestures:
+- Must check e.touches.length at multiple points: start, move, and end
+- In handleTouchEnd, check if it was a pinch by looking at touchSecondStartRef
+- Handle pinch case FIRST with early return before processing swipe logic
+- This prevents accidentally triggering swipe callbacks when pinch ends
+- Pinch detection relies on scale change threshold (pinchThreshold), not distance threshold
+</learning>
+
+<learning type="gotcha">
+Font size boundary enforcement:
+- Always clamp in the store setter, not in the component
+- xterm.js may behave unexpectedly with extreme font sizes (< 8px or > 32px)
+- Establish clear min/max bounds and communicate them in UI
+- Test edge cases: manual slider adjustment to min/max, multiple rapid pinch gestures
+</learning>
+
+[2026-01-24T13:35:30.000000+00:00] [Iter 21] [END] Iteration 21 completed successfully
+[2026-01-24T12:03:40.597692+00:00] [Iter 21] [END] Iteration 21 completed successfully
+[2026-01-24T12:03:40.601985+00:00] [Iter 22] [START] Starting iteration 22
+
+[2026-01-24T13:40:00.000000+00:00] [Iter 22] [US-5.6] Story Completed: Configure Gesture Preferences
+
+<learning type="pattern">
+Gesture settings UI implementation is complete and fully functional:
+- GestureSettings component displays all 5 gesture features with individual toggle switches
+- Each feature has configurable sensitivity threshold via slider (10-100px range)
+- Font size adjustment slider for pinch-zoom feature (8-32px range)
+- Reset button calls resetToDefaults() to restore original settings
+- Component is integrated into SettingsPage.tsx at the UI Preferences tab (line 2240)
+- Zustand persist middleware with name 'ralph-gesture-settings' ensures localStorage persistence
+- All settings persist automatically across sessions
+</learning>
+
+<learning type="pattern">
+Gesture settings store architecture provides complete feature toggle system:
+- All gesture features have enable/disable toggles in DEFAULT_SETTINGS
+- Feature-specific threshold setters update store state with proper immutability patterns
+- resetToDefaults() method provides one-call reset of all settings to initial state
+- Font size bounds enforced in setTerminalFontSize: Math.max(min, Math.min(value, max))
+- Zustand persist middleware partializes only settings state (not entire store)
+</learning>
+[2026-01-24T12:04:51.422601+00:00] [Iter 22] [END] Iteration 22 completed successfully
+[2026-01-24T12:04:51.425254+00:00] [Iter 23] [START] Starting iteration 23

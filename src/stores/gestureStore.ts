@@ -21,6 +21,9 @@ interface GestureSettings {
   enablePinchZoom: boolean
   pinchThreshold: number
 
+  // Haptic feedback settings
+  enableHaptics: boolean
+
   // Font size settings
   terminalFontSize: number // Default font size (pixels)
   minFontSize: number // Minimum font size
@@ -42,6 +45,7 @@ interface GestureStore {
   setExtendedSwipeThreshold: (threshold: number) => void
   togglePinchZoom: () => void
   setPinchThreshold: (threshold: number) => void
+  toggleHaptics: () => void
   setTerminalFontSize: (fontSize: number) => void
   resetToDefaults: () => void
 }
@@ -57,6 +61,7 @@ const DEFAULT_SETTINGS: GestureSettings = {
   extendedSwipeThreshold: 50,
   enablePinchZoom: true, // Enabled for US-5.5
   pinchThreshold: 0.1,
+  enableHaptics: true, // Enabled for US-6.1
   terminalFontSize: 13, // Default font size in pixels
   minFontSize: 8, // Minimum font size
   maxFontSize: 32, // Maximum font size
@@ -144,6 +149,14 @@ export const useGestureStore = create<GestureStore>()(
           settings: {
             ...state.settings,
             pinchThreshold: threshold,
+          },
+        })),
+
+      toggleHaptics: () =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            enableHaptics: !state.settings.enableHaptics,
           },
         })),
 

@@ -20,6 +20,7 @@ export function GestureSettings() {
     toggleExtendedArrows,
     setExtendedSwipeThreshold,
     togglePinchZoom,
+    toggleHaptics,
     setTerminalFontSize,
     resetToDefaults,
   } = useGestureStore()
@@ -232,6 +233,30 @@ export function GestureSettings() {
                 <span>{settings.minFontSize}px (smallest)</span>
                 <span className="ml-auto">{settings.maxFontSize}px (largest)</span>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Haptic Feedback */}
+        <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Haptic Feedback</Label>
+              <p className="text-sm text-muted-foreground">
+                Vibration feedback on key presses and modifier toggles
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableHaptics}
+              onCheckedChange={toggleHaptics}
+              aria-label="Toggle haptic feedback"
+            />
+          </div>
+          {settings.enableHaptics && (
+            <div className="text-xs text-muted-foreground space-y-2">
+              <p>• Light haptic (10ms) on normal key press</p>
+              <p>• Medium haptic (20ms) on modifier toggle</p>
+              <p>• Requires device support for vibration</p>
             </div>
           )}
         </div>

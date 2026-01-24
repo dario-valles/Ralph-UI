@@ -174,7 +174,7 @@
       "id": "US-5.6",
       "title": "Configure Gesture Preferences",
       "acceptance": "- Settings page shows all gesture options\n- Each gesture can be individually enabled/disabled\n- Settings persist across sessions\n- Can reset all gestures to default",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
@@ -182,7 +182,7 @@
       "id": "US-6.1",
       "title": "Receive Haptic Feedback",
       "acceptance": "- Light haptic on normal key press\n- Medium haptic on modifier toggle\n- Haptic feedback can be disabled in settings\n- No haptic on devices that don't support it",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
