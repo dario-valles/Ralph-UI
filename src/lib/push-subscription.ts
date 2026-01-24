@@ -82,22 +82,17 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Register the push service worker
+ * Get the service worker registration (registered by VitePWA)
  */
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
   if (!('serviceWorker' in navigator)) {
     throw new Error('Service workers are not supported in this browser')
   }
 
-  // Register the push service worker
-  const registration = await navigator.serviceWorker.register('/sw-push.js', {
-    scope: '/',
-  })
+  // Wait for the service worker to be ready (registered by VitePWA)
+  const registration = await navigator.serviceWorker.ready
 
-  // Wait for the service worker to be ready
-  await navigator.serviceWorker.ready
-
-  console.log('[Push] Service worker registered:', registration.scope)
+  console.log('[Push] Service worker ready:', registration.scope)
   return registration
 }
 
