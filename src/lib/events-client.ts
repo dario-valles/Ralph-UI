@@ -223,16 +223,19 @@ class EventsClient {
 
   /**
    * Start keepalive ping/pong to detect stale connections
+   * Uses shorter interval when app is visible, longer when backgrounded (US-6)
    */
   private startKeepalive(): void {
     this.stopKeepalive()
     this.lastPongTime = Date.now()
 
-    // Send ping every 30 seconds
+    // Determine interval based on visibility
+    const interval = this.isPageVisible() ? KEEPALIVE_FOREGROUND_MS : KEEPALIVE_BACKGROUND_MS
+
     this.keepaliveInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        // Check if we received a pong recently (within 60 seconds)
-        if (Date.now() - this.lastPongTime > 60000) {
+        // Check if we received a pong recently
+        if (Date.now() - this.lastPongTime > PONG_TIMEOUT_MS) {
           console.warn('[EventsClient] No pong received, connection may be stale')
           this.ws.close(4000, 'Keepalive timeout')
           return
@@ -241,7 +244,7 @@ class EventsClient {
         // Send ping
         this.ws.send(JSON.stringify({ event: 'ping', payload: { timestamp: Date.now() } }))
       }
-    }, 30000)
+    }, interval)
   }
 
   /**
@@ -255,6 +258,46 @@ class EventsClient {
   }
 
   /**
+   * Start visibility change listener for background-aware keepalive (US-6)
+   */
+  private startVisibilityListener(): void {
+    this.stopVisibilityListener()
+
+    this.visibilityHandler = () => {
+      // Restart keepalive with appropriate interval when visibility changes
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.startKeepalive()
+      }
+    }
+
+    document.addEventListener('visibilitychange', this.visibilityHandler)
+  }
+
+  /**
+   * Stop visibility change listener
+   */
+  private stopVisibilityListener(): void {
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler)
+      this.visibilityHandler = null
+    }
+  }
+
+  /**
+   * Check if page is currently visible
+   */
+  private isPageVisible(): boolean {
+    return typeof document !== 'undefined' ? document.visibilityState === 'visible' : true
+  }
+
+  /**
+   * Check if we can show a notification (debounce check) (US-6)
+   */
+  private canShowNotification(): boolean {
+    return Date.now() - this.lastNotificationTime > NOTIFICATION_DEBOUNCE_MS
+  }
+
+  /**
    * Disconnect from the WebSocket server
    */
   disconnect(): void {
@@ -265,6 +308,7 @@ class EventsClient {
     }
 
     this.stopKeepalive()
+    this.stopVisibilityListener()
 
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect')
@@ -272,6 +316,7 @@ class EventsClient {
     }
 
     this.handlers.clear()
+    this.wasReconnecting = false
     useConnectionStore.getState().markDisconnected()
   }
 

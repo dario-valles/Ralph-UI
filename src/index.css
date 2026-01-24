@@ -405,3 +405,18 @@ a:focus-visible,
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ==========================================================================
+   xterm.js Mobile Touch Scrolling
+   ========================================================================== */
+
+/* Enable touch scrolling on xterm viewport */
+.xterm-viewport {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Ensure xterm container allows touch events */
+.xterm {
+  touch-action: pan-y pinch-zoom;
+}

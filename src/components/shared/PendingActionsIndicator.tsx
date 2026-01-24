@@ -8,12 +8,7 @@
 import { Cloud, CloudOff, Loader2, AlertCircle } from 'lucide-react'
 import { useOfflineQueueStore } from '@/stores/offlineQueueStore'
 import { useConnectionStore } from '@/stores/connectionStore'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 /**
@@ -63,30 +58,21 @@ export function PendingActionsIndicatorCompact() {
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs',
-              failedCount > 0
-                ? 'bg-destructive/10 text-destructive'
-                : isOffline
-                  ? 'bg-muted text-muted-foreground'
-                  : 'bg-primary/10 text-primary'
-            )}
-          >
-            {getIcon()}
-            {totalPending > 0 && (
-              <span className="font-medium">{totalPending}</span>
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{getTooltipText()}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip content={getTooltipText()} side="bottom">
+      <div
+        className={cn(
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs cursor-default',
+          failedCount > 0
+            ? 'bg-destructive/10 text-destructive'
+            : isOffline
+              ? 'bg-muted text-muted-foreground'
+              : 'bg-primary/10 text-primary'
+        )}
+      >
+        {getIcon()}
+        {totalPending > 0 && <span className="font-medium">{totalPending}</span>}
+      </div>
+    </Tooltip>
   )
 }
 
