@@ -1,0 +1,221 @@
+{
+  "title": "Mobile Terminal Auxiliary Key Bar",
+  "branch": "ralph-new-feature-prd-4908ac44",
+  "stories": [
+    {
+      "id": "US-1.1",
+      "title": "Access Essential Terminal Keys",
+      "acceptance": "- Key bar displays when terminal is focused on mobile\n- All keys in default layout are visible and tappable\n- Tapping a key sends the correct input to the terminal\n- Key press provides visual and haptic feedback",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-1.2",
+      "title": "Use Modifier Keys (Ctrl/Alt)",
+      "acceptance": "- Single tap on CTRL/ALT activates sticky mode (next key only)\n- Double tap on CTRL/ALT activates lock mode (persistent)\n- Visual indicator shows when modifier is active (accent color) or locked (pulsing border)\n- Combined key press sends correct escape sequence (e.g., Ctrl+C = `\\x03`)\n- Modifier auto-clears after non-modifier key press in sticky mode",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-1.3",
+      "title": "Interrupt Running Processes",
+      "acceptance": "- `^C` button is prominently visible in the key bar\n- Single tap sends interrupt signal (`\\x03`)\n- Works even if another modifier is active",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-1.4",
+      "title": "Auto-Hide Key Bar with Physical Keyboard",
+      "acceptance": "- Key bar hides within 2 seconds of physical keyboard activity\n- Key bar reappears when physical keyboard is disconnected\n- Smooth fade animation on show/hide\n- No flicker when switching between input methods",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-2.1",
+      "title": "Rearrange Keys",
+      "acceptance": "- Can access key bar customizer from settings\n- Can drag and drop keys to new positions\n- Changes persist across sessions\n- Can reset to default layout",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-2.2",
+      "title": "Add and Remove Keys",
+      "acceptance": "- Key palette shows all available keys (50+)\n- Can add keys from palette to key bar (max 10 per row)\n- Can remove keys from key bar (min 6 per row)\n- Visual preview of changes before saving",
+      "passes": true,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-2.3",
+      "title": "Use and Save Presets",
+      "acceptance": "- Built-in presets available: Default, Git, Vim, Node\n- Can save current layout as custom preset\n- Can switch between presets with one tap\n- Can delete custom presets",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-3.1",
+      "title": "Save Frequently Used Commands",
+      "acceptance": "- Can open custom commands side sheet\n- Can add new command with label and command string\n- Command appears in the list immediately\n- Can tap command to use it",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-3.2",
+      "title": "Choose Insert vs Execute Action",
+      "acceptance": "- Each command has action type: \"Insert\" or \"Execute\"\n- \"Insert\" pastes command text without newline\n- \"Execute\" pastes command and sends newline\n- Visual indicator shows action type for each command",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-3.3",
+      "title": "Organize Commands with Categories",
+      "acceptance": "- Can assign category to each command\n- Commands grouped by category in the sheet\n- Can collapse/expand category groups\n- Can filter commands by category",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-3.4",
+      "title": "Search Commands",
+      "acceptance": "- Search input appears when >10 commands exist\n- Search filters by label and command text\n- Results update as user types\n- Clear button resets search",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-3.5",
+      "title": "Manage Commands (Edit/Delete/Reorder)",
+      "acceptance": "- Can edit command label, text, action, category, icon\n- Can delete command with confirmation\n- Can reorder commands via drag-and-drop\n- Changes persist immediately",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-4.1",
+      "title": "Sync Commands Within a Project",
+      "acceptance": "- Can save command to \"Project\" scope\n- Commands saved to `.ralph-ui/terminal/commands.json`\n- Project commands available to all project contributors\n- Project commands tracked in git",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-4.2",
+      "title": "Sync Commands Across All Projects",
+      "acceptance": "- Can save command to \"Global\" scope\n- Commands saved to `~/.ralph-ui/terminal/commands.json`\n- Global commands available in all projects\n- Global commands sync with Ralph account (future)",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-4.3",
+      "title": "Keep Private Commands Local",
+      "acceptance": "- Can save command to \"Local\" scope (default)\n- Local commands stored in localStorage only\n- Local commands never appear in project files\n- Clear visual indicator of command scope",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-4.4",
+      "title": "Understand Command Priority",
+      "acceptance": "- Priority order clearly documented: Project > Global > Default\n- Visual indicator when project command overrides global\n- Can view original global command from override indicator",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.1",
+      "title": "Navigate Command History with Gestures",
+      "acceptance": "- Swipe up recalls previous command (like ↑)\n- Swipe down recalls next command (like ↓)\n- Visual indicator shows gesture is recognized\n- Gesture settings allow enabling/disabling this feature",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.2",
+      "title": "Move Cursor with Gestures",
+      "acceptance": "- Swipe left moves cursor left\n- Swipe right moves cursor right\n- Fast swipe moves cursor by word\n- Velocity threshold is configurable",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.3",
+      "title": "Page Through Terminal Output",
+      "acceptance": "- Two-finger swipe up sends Page Up\n- Two-finger swipe down sends Page Down\n- Works smoothly with terminal scrollback\n- Doesn't conflict with pinch-to-zoom",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.4",
+      "title": "Extended Arrow Key Gestures",
+      "acceptance": "- Swipe up on ↑ sends Page Up\n- Swipe down on ↓ sends Page Down\n- Swipe left on ← sends Home (Ctrl+A)\n- Swipe right on → sends End (Ctrl+E)\n- Visual hint shows extended gesture is available",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.5",
+      "title": "Adjust Terminal Font Size",
+      "acceptance": "- Pinch gesture changes terminal font size\n- Font size persists across sessions\n- Minimum and maximum size limits\n- Can reset to default from settings",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-5.6",
+      "title": "Configure Gesture Preferences",
+      "acceptance": "- Settings page shows all gesture options\n- Each gesture can be individually enabled/disabled\n- Settings persist across sessions\n- Can reset all gestures to default",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-6.1",
+      "title": "Receive Haptic Feedback",
+      "acceptance": "- Light haptic on normal key press\n- Medium haptic on modifier toggle\n- Haptic feedback can be disabled in settings\n- No haptic on devices that don't support it",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-6.2",
+      "title": "See Visual Feedback for Actions",
+      "acceptance": "- Key press shows visual ripple/highlight\n- Gesture shows directional indicator\n- Modifier state clearly visible\n- Command execution shows confirmation",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    },
+    {
+      "id": "US-6.3",
+      "title": "Discover Gestures and Features",
+      "acceptance": "- First-time user sees brief onboarding for key features\n- Tooltip hints for gestures on first encounter\n- Help button in key bar settings explains all features\n- No repeated hints after dismissal",
+      "passes": false,
+      "priority": 100,
+      "requires_primary_review": false
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-24T11:11:36.085942+00:00",
+    "updatedAt": "2026-01-24T11:11:48.896316+00:00",
+    "totalIterations": 0,
+    "lastExecutionId": "1f74fa18-3884-4c64-a12f-503b709ec2fd"
+  },
+  "executionConfig": {
+    "agentType": "claude",
+    "model": "claude-haiku-4-5",
+    "maxIterations": 10,
+    "runTests": true,
+    "runLint": true,
+    "useWorktree": true,
+    "templateName": "task_prompt"
+  }
+}

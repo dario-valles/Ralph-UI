@@ -1,0 +1,211 @@
+# Ralph Wiggum Loop Progress
+# This file tracks learnings across agent iterations.
+# Each agent reads this file to catch up on context.
+# Initialized: 2026-01-24T11:11:36.090461+00:00
+
+[2026-01-24T11:11:49.093664+00:00] [Iter 1] [START] Starting iteration 1
+
+[2026-01-24T12:14:00.000000+00:00] [Iter 1] [US-1.1] Story Completed: Access Essential Terminal Keys
+
+<learning type="architecture">
+Terminal input system uses writeToTerminal(terminalId, data) from src/lib/terminal-api.ts.
+The function looks up the PTY instance and calls pty.write(data), which sends a JSON message
+over WebSocket with type: 'input' and the data field. xterm.js handles the actual keyboard
+events in TerminalInstance.tsx and connects via terminal.onData() callback.
+</learning>
+
+<learning type="pattern">
+Mobile-specific UI patterns in this codebase:
+- Use useIsMobile() hook to detect mobile
+- Hide desktop-only features with conditional rendering (e.g., split controls)
+- Use 'safe-bottom' CSS class for iOS safe area insets
+- Test mobile components at 320px width minimum
+- Use Tailwind responsive prefixes for scaling (md:, lg:)
+</learning>
+
+<learning type="pattern">
+Escape sequences for terminal keys:
+- Tab: '\t' (0x09)
+- Enter: '\r' (0x0D)
+- Backspace: '\x7f' (DEL character)
+- ^C (interrupt): '\x03'
+- Arrow keys: '\x1b[A' (up), '\x1b[B' (down), '\x1b[D' (left), '\x1b[C' (right)
+- Home: '\x1b[H', End: '\x1b[F'
+</learning>
+
+<learning type="pattern">
+Haptic feedback in React: Use navigator.vibrate(duration) for light feedback (10ms).
+This is supported on most mobile devices. Always check availability with if (navigator.vibrate).
+</learning>
+
+<learning type="gotcha">
+The TerminalPanel component renders terminals in a flex layout with recursive PaneRenderer.
+When adding the key bar, wrap terminal content in a flex column container to allow flex-1
+sizing to work correctly. Don't add the key bar directly at panel level.
+</learning>
+[2026-01-24T11:14:48.671465+00:00] [Iter 1] [END] Iteration 1 completed successfully
+[2026-01-24T11:14:48.674575+00:00] [Iter 2] [START] Starting iteration 2
+
+[2026-01-24T12:15:00.000000+00:00] [Iter 2] [US-1.2] Story Completed: Use Modifier Keys (Ctrl/Alt)
+
+<learning type="pattern">
+Modifier key implementation for terminal key bar:
+- Track modifier state with useRef (lastClickRef) and useState (modifierState)
+- Use 300ms window for double-tap detection (single tap = sticky, double tap = lock)
+- Ctrl combinations: For single chars, use charCode - 96 to get Ctrl value (e.g., 'a' -> 0x01)
+- Alt combinations: Send ESC prefix (0x1b) followed by the key
+- Auto-clear sticky mode either after non-modifier key press or after 5-second timeout
+- Visual feedback: bg-accent + text-accent-foreground for active, add border-2 + animate-pulse for locked
+</learning>
+
+<learning type="pattern">
+Terminal modifier key handling in escape sequences:
+- Ctrl+C is already defined as '\x03' (special interrupt sequence)
+- For general Ctrl+letter combinations: charCode - 96 works for lowercase a-z
+- Alt is represented by ESC prefix (\x1b) sent before the actual key
+- The terminal emulator (xterm.js) interprets these sequences correctly
+</learning>
+
+<learning type="gotcha">
+When implementing modifier keys, be careful about:
+- Always clear the double-tap timeout when transitioning states (to avoid stale timeouts)
+- Clean up timeouts on component unmount to prevent memory leaks
+- Use separate state tracking for Ctrl vs Alt to allow independent modifier states
+- Test that modifier state properly clears after non-modifier key press (sticky mode)
+- Verify that lock mode persists across multiple key presses
+</learning>
+[2026-01-24T11:17:09.158966+00:00] [Iter 2] [END] Iteration 2 completed successfully
+[2026-01-24T11:17:09.161442+00:00] [Iter 3] [START] Starting iteration 3
+
+[2026-01-24T12:18:00.000000+00:00] [Iter 3] [US-1.3] Story Completed: Interrupt Running Processes
+
+<learning type="pattern">
+Interrupt button design for terminal key bar:
+- The ^C button should always send pure interrupt signal (\x03), independent of modifier state
+- Always separate modifier handling for interrupt key - check for button label before applying modifiers
+- Use destructive styling (bg-destructive/10 text-destructive) to make interrupt button visually prominent
+- Interrupt button state should not be affected by active modifiers (Ctrl/Alt)
+</learning>
+
+<learning type="gotcha">
+When implementing special keys like interrupt (^C):
+- Don't apply active modifiers (Ctrl/Alt prefix) to interrupt signals
+- Always send clean interrupt value regardless of modifier state - this ensures reliability
+- Structurally, check for special keys BEFORE modifier application logic, not inside
+- This pattern makes the intent clear and prevents subtle bugs with modifier combinations
+</learning>
+[2026-01-24T12:18:30.000000+00:00] [Iter 3] [END] Iteration 3 completed successfully
+[2026-01-24T11:19:10.528448+00:00] [Iter 3] [END] Iteration 3 completed successfully
+[2026-01-24T11:19:10.532654+00:00] [Iter 4] [START] Starting iteration 4
+
+[2026-01-24T12:20:00.000000+00:00] [Iter 4] [US-1.4] Story Completed: Auto-Hide Key Bar with Physical Keyboard
+
+<learning type="pattern">
+Physical keyboard detection for auto-hide functionality:
+- Use KeyboardEvent.code property to detect physical keyboards (it's populated for hardware keys)
+- Check event.code !== '' to ensure it's a real keyboard event, not virtual
+- Exclude input/textarea keydown events as they trigger virtual keyboards on mobile
+- Implement 2-second timeout that resets on each keyboard activity for seamless experience
+- Use opacity-0 + pointer-events-none + max-h-0 for smooth fade animation with CSS transitions
+</learning>
+
+<learning type="pattern">
+State management for visibility toggle in React:
+- Use useState(true) for initial visibility to show key bar on first mount
+- Track visibility separately from other states (modifier state, etc.)
+- Use useEffect with dependency on isMobile and activeTerminalId to enable/disable listeners
+- Clean up all event listeners and timeouts in useEffect return callback to prevent memory leaks
+</learning>
+
+<learning type="gotcha">
+When implementing keyboard detection:
+- The event listener must check both event.code AND !isFromInput to avoid false positives
+- Always clear existing timeout before setting a new one to prevent race conditions
+- Event delegation via window.addEventListener('keydown') works globally for all keyboard input
+- Remember to handle visibilitychange event (tab switch) and explicitly show key bar to ensure UX
+</learning>
+[2026-01-24T12:20:30.000000+00:00] [Iter 4] [END] Iteration 4 completed successfully
+[2026-01-24T11:20:59.056147+00:00] [Iter 4] [END] Iteration 4 completed successfully
+[2026-01-24T11:20:59.060269+00:00] [Iter 5] [START] Starting iteration 5
+
+[2026-01-24T12:25:00.000000+00:00] [Iter 5] [US-2.1] Story Completed: Rearrange Keys
+
+<learning type="pattern">
+Key bar layout customization architecture:
+- Create separate Zustand store (keyBarLayoutStore) for layout persistence
+- Store icon names as strings in the store (not React components) for serialization
+- Map icon names to components in the component using a const ICON_MAP
+- Use useMemo in TerminalKeyBar to convert stored layout to component layout on mount
+- This separation ensures store data is serializable and components remain flexible
+</learning>
+
+<learning type="pattern">
+HTML5 drag-and-drop implementation for key rearrangement:
+- Use native HTML5 drag events: onDragStart, onDragOver, onDrop
+- Track draggedIndex in state during the drag operation
+- In onDragOver, prevent default and set dropEffect = 'move'
+- In onDrop, splice the dragged item from source index and insert at target index
+- Clear draggedIndex after drop completes
+- This approach works without external libraries
+</learning>
+
+<learning type="pattern">
+Integrating customizer into existing settings page:
+- Add new component to appropriate settings tab (UI Preferences for key bar)
+- Import the customizer component at top of SettingsPage
+- Add it to the TabsContent section alongside other settings
+- This keeps settings organized while maintaining modularity
+</learning>
+
+<learning type="gotcha">
+When removing unused code from TerminalKeyBar:
+- The DEFAULT_KEYS array is now defined in the store, not the component
+- Remove it from the component to pass linting (no-unused-vars rule)
+- The store exports DEFAULT_LAYOUT which can be referenced for reset functionality
+</learning>
+
+[2026-01-24T12:25:30.000000+00:00] [Iter 5] [END] Iteration 5 completed successfully
+[2026-01-24T11:24:20.856651+00:00] [Iter 5] [END] Iteration 5 completed successfully
+[2026-01-24T11:24:20.861714+00:00] [Iter 6] [START] Starting iteration 6
+
+[2026-01-24T12:30:00.000000+00:00] [Iter 6] [US-2.2] Story Completed: Add and Remove Keys
+
+<learning type="pattern">
+Key palette implementation for terminal key bar:
+- Define AVAILABLE_KEYS array in the Zustand store with 50+ keys categorized by type (navigation, editing, modifiers, control sequences, function keys, common characters)
+- Use filter() to get available keys not already in the layout
+- Implement search with toLowerCase() matching on both label and ariaLabel for better UX
+- Separate palette visibility from main editor with a collapsible section (show/hide via state)
+- Use grid layout (grid-cols-3) for compact palette display with max-h-64 overflow-y-auto for scrolling
+</learning>
+
+<learning type="pattern">
+Add/remove constraints and validation for key bar:
+- Define MIN_KEYS = 6 and MAX_KEYS_PER_ROW = 10 as constants
+- Disable remove button (with visual feedback) when at minimum keys using opacity-50 + cursor-not-allowed
+- Show helpful tooltip when action is disabled to explain the constraint
+- Calculate rows by dividing layout into chunks of MAX_KEYS_PER_ROW for visual row preview
+- Validate constraints in handleSave() before persisting to store, show alert on failure
+- Show row count and key count in the preview section to help users understand layout
+</learning>
+
+<learning type="pattern">
+Visual feedback for add/remove operations:
+- Show live preview that updates immediately as keys are added/removed (not just on save)
+- Display row-based layout preview to show how keys will wrap at max per-row constraint
+- Show count of available keys and current key count for transparency
+- Display "All available keys are in use" message when palette is full
+- Use "unsaved changes" warning to ensure user explicitly saves before changes persist
+- Clear search query after adding key to keep UI clean
+</learning>
+
+<learning type="gotcha">
+When managing complex component state with multiple related fields:
+- Must track both layout state and hasChanges state separately
+- searchQuery and showPalette are UI-only state that don't need to be persisted
+- Use useMemo or inline calculations for derived values like availableKeysToAdd and filteredAvailableKeys
+- Calculate canRemoveMore and isFull at render time to ensure they stay in sync with layout
+- Test that all state transitions are correct (adding, removing, searching, palette toggle)
+</learning>
+
+[2026-01-24T12:30:30.000000+00:00] [Iter 6] [END] Iteration 6 completed successfully
