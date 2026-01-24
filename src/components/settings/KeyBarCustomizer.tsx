@@ -4,18 +4,23 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RotateCcw, GripVertical, Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { RotateCcw, GripVertical, Plus, X, ChevronDown, ChevronUp, Save, Trash2 } from 'lucide-react'
 import { useKeyBarLayoutStore, DEFAULT_LAYOUT, AVAILABLE_KEYS, type KeyDefinition } from '@/stores/keyBarLayoutStore'
 import { cn } from '@/lib/utils'
 
 export function KeyBarCustomizer() {
-  const { getLayout, setCustomLayout, resetToDefault } = useKeyBarLayoutStore()
+  const { getLayout, setCustomLayout, resetToDefault, savePreset, switchPreset, deletePreset, getPresets, getActivePreset } = useKeyBarLayoutStore()
   const currentLayout = getLayout()
+  const presets = getPresets()
+  const activePreset = getActivePreset()
+
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [layout, setLayout] = useState<KeyDefinition[]>(currentLayout)
   const [hasChanges, setHasChanges] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showPalette, setShowPalette] = useState(false)
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false)
+  const [presetName, setPresetName] = useState('')
 
   const MIN_KEYS = 6
   const MAX_KEYS_PER_ROW = 10
@@ -94,6 +99,39 @@ export function KeyBarCustomizer() {
     setHasChanges(false)
   }
 
+  // Handle switch preset
+  const handleSwitchPreset = (presetId: string) => {
+    switchPreset(presetId)
+    const preset = presets.find((p) => p.id === presetId)
+    if (preset) {
+      setLayout(preset.layout)
+      setHasChanges(false)
+    }
+  }
+
+  // Handle save as preset
+  const handleSaveAsPreset = () => {
+    if (!presetName.trim()) {
+      alert('Please enter a preset name')
+      return
+    }
+    savePreset(presetName, layout)
+    setPresetName('')
+    setShowSavePresetDialog(false)
+  }
+
+  // Handle delete preset
+  const handleDeletePreset = (presetId: string) => {
+    const preset = presets.find((p) => p.id === presetId)
+    if (preset?.isBuiltin) {
+      alert('Cannot delete built-in presets')
+      return
+    }
+    if (confirm(`Delete preset "${preset?.name}"?`)) {
+      deletePreset(presetId)
+    }
+  }
+
   // Calculate rows
   const rows: KeyDefinition[][] = []
   for (let i = 0; i < layout.length; i += MAX_KEYS_PER_ROW) {
@@ -110,6 +148,89 @@ export function KeyBarCustomizer() {
         <CardDescription>Add, remove, and arrange keys in the mobile terminal key bar</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Preset selector */}
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Presets</p>
+          <div className="space-y-2">
+            {presets.map((preset) => (
+              <div key={preset.id} className="flex gap-2 items-stretch">
+                <button
+                  onClick={() => handleSwitchPreset(preset.id)}
+                  className={cn(
+                    'flex-1 p-2 rounded-lg border-2 text-sm font-medium transition-colors',
+                    activePreset?.id === preset.id
+                      ? 'border-accent bg-accent text-accent-foreground'
+                      : 'border-border bg-background hover:border-accent hover:bg-accent/5'
+                  )}
+                >
+                  {preset.name}
+                </button>
+                {!preset.isBuiltin && (
+                  <button
+                    onClick={() => handleDeletePreset(preset.id)}
+                    className="p-2 rounded-lg border-2 border-border hover:bg-destructive/10 text-destructive hover:text-destructive hover:border-destructive transition-colors"
+                    title="Delete preset"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Save as preset dialog */}
+        {showSavePresetDialog ? (
+          <div className="space-y-2 p-3 bg-muted rounded-lg border border-border">
+            <p className="text-sm font-medium">Save Current Layout as Preset</p>
+            <Input
+              placeholder="Enter preset name"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveAsPreset()
+                }
+              }}
+              className="h-8 text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveAsPreset}
+                size="sm"
+                className="flex-1"
+                variant="default"
+              >
+                <Save className="w-3 h-3 mr-1" />
+                Save
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowSavePresetDialog(false)
+                  setPresetName('')
+                }}
+                size="sm"
+                className="flex-1"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            onClick={() => setShowSavePresetDialog(true)}
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={!hasChanges}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Current Layout as Preset
+          </Button>
+        )}
+
         {/* Current layout preview with rows */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
