@@ -7,6 +7,7 @@ use crate::agents::AgentManager;
 use crate::commands::config::ConfigState;
 use crate::commands::git::GitState;
 use crate::commands::models::ModelCacheState;
+use crate::commands::push::PushNotificationState;
 use crate::commands::ralph_loop::RalphLoopManagerState;
 use crate::plugins::PluginRegistry;
 use crate::shutdown::ShutdownState;
@@ -54,6 +55,9 @@ pub struct ServerAppState {
 
     /// PTY session registry for mobile resilience (US-3)
     pub pty_registry: Arc<PtyRegistry>,
+
+    /// Push notification state
+    pub push_state: Arc<PushNotificationState>,
 }
 
 impl ServerAppState {
@@ -70,7 +74,13 @@ impl ServerAppState {
         rate_limit_sender: tokio::sync::mpsc::UnboundedSender<crate::agents::RateLimitEvent>,
         completion_sender: tokio::sync::mpsc::UnboundedSender<crate::agents::AgentCompletionEvent>,
     ) -> Self {
-        let broadcaster = Arc::new(EventBroadcaster::new());
+        let mut broadcaster_inner = EventBroadcaster::new();
+        let push_state = Arc::new(PushNotificationState::new());
+
+        // Wire up the push notifier to the broadcaster for background notifications
+        broadcaster_inner.set_push_notifier(push_state.get_notifier());
+
+        let broadcaster = Arc::new(broadcaster_inner);
         let file_watcher = Arc::new(ServerFileWatcher::new(broadcaster.clone()));
         let pty_registry = Arc::new(PtyRegistry::new());
 
@@ -91,6 +101,7 @@ impl ServerAppState {
             completion_sender,
             file_watcher,
             pty_registry,
+            push_state,
         }
     }
 }

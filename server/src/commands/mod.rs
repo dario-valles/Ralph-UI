@@ -17,6 +17,7 @@ pub mod mission_control;
 pub mod models;
 pub mod ralph_loop;
 pub mod terminal;
+pub mod push;
 
 // Re-export all commands for easy registration
 pub use sessions::*;
@@ -36,3 +37,4 @@ pub use mission_control::*;
 pub use models::*;
 pub use ralph_loop::*;
 pub use terminal::*;
+pub use push::*;

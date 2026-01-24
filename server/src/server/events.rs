@@ -1,6 +1,7 @@
 //! WebSocket event broadcaster for real-time updates
 //!
 //! Bridges the internal event channels to WebSocket clients.
+//! Also handles push notifications for background updates.
 
 use axum::{
     extract::{
@@ -11,9 +12,11 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use super::ServerAppState;
+use crate::push::{NotificationPayload, PushEventType, PushNotifier};
 
 /// A server event that can be broadcast to WebSocket clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,15 +29,25 @@ pub struct ServerEvent {
 }
 
 /// Broadcasts events to all connected WebSocket clients
+/// Also triggers push notifications for configured event types
 pub struct EventBroadcaster {
     tx: broadcast::Sender<ServerEvent>,
+    push_notifier: Option<Arc<PushNotifier>>,
 }
 
 impl EventBroadcaster {
     /// Create a new event broadcaster with a channel capacity of 1000 events
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1000);
-        Self { tx }
+        Self {
+            tx,
+            push_notifier: None,
+        }
+    }
+
+    /// Set the push notifier for sending background notifications
+    pub fn set_push_notifier(&mut self, notifier: Arc<PushNotifier>) {
+        self.push_notifier = Some(notifier);
     }
 
     /// Broadcast an event to all connected clients
@@ -48,9 +61,45 @@ impl EventBroadcaster {
         let _ = self.tx.send(event);
     }
 
+    /// Broadcast an event and also send a push notification
+    /// Use this for important events that should reach users even when browser is closed
+    pub fn broadcast_with_push(
+        &self,
+        event_type: &str,
+        payload: impl Serialize + Clone,
+        push_event_type: PushEventType,
+        push_title: &str,
+        push_body: &str,
+    ) {
+        // First, broadcast to WebSocket clients
+        self.broadcast(event_type, payload.clone());
+
+        // Then, send push notification if notifier is available
+        if let Some(notifier) = &self.push_notifier {
+            let notifier = notifier.clone();
+            let title = push_title.to_string();
+            let body = push_body.to_string();
+            let tag = format!("{}:{}", event_type, chrono::Utc::now().timestamp_millis());
+
+            // Spawn async task to send push notification
+            tokio::spawn(async move {
+                let notification = NotificationPayload::new(&title, &body).with_tag(&tag);
+
+                if let Err(e) = notifier.notify(push_event_type, notification).await {
+                    log::warn!("Failed to send push notification: {}", e);
+                }
+            });
+        }
+    }
+
     /// Subscribe to events (returns a receiver)
     pub fn subscribe(&self) -> broadcast::Receiver<ServerEvent> {
         self.tx.subscribe()
+    }
+
+    /// Get a reference to the push notifier (if set)
+    pub fn get_push_notifier(&self) -> Option<Arc<PushNotifier>> {
+        self.push_notifier.clone()
     }
 }
 

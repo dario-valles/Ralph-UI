@@ -47,6 +47,7 @@ import { templateApi } from '@/lib/backend-api'
 import { useProjectStore } from '@/stores/projectStore'
 import { KeyBarCustomizer } from './KeyBarCustomizer'
 import { GestureSettings } from './GestureSettings'
+import { PushNotificationSettings } from './PushNotificationSettings'
 import type {
   RalphConfig,
   RalphExecutionConfig,
@@ -1607,6 +1608,9 @@ export function SettingsPage() {
               </p>
             </CardContent>
           </Card>
+
+          {/* Push Notifications (Web Push for background notifications) */}
+          <PushNotificationSettings />
         </TabsContent>
 
         {/* Template Editor (US-012) */}

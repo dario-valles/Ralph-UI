@@ -85,6 +85,10 @@ portable-pty = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
 base64 = "0.22.1"
 
+# Web Push notifications
+web-push = "0.10"
+p256 = { version = "0.13", features = ["ecdsa"] }
+
 # Signal handling for graceful shutdown
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"

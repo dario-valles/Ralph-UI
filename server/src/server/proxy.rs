@@ -1959,6 +1959,49 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         }
 
         // =====================================================================
+        // Push Notification Commands
+        // =====================================================================
+        "get_vapid_public_key" => {
+            route_async!(cmd, commands::push::get_vapid_public_key())
+        }
+
+        "subscribe_push" => {
+            let input: commands::push::SubscribePushInput = serde_json::from_value(args.clone())
+                .map_err(|e| format!("Invalid input: {}", e))?;
+            route_async!(cmd, commands::push::subscribe_push(input, &state.push_state))
+        }
+
+        "unsubscribe_push" => {
+            let input: commands::push::UnsubscribePushInput = serde_json::from_value(args.clone())
+                .map_err(|e| format!("Invalid input: {}", e))?;
+            route_async!(cmd, commands::push::unsubscribe_push(input, &state.push_state))
+        }
+
+        "get_push_settings" => {
+            let subscription_id: String = get_arg(&args, "subscriptionId")?;
+            route_async!(cmd, commands::push::get_push_settings(subscription_id))
+        }
+
+        "update_push_settings" => {
+            let input: commands::push::UpdatePushSettingsInput = serde_json::from_value(args.clone())
+                .map_err(|e| format!("Invalid input: {}", e))?;
+            route_async!(cmd, commands::push::update_push_settings(input, &state.push_state))
+        }
+
+        "test_push" => {
+            let subscription_id: String = get_arg(&args, "subscriptionId")?;
+            route_unit_async!(commands::push::test_push(subscription_id, &state.push_state))
+        }
+
+        "list_push_subscriptions" => {
+            route_async!(cmd, commands::push::list_push_subscriptions())
+        }
+
+        "get_push_subscription_count" => {
+            route_async!(cmd, commands::push::get_push_subscription_count(&state.push_state))
+        }
+
+        // =====================================================================
         // Unknown command
         // =====================================================================
         _ => Err(format!("Unknown command: {}", cmd)),

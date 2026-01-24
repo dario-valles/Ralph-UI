@@ -16,6 +16,7 @@ pub mod ralph_loop;
 pub mod file_storage;
 pub mod plugins;
 pub mod gsd;
+pub mod push;
 
 // Server module (HTTP/WebSocket API)
 pub mod server;
