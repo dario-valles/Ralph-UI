@@ -17,7 +17,9 @@ import {
 } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useGestureStore } from '@/stores/gestureStore'
+import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useGestureDetection } from '@/hooks/useGestureDetection'
+import { X } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalInstanceProps {
@@ -35,7 +37,13 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
   const { settings, setTerminalFontSize } = useGestureStore()
+  const { dismissHint, hasHintBeenDismissed } = useOnboardingStore()
   const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | 'left' | 'right' | null>(null)
+  const [gestureHint, setGestureHint] = useState<{
+    id: string
+    title: string
+    description: string
+  } | null>(null)
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
@@ -74,6 +82,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         writeToTerminal(terminalId, '\x1b[A') // Up arrow - previous command
         setGestureIndicator('up')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('history-navigation-hint')) {
+          setGestureHint({
+            id: 'history-navigation-hint',
+            title: 'Command History',
+            description: 'Swipe up/down on the terminal to navigate through your command history',
+          })
+        }
       }
     },
     onSwipeDown: () => {
@@ -81,6 +98,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         writeToTerminal(terminalId, '\x1b[B') // Down arrow - next command
         setGestureIndicator('down')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('history-navigation-hint')) {
+          setGestureHint({
+            id: 'history-navigation-hint',
+            title: 'Command History',
+            description: 'Swipe up/down on the terminal to navigate through your command history',
+          })
+        }
       }
     },
     onSwipeLeft: () => {
@@ -96,6 +122,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         }
         setGestureIndicator('left')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('cursor-movement-hint')) {
+          setGestureHint({
+            id: 'cursor-movement-hint',
+            title: 'Cursor Movement',
+            description: 'Swipe left/right to move your cursor. Fast swipes move by word.',
+          })
+        }
       }
     },
     onSwipeRight: () => {
@@ -111,6 +146,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         }
         setGestureIndicator('right')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('cursor-movement-hint')) {
+          setGestureHint({
+            id: 'cursor-movement-hint',
+            title: 'Cursor Movement',
+            description: 'Swipe left/right to move your cursor. Fast swipes move by word.',
+          })
+        }
       }
     },
     onTwoFingerSwipeUp: () => {
@@ -118,6 +162,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         writeToTerminal(terminalId, '\x1b[5~') // Page Up escape sequence
         setGestureIndicator('up')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('page-scroll-hint')) {
+          setGestureHint({
+            id: 'page-scroll-hint',
+            title: 'Page Scrolling',
+            description: 'Use two fingers to swipe up/down and scroll through terminal output',
+          })
+        }
       }
     },
     onTwoFingerSwipeDown: () => {
@@ -125,6 +178,15 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         writeToTerminal(terminalId, '\x1b[6~') // Page Down escape sequence
         setGestureIndicator('down')
         setTimeout(() => setGestureIndicator(null), 200)
+
+        // Show hint on first use
+        if (!hasHintBeenDismissed('page-scroll-hint')) {
+          setGestureHint({
+            id: 'page-scroll-hint',
+            title: 'Page Scrolling',
+            description: 'Use two fingers to swipe up/down and scroll through terminal output',
+          })
+        }
       }
     },
     onPinchIn: handlePinchIn,
@@ -382,6 +444,34 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
           </div>
         </div>
       )}
+
+      {/* Gesture hint tooltip - shows on first use of each gesture */}
+      {gestureHint && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 pointer-events-auto z-10">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-lg p-3 max-w-xs">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <div className="font-semibold text-sm text-white">{gestureHint.title}</div>
+                <div className="text-xs text-slate-300 mt-1">{gestureHint.description}</div>
+              </div>
+              <button
+                onClick={() => {
+                  dismissHint(gestureHint.id)
+                  setGestureHint(null)
+                }}
+                className="text-slate-400 hover:text-slate-200 flex-shrink-0"
+                aria-label="Dismiss hint"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-xs text-slate-500 mt-2 text-center">
+              Visit Settings → Gesture Controls for more options
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes fadeOut {
           from {

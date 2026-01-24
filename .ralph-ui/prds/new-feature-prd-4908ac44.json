@@ -198,7 +198,7 @@
       "id": "US-6.3",
       "title": "Discover Gestures and Features",
       "acceptance": "- First-time user sees brief onboarding for key features\n- Tooltip hints for gestures on first encounter\n- Help button in key bar settings explains all features\n- No repeated hints after dismissal",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     }

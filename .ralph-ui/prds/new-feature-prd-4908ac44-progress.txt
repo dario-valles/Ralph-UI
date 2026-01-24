@@ -951,3 +951,65 @@ When implementing command execution confirmation:
 - Both the card background AND the badge provide layered visual feedback for better UX
 - The confirmation appears inline with the action badge at the bottom of the command card
 </learning>
+[2026-01-24T12:08:43.127422+00:00] [Iter 24] [END] Iteration 24 completed successfully
+[2026-01-24T12:08:43.130929+00:00] [Iter 25] [START] Starting iteration 25
+
+[2026-01-24T13:55:00.000000+00:00] [Iter 25] [US-6.3] Story Completed: Discover Gestures and Features
+
+<learning type="pattern">
+Onboarding store implementation for tracking first-time user experience:
+- Create Zustand store with dismissed hints tracking using Set<string>
+- Store persists dismissed hints array to localStorage, merge converts back to Set
+- hasHintBeenDismissed method checks if specific hint ID is in the set
+- markMainOnboardingAsSeen and resetOnboarding provide state management actions
+- Partialize/merge pattern handles Set serialization since localStorage only supports JSON
+</learning>
+
+<learning type="pattern">
+First-time onboarding modal architecture:
+- Create step-based modal with multi-step carousel design (5 steps: welcome, modifiers, gestures, customization, help)
+- Use hasSeenMainOnboarding store state to show modal on first visit (conditional render)
+- Each step contains icon, title, description, and detailed content section
+- Progress indicator shows current step with dot visualization (small dots, large for current)
+- Skip and Next buttons allow user to navigate through steps or exit early
+- Modal closes automatically when user completes all steps or clicks Skip
+</learning>
+
+<learning type="pattern">
+Gesture-first tooltip hints for mobile features:
+- Show tooltip hint only on first use of each gesture type (history navigation, cursor movement, page scroll)
+- Integrate with onboarding store: check hasHintBeenDismissed before showing each hint
+- Tooltip appears at bottom of terminal with semi-dark background, title, description, and close button
+- Include "Visit Settings for more options" text to guide users to full documentation
+- Hints auto-dismiss when user closes them (sets dismissHint in store)
+- Use TypeScript union type for hint state: { id, title, description } | null
+</learning>
+
+<learning type="pattern">
+Help button in settings for comprehensive documentation:
+- Add Help icon button to card header using relative positioning and justify-between
+- Dialog opens with scrollable content area (max-h-[80vh] overflow-y-auto)
+- Organize help content by gesture type (5 sections: history, cursor, page scroll, extended arrows, pinch)
+- Each section includes UI components as visual guide, detailed explanation, and technical details
+- Include tips section with accent background color highlighting best practices
+- Use consistent styling for instruction rows with font-medium labels and text-muted-foreground descriptions
+</learning>
+
+<learning type="gotcha">
+When implementing onboarding with first-visit detection:
+- Don't call setState synchronously within useEffect - causes cascading renders
+- Instead, use store state directly to determine if modal should render (conditional JSX)
+- Only dispatch actions in response to user interactions (button clicks, dialog close)
+- This pattern avoids ESLint react-hooks/set-state-in-effect warnings
+</learning>
+
+<learning type="gotcha">
+Gesture hint timing and lifecycle:
+- Hints should appear AFTER gesture is detected and executed (not before)
+- Call dismissHint(id) when user closes hint to update store and prevent re-showing
+- Keep hint state separate from gesture indicator state to allow showing both simultaneously
+- Clear gesture indicator after 200ms but keep hint visible until user dismisses
+- Test that hints don't show on second use of same gesture (dismissal persists in localStorage)
+</learning>
+
+[2026-01-24T13:55:30.000000+00:00] [Iter 25] [END] Iteration 25 completed successfully

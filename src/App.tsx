@@ -8,6 +8,7 @@ import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { ToastContainer } from './components/ui/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ServerConnectionDialog } from './components/ServerConnectionDialog'
+import { OnboardingModal } from './components/onboarding/OnboardingModal'
 import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/backend-api'
@@ -81,6 +82,9 @@ function App() {
     <ErrorBoundary>
       {/* Show connection dialog in browser mode when not connected */}
       {showDialog && <ServerConnectionDialog onConnected={handleConnected} />}
+
+      {/* First-time user onboarding modal */}
+      <OnboardingModal />
 
       <BrowserRouter>
         <GlobalNotificationListener />
