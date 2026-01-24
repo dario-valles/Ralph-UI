@@ -9,8 +9,14 @@ import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function GestureSettings() {
-  const { settings, toggleHistoryNavigation, setHistorySwipeThreshold, resetToDefaults } =
-    useGestureStore()
+  const {
+    settings,
+    toggleHistoryNavigation,
+    setHistorySwipeThreshold,
+    toggleCursorMovement,
+    setCursorSwipeThreshold,
+    resetToDefaults,
+  } = useGestureStore()
 
   return (
     <Card>
@@ -60,11 +66,51 @@ export function GestureSettings() {
           )}
         </div>
 
+        {/* Cursor Movement */}
+        <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Cursor Movement with Gestures</Label>
+              <p className="text-sm text-muted-foreground">
+                Swipe left/right to move cursor. Fast swipes move by word.
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableCursorMovement}
+              onCheckedChange={toggleCursorMovement}
+              aria-label="Toggle cursor movement gestures"
+            />
+          </div>
+
+          {settings.enableCursorMovement && (
+            <div className="space-y-2 mt-4">
+              <Label htmlFor="cursorThreshold" className="text-sm">
+                Swipe Sensitivity: {settings.cursorSwipeThreshold}px
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Minimum swipe distance for character movement (fast swipes move by word at 2x this distance)
+              </p>
+              <Slider
+                id="cursorThreshold"
+                min={10}
+                max={100}
+                step={5}
+                value={[settings.cursorSwipeThreshold]}
+                onValueChange={([v]) => setCursorSwipeThreshold(v)}
+                className="w-full"
+              />
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span>10px (very sensitive)</span>
+                <span className="ml-auto">100px (less sensitive)</span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Future gesture features - placeholder for upcoming stories */}
         <div className="space-y-3 text-sm text-muted-foreground p-4 bg-secondary/20 rounded-lg border">
           <p className="font-medium">Coming Soon</p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Cursor movement with left/right swipes</li>
             <li>Page scrolling with two-finger swipes</li>
             <li>Extended arrow key gestures</li>
             <li>Pinch-to-zoom for terminal font size</li>

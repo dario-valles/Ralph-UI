@@ -134,7 +134,7 @@
       "id": "US-5.1",
       "title": "Navigate Command History with Gestures",
       "acceptance": "- Swipe up recalls previous command (like ↑)\n- Swipe down recalls next command (like ↓)\n- Visual indicator shows gesture is recognized\n- Gesture settings allow enabling/disabling this feature",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

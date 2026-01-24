@@ -35,13 +35,13 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
   const { settings } = useGestureStore()
-  const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | null>(null)
+  const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | 'left' | 'right' | null>(null)
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
 
   // Setup gesture detection
-  useGestureDetection(containerRef, {
+  const gestureState = useGestureDetection(containerRef, {
     onSwipeUp: () => {
       if (settings.enableHistoryNavigation && isActive) {
         writeToTerminal(terminalId, '\x1b[A') // Up arrow - previous command
@@ -56,8 +56,38 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         setTimeout(() => setGestureIndicator(null), 200)
       }
     },
-    threshold: settings.historySwipeThreshold,
-    enabled: settings.enableHistoryNavigation && isActive,
+    onSwipeLeft: () => {
+      if (settings.enableCursorMovement && isActive && gestureState) {
+        // Calculate velocity to determine word vs character movement
+        // Fast swipe (high velocity) moves by word using Ctrl+Left
+        // Slow swipe (low velocity) moves by character using Left arrow
+        const isFastSwipe = gestureState.distance > settings.cursorSwipeThreshold * 2
+        if (isFastSwipe) {
+          writeToTerminal(terminalId, '\x1b[1;5D') // Ctrl+Left - move cursor left by word
+        } else {
+          writeToTerminal(terminalId, '\x1b[D') // Left arrow - move cursor left by character
+        }
+        setGestureIndicator('left')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    onSwipeRight: () => {
+      if (settings.enableCursorMovement && isActive && gestureState) {
+        // Calculate velocity to determine word vs character movement
+        // Fast swipe (high velocity) moves by word using Ctrl+Right
+        // Slow swipe (low velocity) moves by character using Right arrow
+        const isFastSwipe = gestureState.distance > settings.cursorSwipeThreshold * 2
+        if (isFastSwipe) {
+          writeToTerminal(terminalId, '\x1b[1;5C') // Ctrl+Right - move cursor right by word
+        } else {
+          writeToTerminal(terminalId, '\x1b[C') // Right arrow - move cursor right by character
+        }
+        setGestureIndicator('right')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    threshold: Math.min(settings.historySwipeThreshold, settings.cursorSwipeThreshold),
+    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement) && isActive,
   })
 
   // Initialize terminal
@@ -278,12 +308,25 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
           className="absolute inset-0 pointer-events-none flex items-center justify-center"
           style={{
             opacity: 0.3,
-            backgroundColor: gestureIndicator === 'up' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+            backgroundColor:
+              gestureIndicator === 'up'
+                ? 'rgba(59, 130, 246, 0.2)'
+                : gestureIndicator === 'down'
+                  ? 'rgba(34, 197, 94, 0.2)'
+                  : gestureIndicator === 'left'
+                    ? 'rgba(168, 85, 247, 0.2)'
+                    : 'rgba(249, 115, 22, 0.2)',
             animation: 'fadeOut 0.3s ease-out',
           }}
         >
           <div className="text-white text-2xl font-bold">
-            {gestureIndicator === 'up' ? '↑ Previous' : '↓ Next'}
+            {gestureIndicator === 'up'
+              ? '↑ Previous'
+              : gestureIndicator === 'down'
+                ? '↓ Next'
+                : gestureIndicator === 'left'
+                  ? '← Cursor Left'
+                  : '→ Cursor Right'}
           </div>
         </div>
       )}
