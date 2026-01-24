@@ -243,7 +243,40 @@ Pages and their context requirements:
 
 ## Supported AI Agents
 
-Fully integrated: Claude Code, OpenCode, Cursor Agent, Codex CLI
+Fully integrated: Claude Code, OpenCode, Cursor Agent, Codex CLI, Qwen Code, Droid
+
+### Agent Session Resumption (Token Optimization)
+
+PRD Chat uses native CLI session resumption to avoid resending full conversation history on each message. This provides **67-90% token savings** depending on conversation length.
+
+**How it works:**
+1. First message: Full prompt sent, agent's session ID captured from output
+2. Subsequent messages: Session ID passed via resume flag, history omitted from prompt
+3. The CLI agent maintains its own context, so history isn't needed
+
+**Resume commands by agent:**
+
+| Agent | Resume Flag | CLI Reference |
+|-------|-------------|---------------|
+| Claude Code | `--resume <session-id>` | [CLI Reference](https://docs.anthropic.com/en/docs/claude-code/cli-reference) |
+| Cursor Agent | `--resume=<chat-id>` | [Cursor Docs](https://docs.cursor.com/agent/cli) |
+| Codex CLI | `codex resume <session-id>` | [Codex CLI Reference](https://github.com/openai/codex) |
+| Qwen Code | `--continue` | [Qwen Code Docs](https://github.com/QwenLM/Qwen-Agent) |
+| OpenCode | `--session <session-id>` | [OpenCode Docs](https://github.com/opencode-ai/opencode) |
+| Droid | `--session-id <session-id>` | [Factory Droid CLI](https://docs.factory.ai/reference/cli-reference) |
+
+**Key files:**
+- `server/src/commands/prd_chat/agent_executor.rs` - `build_agent_command()` with resume flags
+- `server/src/models/prd_chat.rs` - `ChatSession.external_session_id` field
+- `server/src/file_storage/chat_ops.rs` - `update_chat_session_external_id()`
+
+**Token savings by conversation length:**
+
+| Messages | Without Resume | With Resume | Savings |
+|----------|----------------|-------------|---------|
+| 5 | 15 exchanges | 5 exchanges | 67% |
+| 10 | 55 exchanges | 10 exchanges | 82% |
+| 20 | 210 exchanges | 20 exchanges | 90% |
 
 ## GSD Workflow
 

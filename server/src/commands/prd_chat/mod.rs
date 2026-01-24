@@ -9,7 +9,7 @@
 pub mod agent_executor;
 mod types;
 
-pub use agent_executor::{build_agent_command, generate_session_title, ChatEventEmitter};
+pub use agent_executor::{build_agent_command, generate_session_title, ChatAgentResult, ChatEventEmitter};
 pub use types::*;
 
 use crate::file_storage::{attachments, chat_ops};
@@ -81,6 +81,7 @@ pub async fn start_prd_chat_session(
         updated_at: now.clone(),
         message_count: Some(0),
         pending_operation_started_at: None,
+        external_session_id: None,
     };
 
     // Initialize .ralph-ui directory and save session to file
@@ -223,12 +224,16 @@ pub async fn send_prd_chat_message(
     let history = chat_ops::get_messages_by_session(project_path_obj, &request.session_id)
         .map_err(|e| format!("Failed to get chat history: {}", e))?;
 
+    // Check if we have an existing external session for resume support
+    let has_external_session = session.external_session_id.is_some();
+
     // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
+    // When resuming an external session, history is omitted (agent maintains its own context)
     let prompt = match get_gsd_phase(&session) {
         Some(GsdPhase::DeepQuestioning) => {
-            build_deep_questioning_prompt(&session, &history, &request.content, &attachment_paths)
+            build_deep_questioning_prompt(&session, &history, &request.content, &attachment_paths, has_external_session)
         }
-        _ => build_prd_chat_prompt(&session, &history, &request.content, &attachment_paths),
+        _ => build_prd_chat_prompt(&session, &history, &request.content, &attachment_paths, has_external_session),
     };
 
     // Parse agent type
@@ -240,17 +245,19 @@ pub async fn send_prd_chat_message(
     }
 
     // Execute CLI agent and get response with streaming using the unified executor
+    // Pass external_session_id to enable session resumption (saves 67-90% tokens)
     let emitter = agent_executor::BroadcastEmitter::new(app_handle.clone());
-    let response_content = match agent_executor::execute_chat_agent(
+    let agent_result = match agent_executor::execute_chat_agent(
         &emitter,
         &request.session_id,
         agent_type,
         &prompt,
         session.project_path.as_deref(),
+        session.external_session_id.as_deref(),
     )
     .await
     {
-        Ok(content) => content,
+        Ok(result) => result,
         Err(e) => {
             // Clear pending operation on error
             if let Err(clear_err) = chat_ops::clear_pending_operation(project_path_obj, &request.session_id) {
@@ -262,6 +269,7 @@ pub async fn send_prd_chat_message(
 
     // Second phase: store response and parse structured output
     let response_now = chrono::Utc::now().to_rfc3339();
+    let response_content = agent_result.content;
 
     // Store assistant message
     let assistant_message = ChatMessage {
@@ -279,6 +287,16 @@ pub async fn send_prd_chat_message(
     // Clear pending operation after successful execution
     if let Err(e) = chat_ops::clear_pending_operation(project_path_obj, &request.session_id) {
         log::warn!("Failed to clear pending operation: {}", e);
+    }
+
+    // If we captured a new external session ID, save it for future resume
+    // This enables 67-90% token savings on subsequent messages
+    if let Some(captured_id) = agent_result.captured_session_id {
+        if let Err(e) = chat_ops::update_chat_session_external_id(project_path_obj, &request.session_id, Some(&captured_id)) {
+            log::warn!("Failed to save external session ID for resume: {}", e);
+        } else {
+            log::info!("Captured external session ID for resume: {}", captured_id);
+        }
     }
 
     // Update session timestamp
@@ -1889,6 +1907,7 @@ fn build_deep_questioning_prompt(
     history: &[ChatMessage],
     current_message: &str,
     attachment_paths: &[String],
+    has_external_session: bool,
 ) -> String {
     let mut prompt = String::new();
 
@@ -1958,8 +1977,10 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
         prompt.push_str("Focus your questions on the items that still need input.\n\n");
     }
 
-    // Include conversation history
-    if !history.is_empty() {
+    // Include conversation history only if we don't have an active external session
+    // When resuming an external session, the CLI agent maintains its own context,
+    // so we skip history to save tokens (67-90% savings depending on conversation length)
+    if !has_external_session && !history.is_empty() {
         prompt.push_str("=== Conversation History ===\n\n");
         for msg in history {
             let role_label = match msg.role {
@@ -1986,11 +2007,17 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
     prompt
 }
 
+/// Build the prompt for PRD chat
+///
+/// When `has_external_session` is true, conversation history is omitted because
+/// the CLI agent maintains its own context through native session resumption.
+/// This significantly reduces token usage for multi-turn conversations.
 fn build_prd_chat_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
     current_message: &str,
     attachment_paths: &[String],
+    has_external_session: bool,
 ) -> String {
     let mut prompt = String::new();
 
@@ -2072,8 +2099,10 @@ fn build_prd_chat_prompt(
         prompt.push_str(&plan_file_instruction);
     }
 
-    // Include conversation history
-    if !history.is_empty() {
+    // Include conversation history only if we don't have an active external session
+    // When resuming an external session, the CLI agent maintains its own context,
+    // so we skip history to save tokens (67-90% savings depending on conversation length)
+    if !has_external_session && !history.is_empty() {
         prompt.push_str("=== Conversation History ===\n\n");
         for msg in history {
             let role_label = match msg.role {
@@ -2181,6 +2210,7 @@ mod tests {
             gsd_mode: false,
             gsd_state: None,
             pending_operation_started_at: None,
+            external_session_id: None,
         }
     }
 
@@ -2228,7 +2258,7 @@ mod tests {
         let session = make_test_session("test");
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[]);
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[], false);
 
         assert!(prompt.contains("expert product manager"));
         assert!(prompt.contains("Create a PRD for a todo app"));
@@ -2259,12 +2289,47 @@ mod tests {
             },
         ];
 
-        let prompt = build_prd_chat_prompt(&session, &history, "Add a due date feature", &[]);
+        let prompt = build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], false);
 
         assert!(prompt.contains("Project path: /my/project"));
         assert!(prompt.contains("Conversation History"));
         assert!(prompt.contains("I want to build a todo app"));
         assert!(prompt.contains("Let me help you define"));
+        assert!(prompt.contains("Add a due date feature"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_with_external_session_skips_history() {
+        let mut session = make_test_session("test");
+        session.project_path = Some("/my/project".to_string());
+
+        let history = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I want to build a todo app".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "Great! Let me help you define the requirements.".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+        ];
+
+        // When has_external_session is true, history should be omitted (token savings)
+        let prompt = build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], true);
+
+        assert!(prompt.contains("Project path: /my/project"));
+        // History should NOT be included when resuming external session
+        assert!(!prompt.contains("Conversation History"));
+        assert!(!prompt.contains("I want to build a todo app"));
+        // Current message should still be included
         assert!(prompt.contains("Add a due date feature"));
     }
 
@@ -2603,7 +2668,7 @@ mod tests {
         session.structured_mode = true;
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create epics for an auth system", &[]);
+        let prompt = build_prd_chat_prompt(&session, &history, "Create epics for an auth system", &[], false);
 
         // Should include structured output instructions
         assert!(prompt.contains("STRUCTURED OUTPUT MODE"));
@@ -2621,7 +2686,7 @@ mod tests {
         let session = make_test_session("test"); // structured_mode: false
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[]);
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false);
 
         // Should NOT include structured output instructions
         assert!(!prompt.contains("STRUCTURED OUTPUT MODE"));

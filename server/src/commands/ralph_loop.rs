@@ -2413,16 +2413,17 @@ pub async fn regenerate_ralph_prd_stories(
     let emitter = BroadcastEmitter::new(app_handle.clone());
     let session_id = format!("story-regen-{}", uuid::Uuid::new_v4());
 
-    let response = execute_chat_agent(
+    let result = execute_chat_agent(
         &emitter,
         &session_id,
         agent_type,
         &prompt,
         Some(&request.project_path),
+        None, // No session resumption for story regeneration
     ).await?;
 
     // Parse the AI response to extract stories
-    let extracted_stories = parse_ai_story_response(&response)?;
+    let extracted_stories = parse_ai_story_response(&result.content)?;
 
     if extracted_stories.is_empty() {
         return Err("AI did not extract any valid user stories. The PRD may need manual formatting.".to_string());

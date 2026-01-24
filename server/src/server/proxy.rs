@@ -2023,16 +2023,20 @@ async fn send_prd_chat_message_server(
         .map_err(|e| format!("Invalid agent type: {}", e))?;
 
     // Execute agent using the shared executor with BroadcastEmitter
+    // Pass external_session_id to enable session resumption (saves 67-90% tokens)
     let emitter = BroadcastEmitter::new(broadcaster.clone());
-    let response_content = execute_chat_agent(
+    let agent_result = execute_chat_agent(
         &emitter,
         &request.session_id,
         agent_type,
         &prompt,
         session.project_path.as_deref(),
+        session.external_session_id.as_deref(),
     )
     .await
     .map_err(|e| format!("Agent execution failed: {}", e))?;
+
+    let response_content = agent_result.content;
 
     // Store assistant message
     let response_now = chrono::Utc::now().to_rfc3339();
@@ -2047,6 +2051,13 @@ async fn send_prd_chat_message_server(
 
     chat_ops::create_chat_message(project_path_obj, &assistant_message)
         .map_err(|e| format!("Failed to store assistant message: {}", e))?;
+
+    // If we captured a new external session ID, save it for future resume
+    if let Some(captured_id) = agent_result.captured_session_id {
+        if let Err(e) = chat_ops::update_chat_session_external_id(project_path_obj, &request.session_id, Some(&captured_id)) {
+            log::warn!("Failed to save external session ID for resume: {}", e);
+        }
+    }
 
     // Update session timestamp
     chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
@@ -2170,17 +2181,18 @@ async fn regenerate_ralph_prd_stories_server(
     let emitter = BroadcastEmitter::new(broadcaster.clone());
     let session_id = format!("story-regen-{}", uuid::Uuid::new_v4());
 
-    let response = execute_chat_agent(
+    let result = execute_chat_agent(
         &emitter,
         &session_id,
         agent_type,
         &prompt,
         Some(&request.project_path),
+        None, // No session resumption for story regeneration
     )
     .await?;
 
     // Parse the AI response to extract stories
-    let extracted_stories = parse_ai_story_response(&response)?;
+    let extracted_stories = parse_ai_story_response(&result.content)?;
 
     if extracted_stories.is_empty() {
         return Err(

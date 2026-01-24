@@ -182,6 +182,22 @@ pub fn clear_pending_operation(project_path: &Path, session_id: &str) -> Result<
     Ok(())
 }
 
+/// Update external session ID for CLI agent session resumption
+/// This enables 67-90% token savings by allowing the CLI agent to maintain its own context
+pub fn update_chat_session_external_id(
+    project_path: &Path,
+    session_id: &str,
+    external_id: Option<&str>,
+) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.external_session_id = external_id.map(|s| s.to_string());
+    // Don't update updated_at since this is internal state for optimization
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +223,7 @@ mod tests {
             gsd_mode: false,
             gsd_state: None,
             pending_operation_started_at: None,
+            external_session_id: None,
         }
     }
 

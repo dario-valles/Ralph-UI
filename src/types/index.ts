@@ -654,6 +654,12 @@ export interface ChatSession {
    * Used to restore "thinking" state after page reload.
    */
   pendingOperationStartedAt?: string
+  /**
+   * External session ID for CLI agent session resumption.
+   * When set, allows resuming the agent's native session instead of resending
+   * full conversation history, resulting in 67-90% token savings.
+   */
+  externalSessionId?: string
 }
 
 export interface SendMessageResponse {

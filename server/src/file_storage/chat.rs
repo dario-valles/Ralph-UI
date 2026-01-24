@@ -57,6 +57,10 @@ pub struct ChatFile {
     /// Used to restore "thinking" state after page reload
     #[serde(default)]
     pub pending_operation_started_at: Option<DateTime<Utc>>,
+    /// External session ID for CLI agent session resumption
+    /// This allows resuming agent sessions without resending full history
+    #[serde(default)]
+    pub external_session_id: Option<String>,
 }
 
 /// Message entry in chat file
@@ -131,6 +135,7 @@ impl From<&ChatSession> for ChatFile {
                 .as_ref()
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                 .map(|dt| dt.with_timezone(&Utc)),
+            external_session_id: session.external_session_id.clone(),
         }
     }
 }
@@ -156,6 +161,7 @@ impl ChatFile {
             updated_at: self.updated_at.to_rfc3339(),
             message_count: Some(self.messages.len() as i32),
             pending_operation_started_at: self.pending_operation_started_at.map(|dt| dt.to_rfc3339()),
+            external_session_id: self.external_session_id.clone(),
         }
     }
 
@@ -370,6 +376,7 @@ mod tests {
                 },
             ],
             pending_operation_started_at: None,
+            external_session_id: None,
         }
     }
 

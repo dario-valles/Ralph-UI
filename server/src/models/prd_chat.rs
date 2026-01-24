@@ -177,6 +177,10 @@ pub struct ChatSession {
     /// Used to restore "thinking" state after page reload
     #[serde(default)]
     pub pending_operation_started_at: Option<String>,
+    /// External session ID for CLI agent session resumption
+    /// This allows resuming agent sessions without resending full history
+    #[serde(default)]
+    pub external_session_id: Option<String>,
 }
 
 /// A message in a chat session
