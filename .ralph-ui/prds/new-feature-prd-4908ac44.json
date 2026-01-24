@@ -190,7 +190,7 @@
       "id": "US-6.2",
       "title": "See Visual Feedback for Actions",
       "acceptance": "- Key press shows visual ripple/highlight\n- Gesture shows directional indicator\n- Modifier state clearly visible\n- Command execution shows confirmation",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

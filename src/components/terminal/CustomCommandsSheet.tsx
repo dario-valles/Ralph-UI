@@ -1,7 +1,7 @@
 // Custom commands side sheet for saving and using frequently used commands
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2, AlertCircle, Check } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCustomCommandsStore, CustomCommand } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
@@ -31,6 +31,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [viewingOverrideFor, setViewingOverrideFor] = useState<string | null>(null)
+  const [executedCommandId, setExecutedCommandId] = useState<string | null>(null)
 
   const allCategories = useMemo(() => getAllCategories(), [getAllCategories])
 
@@ -164,13 +165,16 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     setExpandedCategories(newExpanded)
   }
 
-  const handleUseCommand = (cmd: string, action: 'insert' | 'execute') => {
+  const handleUseCommand = (cmdId: string, cmd: string, action: 'insert' | 'execute') => {
     if (activeTerminalId) {
       writeToTerminal(activeTerminalId, cmd)
       // If action is 'execute', also send a newline to run the command
       if (action === 'execute') {
         writeToTerminal(activeTerminalId, '\r')
       }
+      // Show confirmation feedback
+      setExecutedCommandId(cmdId)
+      setTimeout(() => setExecutedCommandId(null), 600)
     }
   }
 
@@ -401,15 +405,17 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                             onDragStart={() => handleDragStart(cmdIndex)}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropCommand(cmdIndex)}
-                            className={`border rounded p-3 transition-colors cursor-move ${
+                            className={`border rounded p-3 transition-all cursor-move ${
                               draggedIndex === cmdIndex
                                 ? 'bg-muted/70 opacity-50'
-                                : 'bg-muted/30 hover:bg-muted/50'
+                                : executedCommandId === cmd.id
+                                  ? 'bg-green-500/20 border-green-500/50'
+                                  : 'bg-muted/30 hover:bg-muted/50'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <button
-                                onClick={() => handleUseCommand(cmd.command, cmd.action)}
+                                onClick={() => handleUseCommand(cmd.id, cmd.command, cmd.action)}
                                 className="flex-1 text-left"
                               >
                                 <div className="font-medium text-sm text-foreground hover:text-primary">
@@ -446,6 +452,12 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                               >
                                 {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
                               </span>
+                              {executedCommandId === cmd.id && (
+                                <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded bg-green-500/20 text-green-600 animate-pulse">
+                                  <Check className="w-3 h-3 mr-1" />
+                                  Executed
+                                </span>
+                              )}
                               <span
                                 className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
                                   cmd.scope === 'project'

@@ -875,3 +875,79 @@ Gesture settings store architecture provides complete feature toggle system:
 </learning>
 [2026-01-24T12:04:51.422601+00:00] [Iter 22] [END] Iteration 22 completed successfully
 [2026-01-24T12:04:51.425254+00:00] [Iter 23] [START] Starting iteration 23
+
+[2026-01-24T13:45:00.000000+00:00] [Iter 23] [US-6.1] Story Completed: Receive Haptic Feedback
+
+<learning type="pattern">
+Haptic feedback implementation for terminal key bar:
+- Add enableHaptics: boolean field to gesture settings interface
+- Light haptic for normal key press: navigator.vibrate(10) for 10ms
+- Medium haptic for modifier toggle: navigator.vibrate(20) for 20ms
+- Always check navigator.vibrate availability and settings.enableHaptics before calling
+- Add toggleHaptics() action to gesture store
+- Default to enabled (enableHaptics: true) so feature works immediately
+- Zustand persist middleware automatically saves setting to localStorage with name 'ralph-gesture-settings'
+</learning>
+
+<learning type="pattern">
+Integrating haptic feedback into key press handler:
+- For modifier keys: provide medium haptic (20ms) when toggling state in both single-tap (sticky) and double-tap (lock) cases
+- For normal keys: provide light haptic (10ms) before sending the key to terminal
+- Both cases check: if (settings.enableHaptics && navigator.vibrate) before calling vibrate()
+- Add settings.enableHaptics to useCallback dependencies to ensure handlers update when setting changes
+- The check for navigator.vibrate availability handles devices without vibration support gracefully
+</learning>
+
+<learning type="pattern">
+Haptic feedback UI in gesture settings component:
+- Add toggleHaptics to destructured imports from useGestureStore
+- Create new settings section with border and muted background (consistent with other gesture features)
+- Show description of what types of haptics are used (light for normal, medium for modifiers)
+- Show conditional details when haptics are enabled:
+  - Bullet point: "Light haptic (10ms) on normal key press"
+  - Bullet point: "Medium haptic (20ms) on modifier toggle"
+  - Bullet point: "Requires device support for vibration"
+- Use existing Switch component for toggle
+</learning>
+
+<learning type="gotcha">
+When adding haptic feedback timing:
+- 10ms is subtle enough for normal key feedback without being annoying
+- 20ms is noticeable enough for modifier state changes which are important mode indicators
+- Always test on real devices as vibration patterns may vary
+- The haptic feedback should enhance UX without being excessive or distracting
+- Consider battery impact - lighter durations (10-20ms) have minimal impact
+</learning>
+
+[2026-01-24T13:45:30.000000+00:00] [Iter 23] [END] Iteration 23 completed successfully
+[2026-01-24T12:06:48.274593+00:00] [Iter 23] [END] Iteration 23 completed successfully
+[2026-01-24T12:06:48.277131+00:00] [Iter 24] [START] Starting iteration 24
+
+[2026-01-24T13:50:00.000000+00:00] [Iter 24] [US-6.2] Story Completed: See Visual Feedback for Actions
+
+<learning type="pattern">
+Visual feedback implementation for terminal key bar actions is comprehensive:
+- Key press ripple/highlight: Already implemented via active:bg-accent active:scale-95 CSS classes in TerminalKeyBar
+- Gesture directional indicators: Already implemented in TerminalInstance with colored overlays (blue for up, green for down, purple for left, orange for right) with text labels
+- Modifier state visibility: Active modifiers show bg-accent text-accent-foreground (highlighted), locked modifiers show border-accent border-2 animate-pulse (pulsing border)
+- Command execution confirmation: Added executedCommandId state to CustomCommandsSheet, shows green flash + checkmark badge for 600ms
+</learning>
+
+<learning type="pattern">
+Command execution feedback in CustomCommandsSheet:
+- Add executedCommandId state to track which command was just executed
+- Modify handleUseCommand to accept cmdId parameter and temporarily set executedCommandId
+- Show green visual feedback on command card: bg-green-500/20 border-green-500/50 with "✓ Executed" badge
+- Use animate-pulse class on confirmation badge for subtle pulsing effect
+- Clear executedCommandId after 600ms timeout to reset visual state
+- Update all command card onClick handlers to pass cmd.id to handleUseCommand
+</learning>
+
+<learning type="gotcha">
+When implementing command execution confirmation:
+- Must import Check icon from lucide-react for the checkmark in the execution badge
+- Update handleUseCommand signature to accept cmdId as first parameter before cmd and action
+- The executedCommandId state is temporary and only lasts 600ms before clearing
+- Both the card background AND the badge provide layered visual feedback for better UX
+- The confirmation appears inline with the action badge at the bottom of the command card
+</learning>
