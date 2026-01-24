@@ -17,20 +17,26 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
   const { commands, addCommand, deleteCommand } = useCustomCommandsStore()
   const [label, setLabel] = useState('')
   const [command, setCommand] = useState('')
+  const [action, setAction] = useState<'insert' | 'execute'>('execute')
   const [showForm, setShowForm] = useState(false)
 
   const handleAddCommand = () => {
     if (label.trim() && command.trim()) {
-      addCommand(label, command)
+      addCommand(label, command, action)
       setLabel('')
       setCommand('')
+      setAction('execute')
       setShowForm(false)
     }
   }
 
-  const handleUseCommand = (cmd: string) => {
+  const handleUseCommand = (cmd: string, action: 'insert' | 'execute') => {
     if (activeTerminalId) {
       writeToTerminal(activeTerminalId, cmd)
+      // If action is 'execute', also send a newline to run the command
+      if (action === 'execute') {
+        writeToTerminal(activeTerminalId, '\r')
+      }
     }
   }
 
@@ -74,23 +80,37 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                 className="w-full px-2 py-1 text-sm border rounded bg-background resize-none"
                 rows={3}
               />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddCommand}
-                  className="flex-1 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setShowForm(false)
-                    setLabel('')
-                    setCommand('')
-                  }}
-                  className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Action:</label>
+                  <select
+                    value={action}
+                    onChange={(e) => setAction(e.target.value as 'insert' | 'execute')}
+                    className="flex-1 px-2 py-1 text-sm border rounded bg-background"
+                  >
+                    <option value="insert">Insert (no newline)</option>
+                    <option value="execute">Execute (with newline)</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddCommand}
+                    className="flex-1 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowForm(false)
+                      setLabel('')
+                      setCommand('')
+                      setAction('execute')
+                    }}
+                    className="flex-1 px-3 py-1 text-sm bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -107,9 +127,9 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                   key={cmd.id}
                   className="border rounded p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="flex items-start justify-between gap-2 mb-2">
                     <button
-                      onClick={() => handleUseCommand(cmd.command)}
+                      onClick={() => handleUseCommand(cmd.command, cmd.action)}
                       className="flex-1 text-left"
                     >
                       <div className="font-medium text-sm text-foreground hover:text-primary">
@@ -126,6 +146,17 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
+                  </div>
+                  <div className="flex items-center">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${
+                        cmd.action === 'execute'
+                          ? 'bg-primary/20 text-primary'
+                          : 'bg-secondary/20 text-secondary-foreground'
+                      }`}
+                    >
+                      {cmd.action === 'execute' ? '↵ Execute' : '← Insert'}
+                    </span>
                   </div>
                 </div>
               ))

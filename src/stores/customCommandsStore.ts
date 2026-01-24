@@ -7,6 +7,7 @@ export interface CustomCommand {
   id: string
   label: string
   command: string
+  action: 'insert' | 'execute'
   createdAt: number
 }
 
@@ -15,7 +16,7 @@ interface CustomCommandsStore {
   commands: CustomCommand[]
 
   // Actions
-  addCommand: (label: string, command: string) => void
+  addCommand: (label: string, command: string, action: 'insert' | 'execute') => void
   deleteCommand: (id: string) => void
   getCommands: () => CustomCommand[]
 }
@@ -26,12 +27,13 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
       // Initial state
       commands: [],
 
-      addCommand: (label: string, command: string) => {
+      addCommand: (label: string, command: string, action: 'insert' | 'execute') => {
         const { commands } = get()
         const newCommand: CustomCommand = {
           id: `cmd-${Date.now()}`,
           label,
           command,
+          action,
           createdAt: Date.now(),
         }
         set({ commands: [...commands, newCommand] })
