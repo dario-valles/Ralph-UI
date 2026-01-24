@@ -472,3 +472,34 @@ When implementing scope feature:
 </learning>
 
 [2026-01-24T12:62:00.000000+00:00] [Iter 13] [END] Iteration 13 completed successfully
+[2026-01-24T11:43:03.213023+00:00] [Iter 13] [END] Iteration 13 completed successfully
+[2026-01-24T11:43:03.215578+00:00] [Iter 14] [START] Starting iteration 14
+
+[2026-01-24T13:00:00.000000+00:00] [Iter 14] [US-4.2] Story Completed: Sync Commands Across All Projects
+
+<learning type="pattern">
+Global command storage implementation follows the same pattern as project-scoped commands:
+- Add save_global_commands(commands) and load_global_commands() functions to terminal.rs
+- Use dirs::home_dir() to get the home directory path
+- Store global commands in ~/.ralph-ui/terminal/commands.json using atomic writes
+- Register new backend routes in proxy.rs using route_async! macro
+- Update Zustand store methods to handle global scope synchronization
+- Call load_global_commands() when loading project commands to merge all scopes
+</learning>
+
+<learning type="pattern">
+Frontend store pattern for multi-scope persistence:
+- Each store method (addCommand, deleteCommand, editCommand, reorderCommands) needs to check command scope
+- If scope is 'project', sync via invoke('save_project_commands', ...)
+- If scope is 'global', sync via invoke('save_global_commands', ...)
+- Local scope commands never sync - they stay in localStorage only
+- loadProjectCommands now loads both project AND global commands, merging them with local commands
+</learning>
+
+<learning type="gotcha">
+When enabling a disabled option in a select element:
+- The option element itself should not have the disabled attribute
+- Instead, remove the disabled attribute from the select element for that option
+- Example: <option value="global">Global (all projects)</option> (no disabled attribute)
+- This allows users to select it while keeping project scope disabled when projectPath is missing
+</learning>

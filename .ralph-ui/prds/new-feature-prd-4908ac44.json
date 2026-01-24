@@ -110,7 +110,7 @@
       "id": "US-4.2",
       "title": "Sync Commands Across All Projects",
       "acceptance": "- Can save command to \"Global\" scope\n- Commands saved to `~/.ralph-ui/terminal/commands.json`\n- Global commands available in all projects\n- Global commands sync with Ralph account (future)",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
