@@ -81,9 +81,12 @@ export function useScrollDirection(
     }
 
     const scrollTop = element.scrollTop
+    const scrollHeight = element.scrollHeight
+    const clientHeight = element.clientHeight
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
-    // Always show header when near top
-    if (scrollTop < minScrollPosition) {
+    // Always show header when near top or near bottom (prevents flicker at chat end)
+    if (scrollTop < minScrollPosition || distanceFromBottom < 50) {
       if (scrollDirection !== null) {
         setScrollDirection(null)
         lastDirectionChangePosition.current = scrollTop

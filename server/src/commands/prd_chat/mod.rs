@@ -2112,7 +2112,9 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
 
     format!(
         "\n=== PLAN FILE INSTRUCTION ===\n\n\
-        Maintain a living plan document at: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
+        **CRITICAL: You MUST use this EXACT filename - do not change it:**\n\
+        `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
+        ⚠️ IMPORTANT: The system tracks this specific file. Using any other filename will cause the PRD to be lost and not appear in the UI.\n\n\
         This file should contain:\n\
         - Current understanding of requirements\n\
         - Key decisions and rationale\n\
@@ -2127,8 +2129,8 @@ fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<
         - Criterion 2\n\
         ```\n\n\
         Never use `**US-1.1:**` bold format. Always use `#### US-X.X:` headers.\n\n\
-        UPDATE THIS FILE NOW with any new insights from this exchange.\n\
-        Write the file content using your file writing capabilities.\n\n\
+        UPDATE THIS FILE NOW at the exact path specified above.\n\
+        Write to: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
         === END PLAN FILE INSTRUCTION ===\n\n"
     )
 }

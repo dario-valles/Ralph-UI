@@ -54,3 +54,8 @@ src-tauri/ralph-ui.db
 .ralph-ui/
 .ralph/
 .worktrees/
+
+# Tailscale HTTPS certificates
+certs/
+*.crt
+*.key

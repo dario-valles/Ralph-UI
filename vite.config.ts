@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -16,6 +17,36 @@ export default defineConfig(async () => ({
       },
     }),
     tailwindcss(),
+    VitePWA({
+      registerType: 'prompt',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      manifest: {
+        name: 'Ralph UI',
+        short_name: 'Ralph',
+        description: 'AI-powered coding agent orchestration',
+        theme_color: '#0a0a0a',
+        background_color: '#0a0a0a',
+        display: 'standalone',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+    }),
   ],
   resolve: {
     alias: {
@@ -27,7 +58,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
 
   server: {
-    port: 1420,
+    port: 5173, // Use 5173 locally, Tailscale Serve proxies 1420 → 5173
     strictPort: true,
     host: '0.0.0.0', // Bind to all interfaces for Tailscale access
     allowedHosts: ['localhost', 'mac', '.ts.net', '.local'], // Allow Tailscale and local access
