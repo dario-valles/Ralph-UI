@@ -52,6 +52,10 @@ export default defineConfig(async () => ({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
     }),
   ],
   resolve: {

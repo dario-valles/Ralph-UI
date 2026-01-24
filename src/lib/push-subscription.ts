@@ -90,7 +90,15 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   }
 
   // Wait for the service worker to be ready (registered by VitePWA)
-  const registration = await navigator.serviceWorker.ready
+  // Add a timeout to prevent hanging if SW isn't registered
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Service worker not available (timeout)')), 10000)
+  })
+
+  const registration = await Promise.race([
+    navigator.serviceWorker.ready,
+    timeoutPromise,
+  ])
 
   console.log('[Push] Service worker ready:', registration.scope)
   return registration
