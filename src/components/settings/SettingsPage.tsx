@@ -46,6 +46,7 @@ import { configApi } from '@/lib/config-api'
 import { templateApi } from '@/lib/backend-api'
 import { useProjectStore } from '@/stores/projectStore'
 import { KeyBarCustomizer } from './KeyBarCustomizer'
+import { GestureSettings } from './GestureSettings'
 import type {
   RalphConfig,
   RalphExecutionConfig,
@@ -2235,6 +2236,8 @@ export function SettingsPage() {
           </Card>
 
           <KeyBarCustomizer />
+
+          <GestureSettings />
         </TabsContent>
       </Tabs>
     </div>

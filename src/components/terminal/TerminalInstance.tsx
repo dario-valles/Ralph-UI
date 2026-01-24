@@ -16,6 +16,8 @@ import {
   type UnifiedPty,
 } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { useGestureStore } from '@/stores/gestureStore'
+import { useGestureDetection } from '@/hooks/useGestureDetection'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalInstanceProps {
@@ -32,9 +34,31 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const ptyRef = useRef<UnifiedPty | null>(null)
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
+  const { settings } = useGestureStore()
+  const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | null>(null)
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
+
+  // Setup gesture detection
+  useGestureDetection(containerRef, {
+    onSwipeUp: () => {
+      if (settings.enableHistoryNavigation && isActive) {
+        writeToTerminal(terminalId, '\x1b[A') // Up arrow - previous command
+        setGestureIndicator('up')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    onSwipeDown: () => {
+      if (settings.enableHistoryNavigation && isActive) {
+        writeToTerminal(terminalId, '\x1b[B') // Down arrow - next command
+        setGestureIndicator('down')
+        setTimeout(() => setGestureIndicator(null), 200)
+      }
+    },
+    threshold: settings.historySwipeThreshold,
+    enabled: settings.enableHistoryNavigation && isActive,
+  })
 
   // Initialize terminal
   useEffect(() => {
@@ -245,8 +269,34 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#1a1a1a]"
+      className="w-full h-full bg-[#1a1a1a] relative"
       style={{ display: isActive ? 'block' : 'none' }}
-    />
+    >
+      {/* Gesture indicator - shows visual feedback for swipe gestures */}
+      {gestureIndicator && (
+        <div
+          className="absolute inset-0 pointer-events-none flex items-center justify-center"
+          style={{
+            opacity: 0.3,
+            backgroundColor: gestureIndicator === 'up' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+            animation: 'fadeOut 0.3s ease-out',
+          }}
+        >
+          <div className="text-white text-2xl font-bold">
+            {gestureIndicator === 'up' ? '↑ Previous' : '↓ Next'}
+          </div>
+        </div>
+      )}
+      <style>{`
+        @keyframes fadeOut {
+          from {
+            opacity: 0.3;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
   )
 }

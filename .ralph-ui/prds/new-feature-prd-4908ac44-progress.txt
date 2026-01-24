@@ -584,3 +584,62 @@ When grouping commands by label for override detection:
 </learning>
 
 [2026-01-24T13:10:30.000000+00:00] [Iter 16] [END] Iteration 16 completed successfully
+[2026-01-24T11:51:31.411469+00:00] [Iter 16] [END] Iteration 16 completed successfully
+[2026-01-24T11:51:31.414063+00:00] [Iter 17] [START] Starting iteration 17
+
+[2026-01-24T13:15:00.000000+00:00] [Iter 17] [US-5.1] Story Completed: Navigate Command History with Gestures
+
+<learning type="pattern">
+Gesture detection implementation for mobile terminal swipe navigation:
+- Create useGestureDetection hook with touch event listeners for single-finger swipes
+- Track touchStart, touchMove, touchEnd events to calculate swipe distance and direction
+- Distinguish between vertical (up/down) and horizontal (left/right) swipes using dx/dy comparison
+- Use threshold parameter (default 30px) to filter out accidental touches
+- Return gestureState with isDetecting, direction, and distance for real-time feedback
+- Support callbacks: onSwipeUp, onSwipeDown, onSwipeLeft, onSwipeRight, onGestureStart, onGestureEnd
+</learning>
+
+<learning type="pattern">
+Command history navigation via gestures sends arrow key escape sequences:
+- Swipe up: writeToTerminal(terminalId, '\x1b[A') - same as pressing up arrow (recall previous command)
+- Swipe down: writeToTerminal(terminalId, '\x1b[B') - same as pressing down arrow (recall next command)
+- These sequences work with any shell that supports readline (bash, zsh, sh, etc.)
+- The terminal interprets them as if user pressed physical arrow keys
+</learning>
+
+<learning type="pattern">
+Gesture settings store pattern using Zustand:
+- Create settings store with feature toggles and threshold configuration
+- Support enable/disable for each gesture feature independently
+- Store thresholds as number values (pixel distance for swipes, scale factor for pinches)
+- Provide both individual toggle methods and bulk resetToDefaults
+- Use partialize to persist only settings, not all store state
+</learning>
+
+<learning type="pattern">
+Visual gesture feedback on terminal:
+- Show animated overlay with direction indicator (↑ Previous or ↓ Next)
+- Use fadeOut CSS animation (0.3s) to smoothly hide feedback
+- Position indicator absolutely over terminal content to avoid blocking interaction
+- Apply opacity-based reveal (0.3) with colored background (blue for up, green for down)
+- Clear gesture indicator after 200ms to provide instant visual confirmation
+</learning>
+
+<learning type="pattern">
+Gesture settings UI component in settings page:
+- Add GestureSettings component to UI Preferences tab (after KeyBarCustomizer)
+- Provide feature card with toggle switch for enabling/disabling
+- Show conditionally rendered threshold slider when feature is enabled
+- Include placeholder section for future gesture features (cursor movement, page scrolling, pinch-zoom)
+- Add reset button to restore default settings
+</learning>
+
+<learning type="gotcha">
+When using useGestureDetection hook with TerminalInstance:
+- Remember to remove unused gestureState variable if not using it for display
+- Add elementRef to useEffect dependencies to avoid stale closures
+- The hook should be enabled only when settings.enableHistoryNavigation && isActive to avoid processing gestures when terminal is not active
+- TouchEvent listeners should be passive: true to avoid blocking scrolling on mobile devices
+</learning>
+
+[2026-01-24T13:15:30.000000+00:00] [Iter 17] [END] Iteration 17 completed successfully
