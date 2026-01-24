@@ -118,7 +118,7 @@
       "id": "US-4.3",
       "title": "Keep Private Commands Local",
       "acceptance": "- Can save command to \"Local\" scope (default)\n- Local commands stored in localStorage only\n- Local commands never appear in project files\n- Clear visual indicator of command scope",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

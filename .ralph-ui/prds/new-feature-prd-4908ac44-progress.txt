@@ -503,3 +503,45 @@ When enabling a disabled option in a select element:
 - Example: <option value="global">Global (all projects)</option> (no disabled attribute)
 - This allows users to select it while keeping project scope disabled when projectPath is missing
 </learning>
+[2026-01-24T11:47:35.721489+00:00] [Iter 14] [END] Iteration 14 completed successfully
+[2026-01-24T11:47:35.724113+00:00] [Iter 15] [START] Starting iteration 15
+
+[2026-01-24T13:05:00.000000+00:00] [Iter 15] [US-4.3] Story Completed: Keep Private Commands Local
+
+<learning type="pattern">
+Local scope command implementation (US-4.3) leverages existing scope system from US-4.1/4.2:
+- LocalScope commands are created with scope: 'local' (default in CustomCommandsSheet line 23)
+- In customCommandsStore.ts: addCommand, deleteCommand, editCommand, reorderCommands all check for scope
+- For 'local' scope: NO backend calls are made - commands stay in localStorage via Zustand persist
+- For 'project' and 'global': backend sync functions (invoke('save_project_commands') / invoke('save_global_commands')) are called
+- This ensures local commands never appear in project files (.ralph-ui/terminal/commands.json)
+</learning>
+
+<learning type="pattern">
+Scope badge visual indicators display correctly in command cards:
+- Line 437 in CustomCommandsSheet.tsx: '📱 Local' badge (gray: bg-muted/20 text-muted-foreground)
+- Line 431: '🔄 Project' badge (blue: bg-blue/20 text-blue)
+- Line 433: '🌐 Global' badge (purple: bg-purple/20 text-purple)
+- Each scope has distinct color to make scope clear at a glance
+- Badges appear inline on every command card below the action badge
+</learning>
+
+<learning type="pattern">
+Default scope in custom commands form:
+- Initial state in CustomCommandsSheet line 23: setScope('local')
+- Form reset in handleCancelForm (line 103): setScope('local')
+- Form reset after successful save (line 77): setScope('local')
+- Scope dropdown shows "Local (this device only)" as first option (line 283)
+- This ensures all new commands default to local scope for privacy
+</learning>
+
+<learning type="gotcha">
+When implementing scope-based persistence:
+- Must check scope in EVERY store method (addCommand, deleteCommand, editCommand, reorderCommands)
+- Local scope must have NO backend calls - not even empty ones
+- Backend calls should only happen for 'project' and 'global' scopes
+- The Zustand persist middleware automatically saves all scopes to localStorage
+- Only scope 'local' uses localStorage; 'project' and 'global' also use localStorage AND backend files
+</learning>
+
+[2026-01-24T13:05:30.000000+00:00] [Iter 15] [END] Iteration 15 completed successfully
