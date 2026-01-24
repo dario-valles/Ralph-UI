@@ -5,9 +5,9 @@
 use crate::commands::ConfigState;
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    AssignmentsFile, AssignmentsManager, ConflictResolution, ErrorStrategy, ExecutionSnapshot,
+    AssignmentsFile, AssignmentsManager, ErrorStrategy, ExecutionSnapshot,
     FallbackChainConfig, FileInUse, LearningEntry, LearningType, LearningsFile, LearningsManager,
-    MergeStrategy, PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder,
+    PrdExecutor, PrdStatus, ProgressSummary, ProgressTracker, PromptBuilder,
     RalphConfig, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
     RalphLoopState as RalphLoopExecutionState, RalphPrd, RalphStory, RetryConfig, SnapshotStore,
 };
@@ -957,10 +957,6 @@ pub async fn start_ralph_loop(
         agent_timeout_secs: resolved_agent_timeout,
         prd_name: request.prd_name.clone(),
         template_name: resolved_template,
-        merge_strategy: MergeStrategy::default(),
-        merge_interval: 0,
-        conflict_resolution: ConflictResolution::default(),
-        merge_target_branch: "main".to_string(),
     };
 
     // Create orchestrator
@@ -2975,129 +2971,4 @@ pub fn get_ralph_historical_briefs(
         .into_iter()
         .map(|(iteration, content)| HistoricalBrief { iteration, content })
         .collect())
-}
-
-/// Get competitive attempts for a PRD execution (US-5.3)
-pub fn get_ralph_competitive_attempts(
-    project_path: String,
-    prd_name: String,
-    execution_id: String,
-) -> Result<Vec<serde_json::Value>, String> {
-    let project_path_buf = to_path_buf(&project_path);
-    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
-
-    // Read the PRD file
-    let prd = prd_executor
-        .read_prd()
-        .map_err(|e| format!("Failed to load PRD: {}", e))?;
-
-    // Find the execution by ID
-    let execution = prd
-        .executions
-        .iter()
-        .find(|e| e.id == execution_id)
-        .ok_or_else(|| format!("Execution {} not found", execution_id))?;
-
-    // Return competitive attempts as JSON
-    let attempts = execution
-        .competitive_attempts
-        .iter()
-        .map(|a| {
-            serde_json::json!({
-                "id": a.id,
-                "attemptNumber": a.attempt_number,
-                "agentType": a.agent_type,
-                "model": a.model,
-                "storiesCompleted": a.stories_completed,
-                "storiesRemaining": a.stories_remaining,
-                "durationSecs": a.duration_secs,
-                "cost": a.cost,
-                "linesChanged": a.lines_changed,
-                "coveragePercent": a.coverage_percent,
-                "selected": a.selected,
-                "selectionReason": a.selection_reason,
-                "startedAt": a.started_at,
-                "completedAt": a.completed_at,
-                "errorMessage": a.error_message,
-            })
-        })
-        .collect();
-
-    Ok(attempts)
-}
-
-/// Select a winning competitive attempt (US-5.3)
-pub fn select_ralph_competitive_attempt(
-    project_path: String,
-    prd_name: String,
-    execution_id: String,
-    attempt_id: String,
-    reason: String,
-) -> Result<(), String> {
-    let project_path_buf = to_path_buf(&project_path);
-    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
-
-    // Read the PRD file
-    let mut prd = prd_executor
-        .read_prd()
-        .map_err(|e| format!("Failed to load PRD: {}", e))?;
-
-    // Find and update the execution
-    if let Some(execution) = prd.executions.iter_mut().find(|e| e.id == execution_id) {
-        execution.select_competitive_attempt(&attempt_id, &reason)?;
-
-        // Write back to disk
-        prd_executor
-            .write_prd(&prd)
-            .map_err(|e| format!("Failed to save PRD: {}", e))?;
-
-        Ok(())
-    } else {
-        Err(format!("Execution {} not found", execution_id))
-    }
-}
-
-/// Get the selected attempt for an execution (US-5.3)
-pub fn get_ralph_selected_competitive_attempt(
-    project_path: String,
-    prd_name: String,
-    execution_id: String,
-) -> Result<Option<serde_json::Value>, String> {
-    let project_path_buf = to_path_buf(&project_path);
-    let prd_executor = PrdExecutor::new(&project_path_buf, &prd_name);
-
-    // Read the PRD file
-    let prd = prd_executor
-        .read_prd()
-        .map_err(|e| format!("Failed to load PRD: {}", e))?;
-
-    // Find the execution
-    let execution = prd
-        .executions
-        .iter()
-        .find(|e| e.id == execution_id)
-        .ok_or_else(|| format!("Execution {} not found", execution_id))?;
-
-    // Return selected attempt if any
-    let result = execution.get_selected_attempt().map(|a| {
-        serde_json::json!({
-            "id": a.id,
-            "attemptNumber": a.attempt_number,
-            "agentType": a.agent_type,
-            "model": a.model,
-            "storiesCompleted": a.stories_completed,
-            "storiesRemaining": a.stories_remaining,
-            "durationSecs": a.duration_secs,
-            "cost": a.cost,
-            "linesChanged": a.lines_changed,
-            "coveragePercent": a.coverage_percent,
-            "selected": a.selected,
-            "selectionReason": a.selection_reason,
-            "startedAt": a.started_at,
-            "completedAt": a.completed_at,
-            "errorMessage": a.error_message,
-        })
-    });
-
-    Ok(result)
 }

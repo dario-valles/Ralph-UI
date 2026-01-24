@@ -10,13 +10,10 @@
 
 mod assignments_manager;
 mod brief_builder;
-mod competitive_manager;
 mod completion;
 mod config;
 pub mod fallback_orchestrator;
-mod hierarchical_team_manager;
 mod learnings_manager;
-mod merge_manager;
 mod prd_executor;
 mod progress_tracker;
 mod prompt_builder;
@@ -25,15 +22,10 @@ mod types;
 
 pub use assignments_manager::*;
 pub use brief_builder::*;
-pub use competitive_manager::{CompetitiveExecutionManager};
 pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
-pub use hierarchical_team_manager::{
-    HierarchicalSubtaskAssignment, HierarchicalTeamAssignment, HierarchicalTeamManager, PrimaryReview,
-};
 pub use learnings_manager::*;
-pub use merge_manager::{MergeConfig, MergeManager, MergeAttemptResult};
 pub use prd_executor::*;
 pub use progress_tracker::*;
 pub use prompt_builder::*;
@@ -102,14 +94,6 @@ pub struct RalphLoopConfig {
     /// Template name to use for prompt generation (US-014)
     /// If None, uses the default hardcoded prompt
     pub template_name: Option<String>,
-    /// Merge strategy for collaborative mode (US-5.1)
-    pub merge_strategy: MergeStrategy,
-    /// Merge interval in iterations - merge every N iterations (US-5.1)
-    pub merge_interval: u32,
-    /// Conflict resolution strategy (US-5.1)
-    pub conflict_resolution: ConflictResolution,
-    /// Target branch for merges (US-5.1) - defaults to "main"
-    pub merge_target_branch: String,
 }
 
 impl Default for RalphLoopConfig {
@@ -131,10 +115,6 @@ impl Default for RalphLoopConfig {
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
             prd_name: String::new(), // Must be set before use
             template_name: None, // Use default prompt
-            merge_strategy: MergeStrategy::default(),
-            merge_interval: 0, // Default: no periodic merges (0 = disabled)
-            conflict_resolution: ConflictResolution::default(),
-            merge_target_branch: "main".to_string(),
         }
     }
 }
