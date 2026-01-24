@@ -142,7 +142,7 @@
       "id": "US-5.2",
       "title": "Move Cursor with Gestures",
       "acceptance": "- Swipe left moves cursor left\n- Swipe right moves cursor right\n- Fast swipe moves cursor by word\n- Velocity threshold is configurable",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },

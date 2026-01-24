@@ -643,3 +643,51 @@ When using useGestureDetection hook with TerminalInstance:
 </learning>
 
 [2026-01-24T13:15:30.000000+00:00] [Iter 17] [END] Iteration 17 completed successfully
+[2026-01-24T11:54:29.768300+00:00] [Iter 17] [END] Iteration 17 completed successfully
+[2026-01-24T11:54:29.770765+00:00] [Iter 18] [START] Starting iteration 18
+
+[2026-01-24T13:20:00.000000+00:00] [Iter 18] [US-5.2] Story Completed: Move Cursor with Gestures
+
+<learning type="pattern">
+Cursor movement gesture implementation for mobile terminal:
+- Use horizontal swipes (left/right) in useGestureDetection hook
+- Track swipe distance from gestureState to determine velocity
+- Slow swipe (normal threshold): send single character movement escape sequences
+  - Left: '\x1b[D' (Left arrow key)
+  - Right: '\x1b[C' (Right arrow key)
+- Fast swipe (distance > 2x threshold): send word movement with Ctrl modifier
+  - Left: '\x1b[1;5D' (Ctrl+Left - move by word)
+  - Right: '\x1b[1;5C' (Ctrl+Right - move by word)
+- This pattern allows a single gesture direction to have two behaviors based on velocity
+</learning>
+
+<learning type="pattern">
+Multi-gesture support in useGestureDetection hook:
+- Enable threshold must check ALL gesture types that will be used (use Math.min for multiple thresholds)
+- Each gesture direction gets its own handler (onSwipeUp, onSwipeDown, onSwipeLeft, onSwipeRight)
+- Settings store already had enableCursorMovement and cursorSwipeThreshold defined
+- No changes needed to gesture detection hook itself - it already supports all 4 directions
+- Just needed to add handlers and enable logic to TerminalInstance.tsx
+</learning>
+
+<learning type="pattern">
+Gesture settings UI integration for new features:
+- Add destructuring for new toggle/setter functions in component imports
+- Replace placeholder "Coming Soon" section with actual feature controls
+- Show settings conditionally: toggle switch + threshold slider when enabled
+- Update slider description to explain the relationship between slow (character) and fast (word) movement
+- Can reuse existing Label/Slider/Switch components for consistency
+</learning>
+
+<learning type="pattern">
+Gesture indicator display for multiple directions:
+- Use conditional rendering with direction-specific colors:
+  - Up (history): blue (rgba(59, 130, 246, 0.2))
+  - Down (history): green (rgba(34, 197, 94, 0.2))
+  - Left (cursor): purple (rgba(168, 85, 247, 0.2))
+  - Right (cursor): orange (rgba(249, 115, 22, 0.2))
+- Update gestureIndicator type to union: 'up' | 'down' | 'left' | 'right' | null
+- Use ternary chains for conditional styling and text display
+</learning>
+
+[2026-01-24T13:20:30.000000+00:00] [Iter 18] [END] Iteration 18 completed successfully
