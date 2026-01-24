@@ -547,3 +547,40 @@ When implementing scope-based persistence:
 [2026-01-24T13:05:30.000000+00:00] [Iter 15] [END] Iteration 15 completed successfully
 [2026-01-24T11:49:08.646429+00:00] [Iter 15] [END] Iteration 15 completed successfully
 [2026-01-24T11:49:08.650158+00:00] [Iter 16] [START] Starting iteration 16
+
+[2026-01-24T13:10:00.000000+00:00] [Iter 16] [US-4.4] Story Completed: Understand Command Priority
+
+<learning type="pattern">
+Command priority resolution system implementation:
+- Create utility functions in src/lib/command-priority.ts: findCommandOverrides(), isCommandOverriding(), getEffectiveCommand()
+- findCommandOverrides() groups commands by label and returns map with effective command and overrides array
+- Priority order: scope === 'project' (0) > scope === 'global' (1) > scope === 'local' (2)
+- Override detection: check if a command is overriding another with same label using isCommandOverriding()
+</learning>
+
+<learning type="pattern">
+Command override UI implementation in custom commands sheet:
+- Add viewingOverrideFor state to track which override the user is viewing
+- Show "Overrides" badge button only for project-scoped commands that have a global override
+- Badge uses amber/warning color to indicate override state
+- Click badge to view original global command in expandable section below the command
+- Override view shows both label and command text of the overridden global command
+</learning>
+
+<learning type="pattern">
+Priority documentation in UI:
+- Add priority info section at top of CustomCommandsSheet showing priority order
+- Use blue background (info color) for priority documentation
+- Show priority as numbered list with scope icons (🔄 Project, 🌐 Global, 📱 Local)
+- Explain that if commands have same label, highest priority version is used
+</learning>
+
+<learning type="gotcha">
+When grouping commands by label for override detection:
+- Must handle case where multiple global and local commands exist with same label
+- Override relationship only matters for project > global, not project > local or global > local
+- Store only the global override, not local ones, to avoid clutter in UI
+- Use command IDs to track which specific command is being edited/viewed to avoid reference issues
+</learning>
+
+[2026-01-24T13:10:30.000000+00:00] [Iter 16] [END] Iteration 16 completed successfully

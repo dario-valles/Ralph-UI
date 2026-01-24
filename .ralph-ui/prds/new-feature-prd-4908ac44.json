@@ -126,7 +126,7 @@
       "id": "US-4.4",
       "title": "Understand Command Priority",
       "acceptance": "- Priority order clearly documented: Project > Global > Default\n- Visual indicator when project command overrides global\n- Can view original global command from override indicator",
-      "passes": false,
+      "passes": true,
       "priority": 100,
       "requires_primary_review": false
     },
