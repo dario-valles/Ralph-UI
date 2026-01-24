@@ -1,7 +1,7 @@
 // Terminal instance component - wraps xterm.js with PTY connection
 // Uses WebSocket PTY for browser mode
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -17,9 +17,6 @@ import {
 } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useGestureStore } from '@/stores/gestureStore'
-import { useOnboardingStore } from '@/stores/onboardingStore'
-import { useGestureDetection } from '@/hooks/useGestureDetection'
-import { X } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalInstanceProps {
@@ -36,165 +33,10 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const ptyRef = useRef<UnifiedPty | null>(null)
   const isInitializedRef = useRef(false)
   const { updateTerminalTitle } = useTerminalStore()
-  const { settings, setTerminalFontSize } = useGestureStore()
-  const { dismissHint, hasHintBeenDismissed } = useOnboardingStore()
-  const [gestureIndicator, setGestureIndicator] = useState<'up' | 'down' | 'left' | 'right' | null>(null)
-  const [gestureHint, setGestureHint] = useState<{
-    id: string
-    title: string
-    description: string
-  } | null>(null)
+  const { settings } = useGestureStore()
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
-
-  // Pinch handlers
-  const handlePinchIn = useCallback(
-    (scale: number) => {
-      if (!terminalRef.current || !isActive) return
-      const newFontSize = Math.round(settings.terminalFontSize * scale)
-      if (newFontSize !== settings.terminalFontSize) {
-        setTerminalFontSize(newFontSize)
-        terminalRef.current.options.fontSize = newFontSize
-        fitAddonRef.current?.fit()
-      }
-    },
-    [settings.terminalFontSize, setTerminalFontSize, isActive]
-  )
-
-  const handlePinchOut = useCallback(
-    (scale: number) => {
-      if (!terminalRef.current || !isActive) return
-      const newFontSize = Math.round(settings.terminalFontSize * scale)
-      if (newFontSize !== settings.terminalFontSize) {
-        setTerminalFontSize(newFontSize)
-        terminalRef.current.options.fontSize = newFontSize
-        fitAddonRef.current?.fit()
-      }
-    },
-    [settings.terminalFontSize, setTerminalFontSize, isActive]
-  )
-
-  // Setup gesture detection
-  const gestureState = useGestureDetection(containerRef, {
-    onSwipeUp: () => {
-      if (settings.enableHistoryNavigation && isActive) {
-        writeToTerminal(terminalId, '\x1b[A') // Up arrow - previous command
-        setGestureIndicator('up')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('history-navigation-hint')) {
-          setGestureHint({
-            id: 'history-navigation-hint',
-            title: 'Command History',
-            description: 'Swipe up/down on the terminal to navigate through your command history',
-          })
-        }
-      }
-    },
-    onSwipeDown: () => {
-      if (settings.enableHistoryNavigation && isActive) {
-        writeToTerminal(terminalId, '\x1b[B') // Down arrow - next command
-        setGestureIndicator('down')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('history-navigation-hint')) {
-          setGestureHint({
-            id: 'history-navigation-hint',
-            title: 'Command History',
-            description: 'Swipe up/down on the terminal to navigate through your command history',
-          })
-        }
-      }
-    },
-    onSwipeLeft: () => {
-      if (settings.enableCursorMovement && isActive && gestureState) {
-        // Calculate velocity to determine word vs character movement
-        // Fast swipe (high velocity) moves by word using Ctrl+Left
-        // Slow swipe (low velocity) moves by character using Left arrow
-        const isFastSwipe = gestureState.distance > settings.cursorSwipeThreshold * 2
-        if (isFastSwipe) {
-          writeToTerminal(terminalId, '\x1b[1;5D') // Ctrl+Left - move cursor left by word
-        } else {
-          writeToTerminal(terminalId, '\x1b[D') // Left arrow - move cursor left by character
-        }
-        setGestureIndicator('left')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('cursor-movement-hint')) {
-          setGestureHint({
-            id: 'cursor-movement-hint',
-            title: 'Cursor Movement',
-            description: 'Swipe left/right to move your cursor. Fast swipes move by word.',
-          })
-        }
-      }
-    },
-    onSwipeRight: () => {
-      if (settings.enableCursorMovement && isActive && gestureState) {
-        // Calculate velocity to determine word vs character movement
-        // Fast swipe (high velocity) moves by word using Ctrl+Right
-        // Slow swipe (low velocity) moves by character using Right arrow
-        const isFastSwipe = gestureState.distance > settings.cursorSwipeThreshold * 2
-        if (isFastSwipe) {
-          writeToTerminal(terminalId, '\x1b[1;5C') // Ctrl+Right - move cursor right by word
-        } else {
-          writeToTerminal(terminalId, '\x1b[C') // Right arrow - move cursor right by character
-        }
-        setGestureIndicator('right')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('cursor-movement-hint')) {
-          setGestureHint({
-            id: 'cursor-movement-hint',
-            title: 'Cursor Movement',
-            description: 'Swipe left/right to move your cursor. Fast swipes move by word.',
-          })
-        }
-      }
-    },
-    onTwoFingerSwipeUp: () => {
-      if (settings.enablePageScroll && isActive) {
-        writeToTerminal(terminalId, '\x1b[5~') // Page Up escape sequence
-        setGestureIndicator('up')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('page-scroll-hint')) {
-          setGestureHint({
-            id: 'page-scroll-hint',
-            title: 'Page Scrolling',
-            description: 'Use two fingers to swipe up/down and scroll through terminal output',
-          })
-        }
-      }
-    },
-    onTwoFingerSwipeDown: () => {
-      if (settings.enablePageScroll && isActive) {
-        writeToTerminal(terminalId, '\x1b[6~') // Page Down escape sequence
-        setGestureIndicator('down')
-        setTimeout(() => setGestureIndicator(null), 200)
-
-        // Show hint on first use
-        if (!hasHintBeenDismissed('page-scroll-hint')) {
-          setGestureHint({
-            id: 'page-scroll-hint',
-            title: 'Page Scrolling',
-            description: 'Use two fingers to swipe up/down and scroll through terminal output',
-          })
-        }
-      }
-    },
-    onPinchIn: handlePinchIn,
-    onPinchOut: handlePinchOut,
-    threshold: Math.min(settings.historySwipeThreshold, settings.cursorSwipeThreshold, settings.pageSwipeThreshold),
-    pinchThreshold: settings.pinchThreshold,
-    enabled: (settings.enableHistoryNavigation || settings.enableCursorMovement || settings.enablePageScroll || settings.enablePinchZoom) && isActive,
-  })
 
   // Initialize terminal
   useEffect(() => {
@@ -413,75 +255,8 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#1a1a1a] relative"
+      className="w-full h-full bg-[#1a1a1a]"
       style={{ display: isActive ? 'block' : 'none' }}
-    >
-      {/* Gesture indicator - shows visual feedback for swipe gestures */}
-      {gestureIndicator && (
-        <div
-          className="absolute inset-0 pointer-events-none flex items-center justify-center"
-          style={{
-            opacity: 0.3,
-            backgroundColor:
-              gestureIndicator === 'up'
-                ? 'rgba(59, 130, 246, 0.2)'
-                : gestureIndicator === 'down'
-                  ? 'rgba(34, 197, 94, 0.2)'
-                  : gestureIndicator === 'left'
-                    ? 'rgba(168, 85, 247, 0.2)'
-                    : 'rgba(249, 115, 22, 0.2)',
-            animation: 'fadeOut 0.3s ease-out',
-          }}
-        >
-          <div className="text-white text-2xl font-bold">
-            {gestureIndicator === 'up'
-              ? '↑ Previous'
-              : gestureIndicator === 'down'
-                ? '↓ Next'
-                : gestureIndicator === 'left'
-                  ? '← Cursor Left'
-                  : '→ Cursor Right'}
-          </div>
-        </div>
-      )}
-
-      {/* Gesture hint tooltip - shows on first use of each gesture */}
-      {gestureHint && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 pointer-events-auto z-10">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-lg p-3 max-w-xs">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1">
-                <div className="font-semibold text-sm text-white">{gestureHint.title}</div>
-                <div className="text-xs text-slate-300 mt-1">{gestureHint.description}</div>
-              </div>
-              <button
-                onClick={() => {
-                  dismissHint(gestureHint.id)
-                  setGestureHint(null)
-                }}
-                className="text-slate-400 hover:text-slate-200 flex-shrink-0"
-                aria-label="Dismiss hint"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="text-xs text-slate-500 mt-2 text-center">
-              Visit Settings → Gesture Controls for more options
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes fadeOut {
-          from {
-            opacity: 0.3;
-          }
-          to {
-            opacity: 0;
-          }
-        }
-      `}</style>
-    </div>
+    />
   )
 }

@@ -54,8 +54,10 @@ pub async fn start_prd_chat_session(
     let structured_mode = request.structured_mode.unwrap_or(false);
     let gsd_mode = request.gsd_mode.unwrap_or(false);
 
-    // Set default title based on PRD type (or GSD workflow if enabled)
-    let default_title = if gsd_mode {
+    // Set title: use custom title if provided, otherwise default based on PRD type
+    let default_title = if let Some(custom_title) = request.title {
+        Some(custom_title)
+    } else if gsd_mode {
         Some("GSD Workflow".to_string())
     } else {
         prd_type_enum.as_ref().map(|pt| get_prd_type_title(pt))
@@ -2066,7 +2068,7 @@ fn build_prd_chat_prompt(
         prompt.push_str(&format!("Project path: {}\n\n", project_path));
 
         // Add plan file instruction
-        let plan_file_instruction = get_prd_plan_instruction(project_path, &session.id, session.title.as_deref());
+        let plan_file_instruction = get_prd_plan_instruction(project_path, &session.id, session.title.as_deref(), session.prd_id.as_deref());
         prompt.push_str(&plan_file_instruction);
     }
 
@@ -2105,10 +2107,23 @@ fn build_prd_chat_prompt(
 ///
 /// The PRD filename uses `make_prd_filename` from ralph_loop::types for consistency:
 /// Format: `{sanitized-title}-{8-char-session-id}`
-fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<&str>) -> String {
-    let prd_name = title
-        .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
-        .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id));
+///
+/// If `prd_id` starts with "file:", that filename is used directly (for existing PRDs).
+fn get_prd_plan_instruction(project_path: &str, session_id: &str, title: Option<&str>, prd_id: Option<&str>) -> String {
+    // If we have a file-based PRD ID, use that filename directly (same logic as get_prd_plan_file_path)
+    let prd_name = if let Some(id) = prd_id {
+        if id.starts_with("file:") {
+            id.trim_start_matches("file:").to_string()
+        } else {
+            title
+                .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
+                .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id))
+        }
+    } else {
+        title
+            .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
+            .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id))
+    };
 
     format!(
         "\n=== PLAN FILE INSTRUCTION ===\n\n\

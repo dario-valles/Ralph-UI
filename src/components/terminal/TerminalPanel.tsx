@@ -273,9 +273,6 @@ export function TerminalPanel() {
       {/* Terminal content */}
       {!isMinimized && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Mobile key bar - sticky at top, only shown on mobile devices */}
-          {isMobile && <TerminalKeyBar className="sticky top-0 z-10" />}
-
           <div className="flex-1 overflow-hidden">
             {!rootPane ? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -296,6 +293,9 @@ export function TerminalPanel() {
               />
             )}
           </div>
+
+          {/* Mobile key bar - positioned at bottom, above device keyboard */}
+          {isMobile && <TerminalKeyBar className="shrink-0" />}
         </div>
       )}
     </div>

@@ -345,7 +345,8 @@ export function PRDChatPanel() {
     prdType: PRDTypeValue,
     guidedMode: boolean,
     projectPath?: string,
-    gsdMode?: boolean
+    gsdMode?: boolean,
+    title?: string
   ) => {
     // Register the project when starting a session
     if (projectPath) {
@@ -357,6 +358,7 @@ export function PRDChatPanel() {
       guidedMode,
       gsdMode: gsdMode || false,
       projectPath: projectPath || activeProject?.path || '',
+      title,
     })
     closeTypeSelector()
   }

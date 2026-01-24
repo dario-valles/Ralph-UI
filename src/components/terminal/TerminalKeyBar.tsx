@@ -3,7 +3,7 @@
 // Supports modifier keys (CTRL/ALT) with sticky/lock modes
 
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen, ChevronDown } from 'lucide-react'
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
@@ -27,6 +27,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   ArrowLeft: <ArrowLeft className="w-3 h-3" />,
   ArrowRight: <ArrowRight className="w-3 h-3" />,
   Delete: <Delete className="w-3 h-3" />,
+  ZoomIn: <ZoomIn className="w-3 h-3" />,
+  ZoomOut: <ZoomOut className="w-3 h-3" />,
 }
 
 type ModifierMode = 'inactive' | 'sticky' | 'locked'
@@ -43,7 +45,7 @@ interface TerminalKeyBarProps {
 export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const { activeTerminalId } = useTerminalStore()
   const { getLayout } = useKeyBarLayoutStore()
-  const { settings } = useGestureStore()
+  const { settings, setTerminalFontSize } = useGestureStore()
   const isMobile = useIsMobile()
   const [modifierState, setModifierState] = useState<ModifierState>({
     ctrl: 'inactive',
@@ -179,6 +181,21 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
               stickyTimeoutRef.current = null
             }, 5000)
           }
+        } else if (keyDef.value === '__ZOOM_IN__' || keyDef.value === '__ZOOM_OUT__') {
+          // Handle zoom actions (special keys that adjust font size)
+          if (settings.enableHaptics && navigator.vibrate) {
+            navigator.vibrate(10)
+          }
+          const currentSize = settings.terminalFontSize
+          const step = 2
+          const minSize = 8
+          const maxSize = 32
+          const newSize = keyDef.value === '__ZOOM_IN__'
+            ? Math.min(currentSize + step, maxSize)
+            : Math.max(currentSize - step, minSize)
+          if (newSize !== currentSize) {
+            setTerminalFontSize(newSize)
+          }
         } else {
           // Handle regular key press
           // Provide light haptic for normal key press if enabled
@@ -233,7 +250,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
         console.error('Failed to send key to terminal:', error)
       }
     },
-    [activeTerminalId, modifierState, clearStickyModifier, settings.enableHaptics]
+    [activeTerminalId, modifierState, clearStickyModifier, settings.enableHaptics, settings.terminalFontSize, setTerminalFontSize]
   )
 
   // Detect physical keyboard activity and hide/show key bar

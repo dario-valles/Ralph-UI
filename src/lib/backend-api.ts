@@ -61,7 +61,8 @@ export const prdChatApi = {
     guidedMode?: boolean,
     templateId?: string,
     structuredMode?: boolean,
-    gsdMode?: boolean
+    gsdMode?: boolean,
+    title?: string
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
       request: {
@@ -73,6 +74,7 @@ export const prdChatApi = {
         templateId,
         structuredMode,
         gsdMode,
+        title,
       },
     })
   },

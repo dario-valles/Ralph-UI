@@ -23,6 +23,8 @@ pub struct StartChatSessionRequest {
     pub structured_mode: Option<bool>,
     /// Whether to use GSD workflow mode
     pub gsd_mode: Option<bool>,
+    /// Custom title for the session (optional, defaults to PRD type title)
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

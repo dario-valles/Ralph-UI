@@ -37,18 +37,18 @@ interface KeyBarLayoutStore {
 
 // Default key layout for mobile terminals
 const DEFAULT_LAYOUT: KeyDefinition[] = [
+  { label: 'Esc', value: '\x1b', ariaLabel: 'Escape key' },
   { label: 'Tab', value: '\t', ariaLabel: 'Tab key' },
   { label: '↑', value: '\x1b[A', icon: 'ArrowUp', ariaLabel: 'Up arrow' },
   { label: '↓', value: '\x1b[B', icon: 'ArrowDown', ariaLabel: 'Down arrow' },
   { label: '←', value: '\x1b[D', icon: 'ArrowLeft', ariaLabel: 'Left arrow' },
   { label: '→', value: '\x1b[C', icon: 'ArrowRight', ariaLabel: 'Right arrow' },
-  { label: 'Home', value: '\x1b[H', ariaLabel: 'Home key' },
-  { label: 'End', value: '\x1b[F', ariaLabel: 'End key' },
   { label: 'Enter', value: '\r', ariaLabel: 'Enter key' },
   { label: 'Backspace', value: '\x7f', icon: 'Delete', ariaLabel: 'Backspace key' },
   { label: 'CTRL', value: '\x00', ariaLabel: 'Control modifier', isModifier: true },
-  { label: 'ALT', value: '\x1b', ariaLabel: 'Alt modifier', isModifier: true },
   { label: '^C', value: '\x03', ariaLabel: 'Interrupt (Ctrl+C)' },
+  { label: 'A-', value: '__ZOOM_OUT__', icon: 'ZoomOut', ariaLabel: 'Zoom out (decrease font size)' },
+  { label: 'A+', value: '__ZOOM_IN__', icon: 'ZoomIn', ariaLabel: 'Zoom in (increase font size)' },
 ]
 
 // Built-in presets for common workflows

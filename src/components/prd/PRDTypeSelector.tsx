@@ -3,6 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   RefreshCw,
   ArrowRight,
@@ -20,6 +29,7 @@ import {
   Rocket,
   LucideIcon,
   Github,
+  Pencil,
 } from 'lucide-react'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
@@ -129,11 +139,26 @@ interface PRDTypeSelectorProps {
     prdType: PRDTypeValue,
     guidedMode: boolean,
     projectPath?: string,
-    gsdMode?: boolean
+    gsdMode?: boolean,
+    title?: string
   ) => void
   loading?: boolean
   className?: string
   defaultProjectPath?: string
+}
+
+// Helper to get default title for PRD type
+function getDefaultTitle(prdType: PRDTypeValue, gsdMode: boolean): string {
+  if (gsdMode) return 'GSD Workflow'
+  const typeLabels: Record<PRDTypeValue, string> = {
+    new_feature: 'New Feature PRD',
+    bug_fix: 'Bug Fix PRD',
+    refactoring: 'Refactoring PRD',
+    api_integration: 'API Integration PRD',
+    full_new_app: 'Full New App PRD',
+    general: 'General PRD',
+  }
+  return typeLabels[prdType] || 'PRD'
 }
 
 export function PRDTypeSelector({
@@ -148,6 +173,9 @@ export function PRDTypeSelector({
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
   const [showProjectPicker, setShowProjectPicker] = useState(!defaultProjectPath)
   const [showGitHubImport, setShowGitHubImport] = useState(false)
+  const [showNameDialog, setShowNameDialog] = useState(false)
+  const [sessionTitle, setSessionTitle] = useState('')
+  const [pendingGsdMode, setPendingGsdMode] = useState(false)
 
   // Derive project name from path
   const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
@@ -170,12 +198,31 @@ export function PRDTypeSelector({
 
   const handleContinue = () => {
     if (selectedMode === 'gsd') {
-      // GSD mode - use default type
-      onSelect('new_feature', false, projectPath || undefined, true)
+      // GSD mode - show naming dialog
+      setPendingGsdMode(true)
+      setSessionTitle(getDefaultTitle('new_feature', true))
+      setShowNameDialog(true)
     } else if (selectedMode === 'guided' && selectedType) {
-      // Guided mode with selected type
-      onSelect(selectedType, true, projectPath || undefined, false)
+      // Guided mode - show naming dialog
+      setPendingGsdMode(false)
+      setSessionTitle(getDefaultTitle(selectedType, false))
+      setShowNameDialog(true)
     }
+  }
+
+  const handleConfirmName = () => {
+    const title = sessionTitle.trim() || undefined
+    if (pendingGsdMode) {
+      onSelect('new_feature', false, projectPath || undefined, true, title)
+    } else if (selectedType) {
+      onSelect(selectedType, true, projectPath || undefined, false, title)
+    }
+    setShowNameDialog(false)
+  }
+
+  const handleCancelName = () => {
+    setShowNameDialog(false)
+    setSessionTitle('')
   }
 
   const canContinue = selectedMode === 'gsd' || (selectedMode === 'guided' && selectedType)
@@ -376,6 +423,54 @@ export function PRDTypeSelector({
             )}
           </Button>
         </div>
+
+        {/* Name Session Dialog */}
+        <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-5 w-5" />
+                Name Your Session
+              </DialogTitle>
+              <DialogDescription>
+                Give your PRD session a memorable name to easily find it later.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="session-name" className="text-sm font-medium">
+                Session Name
+              </Label>
+              <Input
+                id="session-name"
+                value={sessionTitle}
+                onChange={(e) => setSessionTitle(e.target.value)}
+                placeholder="Enter a name for this session"
+                className="mt-2"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleConfirmName()
+                  }
+                }}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleCancelName}>
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmName} disabled={loading}>
+                {loading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Session'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )
