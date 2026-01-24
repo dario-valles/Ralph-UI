@@ -7,6 +7,7 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { useKeyBarLayoutStore } from '@/stores/keyBarLayoutStore'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 
 interface KeyDefinition {
@@ -17,31 +18,14 @@ interface KeyDefinition {
   isModifier?: boolean
 }
 
-// Default key layout for mobile terminals
-const DEFAULT_KEYS: KeyDefinition[] = [
-  { label: 'Tab', value: '\t', ariaLabel: 'Tab key' },
-  { label: '↑', value: '\x1b[A', icon: <ArrowUp className="w-3 h-3" />, ariaLabel: 'Up arrow' },
-  { label: '↓', value: '\x1b[B', icon: <ArrowDown className="w-3 h-3" />, ariaLabel: 'Down arrow' },
-  { label: '←', value: '\x1b[D', icon: <ArrowLeft className="w-3 h-3" />, ariaLabel: 'Left arrow' },
-  {
-    label: '→',
-    value: '\x1b[C',
-    icon: <ArrowRight className="w-3 h-3" />,
-    ariaLabel: 'Right arrow',
-  },
-  { label: 'Home', value: '\x1b[H', ariaLabel: 'Home key' },
-  { label: 'End', value: '\x1b[F', ariaLabel: 'End key' },
-  { label: 'Enter', value: '\r', ariaLabel: 'Enter key' },
-  {
-    label: 'Backspace',
-    value: '\x7f',
-    icon: <Delete className="w-3 h-3" />,
-    ariaLabel: 'Backspace key',
-  },
-  { label: 'CTRL', value: '\x00', ariaLabel: 'Control modifier', isModifier: true },
-  { label: 'ALT', value: '\x1b', ariaLabel: 'Alt modifier', isModifier: true },
-  { label: '^C', value: '\x03', ariaLabel: 'Interrupt (Ctrl+C)' },
-]
+// Map icon names to React components
+const ICON_MAP: Record<string, React.ReactNode> = {
+  ArrowUp: <ArrowUp className="w-3 h-3" />,
+  ArrowDown: <ArrowDown className="w-3 h-3" />,
+  ArrowLeft: <ArrowLeft className="w-3 h-3" />,
+  ArrowRight: <ArrowRight className="w-3 h-3" />,
+  Delete: <Delete className="w-3 h-3" />,
+}
 
 type ModifierMode = 'inactive' | 'sticky' | 'locked'
 
@@ -56,6 +40,7 @@ interface TerminalKeyBarProps {
 
 export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const { activeTerminalId } = useTerminalStore()
+  const { getLayout } = useKeyBarLayoutStore()
   const isMobile = useIsMobile()
   const [modifierState, setModifierState] = useState<ModifierState>({
     ctrl: 'inactive',
@@ -66,7 +51,14 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   const stickyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const keys = useMemo(() => DEFAULT_KEYS, [])
+  // Get custom layout from store and convert icon names to components
+  const keys = useMemo(() => {
+    const layout = getLayout()
+    return layout.map((key) => ({
+      ...key,
+      icon: key.icon ? ICON_MAP[key.icon] : undefined,
+    }))
+  }, [getLayout])
 
   // Clear sticky modifier after a non-modifier key is pressed
   const clearStickyModifier = useCallback(() => {

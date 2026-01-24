@@ -45,6 +45,7 @@ import {
 import { configApi } from '@/lib/config-api'
 import { templateApi } from '@/lib/backend-api'
 import { useProjectStore } from '@/stores/projectStore'
+import { KeyBarCustomizer } from './KeyBarCustomizer'
 import type {
   RalphConfig,
   RalphExecutionConfig,
@@ -130,9 +131,9 @@ export function SettingsPage() {
   // Template preview state (US-013)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewResult, setPreviewResult] = useState<import('@/types').TemplatePreviewResult | null>(
-    null
-  )
+  const [previewResult, setPreviewResult] = useState<
+    import('@/types').TemplatePreviewResult | null
+  >(null)
 
   // Get active project for project-scoped templates
   const { getActiveProject } = useProjectStore()
@@ -238,7 +239,9 @@ export function SettingsPage() {
 
     try {
       const name = isCreatingTemplate ? newTemplateName.trim() : selectedTemplate!.name
-      const scope = isCreatingTemplate ? newTemplateScope : (selectedTemplate!.source as 'project' | 'global')
+      const scope = isCreatingTemplate
+        ? newTemplateScope
+        : (selectedTemplate!.source as 'project' | 'global')
 
       await templateApi.save(name, templateContent, scope, activeProject?.path)
 
@@ -303,7 +306,9 @@ export function SettingsPage() {
     setSelectedTemplate(null)
     setNewTemplateName('')
     setNewTemplateScope('project')
-    setTemplateContent('# New Template\n\nYou are working on:\n\n{{ task.title }}\n\n{{ task.description }}\n')
+    setTemplateContent(
+      '# New Template\n\nYou are working on:\n\n{{ task.title }}\n\n{{ task.description }}\n'
+    )
   }
 
   // Cancel editing
@@ -491,7 +496,9 @@ export function SettingsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Configure your Ralph UI preferences</p>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Configure your Ralph UI preferences
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleReload} disabled={loading}>
@@ -537,13 +544,27 @@ export function SettingsPage() {
 
       <Tabs defaultValue="execution" className="space-y-4">
         <TabsList className="flex flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="execution" className="text-xs sm:text-sm">Execution</TabsTrigger>
-          <TabsTrigger value="git" className="text-xs sm:text-sm">Git</TabsTrigger>
-          <TabsTrigger value="validation" className="text-xs sm:text-sm">Validation</TabsTrigger>
-          <TabsTrigger value="fallback" className="text-xs sm:text-sm">Fallback</TabsTrigger>
-          <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notifications</TabsTrigger>
-          <TabsTrigger value="templates" className="text-xs sm:text-sm">Templates</TabsTrigger>
-          <TabsTrigger value="ui" className="text-xs sm:text-sm">UI</TabsTrigger>
+          <TabsTrigger value="execution" className="text-xs sm:text-sm">
+            Execution
+          </TabsTrigger>
+          <TabsTrigger value="git" className="text-xs sm:text-sm">
+            Git
+          </TabsTrigger>
+          <TabsTrigger value="validation" className="text-xs sm:text-sm">
+            Validation
+          </TabsTrigger>
+          <TabsTrigger value="fallback" className="text-xs sm:text-sm">
+            Fallback
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="text-xs sm:text-sm">
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="text-xs sm:text-sm">
+            Templates
+          </TabsTrigger>
+          <TabsTrigger value="ui" className="text-xs sm:text-sm">
+            UI
+          </TabsTrigger>
         </TabsList>
 
         {/* Execution Settings */}
@@ -1444,9 +1465,7 @@ export function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Notification Sounds</CardTitle>
-              <CardDescription>
-                Configure sound effects for Ralph Loop events
-              </CardDescription>
+              <CardDescription>Configure sound effects for Ralph Loop events</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
@@ -1653,9 +1672,7 @@ export function SettingsPage() {
                     <div className="p-3 border-b bg-muted/30">
                       <h4 className="text-sm font-medium">Available Templates</h4>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {activeProject
-                          ? `Project: ${activeProject.name}`
-                          : 'No project selected'}
+                        {activeProject ? `Project: ${activeProject.name}` : 'No project selected'}
                       </p>
                     </div>
                     <ScrollArea className="h-[400px]">
@@ -1776,7 +1793,9 @@ export function SettingsPage() {
                                 <div className="flex items-start gap-2">
                                   <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                                   <div>
-                                    <p className="text-sm font-medium text-destructive">Syntax Error</p>
+                                    <p className="text-sm font-medium text-destructive">
+                                      Syntax Error
+                                    </p>
                                     <p className="text-xs text-destructive/80 font-mono mt-1">
                                       {previewResult.error}
                                     </p>
@@ -1892,7 +1911,11 @@ export function SettingsPage() {
                                   <Button variant="outline" size="sm" onClick={handleCancelEdit}>
                                     Cancel
                                   </Button>
-                                  <Button size="sm" onClick={handleSaveTemplate} disabled={templateSaving}>
+                                  <Button
+                                    size="sm"
+                                    onClick={handleSaveTemplate}
+                                    disabled={templateSaving}
+                                  >
                                     {templateSaving ? (
                                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                                     ) : (
@@ -1947,7 +1970,9 @@ export function SettingsPage() {
                                 <div className="flex items-start gap-2">
                                   <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                                   <div>
-                                    <p className="text-sm font-medium text-destructive">Syntax Error</p>
+                                    <p className="text-sm font-medium text-destructive">
+                                      Syntax Error
+                                    </p>
                                     <p className="text-sm text-destructive/80 font-mono mt-1">
                                       {previewResult.error}
                                     </p>
@@ -2080,9 +2105,7 @@ export function SettingsPage() {
                       <div className="text-center text-muted-foreground">
                         <FileCode className="h-12 w-12 mx-auto mb-3 opacity-50" />
                         <p className="text-sm">Select a template to view or edit</p>
-                        <p className="text-xs mt-1">
-                          Or click "New Template" to create one
-                        </p>
+                        <p className="text-xs mt-1">Or click "New Template" to create one</p>
                       </div>
                     </div>
                   )}
@@ -2128,9 +2151,7 @@ export function SettingsPage() {
                     <p className="text-muted-foreground mt-0.5">Completed story count</p>
                   </div>
                   <div className="p-2 bg-muted/30 rounded">
-                    <code className="text-blue-600 dark:text-blue-400">
-                      {'{{ current_date }}'}
-                    </code>
+                    <code className="text-blue-600 dark:text-blue-400">{'{{ current_date }}'}</code>
                     <p className="text-muted-foreground mt-0.5">Today's date</p>
                   </div>
                   <div className="p-2 bg-muted/30 rounded">
@@ -2212,6 +2233,8 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <KeyBarCustomizer />
         </TabsContent>
       </Tabs>
     </div>
