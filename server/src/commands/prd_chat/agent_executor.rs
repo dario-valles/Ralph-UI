@@ -34,6 +34,7 @@ static TOOL_RESULT_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// State for tracking active tool calls during streaming
 struct ToolCallState {
     tool_id: String,
+    #[allow(dead_code)] // Kept for debugging purposes
     tool_name: String,
     started_at: std::time::Instant,
     input_lines: Vec<String>,
