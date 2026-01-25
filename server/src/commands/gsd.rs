@@ -148,14 +148,16 @@ pub async fn start_research(
     session_id: String,
     context: String,
     agent_type: Option<String>,
+    model: Option<String>,
 ) -> Result<ResearchStatus, String> {
     let path = as_path(&project_path);
 
-    // Build config with optional agent type override
-    let mut config = GsdConfig::default();
-    if let Some(agent) = agent_type {
-        config.research_agent_type = agent;
-    }
+    // Build config with optional overrides
+    let config = GsdConfig {
+        research_agent_type: agent_type.unwrap_or_else(|| GsdConfig::default().research_agent_type),
+        research_model: model,
+        ..GsdConfig::default()
+    };
 
     // Run research agents in parallel with app handle for event emission
     let (status, results) = run_research_agents_with_handle(

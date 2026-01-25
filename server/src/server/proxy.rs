@@ -1632,7 +1632,21 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
         }
 
         "start_research" => {
-            Err("Research with streaming progress is not supported in browser mode. Use the desktop app.".to_string())
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let context: String = get_arg(&args, "context")?;
+            let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
+            let model: Option<String> = get_opt_arg(&args, "model")?;
+            let result = commands::gsd::start_research(
+                state.broadcaster.clone(),
+                project_path,
+                session_id,
+                context,
+                agent_type,
+                model,
+            )
+            .await?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
         }
 
         "get_research_results" => {

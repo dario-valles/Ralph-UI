@@ -6,21 +6,17 @@
  * streaming output from each agent.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { NativeSelect } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ModelSelector } from '@/components/shared/ModelSelector'
 import { ResearchSummary } from './gsd/ResearchSummary'
-import { useGsdStore } from '@/stores/gsdStore'
+import { usePRDChatStore } from '@/stores/prdChatStore'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { subscribeEvent } from '@/lib/events-client'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
 import type { AgentType } from '@/types'
@@ -62,7 +58,7 @@ interface ResearchProgressProps {
   /** Research synthesis (when complete) */
   synthesis?: ResearchSynthesis | null
   /** Callback to start research */
-  onStartResearch: (context: string, agentType?: string) => Promise<void>
+  onStartResearch: (context: string, agentType?: string, model?: string) => Promise<void>
   /** Callback to synthesize research */
   onSynthesize: () => Promise<void>
   /** Callback when ready to proceed */
@@ -79,13 +75,11 @@ interface ResearchProgressProps {
   sessionId?: string
 }
 
-/** Agent key mapping for events */
-const AGENT_KEY_MAP: Record<string, string> = {
-  architecture: 'architecture',
-  codebase: 'codebase',
-  bestpractices: 'bestPractices',
-  best_practices: 'bestPractices',
-  risks: 'risks',
+/** Normalize agent type keys from events to match local state keys */
+function normalizeAgentKey(agentType: string): string {
+  const key = agentType.toLowerCase()
+  if (key === 'bestpractices' || key === 'best_practices') return 'bestPractices'
+  return key
 }
 
 interface AgentStatusCardProps {
@@ -130,20 +124,14 @@ function AgentStatusCard({
     }
   }, [streamingOutput, isOpen])
 
-  const getStatusIcon = () => {
-    if (status.running) {
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-    }
-    if (status.error) {
-      return <XCircle className="h-4 w-4 text-red-500" />
-    }
-    if (status.complete) {
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />
-    }
+  function getStatusIcon(): React.ReactNode {
+    if (status.running) return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+    if (status.error) return <XCircle className="h-4 w-4 text-red-500" />
+    if (status.complete) return <CheckCircle2 className="h-4 w-4 text-green-500" />
     return <Search className="h-4 w-4 text-muted-foreground" />
   }
 
-  const getStatusText = () => {
+  function getStatusText(): string {
     if (status.running) return 'Researching...'
     if (status.error) return 'Failed'
     if (status.complete) return 'Complete'
@@ -219,6 +207,8 @@ export function ResearchProgress({
   const [selectedResult, setSelectedResult] = useState<ResearchResult | null>(null)
   const [showSummary, setShowSummary] = useState(false)
   const [agentOutputs, setAgentOutputs] = useState<Record<string, string>>({})
+  // Track user's explicit model selection (empty means use default)
+  const [userSelectedModel, setUserSelectedModel] = useState<string>('')
 
   // Get agent selection from store
   const {
@@ -226,7 +216,14 @@ export function ResearchProgress({
     selectedResearchAgent,
     setSelectedResearchAgent,
     loadAvailableAgents,
-  } = useGsdStore()
+  } = usePRDChatStore()
+
+  // Get available models for the selected research agent (default to 'claude')
+  const effectiveAgentType = selectedResearchAgent || 'claude'
+  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(effectiveAgentType)
+
+  // Effective model is user selection or default
+  const selectedModel = userSelectedModel || defaultModelId || ''
 
   // Load available agents on mount
   useEffect(() => {
@@ -248,7 +245,7 @@ export function ResearchProgress({
           (payload) => {
             if (payload.sessionId !== sessionId) return
 
-            const agentKey = AGENT_KEY_MAP[payload.agentType.toLowerCase()] || payload.agentType
+            const agentKey = normalizeAgentKey(payload.agentType)
             if (!payload.isComplete && payload.chunk) {
               setAgentOutputs((prev) => ({
                 ...prev,
@@ -300,18 +297,18 @@ export function ResearchProgress({
   const handleStartResearch = useCallback(async () => {
     // Clear previous outputs before starting new research
     setAgentOutputs({})
-    await onStartResearch(questioningContext, selectedResearchAgent || undefined)
-  }, [onStartResearch, questioningContext, selectedResearchAgent])
+    await onStartResearch(questioningContext, selectedResearchAgent || undefined, selectedModel || undefined)
+  }, [onStartResearch, questioningContext, selectedResearchAgent, selectedModel])
 
   const handleSynthesize = useCallback(async () => {
     await onSynthesize()
     setShowSummary(true)
   }, [onSynthesize])
 
-  // Derive whether to show summary from synthesis availability (no need for effect)
-  const shouldShowSummary = showSummary || !!synthesis
+  // Show summary when explicitly toggled or synthesis exists
+  const shouldShowSummary = showSummary || Boolean(synthesis)
 
-  const getResultForAgent = (name: string): ResearchResult | undefined => {
+  function getResultForAgent(name: string): ResearchResult | undefined {
     return results.find((r) => r.researchType === name.toLowerCase())
   }
 
@@ -383,34 +380,44 @@ export function ResearchProgress({
       {/* Actions */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          {/* Agent selector - only show before research starts */}
+          {/* Agent and Model selectors - only show before research starts */}
           {!hasStarted && (
-            <div className="flex items-center gap-3">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-              <label className="text-sm font-medium">Research Agent:</label>
-              <Select
-                value={selectedResearchAgent || 'claude'}
-                onValueChange={(value) => setSelectedResearchAgent(value as AgentType)}
-                disabled={isLoading || isRunning}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select agent" />
-                </SelectTrigger>
-                <SelectContent>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                <label htmlFor="research-agent-selector" className="text-sm font-medium">Agent:</label>
+                <NativeSelect
+                  id="research-agent-selector"
+                  aria-label="Research Agent"
+                  value={selectedResearchAgent || 'claude'}
+                  onChange={(e) => setSelectedResearchAgent(e.target.value as AgentType)}
+                  disabled={isLoading || isRunning}
+                  className="w-28"
+                >
                   {availableResearchAgents.length > 0 ? (
                     availableResearchAgents.map((agent) => (
-                      <SelectItem key={agent} value={agent}>
+                      <option key={agent} value={agent}>
                         {agent.charAt(0).toUpperCase() + agent.slice(1)}
-                      </SelectItem>
+                      </option>
                     ))
                   ) : (
-                    <SelectItem value="claude">Claude (default)</SelectItem>
+                    <option value="claude">Claude</option>
                   )}
-                </SelectContent>
-              </Select>
-              {availableResearchAgents.length === 0 && (
-                <span className="text-xs text-muted-foreground">Loading agents...</span>
-              )}
+                </NativeSelect>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="research-model-selector" className="text-sm font-medium">Model:</label>
+                <ModelSelector
+                  id="research-model-selector"
+                  ariaLabel="Research Model"
+                  value={selectedModel}
+                  onChange={setUserSelectedModel}
+                  models={models}
+                  loading={modelsLoading}
+                  disabled={isLoading || isRunning}
+                  className="w-40"
+                />
+              </div>
             </div>
           )}
 

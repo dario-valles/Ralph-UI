@@ -41,7 +41,6 @@ import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
-import { GSDWorkflow } from './GSDWorkflow'
 import { ChatMessageItem } from './ChatMessageItem'
 import { ChatInput } from './ChatInput'
 import { StreamingIndicator } from './StreamingIndicator'
@@ -49,6 +48,10 @@ import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
 import { FloatingQualityBadge } from './FloatingQualityBadge'
+import { PhaseActionBar, type PhaseAction, type PhaseState } from './PhaseActionBar'
+import { ResearchProgressModal } from './ResearchProgressModal'
+import { RequirementsScopeSheet } from './RequirementsScopeSheet'
+import type { ResearchSynthesis, ResearchResult } from '@/types/gsd'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType, PRDFile, ChatAttachment } from '@/types'
@@ -114,6 +117,12 @@ export function PRDChatPanel() {
   // State for mobile plan view mode (raw vs rendered)
   const [showRawMobile, setShowRawMobile] = useState(false)
 
+  // Hybrid GSD modal states
+  const [showResearchModal, setShowResearchModal] = useState(false)
+  const [showScopeSheet, setShowScopeSheet] = useState(false)
+  const [showPhaseHint, setShowPhaseHint] = useState(true)
+  const [runningPhaseAction, setRunningPhaseAction] = useState<PhaseAction | null>(null)
+
   const {
     sessions,
     currentSession,
@@ -137,6 +146,19 @@ export function PRDChatPanel() {
     stopWatchingPlanFile,
     updatePlanContent,
     updateSessionAgent,
+    // Hybrid GSD state and actions
+    phaseState,
+    requirementsDoc,
+    isResearchRunning,
+    isSynthesizing,
+    isGeneratingRequirements,
+    loadAvailableAgents,
+    generateRequirements,
+    applyScopeSelection,
+    addRequirement,
+    generateRoadmap,
+    loadRequirements,
+    loadRoadmap,
   } = usePRDChatStore()
 
   // Auto-scroll hook for messages - must be after usePRDChatStore since it uses messages
@@ -406,7 +428,6 @@ export function PRDChatPanel() {
     prdType: PRDTypeValue,
     guidedMode: boolean,
     projectPath?: string,
-    gsdMode?: boolean,
     title?: string
   ) => {
     // Register the project when starting a session
@@ -417,7 +438,6 @@ export function PRDChatPanel() {
       agentType: currentSession?.agentType || 'claude',
       prdType,
       guidedMode,
-      gsdMode: gsdMode || false,
       projectPath: projectPath || activeProject?.path || '',
       title,
     })
@@ -483,6 +503,82 @@ export function PRDChatPanel() {
         err instanceof Error ? err.message : 'An unexpected error occurred.'
       )
     }
+  }
+
+  // Load available agents and existing data when session changes
+  useEffect(() => {
+    if (currentSession?.projectPath) {
+      loadAvailableAgents()
+      loadRequirements()
+      loadRoadmap()
+    }
+  }, [currentSession?.id, currentSession?.projectPath, loadAvailableAgents, loadRequirements, loadRoadmap])
+
+  // Handle phase action from PhaseActionBar
+  const handlePhaseAction = async (action: PhaseAction) => {
+    if (!currentSession?.projectPath) return
+
+    setRunningPhaseAction(action)
+
+    try {
+      switch (action) {
+        case 'research':
+          setShowResearchModal(true)
+          break
+
+        case 'requirements':
+          // Generate requirements from research (or context)
+          await generateRequirements()
+          toast.success('Requirements Generated', 'Requirements have been extracted and are ready for scoping.')
+          break
+
+        case 'scope':
+          if (requirementsDoc) {
+            setShowScopeSheet(true)
+          } else {
+            toast.error('No Requirements', 'Generate requirements first before scoping.')
+          }
+          break
+
+        case 'roadmap':
+          await generateRoadmap()
+          toast.success('Roadmap Generated', 'Execution roadmap has been created from scoped requirements.')
+          break
+      }
+    } catch (err) {
+      console.error(`Failed to execute phase action ${action}:`, err)
+      toast.error(
+        'Action Failed',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
+    } finally {
+      setRunningPhaseAction(null)
+    }
+  }
+
+  // Handle research completion - add summary message to chat
+  const handleResearchComplete = (_synthesis: ResearchSynthesis, results: ResearchResult[]) => {
+    // The synthesis is stored in the store, and we can inject a summary into chat
+    // For now, just close the modal - the phaseState will update automatically
+    void _synthesis // Will be used later for injecting into chat
+    setShowResearchModal(false)
+    toast.success(
+      'Research Complete',
+      `${results.length} research reports generated. Click Requirements to generate requirements.`
+    )
+  }
+
+  // Handle scoping completion
+  const handleScopeComplete = () => {
+    setShowScopeSheet(false)
+    toast.success('Scoping Complete', 'Requirements have been categorized. Click Roadmap to generate execution plan.')
+  }
+
+  // Build phase state for PhaseActionBar
+  const currentPhaseState: PhaseState = {
+    ...phaseState,
+    isRunning: isResearchRunning || isSynthesizing || isGeneratingRequirements || loading,
+    runningAction: runningPhaseAction,
   }
 
   const hasMessages = messages.length > 0
@@ -852,14 +948,7 @@ export function PRDChatPanel() {
             </div>
           )}
 
-          {/* GSD Workflow Mode */}
-          {currentSession?.gsdMode && currentSession.projectPath ? (
-            <div className="flex-1 overflow-y-auto">
-              <GSDWorkflow projectPath={currentSession.projectPath} sessionId={currentSession.id} />
-            </div>
-          ) : (
-            <>
-              {/* Messages Area */}
+          {/* Messages Area */}
               <div
                 ref={messagesContainerRef}
                 className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-0"
@@ -987,29 +1076,39 @@ export function PRDChatPanel() {
                 </Button>
               )}
 
-              {/* Floating Quality Badge */}
-              {currentSession && hasMessages && !currentSession.gsdMode && (
-                <FloatingQualityBadge
-                  assessment={qualityAssessment}
-                  loading={loading}
-                  onRefresh={handleRefreshQuality}
-                />
-              )}
-
-              {/* Input Area */}
-              <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background">
-                <ChatInput
-                  onSend={handleSendMessage}
-                  disabled={isDisabled}
-                  placeholder={
-                    !currentSession
-                      ? 'Create a session to start chatting...'
-                      : 'Describe your product requirements...'
-                  }
-                />
-              </div>
-            </>
+          {/* Floating Quality Badge */}
+          {currentSession && hasMessages && (
+            <FloatingQualityBadge
+              assessment={qualityAssessment}
+              loading={loading}
+              onRefresh={handleRefreshQuality}
+            />
           )}
+
+          {/* Input Area with Phase Actions */}
+          <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background space-y-3">
+            <ChatInput
+              onSend={handleSendMessage}
+              disabled={isDisabled}
+              placeholder={
+                !currentSession
+                  ? 'Create a session to start chatting...'
+                  : 'Describe your product requirements...'
+              }
+            />
+
+            {/* Phase Action Bar - Hybrid GSD */}
+            {currentSession?.projectPath && (
+              <PhaseActionBar
+                phaseState={currentPhaseState}
+                onAction={handlePhaseAction}
+                disabled={isDisabled}
+                compact={isMobile}
+                showHint={showPhaseHint && hasMessages}
+                onDismissHint={() => setShowPhaseHint(false)}
+              />
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1145,6 +1244,32 @@ export function PRDChatPanel() {
         open={!!executePrdFile}
         onOpenChange={(open) => !open && setExecutePrdFile(null)}
       />
+
+      {/* Hybrid GSD Modals */}
+      {currentSession?.projectPath && (
+        <>
+          {/* Research Progress Modal */}
+          <ResearchProgressModal
+            open={showResearchModal}
+            onOpenChange={setShowResearchModal}
+            projectPath={currentSession.projectPath}
+            sessionId={currentSession.id}
+            onComplete={handleResearchComplete}
+            conversationContext={messages.map((m) => `${m.role}: ${m.content}`).join('\n')}
+          />
+
+          {/* Requirements Scope Sheet */}
+          <RequirementsScopeSheet
+            open={showScopeSheet}
+            onOpenChange={setShowScopeSheet}
+            requirements={requirementsDoc}
+            onApplyScope={applyScopeSelection}
+            onAddRequirement={addRequirement}
+            onComplete={handleScopeComplete}
+            isLoading={loading}
+          />
+        </>
+      )}
     </div>
   )
 }

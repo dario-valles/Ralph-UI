@@ -73,13 +73,12 @@ export function DeepQuestioning({
     sendMessage,
   } = usePRDChatStore()
 
-  // Initialize GSD chat session on mount
+  // Initialize chat session on mount
   useEffect(() => {
     if (projectPath && sessionId && !currentSession) {
       startSession({
         agentType: 'claude',
         projectPath,
-        gsdMode: true,
       })
     }
   }, [projectPath, sessionId, currentSession, startSession])

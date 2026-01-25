@@ -61,7 +61,6 @@ export const prdChatApi = {
     guidedMode?: boolean,
     templateId?: string,
     structuredMode?: boolean,
-    gsdMode?: boolean,
     title?: string
   ): Promise<ChatSession> => {
     return await invoke('start_prd_chat_session', {
@@ -73,7 +72,6 @@ export const prdChatApi = {
         guidedMode,
         templateId,
         structuredMode,
-        gsdMode,
         title,
       },
     })
@@ -773,9 +771,10 @@ export const gsdApi = {
     projectPath: string,
     sessionId: string,
     context: string,
-    agentType?: string
+    agentType?: string,
+    model?: string
   ): Promise<ResearchStatus> => {
-    return await invoke('start_research', { projectPath, sessionId, context, agentType })
+    return await invoke('start_research', { projectPath, sessionId, context, agentType, model })
   },
 
   /** Get research results for a session */

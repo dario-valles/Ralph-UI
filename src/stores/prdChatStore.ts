@@ -1,6 +1,6 @@
 // PRD Chat State Management Store
 import { create } from 'zustand'
-import { prdChatApi } from '@/lib/backend-api'
+import { prdChatApi, gsdApi } from '@/lib/backend-api'
 import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
 import type {
   ChatSession,
@@ -10,7 +10,48 @@ import type {
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
+  AgentType,
 } from '@/types'
+import type {
+  ResearchStatus,
+  ResearchResult,
+  ResearchSynthesis,
+} from '@/types/gsd'
+import type {
+  RequirementsDoc,
+  RoadmapDoc,
+  ScopeSelection,
+  RequirementCategory,
+  Requirement,
+} from '@/types/planning'
+
+/**
+ * Phase state for hybrid GSD in chat
+ */
+export interface HybridPhaseState {
+  /** Whether research has been started */
+  researchStarted: boolean
+  /** Whether research is complete */
+  researchComplete: boolean
+  /** Whether requirements have been generated */
+  requirementsGenerated: boolean
+  /** Whether scoping is complete (no unscoped requirements) */
+  scopingComplete: boolean
+  /** Whether roadmap has been generated */
+  roadmapGenerated: boolean
+  /** Number of unscoped requirements */
+  unscopedCount: number
+}
+
+/**
+ * Initial research status
+ */
+const INITIAL_RESEARCH_STATUS: ResearchStatus = {
+  architecture: { running: false, complete: false },
+  codebase: { running: false, complete: false },
+  bestPractices: { running: false, complete: false },
+  risks: { running: false, complete: false },
+}
 
 interface StartSessionOptions {
   agentType: string
@@ -20,7 +61,6 @@ interface StartSessionOptions {
   guidedMode?: boolean
   templateId?: string
   structuredMode?: boolean
-  gsdMode?: boolean // GSD workflow mode
   title?: string // Custom session title
 }
 
@@ -38,6 +78,19 @@ interface PRDChatStore extends AsyncState {
   watchedPlanContent: string | null
   watchedPlanPath: string | null
   isWatchingPlan: boolean
+
+  // Hybrid GSD state (integrated workflow)
+  researchStatus: ResearchStatus
+  researchResults: ResearchResult[]
+  researchSynthesis: ResearchSynthesis | null
+  requirementsDoc: RequirementsDoc | null
+  roadmapDoc: RoadmapDoc | null
+  selectedResearchAgent: AgentType | null
+  availableResearchAgents: AgentType[]
+  phaseState: HybridPhaseState
+  isResearchRunning: boolean
+  isSynthesizing: boolean
+  isGeneratingRequirements: boolean
 
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
@@ -58,6 +111,20 @@ interface PRDChatStore extends AsyncState {
   startWatchingPlanFile: () => Promise<void>
   stopWatchingPlanFile: () => Promise<void>
   updatePlanContent: (content: string, path: string) => void
+
+  // Hybrid GSD actions
+  loadAvailableAgents: () => Promise<void>
+  setSelectedResearchAgent: (agent: AgentType | null) => void
+  startResearch: (context: string, agentType?: string) => Promise<void>
+  synthesizeResearch: () => Promise<ResearchSynthesis | null>
+  generateRequirements: () => Promise<RequirementsDoc | null>
+  loadRequirements: () => Promise<void>
+  applyScopeSelection: (selection: ScopeSelection) => Promise<void>
+  addRequirement: (category: RequirementCategory, title: string, description: string) => Promise<Requirement | null>
+  generateRoadmap: () => Promise<RoadmapDoc | null>
+  loadRoadmap: () => Promise<void>
+  clearHybridState: () => void
+  updatePhaseState: () => void
 }
 
 export const usePRDChatStore = create<PRDChatStore>((set, get) => {
@@ -86,6 +153,26 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     watchedPlanPath: null,
     isWatchingPlan: false,
 
+    // Hybrid GSD initial state
+    researchStatus: INITIAL_RESEARCH_STATUS,
+    researchResults: [],
+    researchSynthesis: null,
+    requirementsDoc: null,
+    roadmapDoc: null,
+    selectedResearchAgent: null,
+    availableResearchAgents: [],
+    phaseState: {
+      researchStarted: false,
+      researchComplete: false,
+      requirementsGenerated: false,
+      scopingComplete: false,
+      roadmapGenerated: false,
+      unscopedCount: 0,
+    },
+    isResearchRunning: false,
+    isSynthesizing: false,
+    isGeneratingRequirements: false,
+
     // Start a new chat session
     startSession: async (options: StartSessionOptions) => {
       set({
@@ -107,7 +194,6 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
           options.guidedMode,
           options.templateId,
           options.structuredMode,
-          options.gsdMode,
           options.title
         )
         set((state) => ({
@@ -491,6 +577,308 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
       set({
         watchedPlanContent: content,
         watchedPlanPath: path,
+      })
+    },
+
+    // =========================================================================
+    // Hybrid GSD Actions
+    // =========================================================================
+
+    // Load available research agents
+    loadAvailableAgents: async () => {
+      try {
+        const agents = await gsdApi.getAvailableAgents()
+        set({ availableResearchAgents: agents })
+        // Auto-select first available agent if none selected
+        if (agents.length > 0 && !get().selectedResearchAgent) {
+          set({ selectedResearchAgent: agents[0] })
+        }
+      } catch (error) {
+        console.error('Failed to load available agents:', error)
+        // Fallback to claude
+        set({ availableResearchAgents: ['claude'] })
+        if (!get().selectedResearchAgent) {
+          set({ selectedResearchAgent: 'claude' })
+        }
+      }
+    },
+
+    // Set selected research agent
+    setSelectedResearchAgent: (agent) => {
+      set({ selectedResearchAgent: agent })
+    },
+
+    // Start parallel research
+    startResearch: async (context, agentType) => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return
+
+      const { selectedResearchAgent } = get()
+      set({
+        isResearchRunning: true,
+        error: null,
+        researchStatus: {
+          architecture: { running: true, complete: false },
+          codebase: { running: true, complete: false },
+          bestPractices: { running: true, complete: false },
+          risks: { running: true, complete: false },
+        },
+      })
+
+      try {
+        const status = await gsdApi.startResearch(
+          ctx.projectPath,
+          ctx.session.id,
+          context,
+          agentType || selectedResearchAgent || undefined
+        )
+        set({ researchStatus: status })
+        // Update phase state
+        get().updatePhaseState()
+      } catch (error) {
+        set({
+          error: errorToString(error),
+          researchStatus: INITIAL_RESEARCH_STATUS,
+        })
+      } finally {
+        set({ isResearchRunning: false })
+      }
+    },
+
+    // Synthesize research results
+    synthesizeResearch: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return null
+
+      set({ isSynthesizing: true, error: null })
+      try {
+        const synthesis = await gsdApi.synthesizeResearch(ctx.projectPath, ctx.session.id)
+        set({ researchSynthesis: synthesis })
+        get().updatePhaseState()
+        return synthesis
+      } catch (error) {
+        set({ error: errorToString(error) })
+        return null
+      } finally {
+        set({ isSynthesizing: false })
+      }
+    },
+
+    // Generate requirements from research
+    generateRequirements: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return null
+
+      set({ isGeneratingRequirements: true, loading: true, error: null })
+      try {
+        const requirements = await gsdApi.generateRequirementsFromResearch(
+          ctx.projectPath,
+          ctx.session.id
+        )
+        set({ requirementsDoc: requirements })
+        get().updatePhaseState()
+        return requirements
+      } catch (error) {
+        set({ error: errorToString(error) })
+        return null
+      } finally {
+        set({ isGeneratingRequirements: false, loading: false })
+      }
+    },
+
+    // Load existing requirements
+    loadRequirements: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return
+
+      try {
+        const requirements = await gsdApi.loadRequirements(ctx.projectPath, ctx.session.id)
+        set({ requirementsDoc: requirements })
+        get().updatePhaseState()
+      } catch (error) {
+        // Silently fail - requirements may not exist yet
+        console.warn('Failed to load requirements:', error)
+      }
+    },
+
+    // Apply scope selection
+    applyScopeSelection: async (selection) => {
+      const ctx = getSessionWithPath()
+      const { requirementsDoc } = get()
+      if (!ctx || !requirementsDoc) return
+
+      set({ loading: true, error: null })
+      try {
+        const updated = await gsdApi.scopeRequirements(ctx.projectPath, ctx.session.id, selection)
+        set({ requirementsDoc: updated })
+        get().updatePhaseState()
+      } catch (error) {
+        // Fall back to local state update if backend fails
+        const updatedRequirements = { ...requirementsDoc.requirements }
+        for (const id of selection.v1) {
+          if (updatedRequirements[id]) {
+            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v1' }
+          }
+        }
+        for (const id of selection.v2) {
+          if (updatedRequirements[id]) {
+            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v2' }
+          }
+        }
+        for (const id of selection.outOfScope) {
+          if (updatedRequirements[id]) {
+            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'out_of_scope' }
+          }
+        }
+        set({
+          requirementsDoc: { requirements: updatedRequirements },
+          error: errorToString(error),
+        })
+        get().updatePhaseState()
+      } finally {
+        set({ loading: false })
+      }
+    },
+
+    // Add a custom requirement
+    addRequirement: async (category, title, description) => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return null
+
+      try {
+        const newReq = await gsdApi.addRequirement(
+          ctx.projectPath,
+          ctx.session.id,
+          category,
+          title,
+          description
+        )
+        // Update requirements state
+        const { requirementsDoc } = get()
+        if (requirementsDoc) {
+          set({
+            requirementsDoc: {
+              ...requirementsDoc,
+              requirements: { ...requirementsDoc.requirements, [newReq.id]: newReq },
+            },
+          })
+        }
+        get().updatePhaseState()
+        return newReq
+      } catch (error) {
+        set({ error: errorToString(error) })
+        return null
+      }
+    },
+
+    // Generate roadmap from scoped requirements
+    generateRoadmap: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return null
+
+      set({ loading: true, error: null })
+      try {
+        const roadmap = await gsdApi.createRoadmap(ctx.projectPath, ctx.session.id)
+        set({ roadmapDoc: roadmap })
+        get().updatePhaseState()
+        return roadmap
+      } catch (error) {
+        set({ error: errorToString(error) })
+        return null
+      } finally {
+        set({ loading: false })
+      }
+    },
+
+    // Load existing roadmap
+    loadRoadmap: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return
+
+      try {
+        const roadmap = await gsdApi.loadRoadmap(ctx.projectPath, ctx.session.id)
+        set({ roadmapDoc: roadmap })
+        get().updatePhaseState()
+      } catch (error) {
+        // Silently fail - roadmap may not exist yet
+        console.warn('Failed to load roadmap:', error)
+      }
+    },
+
+    // Clear hybrid GSD state
+    clearHybridState: () => {
+      set({
+        researchStatus: INITIAL_RESEARCH_STATUS,
+        researchResults: [],
+        researchSynthesis: null,
+        requirementsDoc: null,
+        roadmapDoc: null,
+        phaseState: {
+          researchStarted: false,
+          researchComplete: false,
+          requirementsGenerated: false,
+          scopingComplete: false,
+          roadmapGenerated: false,
+          unscopedCount: 0,
+        },
+        isResearchRunning: false,
+        isSynthesizing: false,
+        isGeneratingRequirements: false,
+      })
+    },
+
+    // Update phase state based on current data
+    updatePhaseState: () => {
+      const { researchStatus, researchSynthesis, requirementsDoc, roadmapDoc } = get()
+
+      // Check if research has started
+      const researchStarted =
+        researchStatus.architecture.running ||
+        researchStatus.architecture.complete ||
+        researchStatus.codebase.running ||
+        researchStatus.codebase.complete ||
+        researchStatus.bestPractices.running ||
+        researchStatus.bestPractices.complete ||
+        researchStatus.risks.running ||
+        researchStatus.risks.complete
+
+      // Check if research is complete (all agents done without errors)
+      const researchComplete =
+        researchStatus.architecture.complete &&
+        !researchStatus.architecture.error &&
+        researchStatus.codebase.complete &&
+        !researchStatus.codebase.error &&
+        researchStatus.bestPractices.complete &&
+        !researchStatus.bestPractices.error &&
+        researchStatus.risks.complete &&
+        !researchStatus.risks.error &&
+        researchSynthesis !== null
+
+      // Check requirements
+      const requirementsGenerated =
+        requirementsDoc !== null && Object.keys(requirementsDoc.requirements).length > 0
+
+      // Check scoping
+      let unscopedCount = 0
+      if (requirementsDoc) {
+        unscopedCount = Object.values(requirementsDoc.requirements).filter(
+          (r) => !r.scope || r.scope === 'unscoped'
+        ).length
+      }
+      const scopingComplete = requirementsGenerated && unscopedCount === 0
+
+      // Check roadmap
+      const roadmapGenerated = roadmapDoc !== null && roadmapDoc.phases.length > 0
+
+      set({
+        phaseState: {
+          researchStarted,
+          researchComplete,
+          requirementsGenerated,
+          scopingComplete,
+          roadmapGenerated,
+          unscopedCount,
+        },
       })
     },
   }

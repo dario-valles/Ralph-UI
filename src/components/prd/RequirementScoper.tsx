@@ -35,7 +35,7 @@ interface RequirementScoperProps {
     category: RequirementCategory,
     title: string,
     description: string
-  ) => Promise<Requirement>
+  ) => Promise<Requirement | null>
   /** Callback when ready to proceed */
   onProceed: () => void
   /** Whether the component is in loading state */
@@ -391,6 +391,10 @@ export function RequirementScoper({
     setIsAddingReq(true)
     try {
       const newReq = await onAddRequirement(newReqCategory, newReqTitle, newReqDescription)
+      if (!newReq) {
+        // Failed to add requirement
+        return
+      }
       // Add to local state
       setLocalRequirements((prev) => ({
         ...prev,
