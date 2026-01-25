@@ -39,8 +39,13 @@ export function StreamingIndicator({
 }: StreamingIndicatorProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [state, setState] = useState<StreamingState>('normal')
-  const { addToolCall, completeToolCall, getToolCallsForAgent, clearToolCalls } = useToolCallStore()
-  const toolCalls = sessionId ? getToolCallsForAgent(sessionId) : []
+
+  // Subscribe to toolCalls state reactively, then filter by sessionId
+  const toolCallsMap = useToolCallStore((state) => state.toolCalls)
+  const addToolCall = useToolCallStore((state) => state.addToolCall)
+  const completeToolCall = useToolCallStore((state) => state.completeToolCall)
+  const clearToolCalls = useToolCallStore((state) => state.clearToolCalls)
+  const toolCalls = sessionId ? (toolCallsMap.get(sessionId) || []) : []
 
   // Subscribe to tool events when sessionId is provided
   useEffect(() => {
