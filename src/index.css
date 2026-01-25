@@ -420,3 +420,143 @@ a:focus-visible,
 .xterm {
   touch-action: pan-y pinch-zoom;
 }
+
+/* ==========================================================================
+   Animation Enhancements (craft-agents inspired)
+   ========================================================================== */
+
+/* Shimmer animation for skeleton/loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Progressive shadow system */
+@layer utilities {
+  .shadow-minimal {
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05);
+  }
+  .shadow-middle {
+    box-shadow:
+      0 2px 4px hsl(0 0% 0% / 0.08),
+      0 1px 2px hsl(0 0% 0% / 0.04);
+  }
+  .shadow-medium {
+    box-shadow:
+      0 4px 8px hsl(0 0% 0% / 0.1),
+      0 2px 4px hsl(0 0% 0% / 0.05);
+  }
+  .shadow-strong {
+    box-shadow:
+      0 8px 16px hsl(0 0% 0% / 0.12),
+      0 4px 8px hsl(0 0% 0% / 0.06);
+  }
+}
+
+/* SpinKit grid spinner */
+.spinner-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  width: 1em;
+  height: 1em;
+}
+
+.spinner-cube {
+  background: currentColor;
+  animation: spinner-cube 1.3s infinite ease-in-out;
+}
+
+.spinner-cube:nth-child(1) {
+  animation-delay: 0.2s;
+}
+.spinner-cube:nth-child(2) {
+  animation-delay: 0.3s;
+}
+.spinner-cube:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.spinner-cube:nth-child(4) {
+  animation-delay: 0.1s;
+}
+.spinner-cube:nth-child(5) {
+  animation-delay: 0.2s;
+}
+.spinner-cube:nth-child(6) {
+  animation-delay: 0.3s;
+}
+.spinner-cube:nth-child(7) {
+  animation-delay: 0s;
+}
+.spinner-cube:nth-child(8) {
+  animation-delay: 0.1s;
+}
+.spinner-cube:nth-child(9) {
+  animation-delay: 0.2s;
+}
+
+@keyframes spinner-cube {
+  0%,
+  70%,
+  100% {
+    transform: scale3d(1, 1, 1);
+  }
+  35% {
+    transform: scale3d(0, 0, 1);
+  }
+}
+
+/* Smooth collapsible content transitions */
+[data-state='open'][data-collapsible-content] {
+  animation: collapsible-down 200ms ease-out;
+}
+
+[data-state='closed'][data-collapsible-content] {
+  animation: collapsible-up 200ms ease-out;
+}
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* Chevron rotation for expand/collapse */
+.chevron-rotate {
+  transition: transform 200ms ease-out;
+}
+
+.chevron-rotate[data-state='open'] {
+  transform: rotate(90deg);
+}

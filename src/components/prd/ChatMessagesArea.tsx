@@ -1,10 +1,35 @@
 import { forwardRef } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, MessageSquare, Bot } from 'lucide-react'
 import { ChatMessageItem } from './ChatMessageItem'
 import { StreamingIndicator } from './StreamingIndicator'
 import type { ChatSession, ChatMessage } from '@/types'
+
+// Animation variants for staggered message reveals
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.03,
+      delayChildren: 0.02,
+    },
+  },
+} as const
+
+const messageVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.2,
+      ease: [0.25, 0.46, 0.45, 0.94] as const, // easeOut cubic bezier
+    },
+  },
+} as const
 
 interface ChatMessagesAreaProps {
   currentSession: ChatSession | null
@@ -117,17 +142,48 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
 
     return (
       <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-4">
-        {messages.map((message) => (
-          <ChatMessageItem key={message.id} message={message} />
-        ))}
-        {streaming && (
-          <StreamingIndicator
-            startedAt={streamingStartedAt}
-            onRetry={onRetry}
-            onCancel={onCancel}
-            content={streamingContent}
-          />
-        )}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-2 sm:space-y-4"
+        >
+          <AnimatePresence mode="popLayout">
+            {messages.map((message, index) => (
+              <motion.div
+                key={message.id}
+                variants={messageVariants}
+                initial="hidden"
+                animate="visible"
+                exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
+                layout
+                style={{
+                  // Stagger delay only for the first 10 messages to prevent long waits
+                  transitionDelay: index < 10 ? `${index * 30}ms` : '0ms',
+                }}
+              >
+                <ChatMessageItem message={message} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+        <AnimatePresence>
+          {streaming && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <StreamingIndicator
+                startedAt={streamingStartedAt}
+                onRetry={onRetry}
+                onCancel={onCancel}
+                content={streamingContent}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={ref} />
       </div>
     )

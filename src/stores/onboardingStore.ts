@@ -47,11 +47,14 @@ export const useOnboardingStore = create<OnboardingStore>()(
         dismissedHints: Array.from(state.dismissedHints),
         hasSeenMainOnboarding: state.hasSeenMainOnboarding,
       }),
-      merge: (persistedState: { dismissedHints?: string[]; hasSeenMainOnboarding?: boolean }, currentState) => ({
-        ...currentState,
-        dismissedHints: new Set(persistedState.dismissedHints || []),
-        hasSeenMainOnboarding: persistedState.hasSeenMainOnboarding || false,
-      }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as { dismissedHints?: string[]; hasSeenMainOnboarding?: boolean } | undefined
+        return {
+          ...currentState,
+          dismissedHints: new Set(persisted?.dismissedHints || []),
+          hasSeenMainOnboarding: persisted?.hasSeenMainOnboarding || false,
+        }
+      },
     }
   )
 )
