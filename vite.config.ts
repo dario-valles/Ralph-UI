@@ -50,7 +50,15 @@ export default defineConfig(async () => ({
         ],
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Only precache critical app shell (hashed assets are cached at runtime)
+        globPatterns: [
+          'index.html',
+          'assets/index-*.js',
+          'assets/index-*.css',
+          'assets/vendor-react-*.js',
+        ],
+        // Exclude lazy-loaded chunks (cached at runtime with CacheFirst)
+        globIgnores: ['assets/vendor-terminal-*.js', 'assets/SettingsPage-*.js'],
       },
       devOptions: {
         enabled: true,
