@@ -99,12 +99,6 @@ class EventsClient {
         this.ws.onopen = () => {
           console.log('[EventsClient] WebSocket connected')
           this.isConnecting = false
-
-          // Show reconnection notification if we were reconnecting (US-6)
-          if (this.wasReconnecting && this.canShowNotification()) {
-            toast.success('Reconnected', 'Connection to server restored')
-            this.lastNotificationTime = Date.now()
-          }
           this.wasReconnecting = false
 
           useConnectionStore.getState().markConnected()
