@@ -154,7 +154,7 @@ function EditPhaseDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{phase ? 'Edit Phase' : 'Add Phase'}</DialogTitle>
           <DialogDescription>Configure the phase details and milestones.</DialogDescription>

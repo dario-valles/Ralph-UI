@@ -192,7 +192,7 @@ export function LearningAnalyticsCard({
               return (
                 <div
                   key={type}
-                  className="p-2 rounded-md border bg-card hover:bg-muted/50 transition-colors"
+                  className="p-2 sm:p-2.5 rounded-md border border-border/50 bg-card hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-1 mb-1">
                     <LearningTypeIcon type={type as LearningType} className="h-3 w-3" />

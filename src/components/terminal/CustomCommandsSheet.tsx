@@ -1,7 +1,7 @@
 // Custom commands side sheet for saving and using frequently used commands
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2, AlertCircle, Check } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, X, Edit2, AlertCircle, Check, Terminal, Search } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCustomCommandsStore, CustomCommand } from '@/stores/customCommandsStore'
 import { writeToTerminal } from '@/lib/terminal-api'
@@ -380,12 +380,14 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
           {/* Commands List - Grouped by Category */}
           <div className="space-y-3 flex-1">
             {commands.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No commands saved yet. Add one to get started!
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Terminal className="h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">No commands saved yet. Add one to get started!</p>
               </div>
             ) : displayedGroups.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No commands in this category.
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Search className="h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">No commands in this category.</p>
               </div>
             ) : (
               displayedGroups.map(([cat, categoryCommands]) => (

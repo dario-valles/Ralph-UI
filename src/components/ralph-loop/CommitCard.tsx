@@ -23,7 +23,7 @@ export function CommitCard({ commit }: CommitCardProps): React.JSX.Element {
   const hasMoreLines = commit.message.split('\n').length > 1
 
   return (
-    <div className="p-3 rounded-lg border bg-card">
+    <div className="p-2.5 sm:p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 transition-colors">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           <GitCommit className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />

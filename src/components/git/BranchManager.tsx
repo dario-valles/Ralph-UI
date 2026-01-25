@@ -109,15 +109,15 @@ export const BranchManager: React.FC<BranchManagerProps> = ({ repoPath, onBranch
 
       <CardContent>
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4 flex items-center">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            {error}
+          <div className="bg-destructive/5 border border-destructive/20 text-destructive px-3 py-2.5 sm:px-4 sm:py-3 rounded-lg mb-3 sm:mb-4 flex items-center">
+            <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
+            <span className="text-sm">{error}</span>
           </div>
         )}
 
         {/* Create Branch Form */}
-        <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-sm font-medium mb-3">Create New Branch</h3>
+        <div className="mb-4 sm:mb-6 p-3 sm:p-4 border border-border/50 rounded-lg bg-muted/30">
+          <h3 className="text-sm font-medium mb-2 sm:mb-3">Create New Branch</h3>
           <div className="flex space-x-2">
             <Input
               type="text"
@@ -140,19 +140,19 @@ export const BranchManager: React.FC<BranchManagerProps> = ({ repoPath, onBranch
 
         {/* Current Branch */}
         {currentBranch && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <div className="mb-3 sm:mb-4 p-3 sm:p-4 bg-green-500/10 border border-green-500/20 dark:bg-green-500/5 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span className="font-medium">Current Branch:</span>
-                <Badge className="bg-green-600">{currentBranch.name}</Badge>
+                <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <span className="font-medium text-sm sm:text-base">Current Branch:</span>
+                <Badge variant="success">{currentBranch.name}</Badge>
               </div>
-              <span className="text-sm text-gray-600 font-mono">
+              <span className="text-xs sm:text-sm text-muted-foreground font-mono">
                 {currentBranch.commit_id.substring(0, 7)}
               </span>
             </div>
             {currentBranch.upstream && (
-              <div className="mt-2 text-sm text-gray-600">Tracking: {currentBranch.upstream}</div>
+              <div className="mt-2 text-xs sm:text-sm text-muted-foreground">Tracking: {currentBranch.upstream}</div>
             )}
           </div>
         )}
@@ -162,39 +162,39 @@ export const BranchManager: React.FC<BranchManagerProps> = ({ repoPath, onBranch
           <h3 className="text-sm font-medium mb-2">All Branches</h3>
 
           {loading && !branches.length && (
-            <div className="text-center py-8 text-gray-500">Loading branches...</div>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground text-sm">Loading branches...</div>
           )}
 
           {!loading && branches.length === 0 && (
-            <div className="text-center py-8 text-gray-500">No branches found</div>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground text-sm">No branches found</div>
           )}
 
           {branches.map((branch) => (
             <div
               key={branch.name}
               className={`
-                border rounded-lg p-3 flex items-center justify-between
+                border rounded-lg p-2.5 sm:p-3 flex items-center justify-between transition-colors
                 ${
                   branch.is_head
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200 hover:bg-gray-50'
+                    ? 'border-green-500/30 bg-green-500/5 dark:bg-green-500/10'
+                    : 'border-border/50 hover:bg-muted/30'
                 }
               `}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <GitBranch
-                  className={`h-4 w-4 ${branch.is_head ? 'text-green-600' : 'text-gray-500'}`}
+                  className={`h-4 w-4 ${branch.is_head ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}
                 />
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="font-medium">{branch.name}</span>
+                    <span className="font-medium text-sm">{branch.name}</span>
                     {branch.is_head && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="success" className="text-[10px] px-1.5 py-0">
                         HEAD
                       </Badge>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500 font-mono">
+                  <div className="text-xs text-muted-foreground font-mono">
                     {branch.commit_id.substring(0, 7)}
                   </div>
                 </div>

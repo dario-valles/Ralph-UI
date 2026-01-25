@@ -118,12 +118,12 @@ export function QualityScoreCard({
             <div className="flex-1 min-w-0">
               {/* Status Badge */}
               {assessment.readyForExport ? (
-                <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 text-[10px] px-1.5 py-0 gap-0.5">
+                <Badge variant="success" className="text-[10px] px-1.5 py-0 gap-0.5">
                   <CheckCircle className="h-2.5 w-2.5" />
                   Ready
                 </Badge>
               ) : (
-                <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 text-[10px] px-1.5 py-0 gap-0.5">
+                <Badge variant="warning" className="text-[10px] px-1.5 py-0 gap-0.5">
                   <AlertTriangle className="h-2.5 w-2.5" />
                   Needs detail
                 </Badge>
@@ -262,12 +262,12 @@ export function QualityScoreCard({
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">Quality</h3>
           {assessment.readyForExport ? (
-            <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 gap-1 text-[11px] px-1.5 py-0.5">
+            <Badge variant="success" className="gap-1 text-[11px] px-1.5 py-0.5">
               <CheckCircle className="h-3 w-3" />
               Ready
             </Badge>
           ) : (
-            <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 gap-1 text-[11px] px-1.5 py-0.5">
+            <Badge variant="warning" className="gap-1 text-[11px] px-1.5 py-0.5">
               <AlertTriangle className="h-3 w-3" />
               Incomplete
             </Badge>

@@ -205,7 +205,7 @@ export function PRDList() {
 
   // Mobile card view for a single PRD file
   const PRDCard = ({ file }: { file: PRDFile }) => (
-    <Card key={file.id} className="p-4">
+    <Card key={file.id} className="p-3 sm:p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -408,7 +408,7 @@ export function PRDList() {
         open={!!deleteConfirmFile}
         onOpenChange={(open) => !open && setDeleteConfirmFile(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete PRD</DialogTitle>
             <DialogDescription>

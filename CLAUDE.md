@@ -191,6 +191,60 @@ Key principles:
 - Test components at 320px width minimum (mobile viewport)
 - Use responsive text sizes: `text-sm md:text-base lg:text-lg`
 
+### Design System (Colors & Tokens)
+
+Use these consistent design tokens across all components:
+
+**Borders & Backgrounds:**
+- Muted backgrounds: `bg-muted/30`
+- Standard borders: `border-border/50`
+- Card hover: `hover:bg-muted/30 transition-colors` or `hover:shadow-md transition-shadow`
+
+**Status Colors (with dark mode):**
+```typescript
+// Success states
+'bg-green-500/5 border-green-500/30 dark:bg-green-500/10'
+'text-green-600 dark:text-green-400'
+
+// Warning states
+'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+
+// Error/destructive states
+'bg-destructive/5 border-destructive/20 text-destructive'
+
+// Info/highlight states
+'bg-blue-500/5 border-blue-500/30 dark:bg-blue-500/10'
+```
+
+**Badge Variants** (`src/components/ui/badge.tsx`):
+- `variant="success"` - Green with dark mode support
+- `variant="warning"` - Amber with dark mode support
+- `variant="emerald"` - Gradient emerald-teal for primary CTAs
+
+**Quality Score Colors** (`src/components/prd/quality-utils.ts`):
+- All functions include dark mode variants automatically
+- Use `getScoreColor()`, `getScoreBg()`, `getProgressColor()`, `getProgressBgColor()`
+
+**Responsive Spacing Patterns:**
+```typescript
+'p-2.5 sm:p-3'     // Compact cards
+'p-3 sm:p-4'       // Standard cards
+'p-3 sm:p-6'       // Large sections
+'gap-2 sm:gap-4'   // Flex gaps
+'mb-3 sm:mb-4'     // Margins
+```
+
+**Dialog Sizing (use Tailwind classes, not arbitrary values):**
+```typescript
+'max-w-sm'   // Small dialogs: confirmations, simple forms (~384px)
+'max-w-md'   // Medium dialogs: form dialogs, detail views (~448px)
+'max-w-lg'   // Large dialogs: multi-step, complex forms (~512px)
+'max-w-xl'   // Extra large: import dialogs, previews (~576px)
+'max-w-2xl'  // Wide content: file editors, settings (~672px)
+'max-w-3xl'  // Very wide: dashboards (~768px)
+'max-w-4xl'  // Full-featured modals (~896px)
+```
+
 ### Prompt Templates
 **IMPORTANT**: When creating new prompts for AI agents, always add them to the template system so they can be edited by users.
 

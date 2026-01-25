@@ -54,7 +54,7 @@ export function InterruptConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0 p-2 rounded-full bg-yellow-500/10">
