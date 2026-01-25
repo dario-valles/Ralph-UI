@@ -9,7 +9,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import {
   spawnTerminalAsync,
-  killTerminal,
+  disconnectTerminal,
   writeToTerminal,
   resizeTerminal,
   decodeTerminalData,
@@ -312,7 +312,10 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
         webglAddonRef.current.dispose()
         webglAddonRef.current = null
       }
-      killTerminal(terminalId)
+      // Use disconnectTerminal instead of killTerminal to preserve session storage
+      // This allows reconnection when panel is reopened (mobile resilience)
+      // Explicit close (X button) calls closeTerminal in store which removes from terminals list
+      disconnectTerminal(terminalId)
       isInitializedRef.current = false
     }
   }, [terminalId, cwd, ptyAvailable, settings.terminalFontSize, wirePty])

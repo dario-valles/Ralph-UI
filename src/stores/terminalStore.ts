@@ -8,6 +8,7 @@ import type {
   SplitDirection,
   AgentTerminalStatus,
 } from '@/types/terminal'
+import { hasStoredSession, killTerminal } from '@/lib/terminal-api'
 
 // A pane can either be a terminal or a split container
 interface TerminalPane {
@@ -53,6 +54,9 @@ interface TerminalStore {
   createAgentTerminal: (agentId: string, title: string, cwd?: string) => string
   updateAgentTerminalStatus: (agentId: string, status: AgentTerminalStatus) => void
   getTerminalForAgent: (agentId: string) => string | null
+
+  // Session persistence
+  cleanupStaleTerminals: () => void
 }
 
 const generateTerminalId = () => `term-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -395,8 +399,11 @@ export const useTerminalStore = create<TerminalStore>()(
       },
 
       togglePanel: () => {
-        const { panelMode, terminals } = get()
+        const { panelMode } = get()
         if (panelMode === 'closed') {
+          // Clean up stale terminals before opening panel
+          get().cleanupStaleTerminals()
+          const terminals = get().terminals
           if (terminals.length === 0) {
             get().createTerminal()
           } else {
@@ -496,11 +503,60 @@ export const useTerminalStore = create<TerminalStore>()(
         const terminal = terminals.find((t) => t.terminalType === 'agent' && t.agentId === agentId)
         return terminal?.id || null
       },
+
+      cleanupStaleTerminals: () => {
+        const { terminals, activeTerminalId, rootPane } = get()
+        const now = Date.now()
+        const SESSION_TIMEOUT_MS = 10 * 60 * 1000 // Match backend PTY timeout (10 min)
+
+        const activeTerminals = terminals.filter((t) => {
+          // Keep if session still stored (backend may still have PTY alive)
+          if (hasStoredSession(t.id)) return true
+          // Keep if created within timeout window
+          const createdAt = new Date(t.createdAt).getTime()
+          return now - createdAt < SESSION_TIMEOUT_MS
+        })
+
+        // Find terminals that were removed
+        const removedIds = new Set(
+          terminals.filter((t) => !activeTerminals.some((at) => at.id === t.id)).map((t) => t.id)
+        )
+
+        // Clean up session storage for removed terminals
+        removedIds.forEach((id) => {
+          killTerminal(id) // This clears session storage
+        })
+
+        if (activeTerminals.length !== terminals.length) {
+          // Update active terminal if it was removed
+          let newActiveId = activeTerminalId
+          if (activeTerminalId && removedIds.has(activeTerminalId)) {
+            newActiveId = activeTerminals.length > 0 ? activeTerminals[0].id : null
+          }
+
+          // Remove stale terminals from pane tree
+          let newRoot = rootPane
+          removedIds.forEach((id) => {
+            if (newRoot) {
+              newRoot = removeTerminal(newRoot, id)
+            }
+          })
+
+          set({
+            terminals: activeTerminals,
+            activeTerminalId: newActiveId,
+            rootPane: newRoot,
+          })
+        }
+      },
     }),
     {
       name: 'ralph-terminal-storage',
       partialize: (state) => ({
         panelHeight: state.panelHeight,
+        terminals: state.terminals,
+        activeTerminalId: state.activeTerminalId,
+        rootPane: state.rootPane,
       }),
     }
   )

@@ -91,7 +91,7 @@ export function resizeTerminal(terminalId: string, cols: number, rows: number): 
 }
 
 /**
- * Kill a PTY process
+ * Kill a PTY process and clear session storage (for explicit close)
  */
 export function killTerminal(terminalId: string): void {
   const pty = ptyInstances.get(terminalId)
@@ -102,6 +102,21 @@ export function killTerminal(terminalId: string): void {
   ptyInstances.delete(terminalId)
   // Clear stored session so we don't try to reconnect to a killed process
   clearStoredPtySession(terminalId)
+}
+
+/**
+ * Disconnect from a PTY without clearing session storage
+ * Used when hiding panel (temporary) vs killing terminal (explicit close)
+ * Allows reconnection when panel is reopened
+ */
+export function disconnectTerminal(terminalId: string): void {
+  const pty = ptyInstances.get(terminalId)
+  if (!pty) {
+    return // Already disconnected or never existed
+  }
+  pty.kill() // Close WebSocket gracefully
+  ptyInstances.delete(terminalId)
+  // DO NOT clear session storage - allows reconnection
 }
 
 /**
