@@ -4,7 +4,8 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::agents::config::{ConfigField, ConfigFieldType, PluginConfigSchema};
-use crate::agents::manager::{truncate_string, AgentSpawnConfig};
+use crate::agents::format_parsers::truncate_string;
+use crate::agents::manager::AgentSpawnConfig;
 use crate::agents::models::{format_model_name, infer_provider, ModelInfo};
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::plugin::AgentPlugin;

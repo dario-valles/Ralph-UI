@@ -9,6 +9,7 @@ mod file_watcher;
 mod proxy;
 mod pty;
 pub mod pty_registry;
+pub mod routes;
 mod state;
 mod static_files;
 

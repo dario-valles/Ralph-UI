@@ -1,934 +1,138 @@
-// PRD Chat State Management Store
+/**
+ * PRD Chat State Management Store
+ *
+ * This store manages all PRD chat functionality including:
+ * - Chat sessions and messages
+ * - Messaging with AI agents
+ * - File watching for plan updates
+ * - Research operations (hybrid GSD)
+ * - Requirements and roadmap generation (GSD workflow)
+ *
+ * The store is organized using the Zustand slices pattern for maintainability.
+ */
 import { create } from 'zustand'
-import { prdChatApi, gsdApi } from '@/lib/backend-api'
-import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
-import type {
-  ChatSession,
-  ChatMessage,
-  ChatAttachment,
-  QualityAssessment,
-  GuidedQuestion,
-  ExtractedPRDContent,
-  PRDTypeValue,
-  AgentType,
-} from '@/types'
-import type {
-  ResearchStatus,
-  ResearchResult,
-  ResearchSynthesis,
-} from '@/types/gsd'
-import type {
-  RequirementsDoc,
-  RoadmapDoc,
-  ScopeSelection,
-  RequirementCategory,
-  Requirement,
-} from '@/types/planning'
+import {
+  // Types
+  type PRDChatStore,
+  type HybridPhaseState,
+  type StartSessionOptions,
+  // Slices
+  createChatSessionSlice,
+  createMessagingSlice,
+  createFileWatchSlice,
+  createResearchSlice,
+  createGsdSlice,
+} from './slices'
+
+// Re-export types for backward compatibility
+export type { HybridPhaseState, StartSessionOptions }
 
 /**
- * Phase state for hybrid GSD in chat
+ * PRD Chat Store
+ *
+ * Combines all slices into a single store with unified state management.
  */
-export interface HybridPhaseState {
-  /** Whether research has been started */
-  researchStarted: boolean
-  /** Whether research is complete */
-  researchComplete: boolean
-  /** Whether requirements have been generated */
-  requirementsGenerated: boolean
-  /** Whether scoping is complete (no unscoped requirements) */
-  scopingComplete: boolean
-  /** Whether roadmap has been generated */
-  roadmapGenerated: boolean
-  /** Number of unscoped requirements */
-  unscopedCount: number
-}
-
-/**
- * Initial research status
- */
-const INITIAL_RESEARCH_STATUS: ResearchStatus = {
-  architecture: { running: false, complete: false },
-  codebase: { running: false, complete: false },
-  bestPractices: { running: false, complete: false },
-  risks: { running: false, complete: false },
-}
-
-interface StartSessionOptions {
-  agentType: string
-  projectPath: string // Required for file-based storage
-  prdId?: string
-  prdType?: PRDTypeValue
-  guidedMode?: boolean
-  templateId?: string
-  structuredMode?: boolean
-  title?: string // Custom session title
-}
-
-interface PRDChatStore extends AsyncState {
-  // State
-  sessions: ChatSession[]
-  currentSession: ChatSession | null
-  messages: ChatMessage[]
-  streaming: boolean
-  qualityAssessment: QualityAssessment | null
-  guidedQuestions: GuidedQuestion[]
-  extractedContent: ExtractedPRDContent | null
-  processingSessionId: string | null
-  // PRD plan file watcher state
-  watchedPlanContent: string | null
-  watchedPlanPath: string | null
-  isWatchingPlan: boolean
-
-  // Hybrid GSD state (integrated workflow)
-  researchStatus: ResearchStatus
-  researchResults: ResearchResult[]
-  researchSynthesis: ResearchSynthesis | null
-  requirementsDoc: RequirementsDoc | null
-  roadmapDoc: RoadmapDoc | null
-  selectedResearchAgent: AgentType | null
-  availableResearchAgents: AgentType[]
-  phaseState: HybridPhaseState
-  isResearchRunning: boolean
-  isSynthesizing: boolean
-  isGeneratingRequirements: boolean
-
-  // Actions
-  startSession: (options: StartSessionOptions) => Promise<void>
-  updateSessionAgent: (agentType: string) => Promise<void>
-  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>
-  loadHistory: (sessionId: string, projectPath?: string) => Promise<void>
-  loadSessions: (projectPath?: string) => Promise<void>
-  setCurrentSession: (session: ChatSession | null) => void
-  deleteSession: (sessionId: string) => Promise<void>
-  clearError: () => void
-  assessQuality: () => Promise<QualityAssessment | null>
-  loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
-  previewExtraction: () => Promise<ExtractedPRDContent | null>
-  // Structured output actions
-  setStructuredMode: (enabled: boolean) => Promise<void>
-  clearExtractedStructure: () => Promise<void>
-  // PRD plan file watcher actions
-  startWatchingPlanFile: () => Promise<void>
-  stopWatchingPlanFile: () => Promise<void>
-  updatePlanContent: (content: string, path: string) => void
-
-  // Hybrid GSD actions
-  loadAvailableAgents: () => Promise<void>
-  setSelectedResearchAgent: (agent: AgentType | null) => void
-  checkResearchStatus: () => Promise<void>
-  loadSynthesis: () => Promise<void>
-  startResearch: (context: string, agentType?: string) => Promise<void>
-  synthesizeResearch: () => Promise<ResearchSynthesis | null>
-  generateRequirements: () => Promise<RequirementsDoc | null>
-  loadRequirements: () => Promise<void>
-  applyScopeSelection: (selection: ScopeSelection) => Promise<void>
-  addRequirement: (category: RequirementCategory, title: string, description: string) => Promise<Requirement | null>
-  generateRoadmap: () => Promise<RoadmapDoc | null>
-  loadRoadmap: () => Promise<void>
-  clearHybridState: () => void
-  updatePhaseState: () => void
-}
-
 export const usePRDChatStore = create<PRDChatStore>((set, get) => {
-  // Helper to get required session with project path, returns null if not available
-  const getSessionWithPath = (): { session: ChatSession; projectPath: string } | null => {
-    const { currentSession } = get()
-    if (!currentSession || !currentSession.projectPath) {
-      return null
-    }
-    return { session: currentSession, projectPath: currentSession.projectPath }
-  }
+  // Create all slices
+  const chatSessionSlice = createChatSessionSlice(set, get)
+  const messagingSlice = createMessagingSlice(set, get)
+  const fileWatchSlice = createFileWatchSlice(set, get)
+  const researchSlice = createResearchSlice(set, get)
+  const gsdSlice = createGsdSlice(set, get)
 
   return {
-    // Initial state
+    // =========================================================================
+    // Core State (ChatCoreState)
+    // =========================================================================
     sessions: [],
     currentSession: null,
     messages: [],
     loading: false,
     streaming: false,
     error: null,
-    qualityAssessment: null,
-    guidedQuestions: [],
-    extractedContent: null,
     processingSessionId: null,
-    watchedPlanContent: null,
-    watchedPlanPath: null,
-    isWatchingPlan: false,
-
-    // Hybrid GSD initial state
-    researchStatus: INITIAL_RESEARCH_STATUS,
-    researchResults: [],
-    researchSynthesis: null,
-    requirementsDoc: null,
-    roadmapDoc: null,
-    selectedResearchAgent: null,
-    availableResearchAgents: [],
-    phaseState: {
-      researchStarted: false,
-      researchComplete: false,
-      requirementsGenerated: false,
-      scopingComplete: false,
-      roadmapGenerated: false,
-      unscopedCount: 0,
-    },
-    isResearchRunning: false,
-    isSynthesizing: false,
-    isGeneratingRequirements: false,
-
-    // Start a new chat session
-    startSession: async (options: StartSessionOptions) => {
-      set({
-        loading: true,
-        error: null,
-        qualityAssessment: null,
-        guidedQuestions: [],
-        extractedContent: null,
-        watchedPlanContent: null,
-        watchedPlanPath: null,
-        isWatchingPlan: false,
-      })
-      try {
-        const session = await prdChatApi.startSession(
-          options.agentType,
-          options.projectPath,
-          options.prdId,
-          options.prdType,
-          options.guidedMode,
-          options.templateId,
-          options.structuredMode,
-          options.title
-        )
-        set((state) => ({
-          sessions: [session, ...state.sessions],
-          currentSession: session,
-          messages: [],
-          loading: false,
-        }))
-
-        // Load history to get the welcome message (created by backend in guided mode)
-        if (options.guidedMode !== false) {
-          const messages = await prdChatApi.getHistory(session.id, options.projectPath)
-          set({ messages })
-        }
-
-        // Load guided questions if prdType is specified
-        if (options.prdType && options.guidedMode !== false) {
-          const questions = await prdChatApi.getGuidedQuestions(options.prdType)
-          set({ guidedQuestions: questions })
-        }
-      } catch (error) {
-        set({ error: errorToString(error), loading: false })
-      }
-    },
-
-    updateSessionAgent: async (agentType: string) => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      try {
-        await prdChatApi.updateSessionAgent(ctx.session.id, ctx.projectPath, agentType)
-
-        set((state) => ({
-          currentSession: state.currentSession ? { ...state.currentSession, agentType } : null,
-          sessions: state.sessions.map((s) => (s.id === ctx.session.id ? { ...s, agentType } : s)),
-        }))
-      } catch (error) {
-        set({ error: errorToString(error) })
-      }
-    },
-
-    // Send a message and receive a response
-    sendMessage: async (content: string, attachments?: ChatAttachment[]) => {
-      const { currentSession } = get()
-      if (!currentSession) {
-        throw new Error('No active session')
-      }
-      if (!currentSession.projectPath) {
-        throw new Error('Session has no project path')
-      }
-
-      // Capture session ID at start to verify it hasn't changed when response arrives
-      const sessionId = currentSession.id
-      const projectPath = currentSession.projectPath
-
-      // Create optimistic user message with UUID to prevent collision
-      const optimisticMessage: ChatMessage = {
-        id: `temp-${crypto.randomUUID()}`,
-        sessionId: sessionId,
-        role: 'user',
-        content,
-        createdAt: new Date().toISOString(),
-        attachments,
-      }
-
-      // Add optimistic message and set streaming state
-      set((state) => ({
-        messages: [...state.messages, optimisticMessage],
-        streaming: true,
-        processingSessionId: sessionId,
-        error: null,
-      }))
-
-      try {
-        const response = await prdChatApi.sendMessage(sessionId, content, projectPath, attachments)
-
-        // Replace optimistic message with actual messages and update session message count
-        set((state) => {
-          // If user switched to a different session while processing,
-          // don't update messages - just clear streaming state
-          if (state.currentSession?.id !== sessionId) {
-            return {
-              streaming: false,
-              processingSessionId: null,
-            }
-          }
-
-          // Update current session's message count locally
-          const updatedSession = state.currentSession
-            ? {
-                ...state.currentSession,
-                messageCount: (state.currentSession.messageCount || 0) + 2,
-              }
-            : null
-
-          // Also update the session in the sessions list
-          const updatedSessions = state.sessions.map((s) =>
-            s.id === updatedSession?.id ? updatedSession : s
-          )
-
-          return {
-            messages: [
-              ...state.messages.filter((m) => m.id !== optimisticMessage.id),
-              response.userMessage,
-              response.assistantMessage,
-            ],
-            streaming: false,
-            processingSessionId: null,
-            currentSession: updatedSession,
-            sessions: updatedSessions,
-          }
-        })
-      } catch (error) {
-        // Remove optimistic message on error (only if still on same session)
-        set((state) => {
-          // If user switched sessions, just clear streaming state
-          if (state.currentSession?.id !== sessionId) {
-            return {
-              streaming: false,
-              processingSessionId: null,
-              error: errorToString(error),
-            }
-          }
-          return {
-            messages: state.messages.filter((m) => m.id !== optimisticMessage.id),
-            streaming: false,
-            processingSessionId: null,
-            error: errorToString(error),
-          }
-        })
-        throw error
-      }
-    },
-
-    // Load message history for a session
-    // projectPath can be passed explicitly for robustness (e.g., during reconnection)
-    loadHistory: async (sessionId: string, projectPath?: string) => {
-      // Try explicit param first, then currentSession, then find from sessions list
-      let resolvedPath = projectPath
-      if (!resolvedPath) {
-        const ctx = getSessionWithPath()
-        resolvedPath = ctx?.projectPath
-      }
-      if (!resolvedPath) {
-        // Fallback: find session in sessions list and get its projectPath
-        const { sessions } = get()
-        const session = sessions.find((s) => s.id === sessionId)
-        resolvedPath = session?.projectPath
-      }
-      if (!resolvedPath) {
-        set({ error: 'No project path available' })
-        return
-      }
-      await asyncAction(set, async () => {
-        const messages = await prdChatApi.getHistory(sessionId, resolvedPath!)
-
-        // Check if operation completed while we were away (last message is from assistant)
-        // If so, clear streaming state since the response is already available
-        const { streaming, processingSessionId } = get()
-        const lastMessage = messages[messages.length - 1]
-        const operationCompleted =
-          streaming && processingSessionId === sessionId && lastMessage?.role === 'assistant'
-
-        return {
-          messages,
-          ...(operationCompleted ? { streaming: false, processingSessionId: null } : {}),
-        }
-      })
-    },
-
-    // Load all chat sessions (requires project path from current context)
-    loadSessions: async (projectPath?: string) => {
-      if (!projectPath) {
-        set({ error: 'Project path is required to load sessions' })
-        return
-      }
-      await asyncAction(set, async () => {
-        const sessions = await prdChatApi.getSessions(projectPath)
-        return { sessions }
-      })
-    },
-
-    // Set the current session (clears messages)
-    // Also restores streaming state if session has a pending operation (for page reload recovery)
-    setCurrentSession: (session: ChatSession | null) => {
-      const currentState = get()
-
-      // Don't interfere with active streaming - only update session and messages
-      // This prevents bugs where session selection during streaming would kill the stream
-      if (currentState.streaming) {
-        set({
-          currentSession: session,
-          messages: [],
-        })
-        return
-      }
-
-      // Check if session has a pending operation that may still be running (page reload recovery)
-      let shouldRestoreStreaming = false
-      if (session?.pendingOperationStartedAt) {
-        const startedAt = new Date(session.pendingOperationStartedAt)
-        const elapsedMs = Date.now() - startedAt.getTime()
-        const timeoutMs = 25 * 60 * 1000 // 25 minutes (AGENT_TIMEOUT_SECS from backend)
-
-        if (elapsedMs < timeoutMs) {
-          // Operation may still be running - restore streaming state
-          shouldRestoreStreaming = true
-        }
-      }
-
-      set({
-        currentSession: session,
-        messages: [],
-        ...(shouldRestoreStreaming && session
-          ? {
-              streaming: true,
-              processingSessionId: session.id,
-            }
-          : {}), // Don't reset streaming state if not restoring - leave it as-is
-      })
-    },
-
-    // Delete a chat session
-    deleteSession: async (sessionId: string) => {
-      const state = get()
-      const sessionToDelete = state.sessions.find((s) => s.id === sessionId)
-      if (!sessionToDelete?.projectPath) {
-        set({ error: 'Cannot delete session without project path' })
-        return
-      }
-      await asyncAction(
-        set,
-        async () => {
-          await prdChatApi.deleteSession(sessionId, sessionToDelete.projectPath!)
-          const currentState = get()
-          return {
-            sessions: currentState.sessions.filter((s) => s.id !== sessionId),
-            currentSession:
-              currentState.currentSession?.id === sessionId ? null : currentState.currentSession,
-            messages: currentState.currentSession?.id === sessionId ? [] : currentState.messages,
-          }
-        },
-        { rethrow: true }
-      )
-    },
-
-    // Clear error
-    clearError: () => {
-      set({ error: null })
-    },
-
-    // Assess quality of current session
-    assessQuality: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      set({ loading: true, error: null })
-      try {
-        const assessment = await prdChatApi.assessQuality(ctx.session.id, ctx.projectPath)
-        set({ qualityAssessment: assessment, loading: false })
-        return assessment
-      } catch (error) {
-        set({ error: errorToString(error), loading: false })
-        return null
-      }
-    },
-
-    // Load guided questions for a PRD type
-    loadGuidedQuestions: async (prdType: PRDTypeValue) => {
-      try {
-        const questions = await prdChatApi.getGuidedQuestions(prdType)
-        set({ guidedQuestions: questions })
-      } catch (error) {
-        set({ error: errorToString(error) })
-      }
-    },
-
-    // Preview extraction before export
-    previewExtraction: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      set({ loading: true, error: null })
-      try {
-        const content = await prdChatApi.previewExtraction(ctx.session.id, ctx.projectPath)
-        set({ extractedContent: content, loading: false })
-        return content
-      } catch (error) {
-        set({ error: errorToString(error), loading: false })
-        return null
-      }
-    },
-
-    // Set structured output mode for current session
-    setStructuredMode: async (enabled: boolean) => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      try {
-        await prdChatApi.setStructuredMode(ctx.session.id, ctx.projectPath, enabled)
-        // Update local state
-        set((state) => {
-          const updatedSession = state.currentSession
-            ? { ...state.currentSession, structuredMode: enabled }
-            : null
-          const updatedSessions = state.sessions.map((s) =>
-            s.id === ctx.session.id ? { ...s, structuredMode: enabled } : s
-          )
-          return {
-            currentSession: updatedSession,
-            sessions: updatedSessions,
-          }
-        })
-      } catch (error) {
-        set({ error: errorToString(error) })
-      }
-    },
-
-    // Clear extracted structure for current session
-    clearExtractedStructure: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      try {
-        await prdChatApi.clearExtractedStructure(ctx.session.id, ctx.projectPath)
-      } catch (error) {
-        set({ error: errorToString(error) })
-      }
-    },
-
-    // Start watching the PRD plan file for the current session
-    startWatchingPlanFile: async () => {
-      const { isWatchingPlan } = get()
-      const ctx = getSessionWithPath()
-      if (!ctx || isWatchingPlan) return
-
-      try {
-        const result = await prdChatApi.startWatchingPlanFile(ctx.session.id, ctx.projectPath)
-        if (result.success) {
-          set({
-            isWatchingPlan: true,
-            watchedPlanPath: result.path,
-            watchedPlanContent: result.initialContent,
-          })
-        } else {
-          // Don't show error for missing project path - it's expected for some sessions
-          if (result.error && !result.error.includes('no project path')) {
-            set({
-              error: result.error,
-            })
-          }
-        }
-      } catch (error) {
-        // Silently fail - not all sessions have project paths
-        console.warn('Failed to start watching plan file:', error)
-      }
-    },
-
-    // Stop watching the PRD plan file
-    stopWatchingPlanFile: async () => {
-      const { currentSession, isWatchingPlan } = get()
-      if (!currentSession || !isWatchingPlan) {
-        return
-      }
-
-      try {
-        await prdChatApi.stopWatchingPlanFile(currentSession.id)
-      } catch {
-        // Ignore errors when stopping
-      } finally {
-        set({
-          isWatchingPlan: false,
-          watchedPlanContent: null,
-          watchedPlanPath: null,
-        })
-      }
-    },
-
-    // Update plan content (called from event listener)
-    updatePlanContent: (content: string, path: string) => {
-      set({
-        watchedPlanContent: content,
-        watchedPlanPath: path,
-      })
-    },
 
     // =========================================================================
-    // Hybrid GSD Actions
+    // Messaging State
     // =========================================================================
+    qualityAssessment: messagingSlice.qualityAssessment,
+    guidedQuestions: messagingSlice.guidedQuestions,
+    extractedContent: messagingSlice.extractedContent,
 
-    // Load available research agents
-    loadAvailableAgents: async () => {
-      try {
-        const agents = await gsdApi.getAvailableAgents()
-        set({ availableResearchAgents: agents })
-        // Auto-select first available agent if none selected
-        if (agents.length > 0 && !get().selectedResearchAgent) {
-          set({ selectedResearchAgent: agents[0] })
-        }
-      } catch (error) {
-        console.error('Failed to load available agents:', error)
-        // Fallback to claude
-        set({ availableResearchAgents: ['claude'] })
-        if (!get().selectedResearchAgent) {
-          set({ selectedResearchAgent: 'claude' })
-        }
-      }
-    },
+    // =========================================================================
+    // File Watch State
+    // =========================================================================
+    watchedPlanContent: fileWatchSlice.watchedPlanContent,
+    watchedPlanPath: fileWatchSlice.watchedPlanPath,
+    isWatchingPlan: fileWatchSlice.isWatchingPlan,
 
-    // Set selected research agent
-    setSelectedResearchAgent: (agent) => {
-      set({ selectedResearchAgent: agent })
-    },
+    // =========================================================================
+    // Research State (Hybrid GSD)
+    // =========================================================================
+    researchStatus: researchSlice.researchStatus,
+    researchResults: researchSlice.researchResults,
+    researchSynthesis: researchSlice.researchSynthesis,
+    selectedResearchAgent: researchSlice.selectedResearchAgent,
+    availableResearchAgents: researchSlice.availableResearchAgents,
+    isResearchRunning: researchSlice.isResearchRunning,
+    isSynthesizing: researchSlice.isSynthesizing,
 
-    // Check if research is currently running (for reconnecting to in-progress research)
-    checkResearchStatus: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
+    // =========================================================================
+    // GSD Workflow State
+    // =========================================================================
+    requirementsDoc: gsdSlice.requirementsDoc,
+    roadmapDoc: gsdSlice.roadmapDoc,
+    phaseState: gsdSlice.phaseState,
+    isGeneratingRequirements: gsdSlice.isGeneratingRequirements,
 
-      try {
-        const state = await gsdApi.getState(ctx.projectPath, ctx.session.id)
-        if (state?.researchStatus) {
-          const { architecture, codebase, bestPractices, risks } = state.researchStatus
-          const isRunning =
-            architecture.running || codebase.running || bestPractices.running || risks.running
-          const isComplete =
-            architecture.complete && codebase.complete && bestPractices.complete && risks.complete
+    // =========================================================================
+    // Chat Session Actions
+    // =========================================================================
+    startSession: chatSessionSlice.startSession,
+    updateSessionAgent: chatSessionSlice.updateSessionAgent,
+    loadSessions: chatSessionSlice.loadSessions,
+    setCurrentSession: chatSessionSlice.setCurrentSession,
+    deleteSession: chatSessionSlice.deleteSession,
+    clearError: chatSessionSlice.clearError,
 
-          set({
-            researchStatus: state.researchStatus,
-            isResearchRunning: isRunning,
-            phaseState: {
-              ...get().phaseState,
-              researchStarted: isRunning || isComplete,
-              researchComplete: isComplete,
-            },
-          })
-        }
-      } catch (error) {
-        // Silently fail - this is just a status check
-        console.warn('Failed to check research status:', error)
-      }
-    },
+    // =========================================================================
+    // Messaging Actions
+    // =========================================================================
+    sendMessage: messagingSlice.sendMessage,
+    loadHistory: messagingSlice.loadHistory,
+    assessQuality: messagingSlice.assessQuality,
+    loadGuidedQuestions: messagingSlice.loadGuidedQuestions,
+    previewExtraction: messagingSlice.previewExtraction,
+    setStructuredMode: messagingSlice.setStructuredMode,
+    clearExtractedStructure: messagingSlice.clearExtractedStructure,
 
-    // Load existing synthesis from disk (for restoring state on page reload)
-    loadSynthesis: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
+    // =========================================================================
+    // File Watch Actions
+    // =========================================================================
+    startWatchingPlanFile: fileWatchSlice.startWatchingPlanFile,
+    stopWatchingPlanFile: fileWatchSlice.stopWatchingPlanFile,
+    updatePlanContent: fileWatchSlice.updatePlanContent,
 
-      try {
-        const synthesis = await gsdApi.loadSynthesis(ctx.projectPath, ctx.session.id)
-        if (synthesis) {
-          set({ researchSynthesis: synthesis })
-          get().updatePhaseState()
-        }
-      } catch (error) {
-        // Silently fail - synthesis may not exist yet
-        console.warn('Failed to load synthesis:', error)
-      }
-    },
+    // =========================================================================
+    // Research Actions (Hybrid GSD)
+    // =========================================================================
+    loadAvailableAgents: researchSlice.loadAvailableAgents,
+    setSelectedResearchAgent: researchSlice.setSelectedResearchAgent,
+    checkResearchStatus: researchSlice.checkResearchStatus,
+    loadSynthesis: researchSlice.loadSynthesis,
+    startResearch: researchSlice.startResearch,
+    synthesizeResearch: researchSlice.synthesizeResearch,
 
-    // Start parallel research
-    startResearch: async (context, agentType) => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      const { selectedResearchAgent } = get()
-      set({
-        isResearchRunning: true,
-        error: null,
-        researchStatus: {
-          architecture: { running: true, complete: false },
-          codebase: { running: true, complete: false },
-          bestPractices: { running: true, complete: false },
-          risks: { running: true, complete: false },
-        },
-      })
-
-      try {
-        const status = await gsdApi.startResearch(
-          ctx.projectPath,
-          ctx.session.id,
-          context,
-          agentType || selectedResearchAgent || undefined
-        )
-        set({ researchStatus: status })
-        // Update phase state
-        get().updatePhaseState()
-      } catch (error) {
-        set({
-          error: errorToString(error),
-          researchStatus: INITIAL_RESEARCH_STATUS,
-        })
-      } finally {
-        set({ isResearchRunning: false })
-      }
-    },
-
-    // Synthesize research results
-    synthesizeResearch: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      set({ isSynthesizing: true, error: null })
-      try {
-        const synthesis = await gsdApi.synthesizeResearch(ctx.projectPath, ctx.session.id)
-        set({ researchSynthesis: synthesis })
-        get().updatePhaseState()
-        return synthesis
-      } catch (error) {
-        set({ error: errorToString(error) })
-        return null
-      } finally {
-        set({ isSynthesizing: false })
-      }
-    },
-
-    // Generate requirements from research
-    generateRequirements: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      set({ isGeneratingRequirements: true, loading: true, error: null })
-      try {
-        const requirements = await gsdApi.generateRequirementsFromResearch(
-          ctx.projectPath,
-          ctx.session.id
-        )
-        set({ requirementsDoc: requirements })
-        get().updatePhaseState()
-        return requirements
-      } catch (error) {
-        set({ error: errorToString(error) })
-        return null
-      } finally {
-        set({ isGeneratingRequirements: false, loading: false })
-      }
-    },
-
-    // Load existing requirements
-    loadRequirements: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      try {
-        const requirements = await gsdApi.loadRequirements(ctx.projectPath, ctx.session.id)
-        set({ requirementsDoc: requirements })
-        get().updatePhaseState()
-      } catch (error) {
-        // Silently fail - requirements may not exist yet
-        console.warn('Failed to load requirements:', error)
-      }
-    },
-
-    // Apply scope selection
-    applyScopeSelection: async (selection) => {
-      const ctx = getSessionWithPath()
-      const { requirementsDoc } = get()
-      if (!ctx || !requirementsDoc) return
-
-      set({ loading: true, error: null })
-      try {
-        const updated = await gsdApi.scopeRequirements(ctx.projectPath, ctx.session.id, selection)
-        set({ requirementsDoc: updated })
-        get().updatePhaseState()
-      } catch (error) {
-        // Fall back to local state update if backend fails
-        const updatedRequirements = { ...requirementsDoc.requirements }
-        for (const id of selection.v1) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v1' }
-          }
-        }
-        for (const id of selection.v2) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'v2' }
-          }
-        }
-        for (const id of selection.outOfScope) {
-          if (updatedRequirements[id]) {
-            updatedRequirements[id] = { ...updatedRequirements[id], scope: 'out_of_scope' }
-          }
-        }
-        set({
-          requirementsDoc: { requirements: updatedRequirements },
-          error: errorToString(error),
-        })
-        get().updatePhaseState()
-      } finally {
-        set({ loading: false })
-      }
-    },
-
-    // Add a custom requirement
-    addRequirement: async (category, title, description) => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      try {
-        const newReq = await gsdApi.addRequirement(
-          ctx.projectPath,
-          ctx.session.id,
-          category,
-          title,
-          description
-        )
-        // Update requirements state
-        const { requirementsDoc } = get()
-        if (requirementsDoc) {
-          set({
-            requirementsDoc: {
-              ...requirementsDoc,
-              requirements: { ...requirementsDoc.requirements, [newReq.id]: newReq },
-            },
-          })
-        }
-        get().updatePhaseState()
-        return newReq
-      } catch (error) {
-        set({ error: errorToString(error) })
-        return null
-      }
-    },
-
-    // Generate roadmap from scoped requirements
-    generateRoadmap: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return null
-
-      set({ loading: true, error: null })
-      try {
-        const roadmap = await gsdApi.createRoadmap(ctx.projectPath, ctx.session.id)
-        set({ roadmapDoc: roadmap })
-        get().updatePhaseState()
-        return roadmap
-      } catch (error) {
-        set({ error: errorToString(error) })
-        return null
-      } finally {
-        set({ loading: false })
-      }
-    },
-
-    // Load existing roadmap
-    loadRoadmap: async () => {
-      const ctx = getSessionWithPath()
-      if (!ctx) return
-
-      try {
-        const roadmap = await gsdApi.loadRoadmap(ctx.projectPath, ctx.session.id)
-        set({ roadmapDoc: roadmap })
-        get().updatePhaseState()
-      } catch (error) {
-        // Silently fail - roadmap may not exist yet
-        console.warn('Failed to load roadmap:', error)
-      }
-    },
-
-    // Clear hybrid GSD state
-    clearHybridState: () => {
-      set({
-        researchStatus: INITIAL_RESEARCH_STATUS,
-        researchResults: [],
-        researchSynthesis: null,
-        requirementsDoc: null,
-        roadmapDoc: null,
-        phaseState: {
-          researchStarted: false,
-          researchComplete: false,
-          requirementsGenerated: false,
-          scopingComplete: false,
-          roadmapGenerated: false,
-          unscopedCount: 0,
-        },
-        isResearchRunning: false,
-        isSynthesizing: false,
-        isGeneratingRequirements: false,
-      })
-    },
-
-    // Update phase state based on current data
-    updatePhaseState: () => {
-      const { researchStatus, researchSynthesis, requirementsDoc, roadmapDoc } = get()
-
-      // Check if research has started
-      const researchStarted =
-        researchStatus.architecture.running ||
-        researchStatus.architecture.complete ||
-        researchStatus.codebase.running ||
-        researchStatus.codebase.complete ||
-        researchStatus.bestPractices.running ||
-        researchStatus.bestPractices.complete ||
-        researchStatus.risks.running ||
-        researchStatus.risks.complete
-
-      // Check if research is complete (all agents done without errors)
-      const researchComplete =
-        researchStatus.architecture.complete &&
-        !researchStatus.architecture.error &&
-        researchStatus.codebase.complete &&
-        !researchStatus.codebase.error &&
-        researchStatus.bestPractices.complete &&
-        !researchStatus.bestPractices.error &&
-        researchStatus.risks.complete &&
-        !researchStatus.risks.error &&
-        researchSynthesis !== null
-
-      // Check requirements
-      const requirementsGenerated =
-        requirementsDoc !== null && Object.keys(requirementsDoc.requirements).length > 0
-
-      // Check scoping
-      let unscopedCount = 0
-      if (requirementsDoc) {
-        unscopedCount = Object.values(requirementsDoc.requirements).filter(
-          (r) => !r.scope || r.scope === 'unscoped'
-        ).length
-      }
-      const scopingComplete = requirementsGenerated && unscopedCount === 0
-
-      // Check roadmap
-      const roadmapGenerated = roadmapDoc !== null && roadmapDoc.phases.length > 0
-
-      set({
-        phaseState: {
-          researchStarted,
-          researchComplete,
-          requirementsGenerated,
-          scopingComplete,
-          roadmapGenerated,
-          unscopedCount,
-        },
-      })
-    },
+    // =========================================================================
+    // GSD Workflow Actions
+    // =========================================================================
+    generateRequirements: gsdSlice.generateRequirements,
+    loadRequirements: gsdSlice.loadRequirements,
+    applyScopeSelection: gsdSlice.applyScopeSelection,
+    addRequirement: gsdSlice.addRequirement,
+    generateRoadmap: gsdSlice.generateRoadmap,
+    loadRoadmap: gsdSlice.loadRoadmap,
+    clearHybridState: gsdSlice.clearHybridState,
+    updatePhaseState: gsdSlice.updatePhaseState,
   }
 })

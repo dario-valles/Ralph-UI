@@ -4,6 +4,8 @@
 #![allow(dead_code)] // Infrastructure for parallel agent orchestration (Phase 4)
 
 use crate::agents::ansi_stripper::RingBuffer;
+use crate::agents::format_parsers::parse_agent_json_output_with_tools;
+use crate::agents::log_collector::LogCollector;
 use crate::agents::path_resolver::CliPathResolver;
 use crate::agents::rate_limiter::{RateLimitDetector, RateLimitInfo};
 use crate::agents::{StreamingParser, SubagentEvent, SubagentTree};
@@ -20,354 +22,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::sync::mpsc;
 
-/// Parsed tool call from agent JSON output
-#[derive(Debug, Clone)]
-pub struct ParsedToolCall {
-    /// Tool call ID (from Claude's tool_use_id)
-    pub tool_id: String,
-    /// Tool name
-    pub tool_name: String,
-    /// Tool input parameters
-    pub input: Option<serde_json::Value>,
-}
-
-/// Parsed tool result from agent JSON output
-#[derive(Debug, Clone)]
-pub struct ParsedToolResult {
-    /// Tool call ID this result is for
-    pub tool_id: String,
-    /// Tool output (may be truncated)
-    pub output: String,
-    /// Whether the result indicates an error
-    pub is_error: bool,
-}
-
-/// Result of parsing agent JSON output
-#[derive(Debug, Clone, Default)]
-pub struct ParsedAgentOutput {
-    /// Display text for the terminal
-    pub display_text: String,
-    /// Tool calls found in this message
-    pub tool_calls: Vec<ParsedToolCall>,
-    /// Tool results found in this message
-    pub tool_results: Vec<ParsedToolResult>,
-}
-
-/// Truncate a string to approximately max_bytes, ensuring we don't cut in the middle of a UTF-8 character
-pub(crate) fn truncate_string(s: &str, max_bytes: usize) -> &str {
-    if s.len() <= max_bytes {
-        return s;
-    }
-    // Find the last valid char boundary at or before max_bytes
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
-
-/// Parse agent JSON output and extract human-readable text and tool call data
-/// Supports Claude stream-json format and OpenCode JSON format
-/// Returns formatted text suitable for terminal display along with tool call info
-fn parse_agent_json_output_with_tools(line: &str) -> ParsedAgentOutput {
-    // Try to parse as JSON
-    let json: serde_json::Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(_) => {
-            return ParsedAgentOutput {
-                display_text: line.to_string(),
-                ..Default::default()
-            };
-        }
-    };
-
-    // Check for Claude stream-json format (has "type" field)
-    if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
-        return parse_claude_stream_json_with_tools(&json, msg_type);
-    }
-
-    // Check for OpenCode format (has "role" or "content" at top level)
-    if json.get("role").is_some() || json.get("content").is_some() {
-        return ParsedAgentOutput {
-            display_text: parse_opencode_json(&json),
-            ..Default::default()
-        };
-    }
-
-    // Check for generic message/text fields
-    if let Some(text) = json.get("text").and_then(|v| v.as_str()) {
-        return ParsedAgentOutput {
-            display_text: text.to_string(),
-            ..Default::default()
-        };
-    }
-    if let Some(message) = json.get("message").and_then(|v| v.as_str()) {
-        return ParsedAgentOutput {
-            display_text: message.to_string(),
-            ..Default::default()
-        };
-    }
-    if let Some(output) = json.get("output").and_then(|v| v.as_str()) {
-        return ParsedAgentOutput {
-            display_text: output.to_string(),
-            ..Default::default()
-        };
-    }
-
-    // Unknown JSON format - return as-is
-    ParsedAgentOutput {
-        display_text: line.to_string(),
-        ..Default::default()
-    }
-}
-
-/// Parse agent JSON output and extract human-readable text
-/// Supports Claude stream-json format and OpenCode JSON format
-/// Returns formatted text suitable for terminal display
-fn parse_agent_json_output(line: &str) -> String {
-    parse_agent_json_output_with_tools(line).display_text
-}
-
-/// Parse Claude stream-json format with tool call extraction
-fn parse_claude_stream_json_with_tools(json: &serde_json::Value, msg_type: &str) -> ParsedAgentOutput {
-    let mut result = ParsedAgentOutput::default();
-
-    match msg_type {
-        "system" => {
-            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
-            if subtype == "init" {
-                let model = json
-                    .get("model")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                result.display_text = format!("\x1b[36m[System] Initialized with model: {}\x1b[0m", model);
-            } else {
-                result.display_text = format!("\x1b[36m[System] {}\x1b[0m", subtype);
-            }
-        }
-        "assistant" => {
-            if let Some(message) = json.get("message") {
-                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
-                    let mut texts: Vec<String> = Vec::new();
-
-                    for item in content {
-                        if item.get("type").and_then(|t| t.as_str()) == Some("text") {
-                            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                                texts.push(text.to_string());
-                            }
-                        } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                            let tool_name = item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                            let tool_id = item.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
-                            let tool_input = item.get("input").cloned();
-
-                            // Add to tool calls
-                            result.tool_calls.push(ParsedToolCall {
-                                tool_id: tool_id.clone(),
-                                tool_name: tool_name.to_string(),
-                                input: tool_input,
-                            });
-
-                            texts.push(format!("\x1b[33m[Using tool: {}]\x1b[0m", tool_name));
-                        }
-                    }
-
-                    if !texts.is_empty() {
-                        result.display_text = texts.join("\n");
-                    }
-                }
-            }
-        }
-        "user" => {
-            if let Some(message) = json.get("message") {
-                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
-                    for item in content {
-                        if item.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-                            let tool_id = item
-                                .get("tool_use_id")
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let content_str = item.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                            let is_error = item.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
-
-                            // Add to tool results
-                            result.tool_results.push(ParsedToolResult {
-                                tool_id: tool_id.clone(),
-                                output: content_str.to_string(),
-                                is_error,
-                            });
-
-                            let truncated = if content_str.len() > 200 {
-                                format!("{}...", truncate_string(content_str, 200))
-                            } else {
-                                content_str.to_string()
-                            };
-                            result.display_text = format!(
-                                "\x1b[90m[Tool result {}]: {}\x1b[0m",
-                                &tool_id[..8.min(tool_id.len())],
-                                truncated
-                            );
-                            return result;
-                        }
-                    }
-                }
-            }
-        }
-        "result" => {
-            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
-            let duration = json
-                .get("duration_ms")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let cost = json
-                .get("total_cost_usd")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            result.display_text = format!(
-                "\x1b[32m[Complete] {} - Duration: {}ms, Cost: ${:.4}\x1b[0m",
-                subtype, duration, cost
-            );
-        }
-        _ => {}
-    }
-
-    result
-}
-
-/// Parse Claude stream-json format
-fn parse_claude_stream_json(json: &serde_json::Value, msg_type: &str) -> String {
-    match msg_type {
-        "system" => {
-            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
-            if subtype == "init" {
-                let model = json
-                    .get("model")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                format!("\x1b[36m[System] Initialized with model: {}\x1b[0m", model)
-            } else {
-                format!("\x1b[36m[System] {}\x1b[0m", subtype)
-            }
-        }
-        "assistant" => {
-            if let Some(message) = json.get("message") {
-                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
-                    let texts: Vec<String> = content
-                        .iter()
-                        .filter_map(|item| {
-                            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
-                                item.get("text").and_then(|t| t.as_str()).map(String::from)
-                            } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                            {
-                                let tool_name =
-                                    item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                                Some(format!("\x1b[33m[Using tool: {}]\x1b[0m", tool_name))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if !texts.is_empty() {
-                        return texts.join("\n");
-                    }
-                }
-            }
-            String::new()
-        }
-        "user" => {
-            if let Some(message) = json.get("message") {
-                if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
-                    for item in content {
-                        if item.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-                            let tool_id = item
-                                .get("tool_use_id")
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("");
-                            let content_str =
-                                item.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                            let truncated = if content_str.len() > 200 {
-                                format!("{}...", truncate_string(content_str, 200))
-                            } else {
-                                content_str.to_string()
-                            };
-                            return format!(
-                                "\x1b[90m[Tool result {}]: {}\x1b[0m",
-                                &tool_id[..8.min(tool_id.len())],
-                                truncated
-                            );
-                        }
-                    }
-                }
-            }
-            String::new()
-        }
-        "result" => {
-            let subtype = json.get("subtype").and_then(|v| v.as_str()).unwrap_or("");
-            let duration = json
-                .get("duration_ms")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let cost = json
-                .get("total_cost_usd")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            format!(
-                "\x1b[32m[Complete] {} - Duration: {}ms, Cost: ${:.4}\x1b[0m",
-                subtype, duration, cost
-            )
-        }
-        _ => String::new(),
-    }
-}
-
-/// Parse OpenCode JSON format
-fn parse_opencode_json(json: &serde_json::Value) -> String {
-    let role = json
-        .get("role")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    // Extract content - can be string or array
-    let content = if let Some(content_str) = json.get("content").and_then(|v| v.as_str()) {
-        content_str.to_string()
-    } else if let Some(content_arr) = json.get("content").and_then(|v| v.as_array()) {
-        content_arr
-            .iter()
-            .filter_map(|item| {
-                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                    Some(text.to_string())
-                } else if let Some(tool) = item.get("tool_use") {
-                    let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                    Some(format!("\x1b[33m[Using tool: {}]\x1b[0m", name))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    } else {
-        String::new()
-    };
-
-    if content.is_empty() {
-        return String::new();
-    }
-
-    match role {
-        "assistant" => content,
-        "user" => format!("\x1b[90m[User]: {}\x1b[0m", content),
-        "system" => format!("\x1b[36m[System]: {}\x1b[0m", content),
-        "tool" => {
-            let truncated = if content.len() > 200 {
-                format!("{}...", truncate_string(&content, 200))
-            } else {
-                content
-            };
-            format!("\x1b[90m[Tool result]: {}\x1b[0m", truncated)
-        }
-        _ => content,
-    }
-}
+// Re-export types from log_collector for backward compatibility
+pub use crate::agents::log_collector::{
+    AgentCompletionEvent, AgentLogEvent, AgentPtyDataEvent, AgentPtyExitEvent, RateLimitEvent,
+    ToolCallCompleteEvent, ToolCallStartEvent,
+};
 
 /// Agent spawn mode - determines how the agent process is spawned
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -377,100 +36,6 @@ pub enum AgentSpawnMode {
     /// PTY mode - interactive terminal with combined output
     #[default]
     Pty,
-}
-
-/// Agent lifecycle manager
-pub struct AgentManager {
-    /// Map of agent ID to running process (for piped mode)
-    processes: Arc<Mutex<HashMap<String, Child>>>,
-    /// Event sender for agent logs
-    log_tx: Option<mpsc::UnboundedSender<AgentLogEvent>>,
-    /// Rate limit detector for parsing stderr output
-    rate_limit_detector: RateLimitDetector,
-    /// Event sender for rate limit events
-    rate_limit_tx: Option<mpsc::UnboundedSender<RateLimitEvent>>,
-    /// Event sender for agent completion events
-    completion_tx: Option<mpsc::UnboundedSender<AgentCompletionEvent>>,
-    /// In-memory log storage for each agent (for retrieval via command)
-    agent_logs: Arc<Mutex<HashMap<String, Vec<LogEntry>>>>,
-    /// Map of agent ID to PTY ID (for PTY mode)
-    pty_ids: Arc<Mutex<HashMap<String, String>>>,
-    /// Raw PTY output history per agent (ring buffer for replay)
-    pty_history: Arc<Mutex<HashMap<String, RingBuffer>>>,
-    /// Event sender for PTY data events
-    pty_data_tx: Option<mpsc::UnboundedSender<AgentPtyDataEvent>>,
-    /// Event sender for PTY exit events
-    pty_exit_tx: Option<mpsc::UnboundedSender<AgentPtyExitEvent>>,
-    /// Event sender for subagent events
-    subagent_tx: Option<mpsc::UnboundedSender<SubagentEvent>>,
-    /// Event sender for tool call events
-    tool_call_tx: Option<mpsc::UnboundedSender<ToolCallStartEvent>>,
-    /// Event sender for tool call completion events
-    tool_call_complete_tx: Option<mpsc::UnboundedSender<ToolCallCompleteEvent>>,
-    /// Trace parsers per agent
-    parsers: Arc<Mutex<HashMap<String, StreamingParser>>>,
-    /// Subagent trees per agent
-    subagent_trees: Arc<Mutex<HashMap<String, SubagentTree>>>,
-    /// Cancellation tokens for monitor threads (triggered when process is taken/stopped)
-    monitor_cancellation: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
-}
-
-/// Event emitted when a rate limit is detected
-#[derive(Debug, Clone)]
-pub struct RateLimitEvent {
-    pub agent_id: String,
-    pub rate_limit_info: RateLimitInfo,
-}
-
-/// Event emitted when an agent process completes
-#[derive(Debug, Clone)]
-pub struct AgentCompletionEvent {
-    pub agent_id: String,
-    pub task_id: String,
-    pub success: bool,
-    pub exit_code: Option<i32>,
-    pub error: Option<String>,
-}
-
-/// Event emitted when an agent produces a log
-#[derive(Debug, Clone)]
-pub struct AgentLogEvent {
-    pub agent_id: String,
-    pub log: LogEntry,
-}
-
-/// Event emitted when PTY produces output data
-#[derive(Debug, Clone)]
-pub struct AgentPtyDataEvent {
-    pub agent_id: String,
-    pub data: Vec<u8>,
-}
-
-/// Event emitted when PTY exits
-#[derive(Debug, Clone)]
-pub struct AgentPtyExitEvent {
-    pub agent_id: String,
-    pub exit_code: i32,
-}
-
-/// Event emitted when a tool call starts
-#[derive(Debug, Clone)]
-pub struct ToolCallStartEvent {
-    pub agent_id: String,
-    pub tool_id: String,
-    pub tool_name: String,
-    pub input: Option<serde_json::Value>,
-    pub timestamp: String,
-}
-
-/// Event emitted when a tool call completes
-#[derive(Debug, Clone)]
-pub struct ToolCallCompleteEvent {
-    pub agent_id: String,
-    pub tool_id: String,
-    pub output: Option<String>,
-    pub is_error: bool,
-    pub timestamp: String,
 }
 
 /// Configuration for spawning an agent
@@ -490,63 +55,78 @@ pub struct AgentSpawnConfig {
     pub plugin_config: Option<HashMap<String, serde_json::Value>>,
 }
 
+/// Agent lifecycle manager
+pub struct AgentManager {
+    /// Map of agent ID to running process (for piped mode)
+    processes: Arc<Mutex<HashMap<String, Child>>>,
+    /// Log collector for managing agent logs and events
+    log_collector: LogCollector,
+    /// Rate limit detector for parsing stderr output
+    rate_limit_detector: RateLimitDetector,
+    /// Map of agent ID to PTY ID (for PTY mode)
+    pty_ids: Arc<Mutex<HashMap<String, String>>>,
+    /// Raw PTY output history per agent (ring buffer for replay)
+    pty_history: Arc<Mutex<HashMap<String, RingBuffer>>>,
+    /// Event sender for subagent events
+    subagent_tx: Option<mpsc::UnboundedSender<SubagentEvent>>,
+    /// Trace parsers per agent
+    parsers: Arc<Mutex<HashMap<String, StreamingParser>>>,
+    /// Subagent trees per agent
+    subagent_trees: Arc<Mutex<HashMap<String, SubagentTree>>>,
+    /// Cancellation tokens for monitor threads (triggered when process is taken/stopped)
+    monitor_cancellation: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+}
+
 impl AgentManager {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(Mutex::new(HashMap::new())),
-            log_tx: None,
+            log_collector: LogCollector::new(),
             rate_limit_detector: RateLimitDetector::new(),
-            rate_limit_tx: None,
-            completion_tx: None,
-            agent_logs: Arc::new(Mutex::new(HashMap::new())),
             pty_ids: Arc::new(Mutex::new(HashMap::new())),
             pty_history: Arc::new(Mutex::new(HashMap::new())),
-            pty_data_tx: None,
-            pty_exit_tx: None,
             subagent_tx: None,
-            tool_call_tx: None,
-            tool_call_complete_tx: None,
             parsers: Arc::new(Mutex::new(HashMap::new())),
             subagent_trees: Arc::new(Mutex::new(HashMap::new())),
             monitor_cancellation: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
+    // ========== Log Collection Delegation ==========
+
     /// Get logs for an agent from in-memory storage
     pub fn get_agent_logs(&self, agent_id: &str) -> Vec<LogEntry> {
-        let logs = lock_mutex_recover(&self.agent_logs);
-        logs.get(agent_id).cloned().unwrap_or_default()
+        self.log_collector.get_agent_logs(agent_id)
     }
 
     /// Clear logs for an agent
     pub fn clear_agent_logs(&self, agent_id: &str) {
-        let mut logs = lock_mutex_recover(&self.agent_logs);
-        logs.remove(agent_id);
+        self.log_collector.clear_agent_logs(agent_id);
     }
 
     /// Set the log event sender for real-time log streaming
     pub fn set_log_sender(&mut self, tx: mpsc::UnboundedSender<AgentLogEvent>) {
-        self.log_tx = Some(tx);
+        self.log_collector.set_log_sender(tx);
     }
 
     /// Set the rate limit event sender for rate limit notifications
     pub fn set_rate_limit_sender(&mut self, tx: mpsc::UnboundedSender<RateLimitEvent>) {
-        self.rate_limit_tx = Some(tx);
+        self.log_collector.set_rate_limit_sender(tx);
     }
 
     /// Set the completion event sender for agent completion notifications
     pub fn set_completion_sender(&mut self, tx: mpsc::UnboundedSender<AgentCompletionEvent>) {
-        self.completion_tx = Some(tx);
+        self.log_collector.set_completion_sender(tx);
     }
 
     /// Set the PTY data event sender for streaming PTY output
     pub fn set_pty_data_sender(&mut self, tx: mpsc::UnboundedSender<AgentPtyDataEvent>) {
-        self.pty_data_tx = Some(tx);
+        self.log_collector.set_pty_data_sender(tx);
     }
 
     /// Set the PTY exit event sender for PTY termination notifications
     pub fn set_pty_exit_sender(&mut self, tx: mpsc::UnboundedSender<AgentPtyExitEvent>) {
-        self.pty_exit_tx = Some(tx);
+        self.log_collector.set_pty_exit_sender(tx);
     }
 
     /// Set the subagent event sender for streaming subagent updates
@@ -556,13 +136,18 @@ impl AgentManager {
 
     /// Set the tool call start event sender for streaming tool call updates
     pub fn set_tool_call_sender(&mut self, tx: mpsc::UnboundedSender<ToolCallStartEvent>) {
-        self.tool_call_tx = Some(tx);
+        self.log_collector.set_tool_call_sender(tx);
     }
 
     /// Set the tool call complete event sender for streaming tool call completion updates
-    pub fn set_tool_call_complete_sender(&mut self, tx: mpsc::UnboundedSender<ToolCallCompleteEvent>) {
-        self.tool_call_complete_tx = Some(tx);
+    pub fn set_tool_call_complete_sender(
+        &mut self,
+        tx: mpsc::UnboundedSender<ToolCallCompleteEvent>,
+    ) {
+        self.log_collector.set_tool_call_complete_sender(tx);
     }
+
+    // ========== Trace Parser Management ==========
 
     /// Initialize trace parser for an agent
     pub fn init_trace_parser(&self, agent_id: &str) {
@@ -620,6 +205,8 @@ impl AgentManager {
             Vec::new()
         }
     }
+
+    // ========== PTY Management ==========
 
     /// Check if an agent has an associated PTY
     pub fn has_pty(&self, agent_id: &str) -> bool {
@@ -755,13 +342,7 @@ impl AgentManager {
             // Check for rate limits
             if let Some(info) = self.rate_limit_detector.detect_in_stderr(line) {
                 log::warn!("[Agent {}] Rate limit detected: {:?}", agent_id, info);
-                if let Some(tx) = &self.rate_limit_tx {
-                    let event = RateLimitEvent {
-                        agent_id: agent_id.to_string(),
-                        rate_limit_info: info,
-                    };
-                    let _ = tx.send(event);
-                }
+                self.log_collector.emit_rate_limit(agent_id, info);
             }
 
             // Create log entry (default to Info level since PTY combines streams)
@@ -773,14 +354,14 @@ impl AgentManager {
 
             // Store in memory
             {
-                let mut logs = lock_mutex_recover(&self.agent_logs);
+                let mut logs = lock_mutex_recover(&self.log_collector.agent_logs);
                 logs.entry(agent_id.to_string())
                     .or_insert_with(Vec::new)
                     .push(log_entry.clone());
             }
 
             // Send via channel if available
-            if let Some(tx) = &self.log_tx {
+            if let Some(tx) = &self.log_collector.log_tx {
                 let event = AgentLogEvent {
                     agent_id: agent_id.to_string(),
                     log: log_entry,
@@ -790,16 +371,13 @@ impl AgentManager {
         }
 
         // Emit PTY data event for terminal streaming
-        if let Some(tx) = &self.pty_data_tx {
+        if self.log_collector.pty_data_tx.is_some() {
             // Filter out noisy server logs from the terminal output
-            // These appear when the agent uses tools that have verbose logging (e.g. ralph-tui)
-            // Pattern: "path=/tui/show-toast" or "type=tui.toast.show"
             let should_filter =
                 text.contains("path=/tui/show-toast") || text.contains("type=tui.toast.show");
 
             let data_to_send = if should_filter {
                 let mut filtered = Vec::new();
-                // split_inclusive preserves the newline characters so we don't break the stream
                 for line in text.split_inclusive('\n') {
                     if !line.contains("path=/tui/show-toast")
                         && !line.contains("type=tui.toast.show")
@@ -813,11 +391,8 @@ impl AgentManager {
             };
 
             if !data_to_send.is_empty() {
-                let event = AgentPtyDataEvent {
-                    agent_id: agent_id.to_string(),
-                    data: data_to_send,
-                };
-                let _ = tx.send(event);
+                self.log_collector
+                    .emit_pty_data(agent_id, data_to_send);
             }
         }
     }
@@ -831,16 +406,10 @@ impl AgentManager {
         );
 
         // Emit exit event
-        if let Some(tx) = &self.pty_exit_tx {
-            let event = AgentPtyExitEvent {
-                agent_id: agent_id.to_string(),
-                exit_code,
-            };
-            let _ = tx.send(event);
-        }
+        self.log_collector.emit_pty_exit(agent_id, exit_code);
 
         // Add exit log entry
-        self.emit_log(
+        self.log_collector.emit_log(
             agent_id,
             if exit_code == 0 {
                 LogLevel::Info
@@ -850,6 +419,8 @@ impl AgentManager {
             format!("Agent exited with code {}", exit_code),
         );
     }
+
+    // ========== Process Lifecycle ==========
 
     /// Build command line arguments for an agent (for PTY spawning on frontend)
     /// Returns (program, args, cwd)
@@ -924,7 +495,6 @@ impl AgentManager {
         }
 
         // For PTY mode, register a pseudo-PTY so the Terminal can connect
-        // We use the agent_id as the pty_id and store output in pty_history
         let is_pty_mode = config.spawn_mode == AgentSpawnMode::Pty;
         if is_pty_mode {
             log::info!(
@@ -933,13 +503,13 @@ impl AgentManager {
             );
             log::debug!(
                 "[AgentManager] pty_data_tx is_some: {}",
-                self.pty_data_tx.is_some()
+                self.log_collector.pty_data_tx.is_some()
             );
             self.register_pty(agent_id, agent_id);
         }
 
         // Emit log
-        self.emit_log(
+        self.log_collector.emit_log(
             agent_id,
             LogLevel::Info,
             format!(
@@ -952,7 +522,7 @@ impl AgentManager {
         log::debug!("[AgentManager] Waiting 100ms for process to start...");
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Quick check - see if process already exited (helps diagnose immediate failures)
+        // Quick check - see if process already exited
         log::debug!("[AgentManager] Checking if process exited immediately...");
         let process_exited_immediately = {
             let mut processes = lock_mutex_recover(&self.processes);
@@ -998,7 +568,7 @@ impl AgentManager {
 
             if !stderr_content.is_empty() {
                 log::error!("[AgentManager] Process stderr: {}", stderr_content);
-                self.emit_log(
+                self.log_collector.emit_log(
                     agent_id,
                     LogLevel::Error,
                     format!(
@@ -1008,7 +578,7 @@ impl AgentManager {
                     ),
                 );
             } else {
-                self.emit_log(agent_id, LogLevel::Error, format!(
+                self.log_collector.emit_log(agent_id, LogLevel::Error, format!(
                     "Process exited immediately with code {}. This usually means the CLI command failed. Check if claude CLI works: claude --version",
                     exit_code
                 ));
@@ -1017,13 +587,28 @@ impl AgentManager {
             return Ok(pid);
         }
 
+        // Spawn background threads for stdout/stderr reading
+        self.spawn_output_readers(agent_id, stdout, stderr, is_pty_mode, &config.task_id);
+
+        Ok(pid)
+    }
+
+    /// Spawn background threads to read stdout and stderr
+    fn spawn_output_readers(
+        &self,
+        agent_id: &str,
+        stdout: Option<std::process::ChildStdout>,
+        stderr: Option<std::process::ChildStderr>,
+        is_pty_mode: bool,
+        task_id: &str,
+    ) {
         // Spawn background thread to read stdout
         if let Some(stdout) = stdout {
-            let log_tx = self.log_tx.clone();
+            let log_tx = self.log_collector.log_tx.clone();
             let subagent_tx = self.subagent_tx.clone();
-            let tool_call_tx = self.tool_call_tx.clone();
-            let tool_call_complete_tx = self.tool_call_complete_tx.clone();
-            let agent_logs = self.agent_logs.clone();
+            let tool_call_tx = self.log_collector.tool_call_tx.clone();
+            let tool_call_complete_tx = self.log_collector.tool_call_complete_tx.clone();
+            let agent_logs = self.log_collector.agent_logs.clone();
             let parsers = self.parsers.clone();
             let subagent_trees = self.subagent_trees.clone();
             let pty_history = if is_pty_mode {
@@ -1032,12 +617,16 @@ impl AgentManager {
                 None
             };
             let pty_data_tx = if is_pty_mode {
-                self.pty_data_tx.clone()
+                self.log_collector.pty_data_tx.clone()
             } else {
                 None
             };
             let agent_id_clone = agent_id.to_string();
-            log::debug!("[AgentManager] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}", agent_id, pty_data_tx.is_some());
+            log::debug!(
+                "[AgentManager] Spawning stdout reader thread for agent {}, pty_data_tx.is_some: {}",
+                agent_id,
+                pty_data_tx.is_some()
+            );
             thread::spawn(move || {
                 log::debug!(
                     "[AgentManager] Stdout reader thread started for agent {}",
@@ -1079,7 +668,7 @@ impl AgentManager {
                                 }
                             }
 
-                            // Skip empty lines (unknown JSON types return empty string)
+                            // Skip empty lines
                             if display_text.is_empty() {
                                 continue;
                             }
@@ -1089,7 +678,7 @@ impl AgentManager {
                                 let text_with_newline = format!("{}\r\n", display_text);
                                 let mut hist = lock_mutex_recover(pty_hist);
                                 hist.entry(agent_id_clone.clone())
-                                    .or_insert_with(|| RingBuffer::new(1024 * 1024)) // 1MB buffer
+                                    .or_insert_with(|| RingBuffer::new(1024 * 1024))
                                     .write(text_with_newline.as_bytes());
 
                                 // Also send via PTY data channel for real-time updates
@@ -1100,12 +689,11 @@ impl AgentManager {
                                     });
                                 }
 
-                                // Parse for subagent events (in PTY mode, we parse the display text)
+                                // Parse for subagent events
                                 {
                                     let mut parsers_guard = lock_mutex_recover(&parsers);
                                     let mut trees_guard = lock_mutex_recover(&subagent_trees);
 
-                                    // Auto-initialize if missing
                                     if !parsers_guard.contains_key(&agent_id_clone) {
                                         parsers_guard.insert(
                                             agent_id_clone.clone(),
@@ -1116,8 +704,6 @@ impl AgentManager {
                                     }
 
                                     if let Some(parser) = parsers_guard.get_mut(&agent_id_clone) {
-                                        // display_text is already stripped of ANSI codes by parse_agent_json_output if it came from JSON
-                                        // but we should make sure we're parsing clean text
                                         let events = parser.parse_output(&display_text);
                                         if !events.is_empty() {
                                             let tree = trees_guard
@@ -1127,7 +713,6 @@ impl AgentManager {
                                             for event in events {
                                                 tree.add_event(event.clone());
 
-                                                // Emit event
                                                 if let Some(tx) = &subagent_tx {
                                                     let _ = tx.send(event);
                                                 }
@@ -1151,7 +736,7 @@ impl AgentManager {
                                     .push(log_entry.clone());
                             }
 
-                            // Also send via channel if available
+                            // Send via channel if available
                             if let Some(tx) = &log_tx {
                                 let event = AgentLogEvent {
                                     agent_id: agent_id_clone.clone(),
@@ -1172,20 +757,19 @@ impl AgentManager {
 
         // Spawn background thread to read stderr
         if let Some(stderr) = stderr {
-            let log_tx = self.log_tx.clone();
-            let rate_limit_tx = self.rate_limit_tx.clone();
-            let agent_logs = self.agent_logs.clone();
+            let log_tx = self.log_collector.log_tx.clone();
+            let rate_limit_tx = self.log_collector.rate_limit_tx.clone();
+            let agent_logs = self.log_collector.agent_logs.clone();
             let pty_history = if is_pty_mode {
                 Some(self.pty_history.clone())
             } else {
                 None
             };
             let pty_data_tx = if is_pty_mode {
-                self.pty_data_tx.clone()
+                self.log_collector.pty_data_tx.clone()
             } else {
                 None
             };
-            // Create a new detector for the thread (uses static patterns internally)
             let rate_limit_detector = RateLimitDetector::new();
             let agent_id_clone = agent_id.to_string();
             log::debug!(
@@ -1201,19 +785,16 @@ impl AgentManager {
                 for line in reader.lines() {
                     match line {
                         Ok(line) => {
-                            // Log stderr as warnings (they're often important)
                             log::warn!("[Agent {}] stderr: {}", agent_id_clone, line);
 
                             // For PTY mode, also write to pty_history (stderr in red)
                             if let Some(ref pty_hist) = pty_history {
-                                // Use ANSI red for stderr
                                 let line_with_color = format!("\x1b[31m{}\x1b[0m\r\n", line);
                                 let mut hist = lock_mutex_recover(pty_hist);
                                 hist.entry(agent_id_clone.clone())
                                     .or_insert_with(|| RingBuffer::new(1024 * 1024))
                                     .write(line_with_color.as_bytes());
 
-                                // Also send via PTY data channel for real-time updates
                                 if let Some(ref tx) = pty_data_tx {
                                     let _ = tx.send(AgentPtyDataEvent {
                                         agent_id: agent_id_clone.clone(),
@@ -1244,7 +825,6 @@ impl AgentManager {
                                 message: line,
                             };
 
-                            // Store in memory
                             {
                                 let mut logs = lock_mutex_recover(&agent_logs);
                                 logs.entry(agent_id_clone.clone())
@@ -1252,7 +832,6 @@ impl AgentManager {
                                     .push(log_entry.clone());
                             }
 
-                            // Also send via channel if available
                             if let Some(tx) = &log_tx {
                                 let event = AgentLogEvent {
                                     agent_id: agent_id_clone.clone(),
@@ -1274,13 +853,13 @@ impl AgentManager {
         // Spawn background thread to monitor process completion
         {
             let processes = self.processes.clone();
-            let completion_tx = self.completion_tx.clone();
-            let agent_logs = self.agent_logs.clone();
+            let completion_tx = self.log_collector.completion_tx.clone();
+            let agent_logs = self.log_collector.agent_logs.clone();
             let agent_id_clone = agent_id.to_string();
-            let task_id_clone = config.task_id.clone();
-            let log_tx = self.log_tx.clone();
+            let task_id_clone = task_id.to_string();
+            let log_tx = self.log_collector.log_tx.clone();
 
-            // Create and store cancellation token for this monitor thread
+            // Create and store cancellation token
             let cancelled = Arc::new(AtomicBool::new(false));
             let monitor_cancellation = self.monitor_cancellation.clone();
             {
@@ -1289,9 +868,7 @@ impl AgentManager {
             }
 
             thread::spawn(move || {
-                // Poll every 500ms to check if process has exited
                 loop {
-                    // Check cancellation token first (allows immediate exit)
                     if cancelled.load(Ordering::Relaxed) {
                         log::debug!(
                             "[AgentManager] Monitor thread for agent {} cancelled",
@@ -1302,7 +879,6 @@ impl AgentManager {
 
                     thread::sleep(std::time::Duration::from_millis(500));
 
-                    // Check again after sleep
                     if cancelled.load(Ordering::Relaxed) {
                         log::debug!(
                             "[AgentManager] Monitor thread for agent {} cancelled after sleep",
@@ -1316,7 +892,6 @@ impl AgentManager {
                         if let Some(child) = processes_guard.get_mut(&agent_id_clone) {
                             match child.try_wait() {
                                 Ok(Some(status)) => {
-                                    // Process has exited
                                     let exit_code = status.code();
                                     let success = exit_code == Some(0);
 
@@ -1326,10 +901,8 @@ impl AgentManager {
                                         exit_code
                                     );
 
-                                    // Remove from processes map
                                     processes_guard.remove(&agent_id_clone);
 
-                                    // Emit completion event
                                     if let Some(tx) = &completion_tx {
                                         let event = AgentCompletionEvent {
                                             agent_id: agent_id_clone.clone(),
@@ -1348,7 +921,6 @@ impl AgentManager {
                                         let _ = tx.send(event);
                                     }
 
-                                    // Log the exit
                                     let log_entry = LogEntry {
                                         timestamp: Utc::now(),
                                         level: if success {
@@ -1374,22 +946,19 @@ impl AgentManager {
                                         });
                                     }
 
-                                    true // Exit the monitoring loop
+                                    true
                                 }
-                                Ok(None) => {
-                                    // Process is still running
-                                    false
-                                }
+                                Ok(None) => false,
                                 Err(e) => {
                                     log::error!(
                                         "[AgentManager] Error checking process status for agent {}: {}",
-                                        agent_id_clone, e
+                                        agent_id_clone,
+                                        e
                                     );
                                     false
                                 }
                             }
                         } else {
-                            // Process was removed (killed externally), exit loop
                             log::debug!(
                                 "[AgentManager] Process for agent {} no longer in tracking map",
                                 agent_id_clone
@@ -1414,321 +983,279 @@ impl AgentManager {
                 );
             });
         }
-
-        Ok(pid)
     }
 
     /// Build the command to execute based on agent type
     fn build_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
         match config.agent_type {
-            AgentType::Claude => {
-                // Resolve Claude CLI path using path resolver
-                let claude_path = CliPathResolver::resolve_claude().ok_or_else(|| {
-                    anyhow!(
-                        "Claude CLI not found. Install: npm install -g @anthropic-ai/claude-code"
-                    )
-                })?;
+            AgentType::Claude => self.build_claude_command(config),
+            AgentType::Opencode => self.build_opencode_command(config),
+            AgentType::Cursor => self.build_cursor_command(config),
+            AgentType::Codex => self.build_codex_command(config),
+            AgentType::Qwen => self.build_qwen_command(config),
+            AgentType::Droid => self.build_droid_command(config),
+        }
+    }
 
-                log::info!("[AgentManager] Claude path: {:?}", claude_path);
+    fn build_claude_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let claude_path = CliPathResolver::resolve_claude().ok_or_else(|| {
+            anyhow!("Claude CLI not found. Install: npm install -g @anthropic-ai/claude-code")
+        })?;
 
-                let mut cmd = Command::new(&claude_path);
+        log::info!("[AgentManager] Claude path: {:?}", claude_path);
 
-                // Set working directory - check if it exists first
-                let worktree = Path::new(&config.worktree_path);
-                if worktree.exists() {
-                    log::info!(
-                        "[AgentManager] Using worktree path: {}",
-                        config.worktree_path
-                    );
-                    cmd.current_dir(&config.worktree_path);
-                } else {
+        let mut cmd = Command::new(&claude_path);
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            log::info!(
+                "[AgentManager] Using worktree path: {}",
+                config.worktree_path
+            );
+            cmd.current_dir(&config.worktree_path);
+        } else {
+            log::warn!(
+                "[AgentManager] Worktree path doesn't exist: {}, using current directory",
+                config.worktree_path
+            );
+        }
+
+        let prompt = match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => prompt.clone(),
+            _ => {
+                return Err(anyhow!(
+                    "Claude requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        };
+
+        cmd.arg("--print");
+        cmd.arg("--output-format").arg("stream-json");
+        cmd.arg("--verbose");
+        cmd.arg("--dangerously-skip-permissions");
+
+        if config.max_iterations > 0 {
+            cmd.arg("--max-turns")
+                .arg(config.max_iterations.to_string());
+        }
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        cmd.arg(&prompt);
+
+        Ok(cmd)
+    }
+
+    fn build_opencode_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let opencode_path = CliPathResolver::resolve_opencode()
+            .ok_or_else(|| anyhow!("OpenCode not found. Install from https://opencode.ai"))?;
+
+        log::info!("[AgentManager] OpenCode path: {:?}", opencode_path);
+
+        let mut cmd = Command::new(&opencode_path);
+
+        let worktree = Path::new(&config.worktree_path);
+
+        // Create opencode.json config in the working directory
+        if worktree.exists() {
+            let config_path = worktree.join("opencode.json");
+            if !config_path.exists() {
+                let config_content =
+                    r#"{"$schema": "https://opencode.ai/config.json", "permission": "allow"}"#;
+                if let Err(e) = std::fs::write(&config_path, config_content) {
                     log::warn!(
-                        "[AgentManager] Worktree path doesn't exist: {}, using current directory",
-                        config.worktree_path
+                        "[AgentManager] Failed to create opencode.json for permissions: {}",
+                        e
                     );
-                }
-
-                // Validate prompt is non-empty
-                let prompt = match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => prompt.clone(),
-                    _ => {
-                        return Err(anyhow!(
-                            "Claude requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                };
-
-                // Add --print first to output to stdout instead of interactive TUI
-                // Note: -p is the short form of --print, NOT a prompt flag!
-                cmd.arg("--print");
-
-                // Use stream-json for real-time streaming (text format buffers until complete)
-                // Requires --verbose when using stream-json
-                cmd.arg("--output-format").arg("stream-json");
-                cmd.arg("--verbose");
-
-                // Add --dangerously-skip-permissions to skip permission prompts
-                cmd.arg("--dangerously-skip-permissions");
-
-                // Add max turns (iterations) - only if greater than 0
-                // max_iterations of 0 or negative means no limit (don't pass flag)
-                if config.max_iterations > 0 {
-                    cmd.arg("--max-turns")
-                        .arg(config.max_iterations.to_string());
-                }
-
-                // Add model if specified
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                // Add the prompt as the LAST positional argument
-                // Claude CLI syntax: claude [options] [prompt]
-                cmd.arg(&prompt);
-
-                Ok(cmd)
-            }
-            AgentType::Opencode => {
-                // Resolve OpenCode path using path resolver
-                let opencode_path = CliPathResolver::resolve_opencode().ok_or_else(|| {
-                    anyhow!("OpenCode not found. Install from https://opencode.ai")
-                })?;
-
-                log::info!("[AgentManager] OpenCode path: {:?}", opencode_path);
-
-                let mut cmd = Command::new(&opencode_path);
-
-                // Set working directory - check if it exists first
-                let worktree = Path::new(&config.worktree_path);
-
-                // Create opencode.json config in the working directory to skip permission prompts
-                // OpenCode uses config-based permissions, not environment variables
-                if worktree.exists() {
-                    let config_path = worktree.join("opencode.json");
-                    // Only create if it doesn't exist (don't overwrite user config)
-                    if !config_path.exists() {
-                        let config_content = r#"{"$schema": "https://opencode.ai/config.json", "permission": "allow"}"#;
-                        if let Err(e) = std::fs::write(&config_path, config_content) {
-                            log::warn!(
-                                "[AgentManager] Failed to create opencode.json for permissions: {}",
-                                e
-                            );
-                        } else {
-                            log::info!(
-                                "[AgentManager] Created opencode.json with permission: allow"
-                            );
-                        }
-                    } else {
-                        log::info!(
-                            "[AgentManager] opencode.json already exists, using existing config"
-                        );
-                    }
-                }
-
-                // Set working directory
-                if worktree.exists() {
-                    log::info!(
-                        "[AgentManager] Using worktree path: {}",
-                        config.worktree_path
-                    );
-                    cmd.current_dir(&config.worktree_path);
                 } else {
-                    log::warn!(
-                        "[AgentManager] Worktree path doesn't exist: {}, using current directory",
-                        config.worktree_path
-                    );
+                    log::info!("[AgentManager] Created opencode.json with permission: allow");
                 }
-
-                // Use the 'run' subcommand for non-interactive execution
-                cmd.arg("run");
-
-                // Add the prompt as the message - opencode requires a non-empty message
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg(prompt);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "OpenCode requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                }
-
-                // Use JSON format for easier parsing
-                cmd.arg("--format").arg("json");
-
-                // Print logs to stderr for debugging
-                cmd.arg("--print-logs");
-
-                // Add model if specified
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                Ok(cmd)
-            }
-            AgentType::Cursor => {
-                // Resolve Cursor agent path
-                let cursor_path = CliPathResolver::resolve_cursor().ok_or_else(|| {
-                    anyhow!("Cursor agent not found. Ensure Cursor is installed.")
-                })?;
-
-                log::info!("[AgentManager] Cursor path: {:?}", cursor_path);
-
-                let mut cmd = Command::new(&cursor_path);
-
-                // Set working directory
-                let worktree = Path::new(&config.worktree_path);
-                if worktree.exists() {
-                    cmd.current_dir(&config.worktree_path);
-                }
-
-                // Add the prompt - requires non-empty prompt
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg("--prompt").arg(prompt);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "Cursor requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                }
-
-                // Add --force to skip confirmation prompts
-                cmd.arg("--force");
-
-                // Add model if specified (Cursor may support model selection)
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                Ok(cmd)
-            }
-            AgentType::Codex => {
-                // Resolve Codex CLI path
-                let codex_path = CliPathResolver::resolve_codex()
-                    .ok_or_else(|| anyhow!("Codex CLI not found. Install from OpenAI."))?;
-
-                log::info!("[AgentManager] Codex path: {:?}", codex_path);
-
-                let mut cmd = Command::new(&codex_path);
-
-                // Set working directory
-                let worktree = Path::new(&config.worktree_path);
-                if worktree.exists() {
-                    cmd.current_dir(&config.worktree_path);
-                }
-
-                // Add the prompt - requires non-empty prompt
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg("--prompt").arg(prompt);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "Codex requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                }
-
-                // Add max turns (iterations) - only if greater than 0
-                if config.max_iterations > 0 {
-                    cmd.arg("--max-turns")
-                        .arg(config.max_iterations.to_string());
-                }
-
-                // Add model if specified
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                Ok(cmd)
-            }
-            AgentType::Qwen => {
-                // Resolve Qwen CLI path
-                let qwen_path = CliPathResolver::resolve_qwen()
-                    .ok_or_else(|| anyhow!("Qwen CLI not found."))?;
-
-                log::info!("[AgentManager] Qwen path: {:?}", qwen_path);
-
-                let mut cmd = Command::new(&qwen_path);
-
-                // Set working directory
-                let worktree = Path::new(&config.worktree_path);
-                if worktree.exists() {
-                    cmd.current_dir(&config.worktree_path);
-                }
-
-                // Add the prompt - requires non-empty prompt
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg("--prompt").arg(prompt);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "Qwen requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                }
-
-                // Permission: --yolo for fully autonomous execution (auto-approves all operations)
-                cmd.arg("--yolo");
-
-                // Add model if specified
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                Ok(cmd)
-            }
-            AgentType::Droid => {
-                // Resolve Droid CLI path
-                let droid_path = CliPathResolver::resolve_droid()
-                    .ok_or_else(|| anyhow!("Droid CLI not found."))?;
-
-                log::info!("[AgentManager] Droid path: {:?}", droid_path);
-
-                let mut cmd = Command::new(&droid_path);
-
-                // Droid uses "exec" subcommand
-                cmd.arg("exec");
-
-                // Set working directory
-                let worktree = Path::new(&config.worktree_path);
-                if worktree.exists() {
-                    cmd.current_dir(&config.worktree_path);
-                }
-
-                // Add the prompt - requires non-empty prompt
-                match &config.prompt {
-                    Some(prompt) if !prompt.trim().is_empty() => {
-                        cmd.arg("--prompt").arg(prompt);
-                    }
-                    _ => {
-                        return Err(anyhow!(
-                            "Droid requires a non-empty prompt. Task description is empty for task {}",
-                            config.task_id
-                        ));
-                    }
-                }
-
-                // Permission: --auto medium for autonomous execution
-                cmd.arg("--auto").arg("medium");
-
-                // Add model if specified
-                if let Some(model) = &config.model {
-                    cmd.arg("--model").arg(model);
-                }
-
-                Ok(cmd)
+            } else {
+                log::info!(
+                    "[AgentManager] opencode.json already exists, using existing config"
+                );
             }
         }
+
+        if worktree.exists() {
+            log::info!(
+                "[AgentManager] Using worktree path: {}",
+                config.worktree_path
+            );
+            cmd.current_dir(&config.worktree_path);
+        } else {
+            log::warn!(
+                "[AgentManager] Worktree path doesn't exist: {}, using current directory",
+                config.worktree_path
+            );
+        }
+
+        cmd.arg("run");
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "OpenCode requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        cmd.arg("--format").arg("json");
+        cmd.arg("--print-logs");
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
+    }
+
+    fn build_cursor_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let cursor_path = CliPathResolver::resolve_cursor()
+            .ok_or_else(|| anyhow!("Cursor agent not found. Ensure Cursor is installed."))?;
+
+        log::info!("[AgentManager] Cursor path: {:?}", cursor_path);
+
+        let mut cmd = Command::new(&cursor_path);
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            cmd.current_dir(&config.worktree_path);
+        }
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg("--prompt").arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Cursor requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        cmd.arg("--force");
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
+    }
+
+    fn build_codex_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let codex_path = CliPathResolver::resolve_codex()
+            .ok_or_else(|| anyhow!("Codex CLI not found. Install from OpenAI."))?;
+
+        log::info!("[AgentManager] Codex path: {:?}", codex_path);
+
+        let mut cmd = Command::new(&codex_path);
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            cmd.current_dir(&config.worktree_path);
+        }
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg("--prompt").arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Codex requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        if config.max_iterations > 0 {
+            cmd.arg("--max-turns")
+                .arg(config.max_iterations.to_string());
+        }
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
+    }
+
+    fn build_qwen_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let qwen_path =
+            CliPathResolver::resolve_qwen().ok_or_else(|| anyhow!("Qwen CLI not found."))?;
+
+        log::info!("[AgentManager] Qwen path: {:?}", qwen_path);
+
+        let mut cmd = Command::new(&qwen_path);
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            cmd.current_dir(&config.worktree_path);
+        }
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg("--prompt").arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Qwen requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        cmd.arg("--yolo");
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
+    }
+
+    fn build_droid_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let droid_path =
+            CliPathResolver::resolve_droid().ok_or_else(|| anyhow!("Droid CLI not found."))?;
+
+        log::info!("[AgentManager] Droid path: {:?}", droid_path);
+
+        let mut cmd = Command::new(&droid_path);
+
+        cmd.arg("exec");
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            cmd.current_dir(&config.worktree_path);
+        }
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg("--prompt").arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Droid requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        cmd.arg("--auto").arg("medium");
+
+        if let Some(model) = &config.model {
+            cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
     }
 
     /// Stop an agent by killing its process
@@ -1748,7 +1275,8 @@ impl AgentManager {
                 .kill()
                 .map_err(|e| anyhow!("Failed to kill agent process: {}", e))?;
 
-            self.emit_log(agent_id, LogLevel::Info, "Agent stopped".to_string());
+            self.log_collector
+                .emit_log(agent_id, LogLevel::Info, "Agent stopped".to_string());
             Ok(())
         } else {
             Err(anyhow!("Agent process not found: {}", agent_id))
@@ -1783,7 +1311,7 @@ impl AgentManager {
         for agent_id in agent_ids {
             if let Some(mut child) = processes.remove(&agent_id) {
                 let _ = child.kill(); // Best effort
-                self.emit_log(
+                self.log_collector.emit_log(
                     &agent_id,
                     LogLevel::Info,
                     "Agent stopped (shutdown)".to_string(),
@@ -1813,7 +1341,7 @@ impl AgentManager {
 
             let exit_code = status.code().unwrap_or(-1);
 
-            self.emit_log(
+            self.log_collector.emit_log(
                 agent_id,
                 if exit_code == 0 {
                     LogLevel::Info
@@ -1830,7 +1358,6 @@ impl AgentManager {
     }
 
     /// Wait for a child process with timeout (polling-based)
-    /// Returns Ok(Some(exit_code)) if process exited, Ok(None) if timeout, Err on wait error
     pub fn wait_with_timeout(child: &mut Child, timeout_secs: u64) -> Result<Option<i32>> {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
@@ -1839,11 +1366,9 @@ impl AgentManager {
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    // Process exited
                     return Ok(Some(status.code().unwrap_or(-1)));
                 }
                 Ok(None) => {
-                    // Still running - check timeout
                     if start.elapsed() >= timeout {
                         log::warn!("Process wait timed out after {} seconds", timeout_secs);
                         return Ok(None);
@@ -1858,10 +1383,6 @@ impl AgentManager {
     }
 
     /// Take a child process out of the manager for external waiting
-    ///
-    /// This allows the caller to wait on the process without holding
-    /// the manager lock, preventing UI freezes.
-    /// Also cancels the background monitor thread for this agent.
     pub fn take_child_process(&mut self, agent_id: &str) -> Option<std::process::Child> {
         // Cancel the monitor thread for this agent
         {
@@ -1875,20 +1396,13 @@ impl AgentManager {
             }
         }
 
-        // Remove the process from tracking
         let mut processes = lock_mutex_recover(&self.processes);
         processes.remove(agent_id)
     }
 
-    /// Clean up cancellation token for an agent (call after monitor thread exits)
-    fn cleanup_monitor_token(&self, agent_id: &str) {
-        let mut tokens = lock_mutex_recover(&self.monitor_cancellation);
-        tokens.remove(agent_id);
-    }
-
     /// Emit a log event for agent exit (for use after take_child_process + wait)
     pub fn emit_agent_exit(&self, agent_id: &str, exit_code: i32) {
-        self.emit_log(
+        self.log_collector.emit_log(
             agent_id,
             if exit_code == 0 {
                 LogLevel::Info
@@ -1899,68 +1413,26 @@ impl AgentManager {
         );
     }
 
-    /// Emit a log event
-    fn emit_log(&self, agent_id: &str, level: LogLevel, message: String) {
-        let log_entry = LogEntry {
-            timestamp: Utc::now(),
-            level,
-            message,
-        };
-
-        // Store in memory for later retrieval
-        {
-            let mut logs = lock_mutex_recover(&self.agent_logs);
-            logs.entry(agent_id.to_string())
-                .or_insert_with(Vec::new)
-                .push(log_entry.clone());
-        }
-
-        // Also send via channel if available
-        if let Some(tx) = &self.log_tx {
-            let event = AgentLogEvent {
-                agent_id: agent_id.to_string(),
-                log: log_entry,
-            };
-            let _ = tx.send(event); // Best effort
-        }
-    }
-
     /// Parse stderr output and check for rate limits
-    /// Returns Some(RateLimitInfo) if a rate limit is detected
     pub fn check_stderr_for_rate_limit(&self, stderr: &str) -> Option<RateLimitInfo> {
         self.rate_limit_detector.detect_in_stderr(stderr)
     }
 
-    /// Emit a rate limit event
-    fn emit_rate_limit(&self, agent_id: &str, info: RateLimitInfo) {
-        if let Some(tx) = &self.rate_limit_tx {
-            let event = RateLimitEvent {
-                agent_id: agent_id.to_string(),
-                rate_limit_info: info.clone(),
-            };
-            let _ = tx.send(event); // Best effort
+    /// Process a chunk of stderr output for an agent
+    pub fn process_stderr_chunk(
+        &self,
+        agent_id: &str,
+        stderr_chunk: &str,
+    ) -> Option<RateLimitInfo> {
+        if let Some(info) = self.rate_limit_detector.detect_in_stderr(stderr_chunk) {
+            self.log_collector.emit_rate_limit(agent_id, info.clone());
+            Some(info)
+        } else {
+            None
         }
-
-        // Also emit as a warning log
-        let retry_msg = info
-            .retry_after_ms
-            .map(|ms| format!(", retry after {}ms", ms))
-            .unwrap_or_default();
-
-        self.emit_log(
-            agent_id,
-            LogLevel::Warn,
-            format!(
-                "Rate limit detected: {:?}{}",
-                info.limit_type
-                    .unwrap_or(crate::agents::rate_limiter::RateLimitType::RateLimit),
-                retry_msg
-            ),
-        );
     }
 
     /// Wait for an agent process to complete while monitoring stderr for rate limits
-    /// Returns the exit code and any rate limit info detected
     pub fn wait_for_agent_with_rate_limit_check(
         &mut self,
         agent_id: &str,
@@ -1968,22 +1440,20 @@ impl AgentManager {
         let mut processes = lock_mutex_recover(&self.processes);
 
         if let Some(mut child) = processes.remove(agent_id) {
-            // Capture stderr and check for rate limits
             let mut rate_limit_info = None;
 
             if let Some(stderr) = child.stderr.take() {
                 let reader = BufReader::new(stderr);
-                let mut stderr_buffer = String::new();
+                let mut _stderr_buffer = String::new();
 
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        stderr_buffer.push_str(&line);
-                        stderr_buffer.push('\n');
+                        _stderr_buffer.push_str(&line);
+                        _stderr_buffer.push('\n');
 
-                        // Check each line for rate limit indicators
                         if let Some(info) = self.rate_limit_detector.detect_in_stderr(&line) {
                             rate_limit_info = Some(info.clone());
-                            self.emit_rate_limit(agent_id, info);
+                            self.log_collector.emit_rate_limit(agent_id, info);
                         }
                     }
                 }
@@ -1995,7 +1465,7 @@ impl AgentManager {
 
             let exit_code = status.code().unwrap_or(-1);
 
-            self.emit_log(
+            self.log_collector.emit_log(
                 agent_id,
                 if exit_code == 0 {
                     LogLevel::Info
@@ -2008,21 +1478,6 @@ impl AgentManager {
             Ok((exit_code, rate_limit_info))
         } else {
             Err(anyhow!("Agent process not found: {}", agent_id))
-        }
-    }
-
-    /// Process a chunk of stderr output for an agent
-    /// Useful for streaming stderr monitoring
-    pub fn process_stderr_chunk(
-        &self,
-        agent_id: &str,
-        stderr_chunk: &str,
-    ) -> Option<RateLimitInfo> {
-        if let Some(info) = self.rate_limit_detector.detect_in_stderr(stderr_chunk) {
-            self.emit_rate_limit(agent_id, info.clone());
-            Some(info)
-        } else {
-            None
         }
     }
 }
@@ -2058,7 +1513,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if claude is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2081,7 +1535,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if opencode is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2104,7 +1557,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if cursor-agent is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2127,7 +1579,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if codex is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2150,7 +1601,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if qwen is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2173,7 +1623,6 @@ mod tests {
             plugin_config: None,
         };
 
-        // This test may fail if droid is not installed, which is expected
         let result = manager.build_command(&config);
         if let Ok(cmd) = result {
             let program = cmd.get_program().to_string_lossy();
@@ -2187,7 +1636,7 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
 
         manager.set_log_sender(tx);
-        assert!(manager.log_tx.is_some());
+        assert!(manager.log_collector.log_tx.is_some());
     }
 
     #[test]
@@ -2208,7 +1657,7 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
 
         manager.set_rate_limit_sender(tx);
-        assert!(manager.rate_limit_tx.is_some());
+        assert!(manager.log_collector.rate_limit_tx.is_some());
     }
 
     #[test]
@@ -2233,16 +1682,10 @@ mod tests {
     fn test_process_stderr_chunk() {
         let manager = AgentManager::new();
 
-        // Should return rate limit info when detected
         let result = manager.process_stderr_chunk("agent-1", "rate limit exceeded");
         assert!(result.is_some());
 
-        // Should return None when no rate limit
         let result = manager.process_stderr_chunk("agent-1", "task completed");
         assert!(result.is_none());
     }
-
-    // Note: We can't easily test actual process spawning in unit tests
-    // without having the actual CLI tools installed. These tests focus
-    // on the command building and manager state management.
 }
