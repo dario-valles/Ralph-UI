@@ -69,7 +69,7 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ cmd: 'get_projects', args: {} }),
+        body: JSON.stringify({ cmd: 'get_all_projects', args: {} }),
       })
 
       if (!authResponse.ok) {
