@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "HTTP/WebSocket server for Ralph Wiggum Loop autonomous AI agent system"
 authors = ["Ralph UI Contributors"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/dario-valles/Ralph-UI"
+homepage = "https://github.com/dario-valles/Ralph-UI"
+keywords = ["ai", "autonomous-agents", "claude", "developer-tools", "llm"]
+categories = ["development-tools", "command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
