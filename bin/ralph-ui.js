@@ -524,6 +524,81 @@ function createPrompt() {
 }
 
 // ============================================================================
+// Tailscale helpers
+// ============================================================================
+
+async function checkTailscaleAvailable() {
+  try {
+    execFileSync('tailscale', ['version'], { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function getTailscaleStatus() {
+  try {
+    const output = execFileSync('tailscale', ['status', '--json'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+    })
+    const status = JSON.parse(output)
+
+    // Get the device's tailscale hostname
+    const selfKey = status.Self?.DNSName || ''
+    // Remove trailing dot from DNS name
+    const hostname = selfKey.replace(/\.$/, '')
+
+    return {
+      connected: status.BackendState === 'Running',
+      hostname: hostname || null,
+    }
+  } catch {
+    return { connected: false, hostname: null }
+  }
+}
+
+async function setupTailscaleServe(port) {
+  try {
+    // First, reset any existing serve config
+    try {
+      execFileSync('tailscale', ['serve', 'reset'], { stdio: 'pipe' })
+    } catch {
+      // Ignore errors from reset
+    }
+
+    // Configure serve to forward to localhost:port
+    execFileSync('tailscale', ['serve', '--bg', `localhost:${port}`], {
+      stdio: 'pipe',
+    })
+
+    return true
+  } catch (error) {
+    console.error(c.dim(`Tailscale serve error: ${error.message}`))
+    return false
+  }
+}
+
+async function getTailscaleServeUrl() {
+  try {
+    const output = execFileSync('tailscale', ['serve', 'status'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+    })
+
+    // Parse the output to find the HTTPS URL
+    // Example output: "https://mac.tail18652a.ts.net:80 (tailnet only)"
+    const match = output.match(/https:\/\/([^\s:]+)/)
+    if (match) {
+      return `https://${match[1]}`
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ============================================================================
 // Setup wizard
 // ============================================================================
 
@@ -611,20 +686,78 @@ async function runSetupWizard(config, isFirstRun = false, downloadedVersion = nu
           console.log()
           console.log('Your HTTPS URL will be shown in the ngrok output.')
         } else if (provider === 'tailscale') {
-          console.log(`${c.info('🔒')} ${c.bold('Tailscale Funnel Setup')}`)
+          console.log(`${c.info('🔒')} ${c.bold('Tailscale Serve Setup')}`)
           console.log()
-          console.log('1. Ensure Tailscale is installed and connected')
-          console.log()
-          console.log('2. Enable Funnel for your device:')
-          console.log(`   ${c.info('tailscale funnel 3420')}`)
-          console.log()
-          console.log('Your HTTPS URL will be your-device.ts.net')
+
+          // Check if tailscale CLI is available
+          const tailscaleAvailable = await checkTailscaleAvailable()
+
+          if (tailscaleAvailable) {
+            // Get tailscale status to check if connected
+            const tailscaleStatus = await getTailscaleStatus()
+
+            if (tailscaleStatus.connected) {
+              console.log(`${c.success('✓')} Tailscale is connected as ${c.info(tailscaleStatus.hostname)}`)
+              console.log()
+
+              const autoSetup = await prompt.confirm(
+                'Would you like to auto-configure Tailscale serve?',
+                true
+              )
+
+              if (autoSetup) {
+                const port = config.server.port || 3420
+                const success = await setupTailscaleServe(port)
+
+                if (success) {
+                  console.log()
+                  console.log(`${c.success('✓')} Tailscale serve configured!`)
+                  console.log()
+                  console.log(`  Your HTTPS URL: ${c.info(`https://${tailscaleStatus.hostname}`)}`)
+                  config.tunnel.configured = true
+                  config.tunnel.hostname = tailscaleStatus.hostname
+                } else {
+                  console.log()
+                  console.log(c.warn('Could not auto-configure. Manual steps:'))
+                  console.log(`   ${c.info(`tailscale serve --bg localhost:${port}`)}`)
+                }
+              } else {
+                const port = config.server.port || 3420
+                console.log()
+                console.log('To configure manually, run:')
+                console.log(`   ${c.info(`tailscale serve --bg localhost:${port}`)}`)
+                console.log()
+                console.log(`Your HTTPS URL will be: ${c.info(`https://${tailscaleStatus.hostname}`)}`)
+              }
+            } else {
+              console.log(c.warn('Tailscale is installed but not connected.'))
+              console.log()
+              console.log('1. Connect to Tailscale:')
+              console.log(`   ${c.info('tailscale up')}`)
+              console.log()
+              console.log('2. Then configure serve:')
+              console.log(`   ${c.info('tailscale serve --bg localhost:3420')}`)
+            }
+          } else {
+            console.log('1. Install Tailscale:')
+            console.log(`   ${c.info('https://tailscale.com/download')}`)
+            console.log()
+            console.log('2. Connect to your tailnet:')
+            console.log(`   ${c.info('tailscale up')}`)
+            console.log()
+            console.log('3. Configure serve:')
+            console.log(`   ${c.info('tailscale serve --bg localhost:3420')}`)
+            console.log()
+            console.log('Your HTTPS URL will be your-device.ts.net')
+          }
         }
 
-        console.log()
-        const key = await prompt.waitForKey(`Press Enter when ready, or 's' to skip...`)
-        if (key !== 's') {
-          config.tunnel.configured = true
+        if (provider !== 'tailscale' || !config.tunnel.configured) {
+          console.log()
+          const key = await prompt.waitForKey(`Press Enter when ready, or 's' to skip...`)
+          if (key !== 's') {
+            config.tunnel.configured = true
+          }
         }
       }
     }
@@ -936,6 +1069,14 @@ async function main() {
     // Check if token not already provided
     if (!serverArgs.includes('--token') && !process.env.RALPH_SERVER_TOKEN) {
       serverArgs.push('--token', config.server.token)
+    }
+  }
+
+  // Check for Tailscale serve and show the URL
+  if (config.tunnel?.provider === 'tailscale') {
+    const tailscaleUrl = await getTailscaleServeUrl()
+    if (tailscaleUrl) {
+      console.log(`\n${c.info('🔒')} Tailscale: ${c.bold(tailscaleUrl)}`)
     }
   }
 
