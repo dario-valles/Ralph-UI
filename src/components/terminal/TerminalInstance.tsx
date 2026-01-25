@@ -349,6 +349,35 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
     }
   }, [])
 
+  // Handle visual viewport changes (mobile keyboard show/hide)
+  useEffect(() => {
+    if (!fitAddonRef.current || !terminalRef.current) return
+    if (typeof window === 'undefined' || !window.visualViewport) return
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const handleViewportResize = () => {
+      // Debounce to allow keyboard animation to settle (iOS needs ~150ms)
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        requestAnimationFrame(() => {
+          try {
+            fitAddonRef.current?.fit()
+          } catch {
+            // Ignore fit errors during transitions
+          }
+        })
+      }, 150)
+    }
+
+    window.visualViewport.addEventListener('resize', handleViewportResize)
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      window.visualViewport?.removeEventListener('resize', handleViewportResize)
+    }
+  }, [])
+
   // Focus terminal when it becomes active
   useEffect(() => {
     if (isActive && terminalRef.current) {

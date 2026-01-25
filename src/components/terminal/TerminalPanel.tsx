@@ -19,6 +19,7 @@ import { SplitResizeHandle } from './SplitResizeHandle'
 import { TerminalKeyBar } from './TerminalKeyBar'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useIsMobile } from '@/hooks/useMediaQuery'
+import { useVisualViewport } from '@/hooks/useVisualViewport'
 
 // Terminal info for rendering
 interface TerminalInfo {
@@ -145,6 +146,7 @@ export function TerminalPanel() {
   } = useTerminalStore()
 
   const isMobile = useIsMobile()
+  const { height: viewportHeight, isKeyboardVisible } = useVisualViewport()
 
   const handleResize = useCallback(
     (deltaY: number) => {
@@ -177,6 +179,15 @@ export function TerminalPanel() {
   // On mobile, always use fullscreen mode when open (not minimized)
   const effectiveFullScreen = isMobile ? !isMinimized : isFullScreen
 
+  // Calculate effective height for mobile with keyboard visible
+  // Account for header (~40px) and key bar (~48px)
+  const HEADER_HEIGHT = 40
+  const KEYBAR_HEIGHT = 48
+  const mobileKeyboardHeight =
+    isMobile && isKeyboardVisible && effectiveFullScreen
+      ? viewportHeight - HEADER_HEIGHT - KEYBAR_HEIGHT
+      : null
+
   return (
     <div
       className={cn(
@@ -186,7 +197,13 @@ export function TerminalPanel() {
         isMinimized && 'h-auto'
       )}
       style={{
-        height: isMinimized ? 'auto' : effectiveFullScreen ? '100%' : `${panelHeight}%`,
+        height: isMinimized
+          ? 'auto'
+          : mobileKeyboardHeight !== null
+            ? `${mobileKeyboardHeight}px`
+            : effectiveFullScreen
+              ? '100%'
+              : `${panelHeight}%`,
         overscrollBehavior: 'contain',
       }}
     >
