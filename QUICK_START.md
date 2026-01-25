@@ -37,7 +37,25 @@ Get Ralph UI running on your machine in under 10 minutes.
 
 ---
 
-## Installation
+## Quick Install (NPX)
+
+The fastest way to get started - no prerequisites except Node.js:
+
+```bash
+# Run Ralph UI instantly
+npx ralph-ui
+
+# Server starts on http://localhost:3420
+# Enter the auth token shown in terminal
+```
+
+The binary is automatically downloaded for your platform and cached in `~/.ralph-ui/bin/`.
+
+**Supported:** macOS (Intel/Apple Silicon), Linux (x64/arm64), Windows
+
+---
+
+## Installation (From Source)
 
 ```bash
 # Clone the repository
@@ -93,6 +111,62 @@ bun run server:dev:token # Dev mode with fixed token (no re-entry after restart)
 The server displays an auth token on startup - enter it in the browser connection dialog.
 
 See [CLAUDE.md](./CLAUDE.md) for full server documentation.
+
+---
+
+## Remote Access
+
+### From Other Devices on Your Network
+
+Ralph UI binds to all network interfaces by default (0.0.0.0), so you can access it from any device on your local network.
+
+1. Find your computer's IP address:
+   ```bash
+   # macOS
+   ipconfig getifaddr en0
+
+   # Linux
+   hostname -I | awk '{print $1}'
+
+   # Windows
+   ipconfig | findstr IPv4
+   ```
+
+2. Start the server:
+   ```bash
+   npx ralph-ui --port 3420
+   ```
+
+3. On your phone/tablet/other device, open: `http://<your-ip>:3420`
+
+4. Enter the auth token displayed in the terminal
+
+### Remote Access (Outside Your Network)
+
+For access from anywhere, use a tunnel service:
+
+```bash
+# ngrok (quick setup)
+ngrok http 3420
+
+# Cloudflare Tunnel (free, more reliable)
+cloudflared tunnel --url http://localhost:3420
+
+# Tailscale (recommended for persistent access)
+# After installing Tailscale, access via your Tailscale IP
+```
+
+### Fixed Auth Token
+
+By default, a new token is generated on each restart. For persistent access:
+
+```bash
+# Use a fixed token
+npx ralph-ui --token my-secret-token
+
+# Or via environment variable
+RALPH_SERVER_TOKEN=my-secret-token npx ralph-ui
+```
 
 ---
 

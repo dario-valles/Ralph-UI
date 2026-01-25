@@ -16,6 +16,7 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 ### Key Features
 
 - **Browser Access** - Access from any device on your network via HTTP/WebSocket
+- **Remote Terminal Access** - Access from phones, tablets, or any device via your network or tunnels
 - **Mission Control** - Bird's-eye view of all projects and active agents
 - **Multi-Project Support** - Manage multiple projects with VS Code-style project switching
 - **Multi-Agent Orchestration** - Run multiple AI agents in parallel with complete isolation
@@ -50,6 +51,24 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 
 ---
 
+## Quick Start (NPX)
+
+The fastest way to run Ralph UI - no cloning or building required:
+
+```bash
+# Run Ralph UI instantly
+npx ralph-ui
+
+# Or with custom port
+npx ralph-ui --port 8080
+```
+
+The binary is downloaded once and cached in `~/.ralph-ui/bin/`.
+
+**Supported platforms:** macOS (Intel/Apple Silicon), Linux (x64/arm64), Windows
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -59,9 +78,19 @@ Ralph UI provides a beautiful, intuitive interface for the **Ralph Wiggum Loop**
 
 ### Installation
 
+**Option 1: NPX (Recommended)**
+
+```bash
+npx ralph-ui
+```
+
+That's it! The server starts on port 3420. Open `http://localhost:3420` and enter the auth token.
+
+**Option 2: From Source (Development)**
+
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/Ralph-UI.git
+git clone https://github.com/dario-valles/Ralph-UI.git
 cd Ralph-UI
 
 # Install dependencies
@@ -75,12 +104,13 @@ bun run dev
 
 # Open http://localhost:1420 in your browser
 # Enter the auth token displayed by the server
+```
 
-# Run tests
+**Testing & Building**
+
+```bash
 bun run test           # Frontend tests
 bun run cargo:test     # Backend tests
-
-# Build for production
 bun run cargo:build    # Backend binary
 bun run build          # Frontend assets
 ```
@@ -163,6 +193,47 @@ See [CLAUDE.md](./CLAUDE.md) for detailed server documentation including authent
 
 ---
 
+## Remote Terminal Access
+
+Ralph UI runs as an HTTP/WebSocket server, accessible from any device on your network or remotely via tunnels.
+
+### Local Network Access
+
+```bash
+# Start server (binds to all interfaces by default)
+npx ralph-ui
+
+# Or specify port
+npx ralph-ui --port 8080
+```
+
+Access from any device: `http://<your-ip>:3420`
+- Find your IP: `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux)
+- Enter the auth token shown in the terminal
+
+### Remote Access via Tunnels
+
+For access outside your network:
+
+```bash
+# Using ngrok
+ngrok http 3420
+
+# Using Cloudflare Tunnel
+cloudflared tunnel --url http://localhost:3420
+
+# Using Tailscale (recommended for persistent access)
+# Install Tailscale, then access via your Tailscale IP
+```
+
+### Security Notes
+
+- Always use a strong `--token` for remote access
+- Consider HTTPS proxy for public tunnels
+- The default token is regenerated on each restart; use `--token` for persistence
+
+---
+
 ## Architecture
 
 ```
@@ -234,6 +305,8 @@ Ralph UI aims to provide the most comprehensive graphical interface for the Ralp
 We welcome contributions! This project is in active development.
 
 ### How to Contribute
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
 
 1. Check the [Project Structure](./PROJECT_STRUCTURE.md) to understand the codebase
 2. Look for issues tagged with `good-first-issue` or `help-wanted`
