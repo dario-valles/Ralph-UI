@@ -81,6 +81,14 @@ export function GSDWorkflow({ projectPath, sessionId, onComplete, onBack }: GSDW
     executionConfig: {},
   })
 
+  // Auto-populate PRD name from session ID (only on mount, not when user edits)
+  useEffect(() => {
+    if (sessionId && !exportState.prdName) {
+      setExportState((prev) => ({ ...prev, prdName: sessionId }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only when sessionId changes, not on prdName edits
+  }, [sessionId])
+
   // Use store state directly
   const state = workflowState
   const requirements = requirementsDoc
