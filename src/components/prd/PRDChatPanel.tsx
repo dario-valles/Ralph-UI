@@ -152,6 +152,8 @@ export function PRDChatPanel() {
     isSynthesizing,
     isGeneratingRequirements,
     loadAvailableAgents,
+    checkResearchStatus,
+    loadSynthesis,
     generateRequirements,
     applyScopeSelection,
     addRequirement,
@@ -508,10 +510,12 @@ export function PRDChatPanel() {
   useEffect(() => {
     if (currentSession?.projectPath) {
       loadAvailableAgents()
+      checkResearchStatus()
+      loadSynthesis()
       loadRequirements()
       loadRoadmap()
     }
-  }, [currentSession?.id, currentSession?.projectPath, loadAvailableAgents, loadRequirements, loadRoadmap])
+  }, [currentSession?.id, currentSession?.projectPath, loadAvailableAgents, checkResearchStatus, loadSynthesis, loadRequirements, loadRoadmap])
 
   // Handle phase action from PhaseActionBar
   const handlePhaseAction = async (action: PhaseAction) => {
@@ -556,10 +560,28 @@ export function PRDChatPanel() {
   }
 
   // Handle research completion - add summary message to chat
-  const handleResearchComplete = (_synthesis: ResearchSynthesis, results: ResearchResult[]) => {
-    // The synthesis is stored in the store, and we can inject a summary into chat
-    // For now, just close the modal - the phaseState will update automatically
-    void _synthesis // Will be used later for injecting into chat
+  const handleResearchComplete = (synthesis: ResearchSynthesis, results: ResearchResult[]) => {
+    // 1. Save synthesis to store so phaseState.researchComplete becomes true
+    usePRDChatStore.setState({ researchSynthesis: synthesis })
+
+    // 2. Update phase state to reflect research completion
+    usePRDChatStore.getState().updatePhaseState()
+
+    // 3. Add synthesis as an assistant message to chat so user sees the summary
+    if (currentSession) {
+      const synthesisMessage = {
+        id: `synthesis-${crypto.randomUUID()}`,
+        sessionId: currentSession.id,
+        role: 'assistant' as const,
+        content: `## Research Summary\n\n${synthesis.content}\n\n---\n*Research analyzed ${synthesis.filesIncluded} files across ${results.length} research areas. Click **Requirements** below to generate requirements from this research.*`,
+        createdAt: new Date().toISOString(),
+        metadata: { type: 'research-synthesis' },
+      }
+      usePRDChatStore.setState((state) => ({
+        messages: [...state.messages, synthesisMessage],
+      }))
+    }
+
     setShowResearchModal(false)
     toast.success(
       'Research Complete',

@@ -12,7 +12,7 @@ use crate::gsd::{
     },
     requirements::{Requirement, RequirementsDoc, ScopeSelection},
     research::{
-        get_available_agents, run_research_agents_with_handle, synthesize_research, ResearchResult,
+        get_available_agents, synthesize_research, ResearchResult,
         ResearchSynthesis,
     },
     roadmap::{derive_roadmap, RoadmapDoc},
@@ -149,6 +149,7 @@ pub async fn start_research(
     context: String,
     agent_type: Option<String>,
     model: Option<String>,
+    research_types: Option<Vec<String>>,
 ) -> Result<ResearchStatus, String> {
     let path = as_path(&project_path);
 
@@ -160,12 +161,14 @@ pub async fn start_research(
     };
 
     // Run research agents in parallel with app handle for event emission
-    let (status, results) = run_research_agents_with_handle(
+    // If research_types is specified, only run those agents (for retrying failed agents)
+    let (status, results) = crate::gsd::research::run_research_agents_selective(
         &config,
         &project_path,
         &session_id,
         &context,
         Some(app_handle),
+        research_types,
     )
     .await;
 
@@ -782,4 +785,70 @@ pub async fn add_requirement(
 
 pub fn get_available_research_agents() -> Vec<AgentType> {
     get_available_agents()
+}
+
+/// Load existing research synthesis from SUMMARY.md
+///
+/// Used to restore synthesis state when reopening a chat session.
+/// Returns None if no synthesis exists yet.
+
+pub async fn load_synthesis(
+    project_path: String,
+    session_id: String,
+) -> Result<Option<ResearchSynthesis>, String> {
+    let path = as_path(&project_path);
+
+    // Try to read existing SUMMARY.md
+    let content = match read_planning_file(&path, &session_id, PlanningFile::Summary) {
+        Ok(content) => content,
+        Err(_) => return Ok(None), // No synthesis exists yet
+    };
+
+    if content.is_empty() {
+        return Ok(None);
+    }
+
+    // Extract key themes from content (simple parsing)
+    let key_themes = extract_key_themes(&content);
+
+    // Count research files
+    let planning_dir = crate::gsd::planning_storage::get_planning_dir(&path, &session_id);
+    let research_dir = planning_dir.join("research");
+    let files_included = std::fs::read_dir(&research_dir)
+        .map(|entries| entries.filter_map(|e| e.ok()).count())
+        .unwrap_or(0);
+
+    Ok(Some(ResearchSynthesis {
+        content,
+        files_included,
+        missing_files: vec![],
+        key_themes,
+    }))
+}
+
+/// Extract key themes from synthesis content
+fn extract_key_themes(content: &str) -> Vec<String> {
+    let mut themes = Vec::new();
+
+    // Look for markdown headers that might indicate themes
+    for line in content.lines() {
+        if line.starts_with("## ") {
+            let theme = line.trim_start_matches("## ").trim();
+            if !theme.is_empty()
+                && !theme.to_lowercase().contains("summary")
+                && !theme.to_lowercase().contains("overview")
+            {
+                themes.push(theme.to_string());
+            }
+        } else if line.starts_with("### ") {
+            let theme = line.trim_start_matches("### ").trim();
+            if !theme.is_empty() {
+                themes.push(theme.to_string());
+            }
+        }
+    }
+
+    // Limit to reasonable number of themes
+    themes.truncate(10);
+    themes
 }

@@ -772,9 +772,10 @@ export const gsdApi = {
     sessionId: string,
     context: string,
     agentType?: string,
-    model?: string
+    model?: string,
+    researchTypes?: string[]
   ): Promise<ResearchStatus> => {
-    return await invoke('start_research', { projectPath, sessionId, context, agentType, model })
+    return await invoke('start_research', { projectPath, sessionId, context, agentType, model, researchTypes })
   },
 
   /** Get research results for a session */
@@ -788,6 +789,14 @@ export const gsdApi = {
     sessionId: string
   ): Promise<ResearchSynthesis> => {
     return await invoke('synthesize_research_cmd', { projectPath, sessionId })
+  },
+
+  /** Load existing research synthesis from disk (for restoring state on reload) */
+  loadSynthesis: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<ResearchSynthesis | null> => {
+    return await invoke('load_synthesis', { projectPath, sessionId })
   },
 
   /** Generate requirements from research output */

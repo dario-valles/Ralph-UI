@@ -220,6 +220,8 @@ describe('PRDChatPanel', () => {
     // Hybrid GSD actions
     loadAvailableAgents: vi.fn(),
     setSelectedResearchAgent: vi.fn(),
+    checkResearchStatus: vi.fn(),
+    loadSynthesis: vi.fn(),
     loadRequirements: vi.fn(),
     loadRoadmap: vi.fn(),
     startResearch: vi.fn(),

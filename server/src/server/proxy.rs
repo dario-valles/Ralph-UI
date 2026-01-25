@@ -1637,6 +1637,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             let context: String = get_arg(&args, "context")?;
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
+            let research_types: Option<Vec<String>> = get_opt_arg(&args, "researchTypes")?;
             let result = commands::gsd::start_research(
                 state.broadcaster.clone(),
                 project_path,
@@ -1644,6 +1645,7 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
                 context,
                 agent_type,
                 model,
+                research_types,
             )
             .await?;
             serde_json::to_value(result).map_err(|e| e.to_string())
@@ -1664,6 +1666,15 @@ async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result
             route_async!(
                 cmd,
                 commands::gsd::synthesize_research_cmd(project_path, session_id)
+            )
+        }
+
+        "load_synthesis" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::gsd::load_synthesis(project_path, session_id)
             )
         }
 

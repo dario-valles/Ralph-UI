@@ -116,6 +116,7 @@ interface PRDChatStore extends AsyncState {
   loadAvailableAgents: () => Promise<void>
   setSelectedResearchAgent: (agent: AgentType | null) => void
   checkResearchStatus: () => Promise<void>
+  loadSynthesis: () => Promise<void>
   startResearch: (context: string, agentType?: string) => Promise<void>
   synthesizeResearch: () => Promise<ResearchSynthesis | null>
   generateRequirements: () => Promise<RequirementsDoc | null>
@@ -636,6 +637,23 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
       } catch (error) {
         // Silently fail - this is just a status check
         console.warn('Failed to check research status:', error)
+      }
+    },
+
+    // Load existing synthesis from disk (for restoring state on page reload)
+    loadSynthesis: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return
+
+      try {
+        const synthesis = await gsdApi.loadSynthesis(ctx.projectPath, ctx.session.id)
+        if (synthesis) {
+          set({ researchSynthesis: synthesis })
+          get().updatePhaseState()
+        }
+      } catch (error) {
+        // Silently fail - synthesis may not exist yet
+        console.warn('Failed to load synthesis:', error)
       }
     },
 
