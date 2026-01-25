@@ -43,8 +43,6 @@ const KEEPALIVE_FOREGROUND_MS = 30000 // 30 seconds when visible
 const KEEPALIVE_BACKGROUND_MS = 60000 // 60 seconds when backgrounded
 const PONG_TIMEOUT_MS = 90000 // 90 seconds without pong = stale
 
-// Notification debounce (US-6)
-const NOTIFICATION_DEBOUNCE_MS = 5000 // 5 seconds between notifications
 
 /**
  * WebSocket-based event client with mobile-resilient reconnection
@@ -57,8 +55,6 @@ class EventsClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null
   private lastPongTime: number = 0
-  private lastNotificationTime: number = 0
-  private wasReconnecting: boolean = false
   private visibilityHandler: (() => void) | null = null
 
   /**
@@ -98,7 +94,6 @@ class EventsClient {
         this.ws.onopen = () => {
           console.log('[EventsClient] WebSocket connected')
           this.isConnecting = false
-          this.wasReconnecting = false
 
           useConnectionStore.getState().markConnected()
           this.startKeepalive()
@@ -155,7 +150,6 @@ class EventsClient {
             store.startReconnecting()
           }
 
-          this.wasReconnecting = true
           this.scheduleReconnect()
         }
       } catch (e) {
@@ -288,13 +282,6 @@ class EventsClient {
   }
 
   /**
-   * Check if we can show a notification (debounce check) (US-6)
-   */
-  private canShowNotification(): boolean {
-    return Date.now() - this.lastNotificationTime > NOTIFICATION_DEBOUNCE_MS
-  }
-
-  /**
    * Disconnect from the WebSocket server
    */
   disconnect(): void {
@@ -313,7 +300,6 @@ class EventsClient {
     }
 
     this.handlers.clear()
-    this.wasReconnecting = false
     useConnectionStore.getState().markDisconnected()
   }
 

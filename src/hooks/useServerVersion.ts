@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useConnectionStore } from '@/stores/connectionStore'
+import { getServerConfig } from '@/lib/invoke'
 
 const VERSION_STORAGE_KEY = 'ralph-ui-last-version'
 const CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
@@ -17,8 +17,9 @@ export function useServerVersion() {
   const [latestVersion, setLatestVersion] = useState<VersionInfo | null>(null)
   const [showUpdateBanner, setShowUpdateBanner] = useState(false)
   const [lastSeenVersion, setLastSeenVersion] = useState<string | null>(getStoredVersion)
-  const serverUrl = useConnectionStore((state) => state.serverUrl)
-  const token = useConnectionStore((state) => state.token)
+  const config = getServerConfig()
+  const serverUrl = config?.url
+  const token = config?.token
 
   useEffect(() => {
     if (!serverUrl || !token) return

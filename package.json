@@ -48,7 +48,12 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
     "cargo:test": "cd server && cargo test",
-    "cargo:build": "cd server && cargo build --release"
+    "cargo:build": "cd server && cargo build --release",
+    "release:build": "bun run build && bun run cargo:build",
+    "release:local": "bun run release:build && mkdir -p ~/.ralph-ui/bin && cp server/target/release/ralph-ui ~/.ralph-ui/bin/ && echo 'local-dev' > ~/.ralph-ui/version.txt && echo '✓ Installed to ~/.ralph-ui/bin/ralph-ui'",
+    "release:test": "bun run release:local && node bin/ralph-ui.js --skip-update",
+    "release:pack": "bun run release:build && npm pack",
+    "release:npx": "bun run release:local && node bin/ralph-ui.js --skip-update"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
