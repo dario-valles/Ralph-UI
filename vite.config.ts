@@ -26,7 +26,7 @@ export default defineConfig(async () => ({
       manifest: {
         name: 'Ralph UI',
         short_name: 'Ralph',
-        description: 'AI-powered coding agent orchestration',
+        description: 'AI-powered Ralph Wiggum agent orchestration',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
@@ -103,11 +103,7 @@ export default defineConfig(async () => ({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-terminal': [
-            '@xterm/xterm',
-            '@xterm/addon-fit',
-            '@xterm/addon-webgl',
-          ],
+          'vendor-terminal': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-webgl'],
         },
       },
     },
