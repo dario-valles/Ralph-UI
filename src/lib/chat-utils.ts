@@ -167,7 +167,9 @@ export function detectCodeLikelihood(text: string): { isCode: boolean; language:
  * Wrap text in a code block
  */
 export function wrapInCodeBlock(text: string, language: string = ''): string {
-  return `\`\`\`${language}\n${text}\n\`\`\``
+  // Treat "auto" as no specific language (empty string for code fence)
+  const lang = language === 'auto' ? '' : language
+  return `\`\`\`${lang}\n${text}\n\`\`\``
 }
 
 /**

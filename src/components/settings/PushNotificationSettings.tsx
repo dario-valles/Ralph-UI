@@ -65,9 +65,7 @@ export function PushNotificationSettings() {
             <BellOff className="h-5 w-5 text-muted-foreground" />
             Push Notifications
           </CardTitle>
-          <CardDescription>
-            Push notifications are not supported in this browser
-          </CardDescription>
+          <CardDescription>Push notifications are not supported in this browser</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -88,9 +86,7 @@ export function PushNotificationSettings() {
             <BellOff className="h-5 w-5 text-destructive" />
             Push Notifications Blocked
           </CardTitle>
-          <CardDescription>
-            You have blocked notifications for this site
-          </CardDescription>
+          <CardDescription>You have blocked notifications for this site</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -126,9 +122,7 @@ export function PushNotificationSettings() {
                 </Badge>
               )}
             </CardTitle>
-            <CardDescription>
-              Receive notifications even when the browser is closed
-            </CardDescription>
+            <CardDescription>Receive notifications even when the browser is closed</CardDescription>
           </div>
           <Switch
             checked={isSubscribed}
@@ -179,9 +173,7 @@ export function PushNotificationSettings() {
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <div>
                 <span className="text-sm font-medium">Task Completions</span>
-                <p className="text-xs text-muted-foreground">
-                  When tasks are marked as completed
-                </p>
+                <p className="text-xs text-muted-foreground">When tasks are marked as completed</p>
               </div>
             </div>
             <Switch
@@ -233,9 +225,7 @@ export function PushNotificationSettings() {
               <Wifi className="h-4 w-4 text-cyan-500" />
               <div>
                 <span className="text-sm font-medium">Connection Status</span>
-                <p className="text-xs text-muted-foreground">
-                  When connection is lost or restored
-                </p>
+                <p className="text-xs text-muted-foreground">When connection is lost or restored</p>
               </div>
             </div>
             <Switch

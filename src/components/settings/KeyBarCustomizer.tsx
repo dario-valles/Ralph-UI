@@ -4,12 +4,35 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RotateCcw, GripVertical, Plus, X, ChevronDown, ChevronUp, Save, Trash2 } from 'lucide-react'
-import { useKeyBarLayoutStore, DEFAULT_LAYOUT, AVAILABLE_KEYS, type KeyDefinition } from '@/stores/keyBarLayoutStore'
+import {
+  RotateCcw,
+  GripVertical,
+  Plus,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  Trash2,
+} from 'lucide-react'
+import {
+  useKeyBarLayoutStore,
+  DEFAULT_LAYOUT,
+  AVAILABLE_KEYS,
+  type KeyDefinition,
+} from '@/stores/keyBarLayoutStore'
 import { cn } from '@/lib/utils'
 
 export function KeyBarCustomizer() {
-  const { getLayout, setCustomLayout, resetToDefault, savePreset, switchPreset, deletePreset, getPresets, getActivePreset } = useKeyBarLayoutStore()
+  const {
+    getLayout,
+    setCustomLayout,
+    resetToDefault,
+    savePreset,
+    switchPreset,
+    deletePreset,
+    getPresets,
+    getActivePreset,
+  } = useKeyBarLayoutStore()
   const currentLayout = getLayout()
   const presets = getPresets()
   const activePreset = getActivePreset()
@@ -31,9 +54,10 @@ export function KeyBarCustomizer() {
   )
 
   // Filter palette by search query
-  const filteredAvailableKeys = availableKeysToAdd.filter((key) =>
-    key.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (key.ariaLabel?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+  const filteredAvailableKeys = availableKeysToAdd.filter(
+    (key) =>
+      key.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (key.ariaLabel?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
   )
 
   // Handle drag start
@@ -145,7 +169,9 @@ export function KeyBarCustomizer() {
     <Card>
       <CardHeader>
         <CardTitle>Key Bar Layout</CardTitle>
-        <CardDescription>Add, remove, and arrange keys in the mobile terminal key bar</CardDescription>
+        <CardDescription>
+          Add, remove, and arrange keys in the mobile terminal key bar
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Preset selector */}
@@ -196,12 +222,7 @@ export function KeyBarCustomizer() {
               autoFocus
             />
             <div className="flex gap-2">
-              <Button
-                onClick={handleSaveAsPreset}
-                size="sm"
-                className="flex-1"
-                variant="default"
-              >
+              <Button onClick={handleSaveAsPreset} size="sm" className="flex-1" variant="default">
                 <Save className="w-3 h-3 mr-1" />
                 Save
               </Button>
@@ -301,11 +322,7 @@ export function KeyBarCustomizer() {
                         ? 'hover:bg-destructive/10 text-destructive hover:text-destructive'
                         : 'text-muted-foreground cursor-not-allowed opacity-50'
                     )}
-                    title={
-                      !canRemoveMore
-                        ? `Minimum ${MIN_KEYS} keys required`
-                        : 'Remove key'
-                    }
+                    title={!canRemoveMore ? `Minimum ${MIN_KEYS} keys required` : 'Remove key'}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -322,10 +339,18 @@ export function KeyBarCustomizer() {
             className="flex items-center gap-2 text-sm font-medium text-left w-full"
             disabled={isFull}
           >
-            <span>{showPalette ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</span>
+            <span>
+              {showPalette ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </span>
             <span>Add Keys from Palette</span>
             {availableKeysToAdd.length > 0 && (
-              <span className="text-xs text-muted-foreground ml-auto">{availableKeysToAdd.length} available</span>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {availableKeysToAdd.length} available
+              </span>
             )}
           </button>
 
@@ -400,7 +425,8 @@ export function KeyBarCustomizer() {
 
         {/* Info text */}
         <p className="text-xs text-muted-foreground">
-          Drag to reorder, click + to add, click × to remove. The new layout appears on your next terminal session.
+          Drag to reorder, click + to add, click × to remove. The new layout appears on your next
+          terminal session.
         </p>
       </CardContent>
     </Card>

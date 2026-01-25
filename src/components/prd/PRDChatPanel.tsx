@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NativeSelect as Select } from '@/components/ui/select'
@@ -32,6 +33,7 @@ import {
   Play,
   Code,
   FileText,
+  ArrowDown,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -65,16 +67,17 @@ export function PRDChatPanel() {
   const [searchParams] = useSearchParams()
   const prdIdFromUrl = searchParams.get('prdId')
 
-  const { getActiveProject, registerProject } = useProjectStore()
-  const activeProject = getActiveProject()
+  const { registerProject } = useProjectStore()
+  // Subscribe to projects and activeProjectId so component re-renders when they change
+  // This fixes an issue where sessions wouldn't load on page reload
+  const activeProject = useProjectStore((state) => {
+    const { projects, activeProjectId } = state
+    if (!activeProjectId) return undefined
+    return projects.find((p) => p.id === activeProjectId)
+  })
 
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const prevSessionIdRef = useRef<string | null>(null)
   const prevAgentTypeRef = useRef<string>('')
-
-  // Track scroll direction for mobile header auto-hide
-  const scrollDirection = useScrollDirection(messagesContainerRef, 15)
 
   // Consolidated UI state
   const {
@@ -135,6 +138,16 @@ export function PRDChatPanel() {
     updateSessionAgent,
   } = usePRDChatStore()
 
+  // Auto-scroll hook for messages - must be after usePRDChatStore since it uses messages
+  const {
+    scrollRef: messagesContainerRef,
+    isAtBottom,
+    scrollToBottom,
+  } = useAutoScroll({ offset: 50, smooth: true, content: messages })
+
+  // Track scroll direction for mobile header auto-hide
+  const scrollDirection = useScrollDirection(messagesContainerRef, 15)
+
   // Load available models for the current agent type
   const agentType = (currentSession?.agentType || 'claude') as AgentType
   const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
@@ -181,9 +194,9 @@ export function PRDChatPanel() {
       // If we had a processing session stored and we're returning to this view,
       // reload its history to show the new messages
       const storedProcessingId = prevProcessingSessionIdRef.current
-      if (storedProcessingId && !processingSessionId) {
+      if (storedProcessingId && !processingSessionId && activeProject?.path) {
         // Processing completed while we were away - reload history
-        loadHistory(storedProcessingId)
+        loadHistory(storedProcessingId, activeProject.path)
       }
     }
 
@@ -232,7 +245,7 @@ export function PRDChatPanel() {
   // Load history when session changes
   useEffect(() => {
     if (currentSession && currentSession.id !== prevSessionIdRef.current) {
-      loadHistory(currentSession.id)
+      loadHistory(currentSession.id, currentSession.projectPath)
       prevSessionIdRef.current = currentSession.id
     }
   }, [currentSession, loadHistory])
@@ -271,8 +284,8 @@ export function PRDChatPanel() {
             setCurrentSession(updatedSession)
           }
 
-          // Then reload history for current session
-          await loadHistory(currentSessionId)
+          // Then reload history for current session (pass projectPath explicitly for robustness)
+          await loadHistory(currentSessionId, activeProject.path)
         } catch (err) {
           console.error('[PRDChatPanel] Failed to refresh after reconnection:', err)
         }
@@ -287,11 +300,6 @@ export function PRDChatPanel() {
     setCurrentSession,
     activeProject?.path,
   ])
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-  }, [messages])
 
   // Clear streaming content when streaming completes
   useEffect(() => {
@@ -883,10 +891,22 @@ export function PRDChatPanel() {
                         content={streamingContent}
                       />
                     )}
-                    <div ref={messagesEndRef} />
                   </>
                 )}
               </div>
+
+              {/* Scroll to bottom button */}
+              {!isAtBottom && messages.length > 0 && (
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  onClick={scrollToBottom}
+                  className="absolute bottom-20 right-4 sm:right-6 h-8 w-8 rounded-full shadow-lg z-10"
+                  aria-label="Scroll to bottom"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+              )}
 
               {/* Input Area */}
               <div className="border-t p-2 sm:p-4 flex-shrink-0 bg-card">

@@ -2,8 +2,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import type { ChatMessage } from '@/types'
-import { cn } from '@/lib/utils'
 import { AttachmentList } from './AttachmentPreview'
+import {
+  ChatBubble,
+  ChatBubbleAvatar,
+  ChatBubbleMessage,
+  ChatBubbleTimestamp,
+} from '@/components/ui/chat/chat-bubble'
 
 interface ChatMessageItemProps {
   message: ChatMessage
@@ -15,34 +20,30 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
   const hasAttachments = message.attachments && message.attachments.length > 0
 
   return (
-    <div
+    <ChatBubble
       data-testid={`message-${message.role}`}
-      className={cn(
-        'flex gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg',
-        isUser ? 'bg-primary/5 ml-2 sm:ml-4 md:ml-8' : 'bg-muted mr-2 sm:mr-4 md:mr-8'
-      )}
+      variant={isUser ? 'sent' : 'received'}
+      layout="ai"
+      className="px-2 sm:px-4"
     >
-      <div
-        className={cn(
-          'flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-        )}
+      <ChatBubbleAvatar
+        icon={isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        className={isUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'}
+      />
+      <ChatBubbleMessage
+        variant={isUser ? 'sent' : 'received'}
+        layout="ai"
+        className="flex-1 p-3 sm:p-4 rounded-lg"
       >
-        {isUser ? (
-          <User className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        ) : (
-          <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        )}
-      </div>
-      <div className="flex-1 space-y-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-medium">{isUser ? 'You' : 'Assistant'}</span>
-          <span className="text-xs text-muted-foreground">
-            {timestamp.toLocaleTimeString([], {
+          <ChatBubbleTimestamp
+            timestamp={timestamp.toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
             })}
-          </span>
+            className="text-xs text-muted-foreground mt-0"
+          />
         </div>
         {isUser ? (
           <div className="space-y-2">
@@ -118,7 +119,7 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
             </ReactMarkdown>
           </div>
         )}
-      </div>
-    </div>
+      </ChatBubbleMessage>
+    </ChatBubble>
   )
 }

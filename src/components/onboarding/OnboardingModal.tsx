@@ -217,17 +217,10 @@ export function OnboardingModal() {
         </DialogFooter>
 
         <div className="flex gap-2 mt-4">
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            className="flex-1"
-          >
+          <Button variant="outline" onClick={handleClose} className="flex-1">
             Skip
           </Button>
-          <Button
-            onClick={handleNext}
-            className="flex-1"
-          >
+          <Button onClick={handleNext} className="flex-1">
             {currentStep === steps.length - 1 ? 'Done' : 'Next'}
             <ChevronRight className="w-4 h-4 ml-2" />
           </Button>

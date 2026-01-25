@@ -3,7 +3,17 @@
 // Supports modifier keys (CTRL/ALT) with sticky/lock modes
 
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, BookOpen, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react'
+import {
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Delete,
+  BookOpen,
+  ChevronDown,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { writeToTerminal } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
@@ -79,14 +89,17 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
   }, [])
 
   // Handle extended arrow key gestures (swipes on arrow buttons)
-  const handleArrowTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!settings.enableExtendedArrows || !activeTerminalId) return
-    touchStartRef.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-      timestamp: Date.now(),
-    }
-  }, [settings.enableExtendedArrows, activeTerminalId])
+  const handleArrowTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!settings.enableExtendedArrows || !activeTerminalId) return
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        timestamp: Date.now(),
+      }
+    },
+    [settings.enableExtendedArrows, activeTerminalId]
+  )
 
   const handleArrowTouchEnd = useCallback(
     (keyLabel: string, e: React.TouchEvent) => {
@@ -190,9 +203,10 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
           const step = 2
           const minSize = 8
           const maxSize = 32
-          const newSize = keyDef.value === '__ZOOM_IN__'
-            ? Math.min(currentSize + step, maxSize)
-            : Math.max(currentSize - step, minSize)
+          const newSize =
+            keyDef.value === '__ZOOM_IN__'
+              ? Math.min(currentSize + step, maxSize)
+              : Math.max(currentSize - step, minSize)
           if (newSize !== currentSize) {
             setTerminalFontSize(newSize)
           }
@@ -250,7 +264,14 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
         console.error('Failed to send key to terminal:', error)
       }
     },
-    [activeTerminalId, modifierState, clearStickyModifier, settings.enableHaptics, settings.terminalFontSize, setTerminalFontSize]
+    [
+      activeTerminalId,
+      modifierState,
+      clearStickyModifier,
+      settings.enableHaptics,
+      settings.terminalFontSize,
+      setTerminalFontSize,
+    ]
   )
 
   // Detect physical keyboard activity and hide/show key bar
@@ -363,7 +384,8 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
                     ],
                   ],
                   // Interrupt button styling
-                  keyDef.label === '^C' && 'bg-destructive/10 text-destructive hover:bg-destructive/20',
+                  keyDef.label === '^C' &&
+                    'bg-destructive/10 text-destructive hover:bg-destructive/20',
                   // Regular key styling
                   !keyDef.isModifier &&
                     keyDef.label !== '^C' && [
@@ -372,7 +394,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
                         'border-accent/50',
                     ],
                   // Arrow key with extended gestures enabled
-                  isArrowKey && settings.enableExtendedArrows && 'relative',
+                  isArrowKey && settings.enableExtendedArrows && 'relative'
                 )}
               >
                 {keyDef.icon ? (
@@ -423,10 +445,7 @@ export function TerminalKeyBar({ className }: TerminalKeyBarProps) {
       </div>
 
       {/* Custom commands side sheet */}
-      <CustomCommandsSheet
-        open={isCommandsSheetOpen}
-        onOpenChange={setIsCommandsSheetOpen}
-      />
+      <CustomCommandsSheet open={isCommandsSheetOpen} onOpenChange={setIsCommandsSheetOpen} />
     </>
   )
 }

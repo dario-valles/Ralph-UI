@@ -47,7 +47,12 @@ const DEFAULT_LAYOUT: KeyDefinition[] = [
   { label: 'Backspace', value: '\x7f', icon: 'Delete', ariaLabel: 'Backspace key' },
   { label: 'CTRL', value: '\x00', ariaLabel: 'Control modifier', isModifier: true },
   { label: '^C', value: '\x03', ariaLabel: 'Interrupt (Ctrl+C)' },
-  { label: 'A-', value: '__ZOOM_OUT__', icon: 'ZoomOut', ariaLabel: 'Zoom out (decrease font size)' },
+  {
+    label: 'A-',
+    value: '__ZOOM_OUT__',
+    icon: 'ZoomOut',
+    ariaLabel: 'Zoom out (decrease font size)',
+  },
   { label: 'A+', value: '__ZOOM_IN__', icon: 'ZoomIn', ariaLabel: 'Zoom in (increase font size)' },
 ]
 

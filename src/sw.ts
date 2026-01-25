@@ -225,21 +225,19 @@ self.addEventListener('notificationclick', (event) => {
   }
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // Try to find an existing window and focus it
-        for (const client of clientList) {
-          // Check if this is a Ralph UI window
-          if (client.url.includes(self.registration.scope)) {
-            // Navigate to the target URL and focus
-            return client.navigate(url).then((c) => c?.focus())
-          }
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to find an existing window and focus it
+      for (const client of clientList) {
+        // Check if this is a Ralph UI window
+        if (client.url.includes(self.registration.scope)) {
+          // Navigate to the target URL and focus
+          return client.navigate(url).then((c) => c?.focus())
         }
+      }
 
-        // No existing window found, open a new one
-        return self.clients.openWindow(url)
-      })
+      // No existing window found, open a new one
+      return self.clients.openWindow(url)
+    })
   )
 })
 

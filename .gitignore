@@ -46,9 +46,6 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# GitHub workflows (requires special permissions to commit)
-.github/workflows/
-
 # Runtime data
 src-tauri/ralph-ui.db
 .ralph-ui/

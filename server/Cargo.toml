@@ -85,6 +85,10 @@ portable-pty = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
 base64 = "0.22.1"
 
+# Static file embedding for single-binary distribution
+rust-embed = "8.5"
+mime_guess = "2.0"
+
 # Web Push notifications
 web-push = "0.10"
 p256 = { version = "0.13", features = ["ecdsa"] }

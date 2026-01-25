@@ -162,10 +162,9 @@ class EventsClient {
         }
       } catch (e) {
         this.isConnecting = false
-        useConnectionStore.getState().markDisconnected(
-          e instanceof Error ? e.message : 'Connection failed',
-          'unknown'
-        )
+        useConnectionStore
+          .getState()
+          .markDisconnected(e instanceof Error ? e.message : 'Connection failed', 'unknown')
         reject(e)
       }
     })

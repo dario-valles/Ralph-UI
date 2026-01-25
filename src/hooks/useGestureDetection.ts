@@ -128,7 +128,11 @@ export function useGestureDetection(
       }
 
       // Handle two-finger pinch
-      if (e.touches.length === 2 && touchSecondStartRef.current && initialPinchDistanceRef.current !== null) {
+      if (
+        e.touches.length === 2 &&
+        touchSecondStartRef.current &&
+        initialPinchDistanceRef.current !== null
+      ) {
         const touch2 = e.touches[1]
         touchSecondCurrentRef.current = {
           x: touch2.clientX,
@@ -185,7 +189,11 @@ export function useGestureDetection(
       if (!touchStartRef.current || !touchCurrentRef.current) return
 
       // Check if this was a pinch gesture (ended with scale change)
-      if (touchSecondStartRef.current && touchSecondCurrentRef.current && initialPinchDistanceRef.current !== null) {
+      if (
+        touchSecondStartRef.current &&
+        touchSecondCurrentRef.current &&
+        initialPinchDistanceRef.current !== null
+      ) {
         const currentDistance = getDistance(
           touchCurrentRef.current.x,
           touchCurrentRef.current.y,
@@ -226,7 +234,8 @@ export function useGestureDetection(
       const distance = Math.sqrt(dx * dx + dy * dy)
 
       // Check if this was a two-finger gesture
-      const isTwoFinger = e.touches.length > 0 && (e.touches.length === 2 || e.changedTouches.length === 2)
+      const isTwoFinger =
+        e.touches.length > 0 && (e.touches.length === 2 || e.changedTouches.length === 2)
 
       // Only trigger callback if swipe exceeded threshold
       if (distance >= threshold) {

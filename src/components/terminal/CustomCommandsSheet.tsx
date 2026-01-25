@@ -16,14 +16,24 @@ interface CustomCommandsSheetProps {
 
 export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetProps) {
   const { activeTerminalId } = useTerminalStore()
-  const { commands, addCommand, deleteCommand, editCommand, getAllCategories, reorderCommands, projectPath } = useCustomCommandsStore()
+  const {
+    commands,
+    addCommand,
+    deleteCommand,
+    editCommand,
+    getAllCategories,
+    reorderCommands,
+    projectPath,
+  } = useCustomCommandsStore()
   const [label, setLabel] = useState('')
   const [command, setCommand] = useState('')
   const [action, setAction] = useState<'insert' | 'execute'>('execute')
   const [category, setCategory] = useState('Uncategorized')
   const [scope, setScope] = useState<'local' | 'project' | 'global'>('local')
   const [showForm, setShowForm] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Uncategorized']))
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(['Uncategorized'])
+  )
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -47,9 +57,7 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
     }
     const query = searchQuery.toLowerCase()
     return commands.filter(
-      (cmd) =>
-        cmd.label.toLowerCase().includes(query) ||
-        cmd.command.toLowerCase().includes(query)
+      (cmd) => cmd.label.toLowerCase().includes(query) || cmd.command.toLowerCase().includes(query)
     )
   }, [commands, searchQuery])
 
@@ -194,7 +202,8 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
             <div>3. 📱 Local commands (lowest)</div>
           </div>
           <div className="text-blue-800 mt-2">
-            If commands have the same label, the highest priority version is used. Project commands override Global commands.
+            If commands have the same label, the highest priority version is used. Project commands
+            override Global commands.
           </div>
         </div>
 
@@ -264,11 +273,13 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                     onChange={(e) => setCategory(e.target.value)}
                     className="flex-1 px-2 py-1 text-sm border rounded bg-background"
                   >
-                    {['Uncategorized', ...allCategories.filter((c) => c !== 'Uncategorized')].map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
+                    {['Uncategorized', ...allCategories.filter((c) => c !== 'Uncategorized')].map(
+                      (cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      )
+                    )}
                     <option value="">+ New Category</option>
                   </select>
                 </div>
@@ -463,15 +474,23 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                                   cmd.scope === 'project'
                                     ? 'bg-blue/20 text-blue'
                                     : cmd.scope === 'global'
-                                    ? 'bg-purple/20 text-purple'
-                                    : 'bg-muted/20 text-muted-foreground'
+                                      ? 'bg-purple/20 text-purple'
+                                      : 'bg-muted/20 text-muted-foreground'
                                 }`}
                               >
-                                {cmd.scope === 'project' ? '🔄 Project' : cmd.scope === 'global' ? '🌐 Global' : '📱 Local'}
+                                {cmd.scope === 'project'
+                                  ? '🔄 Project'
+                                  : cmd.scope === 'global'
+                                    ? '🌐 Global'
+                                    : '📱 Local'}
                               </span>
                               {cmd.scope === 'project' && getOverriddenCommand(cmd.id) && (
                                 <button
-                                  onClick={() => setViewingOverrideFor(viewingOverrideFor === cmd.id ? null : cmd.id)}
+                                  onClick={() =>
+                                    setViewingOverrideFor(
+                                      viewingOverrideFor === cmd.id ? null : cmd.id
+                                    )
+                                  }
                                   className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-amber-100/20 text-amber-700 hover:bg-amber-100/30 transition-colors"
                                   title="This project command overrides a global command"
                                 >
@@ -483,7 +502,9 @@ export function CustomCommandsSheet({ open, onOpenChange }: CustomCommandsSheetP
                             {/* Override Information */}
                             {viewingOverrideFor === cmd.id && getOverriddenCommand(cmd.id) && (
                               <div className="mt-2 p-3 bg-amber-50/50 border border-amber-200/50 rounded text-sm">
-                                <div className="font-medium text-amber-900 mb-2">Overriding Global Command:</div>
+                                <div className="font-medium text-amber-900 mb-2">
+                                  Overriding Global Command:
+                                </div>
                                 <div className="ml-2 pl-2 border-l-2 border-amber-200 space-y-1">
                                   {(() => {
                                     const overridden = getOverriddenCommand(cmd.id)

@@ -48,7 +48,9 @@ export const useOnboardingStore = create<OnboardingStore>()(
         hasSeenMainOnboarding: state.hasSeenMainOnboarding,
       }),
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as { dismissedHints?: string[]; hasSeenMainOnboarding?: boolean } | undefined
+        const persisted = persistedState as
+          | { dismissedHints?: string[]; hasSeenMainOnboarding?: boolean }
+          | undefined
         return {
           ...currentState,
           dismissedHints: new Set(persisted?.dismissedHints || []),

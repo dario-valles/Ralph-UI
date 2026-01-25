@@ -96,6 +96,7 @@ describe('prdChatStore', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         undefined
       )
       expect(usePRDChatStore.getState().currentSession).toEqual(mockSession)
@@ -134,6 +135,7 @@ describe('prdChatStore', () => {
         'claude',
         '/test/project',
         'prd-123',
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -754,6 +756,7 @@ describe('prdChatStore', () => {
         undefined,
         undefined,
         true,
+        undefined,
         undefined
       )
       expect(usePRDChatStore.getState().currentSession?.structuredMode).toBe(true)

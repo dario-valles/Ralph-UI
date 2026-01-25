@@ -8,7 +8,9 @@ import { CustomCommand } from '@/stores/customCommandsStore'
  * If a project command has the same label as a global command,
  * the project command "overrides" the global one
  */
-export function findCommandOverrides(commands: CustomCommand[]): Map<string, { effective: CustomCommand; overrides?: CustomCommand[] }> {
+export function findCommandOverrides(
+  commands: CustomCommand[]
+): Map<string, { effective: CustomCommand; overrides?: CustomCommand[] }> {
   const overrideMap = new Map<string, { effective: CustomCommand; overrides?: CustomCommand[] }>()
 
   // Group commands by label
@@ -44,7 +46,10 @@ export function findCommandOverrides(commands: CustomCommand[]): Map<string, { e
 /**
  * Check if a command is overriding another command with the same label
  */
-export function isCommandOverriding(command: CustomCommand, commands: CustomCommand[]): CustomCommand | undefined {
+export function isCommandOverriding(
+  command: CustomCommand,
+  commands: CustomCommand[]
+): CustomCommand | undefined {
   const overrides = findCommandOverrides(commands)
   const entry = overrides.get(command.label)
 
@@ -60,7 +65,10 @@ export function isCommandOverriding(command: CustomCommand, commands: CustomComm
  * Get the effective command for a given label
  * (the one that would actually be used, based on priority)
  */
-export function getEffectiveCommand(label: string, commands: CustomCommand[]): CustomCommand | undefined {
+export function getEffectiveCommand(
+  label: string,
+  commands: CustomCommand[]
+): CustomCommand | undefined {
   const overrides = findCommandOverrides(commands)
   return overrides.get(label)?.effective
 }

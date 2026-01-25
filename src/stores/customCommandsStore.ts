@@ -23,9 +23,22 @@ interface CustomCommandsStore {
   loading: boolean
 
   // Actions
-  addCommand: (label: string, command: string, action: 'insert' | 'execute', category: string, scope: 'local' | 'project' | 'global') => Promise<void>
+  addCommand: (
+    label: string,
+    command: string,
+    action: 'insert' | 'execute',
+    category: string,
+    scope: 'local' | 'project' | 'global'
+  ) => Promise<void>
   deleteCommand: (id: string) => Promise<void>
-  editCommand: (id: string, label: string, command: string, action: 'insert' | 'execute', category: string, scope?: 'local' | 'project' | 'global') => Promise<void>
+  editCommand: (
+    id: string,
+    label: string,
+    command: string,
+    action: 'insert' | 'execute',
+    category: string,
+    scope?: 'local' | 'project' | 'global'
+  ) => Promise<void>
   reorderCommands: (commands: CustomCommand[]) => Promise<void>
   setProjectPath: (path: string | null) => void
   loadProjectCommands: (projectPath: string) => Promise<void>
@@ -43,7 +56,13 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
       projectPath: null,
       loading: false,
 
-      addCommand: async (label: string, command: string, action: 'insert' | 'execute', category: string, scope: 'local' | 'project' | 'global') => {
+      addCommand: async (
+        label: string,
+        command: string,
+        action: 'insert' | 'execute',
+        category: string,
+        scope: 'local' | 'project' | 'global'
+      ) => {
         const { commands, projectPath } = get()
         const newCommand: CustomCommand = {
           id: `cmd-${Date.now()}`,
@@ -117,7 +136,14 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
         set({ commands: updatedCommands })
       },
 
-      editCommand: async (id: string, label: string, command: string, action: 'insert' | 'execute', category: string, scope?: 'local' | 'project' | 'global') => {
+      editCommand: async (
+        id: string,
+        label: string,
+        command: string,
+        action: 'insert' | 'execute',
+        category: string,
+        scope?: 'local' | 'project' | 'global'
+      ) => {
         const { commands, projectPath } = get()
         const commandToEdit = commands.find((c) => c.id === id)
         const newScope = scope || commandToEdit?.scope || 'local'
@@ -217,10 +243,7 @@ export const useCustomCommandsStore = create<CustomCommandsStore>()(
           const globalCommands = await invoke<CustomCommand[]>('load_global_commands', {})
           const { commands } = get()
           // Merge global commands with local commands
-          const mergedCommands = [
-            ...commands.filter((c) => c.scope === 'local'),
-            ...globalCommands,
-          ]
+          const mergedCommands = [...commands.filter((c) => c.scope === 'local'), ...globalCommands]
           set({ commands: mergedCommands })
         } catch (error) {
           console.error('Failed to load global commands:', error)

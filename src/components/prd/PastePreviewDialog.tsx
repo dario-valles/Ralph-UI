@@ -85,7 +85,7 @@ function PastePreviewDialogContent({
 }: PastePreviewDialogContentProps) {
   // Initialize state from props - component remounts when dialog opens
   const [wrapInCode, setWrapInCode] = useState(isCode)
-  const [language, setLanguage] = useState(detectedLanguage || '')
+  const [language, setLanguage] = useState(detectedLanguage || 'auto')
 
   // Truncate preview if too long
   const previewContent = useMemo(() => {

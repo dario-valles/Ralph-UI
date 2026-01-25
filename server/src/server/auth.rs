@@ -74,14 +74,16 @@ where
                 return inner.call(req).await;
             }
 
-            // Skip auth for health check, index page, and WebSocket upgrade with token in query
-            if path == "/health" || path == "/" {
+            // Only require auth for API and WebSocket endpoints
+            // All other paths (static files, index.html, etc.) are public
+            let requires_auth = path.starts_with("/api/") || path.starts_with("/ws/");
+
+            if !requires_auth {
                 return inner.call(req).await;
             }
 
-            // For WebSocket endpoints, check query parameter
-            // This includes /ws/events and /ws/pty/:id
-            if path == "/ws/events" || path.starts_with("/ws/pty/") {
+            // For WebSocket endpoints, check query parameter (browsers can't set headers on WS)
+            if path.starts_with("/ws/") {
                 if let Some(query) = req.uri().query() {
                     if query.contains(&format!("token={}", *token)) {
                         return inner.call(req).await;
@@ -89,7 +91,7 @@ where
                 }
             }
 
-            // Check Authorization header
+            // Check Authorization header for API endpoints
             if let Some(auth_header) = req.headers().get(AUTHORIZATION) {
                 if let Ok(auth_str) = auth_header.to_str() {
                     if auth_str.starts_with("Bearer ") {

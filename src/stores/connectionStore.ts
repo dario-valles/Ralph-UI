@@ -4,7 +4,12 @@
 import { create } from 'zustand'
 
 /** Connection status states */
-export type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected' | 'offline'
+export type ConnectionStatus =
+  | 'connected'
+  | 'connecting'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'offline'
 
 /** Connection error types */
 export type ConnectionErrorType = 'network' | 'auth' | 'server' | 'timeout' | 'unknown'

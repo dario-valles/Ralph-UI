@@ -139,9 +139,7 @@ export function PendingActionsIndicator() {
         <div className="text-sm text-destructive">
           <span>Failed: </span>
           <span className="font-medium">{failedActions.length}</span>
-          {lastSyncError && (
-            <p className="text-xs mt-1 text-muted-foreground">{lastSyncError}</p>
-          )}
+          {lastSyncError && <p className="text-xs mt-1 text-muted-foreground">{lastSyncError}</p>}
         </div>
       )}
     </div>

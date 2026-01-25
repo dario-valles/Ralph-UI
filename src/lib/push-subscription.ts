@@ -46,11 +46,7 @@ export interface PushSubscriptionInfo {
  * Check if push notifications are supported in this browser
  */
 export function isPushSupported(): boolean {
-  return (
-    'serviceWorker' in navigator &&
-    'PushManager' in window &&
-    'Notification' in window
-  )
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 }
 
 /**
@@ -95,10 +91,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     setTimeout(() => reject(new Error('Service worker not available (timeout)')), 10000)
   })
 
-  const registration = await Promise.race([
-    navigator.serviceWorker.ready,
-    timeoutPromise,
-  ])
+  const registration = await Promise.race([navigator.serviceWorker.ready, timeoutPromise])
 
   console.log('[Push] Service worker ready:', registration.scope)
   return registration
@@ -297,9 +290,7 @@ export async function updatePushSettings(
 /**
  * Get notification settings for a subscription
  */
-export async function getPushSettings(
-  subscriptionId: string
-): Promise<PushNotificationSettings> {
+export async function getPushSettings(subscriptionId: string): Promise<PushNotificationSettings> {
   return await invoke<PushNotificationSettings>('get_push_settings', {
     subscriptionId,
   })

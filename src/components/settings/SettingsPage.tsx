@@ -806,9 +806,7 @@ export function SettingsPage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div
-                      className={`space-y-2 ${!config.validation.runTests ? 'opacity-50' : ''}`}
-                    >
+                    <div className={`space-y-2 ${!config.validation.runTests ? 'opacity-50' : ''}`}>
                       <Label htmlFor="testCommand">Test Command (Optional)</Label>
                       <Input
                         id="testCommand"
@@ -827,9 +825,7 @@ export function SettingsPage() {
                       </p>
                     </div>
 
-                    <div
-                      className={`space-y-2 ${!config.validation.runLint ? 'opacity-50' : ''}`}
-                    >
+                    <div className={`space-y-2 ${!config.validation.runLint ? 'opacity-50' : ''}`}>
                       <Label htmlFor="lintCommand">Lint Command (Optional)</Label>
                       <Input
                         id="lintCommand"

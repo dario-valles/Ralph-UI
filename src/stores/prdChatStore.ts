@@ -43,7 +43,7 @@ interface PRDChatStore extends AsyncState {
   startSession: (options: StartSessionOptions) => Promise<void>
   updateSessionAgent: (agentType: string) => Promise<void>
   sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>
-  loadHistory: (sessionId: string) => Promise<void>
+  loadHistory: (sessionId: string, projectPath?: string) => Promise<void>
   loadSessions: (projectPath?: string) => Promise<void>
   setCurrentSession: (session: ChatSession | null) => void
   deleteSession: (sessionId: string) => Promise<void>
@@ -243,15 +243,38 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     },
 
     // Load message history for a session
-    loadHistory: async (sessionId: string) => {
-      const ctx = getSessionWithPath()
-      if (!ctx) {
+    // projectPath can be passed explicitly for robustness (e.g., during reconnection)
+    loadHistory: async (sessionId: string, projectPath?: string) => {
+      // Try explicit param first, then currentSession, then find from sessions list
+      let resolvedPath = projectPath
+      if (!resolvedPath) {
+        const ctx = getSessionWithPath()
+        resolvedPath = ctx?.projectPath
+      }
+      if (!resolvedPath) {
+        // Fallback: find session in sessions list and get its projectPath
+        const { sessions } = get()
+        const session = sessions.find((s) => s.id === sessionId)
+        resolvedPath = session?.projectPath
+      }
+      if (!resolvedPath) {
         set({ error: 'No project path available' })
         return
       }
       await asyncAction(set, async () => {
-        const messages = await prdChatApi.getHistory(sessionId, ctx.projectPath)
-        return { messages }
+        const messages = await prdChatApi.getHistory(sessionId, resolvedPath!)
+
+        // Check if operation completed while we were away (last message is from assistant)
+        // If so, clear streaming state since the response is already available
+        const { streaming, processingSessionId } = get()
+        const lastMessage = messages[messages.length - 1]
+        const operationCompleted =
+          streaming && processingSessionId === sessionId && lastMessage?.role === 'assistant'
+
+        return {
+          messages,
+          ...(operationCompleted ? { streaming: false, processingSessionId: null } : {}),
+        }
       })
     },
 

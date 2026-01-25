@@ -10,7 +10,7 @@ export const PASTE_CONFIG = {
 
 /** Supported programming languages for code blocks */
 export const CODE_LANGUAGES = [
-  { value: '', label: 'Auto-detect' },
+  { value: 'auto', label: 'Auto-detect' },
   { value: 'typescript', label: 'TypeScript' },
   { value: 'javascript', label: 'JavaScript' },
   { value: 'python', label: 'Python' },
