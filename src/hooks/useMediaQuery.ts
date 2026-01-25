@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from 'react'
+import { useSyncExternalStore, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 
 /**
  * Hook to detect if a media query matches
@@ -6,22 +6,24 @@ import { useSyncExternalStore, useState, useEffect, useCallback, useRef } from '
  * @returns boolean indicating if the query matches
  */
 export function useMediaQuery(query: string): boolean {
-  // Use useSyncExternalStore for proper subscription pattern
-  const subscribe = (callback: () => void) => {
-    if (typeof window === 'undefined') return () => {}
-    const mediaQuery = window.matchMedia(query)
-    mediaQuery.addEventListener('change', callback)
-    return () => mediaQuery.removeEventListener('change', callback)
-  }
+  // Create stable subscribe and getSnapshot functions using useMemo
+  // These must remain stable for useSyncExternalStore to work correctly
+  const { subscribe, getSnapshot } = useMemo(() => {
+    return {
+      subscribe: (callback: () => void) => {
+        if (typeof window === 'undefined') return () => {}
+        const mediaQuery = window.matchMedia(query)
+        mediaQuery.addEventListener('change', callback)
+        return () => mediaQuery.removeEventListener('change', callback)
+      },
+      getSnapshot: () => {
+        if (typeof window === 'undefined') return false
+        return window.matchMedia(query).matches
+      },
+    }
+  }, [query])
 
-  const getSnapshot = () => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia(query).matches
-  }
-
-  const getServerSnapshot = () => false
-
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  return useSyncExternalStore(subscribe, getSnapshot, () => false)
 }
 
 /**

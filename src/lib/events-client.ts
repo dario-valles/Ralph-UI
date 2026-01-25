@@ -19,7 +19,6 @@ import {
   shouldContinueReconnecting,
   RECONNECTION_CONFIG,
 } from '@/stores/connectionStore'
-import { toast } from '@/stores/toastStore'
 
 /**
  * Event payload from the server
