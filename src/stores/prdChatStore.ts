@@ -115,6 +115,7 @@ interface PRDChatStore extends AsyncState {
   // Hybrid GSD actions
   loadAvailableAgents: () => Promise<void>
   setSelectedResearchAgent: (agent: AgentType | null) => void
+  checkResearchStatus: () => Promise<void>
   startResearch: (context: string, agentType?: string) => Promise<void>
   synthesizeResearch: () => Promise<ResearchSynthesis | null>
   generateRequirements: () => Promise<RequirementsDoc | null>
@@ -606,6 +607,36 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     // Set selected research agent
     setSelectedResearchAgent: (agent) => {
       set({ selectedResearchAgent: agent })
+    },
+
+    // Check if research is currently running (for reconnecting to in-progress research)
+    checkResearchStatus: async () => {
+      const ctx = getSessionWithPath()
+      if (!ctx) return
+
+      try {
+        const state = await gsdApi.getState(ctx.projectPath, ctx.session.id)
+        if (state?.researchStatus) {
+          const { architecture, codebase, bestPractices, risks } = state.researchStatus
+          const isRunning =
+            architecture.running || codebase.running || bestPractices.running || risks.running
+          const isComplete =
+            architecture.complete && codebase.complete && bestPractices.complete && risks.complete
+
+          set({
+            researchStatus: state.researchStatus,
+            isResearchRunning: isRunning,
+            phaseState: {
+              ...get().phaseState,
+              researchStarted: isRunning || isComplete,
+              researchComplete: isComplete,
+            },
+          })
+        }
+      } catch (error) {
+        // Silently fail - this is just a status check
+        console.warn('Failed to check research status:', error)
+      }
     },
 
     // Start parallel research

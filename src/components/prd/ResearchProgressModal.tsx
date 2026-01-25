@@ -58,18 +58,32 @@ export function ResearchProgressModal({
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Get agent selection from store
-  const { selectedResearchAgent } = usePRDChatStore()
+  // Get agent selection and research status checker from store
+  const { selectedResearchAgent, checkResearchStatus } = usePRDChatStore()
 
-  // Reset state when modal opens
+  // Check research status when modal opens (to reconnect to running research)
   useEffect(() => {
     if (open) {
-      setResearchStatus(INITIAL_RESEARCH_STATUS)
-      setResearchResults([])
-      setSynthesis(null)
-      setError(null)
+      // First check if research is already running
+      checkResearchStatus().then(() => {
+        const { researchStatus: currentStatus, isResearchRunning: currentlyRunning } =
+          usePRDChatStore.getState()
+
+        if (currentlyRunning) {
+          // Research is running - sync state from store
+          setResearchStatus(currentStatus)
+          setIsRunning(true)
+          setError(null)
+        } else {
+          // No research running - reset to initial state
+          setResearchStatus(INITIAL_RESEARCH_STATUS)
+          setResearchResults([])
+          setSynthesis(null)
+          setError(null)
+        }
+      })
     }
-  }, [open])
+  }, [open, checkResearchStatus])
 
   // Start research
   const handleStartResearch = useCallback(
@@ -79,13 +93,15 @@ export function ResearchProgressModal({
       setIsRunning(true)
       setError(null)
 
-      // Mark all as running
-      setResearchStatus({
+      // Mark all as running (local state + store)
+      const runningStatus = {
         architecture: { running: true, complete: false },
         codebase: { running: true, complete: false },
         bestPractices: { running: true, complete: false },
         risks: { running: true, complete: false },
-      })
+      }
+      setResearchStatus(runningStatus)
+      usePRDChatStore.setState({ isResearchRunning: true, researchStatus: runningStatus })
 
       try {
         const status = await gsdApi.startResearch(
@@ -96,11 +112,14 @@ export function ResearchProgressModal({
           model
         )
         setResearchStatus(status)
+        usePRDChatStore.setState({ researchStatus: status })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start research')
         setResearchStatus(INITIAL_RESEARCH_STATUS)
+        usePRDChatStore.setState({ researchStatus: INITIAL_RESEARCH_STATUS })
       } finally {
         setIsRunning(false)
+        usePRDChatStore.setState({ isResearchRunning: false })
       }
     },
     [projectPath, sessionId, conversationContext, selectedResearchAgent]

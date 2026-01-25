@@ -575,10 +575,15 @@ export function PRDChatPanel() {
   }
 
   // Build phase state for PhaseActionBar
+  // Determine which action is actually running (research takes precedence if running)
+  const effectiveRunningAction: PhaseAction | null = isResearchRunning
+    ? 'research'
+    : runningPhaseAction
+
   const currentPhaseState: PhaseState = {
     ...phaseState,
     isRunning: isResearchRunning || isSynthesizing || isGeneratingRequirements || loading,
-    runningAction: runningPhaseAction,
+    runningAction: effectiveRunningAction,
   }
 
   const hasMessages = messages.length > 0
