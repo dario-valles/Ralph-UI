@@ -136,10 +136,11 @@ class EventsClient {
         this.ws.onclose = (event) => {
           console.log('[EventsClient] WebSocket closed:', event.code, event.reason)
           this.ws = null
-          this.isConnecting = false
           this.stopKeepalive()
 
           const store = useConnectionStore.getState()
+          const wasConnecting = this.isConnecting
+          this.isConnecting = false
 
           // Don't reconnect if it was a clean close (code 1000) or auth failure (4001)
           if (event.code === 1000) {
@@ -149,6 +150,10 @@ class EventsClient {
 
           if (event.code === 4001) {
             store.markDisconnected('Authentication failed', 'auth')
+            // Reject the connection promise if we were still connecting
+            if (wasConnecting) {
+              reject(new Error('Authentication failed: Invalid token'))
+            }
             return
           }
 

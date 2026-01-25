@@ -51,23 +51,36 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
     setError(null)
 
     try {
-      // Test the connection by hitting the health endpoint
-      const healthUrl = url.replace(/\/$/, '') + '/health'
-      const response = await fetch(healthUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const normalizedUrl = url.replace(/\/$/, '')
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Invalid auth token')
-        }
-        throw new Error(`Server returned ${response.status}`)
+      // First check if server is reachable via health endpoint (no auth required)
+      const healthUrl = normalizedUrl + '/health'
+      const healthResponse = await fetch(healthUrl)
+      if (!healthResponse.ok) {
+        throw new Error(`Server not reachable: ${healthResponse.status}`)
       }
 
-      // Save the config
-      setServerConfig({ url: url.replace(/\/$/, ''), token })
+      // Validate token by calling an authenticated endpoint
+      // Use invoke with a simple command that requires auth
+      const invokeUrl = normalizedUrl + '/api/invoke'
+      const authResponse = await fetch(invokeUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ cmd: 'get_projects', args: {} }),
+      })
+
+      if (!authResponse.ok) {
+        if (authResponse.status === 401) {
+          throw new Error('Invalid auth token')
+        }
+        throw new Error(`Server returned ${authResponse.status}`)
+      }
+
+      // Token is valid - now save the config
+      setServerConfig({ url: normalizedUrl, token })
 
       // Connect WebSocket events
       await connectEvents()
