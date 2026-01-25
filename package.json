@@ -38,6 +38,7 @@
     "server:dev": "cd server && cargo run -- --port 3421",
     "server:dev:token": "cd server && RALPH_SERVER_TOKEN=secure-token cargo run -- --port 3421",
     "server:kill": "pkill -f 'ralph-ui' || true; lsof -ti:3421 | xargs kill -9 2>/dev/null || true",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
