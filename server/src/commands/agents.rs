@@ -230,12 +230,21 @@ pub fn cleanup_stale_agents_internal(
 // Agent PTY Commands - for interactive terminal support
 // ============================================================================
 
-/// Check if an agent has an associated PTY
-pub fn agent_has_pty(agent_manager: &Arc<Mutex<AgentManager>>, agent_id: String) -> Result<bool, String> {
-    let manager = agent_manager
+/// Acquire lock on AgentManager with consistent error handling
+fn lock_manager(
+    agent_manager: &Arc<Mutex<AgentManager>>,
+) -> Result<std::sync::MutexGuard<'_, AgentManager>, String> {
+    agent_manager
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    Ok(manager.has_pty(&agent_id))
+        .map_err(|e| format!("Lock error: {}", e))
+}
+
+/// Check if an agent has an associated PTY
+pub fn agent_has_pty(
+    agent_manager: &Arc<Mutex<AgentManager>>,
+    agent_id: String,
+) -> Result<bool, String> {
+    Ok(lock_manager(agent_manager)?.has_pty(&agent_id))
 }
 
 /// Get the PTY ID for an agent
@@ -243,10 +252,7 @@ pub fn get_agent_pty_id(
     agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<Option<String>, String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    Ok(manager.get_pty_id(&agent_id))
+    Ok(lock_manager(agent_manager)?.get_pty_id(&agent_id))
 }
 
 /// Get the PTY history (raw output) for an agent
@@ -254,10 +260,7 @@ pub fn get_agent_pty_history(
     agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<Vec<u8>, String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    Ok(manager.get_pty_history(&agent_id))
+    Ok(lock_manager(agent_manager)?.get_pty_history(&agent_id))
 }
 
 /// Register a PTY association for an agent
@@ -266,10 +269,7 @@ pub fn register_agent_pty(
     agent_id: String,
     pty_id: String,
 ) -> Result<(), String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    manager.register_pty(&agent_id, &pty_id);
+    lock_manager(agent_manager)?.register_pty(&agent_id, &pty_id);
     Ok(())
 }
 
@@ -278,10 +278,7 @@ pub fn unregister_agent_pty(
     agent_manager: &Arc<Mutex<AgentManager>>,
     agent_id: String,
 ) -> Result<(), String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    manager.unregister_pty(&agent_id);
+    lock_manager(agent_manager)?.unregister_pty(&agent_id);
     Ok(())
 }
 
@@ -291,10 +288,7 @@ pub fn process_agent_pty_data(
     agent_id: String,
     data: Vec<u8>,
 ) -> Result<(), String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    manager.process_pty_data(&agent_id, &data);
+    lock_manager(agent_manager)?.process_pty_data(&agent_id, &data);
     Ok(())
 }
 
@@ -304,23 +298,21 @@ pub fn notify_agent_pty_exit(
     agent_id: String,
     exit_code: i32,
 ) -> Result<(), String> {
-    let manager = agent_manager
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    manager.notify_pty_exit(&agent_id, exit_code);
+    lock_manager(agent_manager)?.notify_pty_exit(&agent_id, exit_code);
     Ok(())
 }
 
 // ============================================================================
 // Internal PTY functions for use with pre-locked AgentManager
+// Used by proxy.rs via with_agent_manager() to avoid double-locking
 // ============================================================================
 
-/// Check if an agent has an associated PTY (internal, for pre-locked manager)
+/// Check if an agent has an associated PTY (for pre-locked manager)
 pub fn agent_has_pty_internal(manager: &AgentManager, agent_id: &str) -> Result<bool, String> {
     Ok(manager.has_pty(agent_id))
 }
 
-/// Get the PTY ID for an agent (internal, for pre-locked manager)
+/// Get the PTY ID for an agent (for pre-locked manager)
 pub fn get_agent_pty_id_internal(
     manager: &AgentManager,
     agent_id: &str,
@@ -328,7 +320,7 @@ pub fn get_agent_pty_id_internal(
     Ok(manager.get_pty_id(agent_id))
 }
 
-/// Get the PTY history for an agent (internal, for pre-locked manager)
+/// Get the PTY history for an agent (for pre-locked manager)
 pub fn get_agent_pty_history_internal(
     manager: &AgentManager,
     agent_id: &str,
@@ -336,7 +328,7 @@ pub fn get_agent_pty_history_internal(
     Ok(manager.get_pty_history(agent_id))
 }
 
-/// Process PTY data from an agent (internal, for pre-locked manager)
+/// Process PTY data from an agent (for pre-locked manager)
 pub fn process_agent_pty_data_internal(
     manager: &AgentManager,
     agent_id: &str,
@@ -346,7 +338,7 @@ pub fn process_agent_pty_data_internal(
     Ok(())
 }
 
-/// Notify that an agent's PTY has exited (internal, for pre-locked manager)
+/// Notify that an agent's PTY has exited (for pre-locked manager)
 pub fn notify_agent_pty_exit_internal(
     manager: &AgentManager,
     agent_id: &str,
