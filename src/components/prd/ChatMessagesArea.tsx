@@ -180,6 +180,7 @@ export const ChatMessagesArea = forwardRef<HTMLDivElement, ChatMessagesAreaProps
                 onRetry={onRetry}
                 onCancel={onCancel}
                 content={streamingContent}
+                sessionId={currentSession?.id}
               />
             </motion.div>
           )}

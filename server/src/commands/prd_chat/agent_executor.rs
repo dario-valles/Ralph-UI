@@ -3,8 +3,14 @@
 //! This module provides the implementation for executing chat agents
 //! with streaming output via WebSocket broadcast.
 
+use crate::events::{
+    ToolCallCompletedPayload, ToolCallStartedPayload, EVENT_TOOL_CALL_COMPLETED,
+    EVENT_TOOL_CALL_STARTED,
+};
 use crate::models::AgentType;
+use regex::Regex;
 use std::process::Stdio;
+use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
@@ -12,10 +18,37 @@ use tokio::time::{timeout, Duration};
 /// Default timeout for agent execution (25 minutes)
 pub const AGENT_TIMEOUT_SECS: u64 = 1500;
 
+/// Regex pattern to detect tool usage start (e.g., "⚡ Using Read")
+static TOOL_START_RE: LazyLock<Regex> = LazyLock::new(|| {
+    // Match various tool start patterns from Claude Code CLI
+    // Common patterns: "⚡ Using Read", "Using Read", "● Using Bash"
+    Regex::new(r"(?:⚡|●|▶|>)\s*Using\s+(\w+)").unwrap()
+});
+
+/// Regex pattern to detect tool result (e.g., "✓ Tool Result", "✗ Tool Result")
+static TOOL_RESULT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    // Match tool result patterns
+    Regex::new(r"[✓✗]\s*(?:Tool\s+)?(?:Result|Completed|Done|Error)").unwrap()
+});
+
+/// State for tracking active tool calls during streaming
+struct ToolCallState {
+    tool_id: String,
+    tool_name: String,
+    started_at: std::time::Instant,
+    input_lines: Vec<String>,
+}
+
 /// Trait for emitting chat streaming events
 pub trait ChatEventEmitter: Send + Sync {
     /// Emit a chat chunk event with the given session ID and content
     fn emit_chunk(&self, session_id: &str, content: &str);
+
+    /// Emit a tool call started event
+    fn emit_tool_started(&self, payload: ToolCallStartedPayload);
+
+    /// Emit a tool call completed event
+    fn emit_tool_completed(&self, payload: ToolCallCompletedPayload);
 }
 
 /// Broadcast-based event emitter for WebSocket clients
@@ -38,6 +71,14 @@ impl ChatEventEmitter for BroadcastEmitter {
                 "content": content,
             }),
         );
+    }
+
+    fn emit_tool_started(&self, payload: ToolCallStartedPayload) {
+        self.broadcaster.broadcast(EVENT_TOOL_CALL_STARTED, payload);
+    }
+
+    fn emit_tool_completed(&self, payload: ToolCallCompletedPayload) {
+        self.broadcaster.broadcast(EVENT_TOOL_CALL_COMPLETED, payload);
     }
 }
 
@@ -169,6 +210,10 @@ pub async fn execute_chat_agent<E: ChatEventEmitter>(
     let mut reader = BufReader::new(stdout).lines();
     let mut accumulated = String::new();
 
+    // Track active tool call for emitting events
+    let mut active_tool: Option<ToolCallState> = None;
+    let mut tool_counter: u32 = 0;
+
     // Stream lines with overall timeout
     let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
         while let Some(line) = reader
@@ -181,9 +226,36 @@ pub async fn execute_chat_agent<E: ChatEventEmitter>(
             }
             accumulated.push_str(&line);
 
+            // Parse tool usage patterns from the line
+            parse_and_emit_tool_events(
+                emitter,
+                session_id,
+                &line,
+                &mut active_tool,
+                &mut tool_counter,
+            );
+
             // Emit streaming chunk via the abstracted emitter
             emitter.emit_chunk(session_id, &line);
         }
+
+        // If there's still an active tool when streaming ends, complete it
+        if let Some(tool_state) = active_tool.take() {
+            let duration_ms = tool_state.started_at.elapsed().as_millis() as u64;
+            emitter.emit_tool_completed(ToolCallCompletedPayload {
+                agent_id: session_id.to_string(),
+                tool_id: tool_state.tool_id,
+                output: if tool_state.input_lines.is_empty() {
+                    None
+                } else {
+                    Some(tool_state.input_lines.join("\n"))
+                },
+                duration_ms: Some(duration_ms),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                is_error: false,
+            });
+        }
+
         Ok::<(), String>(())
     })
     .await;
@@ -240,6 +312,95 @@ pub async fn execute_chat_agent<E: ChatEventEmitter>(
         content,
         captured_session_id,
     })
+}
+
+/// Parse a line for tool usage patterns and emit events
+///
+/// Detects tool start patterns like "⚡ Using Read" and tool result patterns
+/// like "✓ Tool Result", emitting appropriate events.
+fn parse_and_emit_tool_events<E: ChatEventEmitter>(
+    emitter: &E,
+    session_id: &str,
+    line: &str,
+    active_tool: &mut Option<ToolCallState>,
+    tool_counter: &mut u32,
+) {
+    // Check for tool start pattern
+    if let Some(caps) = TOOL_START_RE.captures(line) {
+        // First, complete any existing active tool
+        if let Some(prev_tool) = active_tool.take() {
+            let duration_ms = prev_tool.started_at.elapsed().as_millis() as u64;
+            emitter.emit_tool_completed(ToolCallCompletedPayload {
+                agent_id: session_id.to_string(),
+                tool_id: prev_tool.tool_id,
+                output: if prev_tool.input_lines.is_empty() {
+                    None
+                } else {
+                    Some(prev_tool.input_lines.join("\n"))
+                },
+                duration_ms: Some(duration_ms),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                is_error: false,
+            });
+        }
+
+        // Start a new tool call
+        *tool_counter += 1;
+        let tool_name = caps
+            .get(1)
+            .map(|m: regex::Match| m.as_str())
+            .unwrap_or("Unknown");
+        let tool_id = format!("tool_{}_{}", session_id, tool_counter);
+
+        emitter.emit_tool_started(ToolCallStartedPayload {
+            agent_id: session_id.to_string(),
+            tool_id: tool_id.clone(),
+            tool_name: tool_name.to_string(),
+            input: None, // Will be populated from subsequent lines
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
+
+        *active_tool = Some(ToolCallState {
+            tool_id,
+            tool_name: tool_name.to_string(),
+            started_at: std::time::Instant::now(),
+            input_lines: Vec::new(),
+        });
+    }
+    // Check for tool result pattern (completes the active tool)
+    else if TOOL_RESULT_RE.is_match(line) {
+        if let Some(tool_state) = active_tool.take() {
+            let duration_ms = tool_state.started_at.elapsed().as_millis() as u64;
+            let is_error = line.contains('✗');
+
+            emitter.emit_tool_completed(ToolCallCompletedPayload {
+                agent_id: session_id.to_string(),
+                tool_id: tool_state.tool_id,
+                output: if tool_state.input_lines.is_empty() {
+                    None
+                } else {
+                    // Truncate output if too long
+                    let output = tool_state.input_lines.join("\n");
+                    Some(if output.len() > 5000 {
+                        format!("{}... (truncated)", &output[..5000])
+                    } else {
+                        output
+                    })
+                },
+                duration_ms: Some(duration_ms),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                is_error,
+            });
+        }
+    }
+    // If we have an active tool, accumulate lines as potential output
+    else if let Some(ref mut tool_state) = active_tool {
+        // Only accumulate non-empty lines that aren't just whitespace
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            tool_state.input_lines.push(line.to_string());
+        }
+    }
 }
 
 /// Parse session ID from agent output based on agent type
@@ -476,5 +637,55 @@ mod tests {
     fn test_generate_session_title_multiline() {
         let title = generate_session_title("First line\nSecond line\nThird line", None);
         assert_eq!(title, "First line");
+    }
+
+    // Tool parsing pattern tests
+    #[test]
+    fn test_tool_start_pattern_flash() {
+        let line = "⚡ Using Read";
+        let caps = TOOL_START_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "Read");
+    }
+
+    #[test]
+    fn test_tool_start_pattern_bullet() {
+        let line = "● Using Bash";
+        let caps = TOOL_START_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "Bash");
+    }
+
+    #[test]
+    fn test_tool_start_pattern_arrow() {
+        let line = "▶ Using Write";
+        let caps = TOOL_START_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "Write");
+    }
+
+    #[test]
+    fn test_tool_result_pattern_success() {
+        let line = "✓ Tool Result";
+        assert!(TOOL_RESULT_RE.is_match(line));
+    }
+
+    #[test]
+    fn test_tool_result_pattern_error() {
+        let line = "✗ Tool Result";
+        assert!(TOOL_RESULT_RE.is_match(line));
+    }
+
+    #[test]
+    fn test_tool_result_pattern_completed() {
+        let line = "✓ Completed";
+        assert!(TOOL_RESULT_RE.is_match(line));
+    }
+
+    #[test]
+    fn test_no_tool_pattern_in_normal_text() {
+        let line = "Hello, how can I help you today?";
+        assert!(TOOL_START_RE.captures(line).is_none());
+        assert!(!TOOL_RESULT_RE.is_match(line));
     }
 }

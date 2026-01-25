@@ -3,6 +3,10 @@ import { Bot, AlertTriangle, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { GridSpinner } from '@/components/shared/LoadingState'
+import { ToolActivityList } from './ToolActivityCard'
+import { useToolCallStore } from '@/stores/toolCallStore'
+import { subscribeEvent } from '@/lib/events-client'
+import type { ToolCallStartedPayload, ToolCallCompletedPayload } from '@/types'
 
 interface StreamingIndicatorProps {
   className?: string
@@ -14,6 +18,8 @@ interface StreamingIndicatorProps {
   onCancel?: () => void
   /** Streaming content to display (shows real-time output instead of bouncing dots) */
   content?: string
+  /** Session ID for tool call tracking */
+  sessionId?: string
 }
 
 // Thresholds in seconds (5x multiplier for longer agent operations)
@@ -29,9 +35,45 @@ export function StreamingIndicator({
   onRetry,
   onCancel,
   content,
+  sessionId,
 }: StreamingIndicatorProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [state, setState] = useState<StreamingState>('normal')
+  const { addToolCall, completeToolCall, getToolCallsForAgent, clearToolCalls } = useToolCallStore()
+  const toolCalls = sessionId ? getToolCallsForAgent(sessionId) : []
+
+  // Subscribe to tool events when sessionId is provided
+  useEffect(() => {
+    if (!sessionId) return
+
+    let unsubStart: (() => void) | undefined
+    let unsubComplete: (() => void) | undefined
+
+    const setup = async () => {
+      unsubStart = await subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+        if (payload.agentId === sessionId) {
+          addToolCall(payload)
+        }
+      })
+
+      unsubComplete = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+        if (payload.agentId === sessionId) {
+          completeToolCall(payload)
+        }
+      })
+    }
+
+    setup()
+
+    return () => {
+      unsubStart?.()
+      unsubComplete?.()
+      // Clear tool calls when streaming ends
+      if (sessionId) {
+        clearToolCalls(sessionId)
+      }
+    }
+  }, [sessionId, addToolCall, completeToolCall, clearToolCalls])
 
   // Calculate initial values outside useEffect to avoid setState in effect body
   const getInitialValues = () => {
@@ -203,6 +245,7 @@ export function StreamingIndicator({
 
   // Normal state - show streaming content if available, otherwise bouncing dots
   const hasContent = content && content.trim().length > 0
+  const hasToolCalls = toolCalls.length > 0
 
   return (
     <div
@@ -210,22 +253,29 @@ export function StreamingIndicator({
       data-state="normal"
       className={cn(
         'flex gap-2 p-3 sm:p-4 bg-muted rounded-lg mr-2 sm:mr-4 md:mr-8',
-        !hasContent && 'items-center animate-pulse',
-        hasContent && 'items-start',
+        !hasContent && !hasToolCalls && 'items-center animate-pulse',
+        (hasContent || hasToolCalls) && 'items-start',
         className
       )}
     >
       <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
         <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       </div>
-      {hasContent ? (
+      {hasContent || hasToolCalls ? (
         <div className="flex-1 min-w-0">
-          <pre className="text-xs sm:text-sm whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed max-h-64 sm:max-h-96 overflow-y-auto">
-            {content}
-          </pre>
+          {/* Tool activity cards */}
+          {hasToolCalls && (
+            <ToolActivityList toolCalls={toolCalls} className="mb-2" />
+          )}
+          {/* Streaming content */}
+          {hasContent && (
+            <pre className="text-xs sm:text-sm whitespace-pre-wrap break-words font-sans text-foreground leading-relaxed max-h-64 sm:max-h-96 overflow-y-auto">
+              {content}
+            </pre>
+          )}
           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
             <GridSpinner className="text-sm" />
-            <span>Streaming...</span>
+            <span>{hasToolCalls ? 'Working...' : 'Streaming...'}</span>
           </div>
         </div>
       ) : (

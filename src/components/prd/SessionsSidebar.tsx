@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
-import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import { SessionItem } from './SessionItem'
 import { QualityScoreCard } from './QualityScoreCard'
 import { cn } from '@/lib/utils'
 import type { ChatSession, QualityAssessment } from '@/types'
+
+/** Number of sessions to show before "Show more" */
+const INITIAL_SESSIONS_COUNT = 5
 
 interface SessionsSidebarProps {
   sessions: ChatSession[]
@@ -42,6 +46,10 @@ export function SessionsSidebar({
   onRefreshQuality,
   className,
 }: SessionsSidebarProps) {
+  const [showAll, setShowAll] = useState(false)
+  const hasMore = sessions.length > INITIAL_SESSIONS_COUNT
+  const visibleSessions = showAll ? sessions : sessions.slice(0, INITIAL_SESSIONS_COUNT)
+
   return (
     <Card
       className={cn(
@@ -131,7 +139,7 @@ export function SessionsSidebar({
               </div>
             ) : (
               <div className="space-y-1">
-                {sessions.map((session) => (
+                {visibleSessions.map((session) => (
                   <SessionItem
                     key={session.id}
                     session={session}
@@ -141,6 +149,24 @@ export function SessionsSidebar({
                     onDelete={() => onDeleteSession(session.id)}
                   />
                 ))}
+                {hasMore && (
+                  <button
+                    onClick={() => setShowAll(!showAll)}
+                    className="w-full flex items-center justify-center gap-1 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showAll ? (
+                      <>
+                        <ChevronUp className="h-3 w-3" />
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3" />
+                        Show {sessions.length - INITIAL_SESSIONS_COUNT} more
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </CardContent>
