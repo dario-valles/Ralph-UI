@@ -48,6 +48,7 @@ import { StreamingIndicator } from './StreamingIndicator'
 import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
+import { FloatingQualityBadge } from './FloatingQualityBadge'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, ChatSession, AgentType, PRDFile, ChatAttachment } from '@/types'
@@ -901,11 +902,20 @@ export function PRDChatPanel() {
                   variant="secondary"
                   size="icon"
                   onClick={scrollToBottom}
-                  className="absolute bottom-20 right-4 sm:right-6 h-8 w-8 rounded-full shadow-lg z-10"
+                  className="absolute bottom-[4.5rem] right-16 h-8 w-8 rounded-full shadow-lg z-10"
                   aria-label="Scroll to bottom"
                 >
                   <ArrowDown className="h-4 w-4" />
                 </Button>
+              )}
+
+              {/* Floating Quality Badge */}
+              {currentSession && hasMessages && !currentSession.gsdMode && (
+                <FloatingQualityBadge
+                  assessment={qualityAssessment}
+                  loading={loading}
+                  onRefresh={handleRefreshQuality}
+                />
               )}
 
               {/* Input Area */}
