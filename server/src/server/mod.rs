@@ -137,7 +137,20 @@ pub async fn run_server(
 
     log::info!("Server listening on http://{}", addr);
 
+    // Create shutdown signal that waits for the shutdown state flag
+    let shutdown_state = state.shutdown_state.clone();
+    let shutdown_signal = async move {
+        loop {
+            if shutdown_state.is_shutdown_requested() {
+                log::info!("Shutdown signal received, stopping server...");
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    };
+
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
         .await
         .map_err(|e| format!("Server error: {}", e))
 }
