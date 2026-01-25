@@ -3,12 +3,16 @@
  *
  * Shows contextual action buttons for GSD workflow phases.
  * Buttons are shown/enabled based on conversation state and completed phases.
+ *
+ * Supports two modes:
+ * - Default: Full bar with labels, shown below input
+ * - Inline: Icon-only buttons with progressive visibility, shown inside input
  */
 
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { Search, FileText, Target, Calendar, Loader2, Sparkles } from 'lucide-react'
+import { Search, FileText, Target, Calendar, Loader2, Check } from 'lucide-react'
 
 export type PhaseAction = 'research' | 'requirements' | 'scope' | 'roadmap'
 
@@ -42,10 +46,18 @@ interface PhaseActionBarProps {
   className?: string
   /** Whether to show compact mode (icons only) */
   compact?: boolean
-  /** Whether to show dismissible hint */
-  showHint?: boolean
-  /** Callback to dismiss hint */
-  onDismissHint?: () => void
+}
+
+/** Props for inline phase buttons (inside chat input) */
+interface InlinePhaseButtonsProps {
+  /** Current phase state */
+  phaseState: PhaseState
+  /** Callback when an action button is clicked */
+  onAction: (action: PhaseAction) => void
+  /** Whether buttons are disabled */
+  disabled?: boolean
+  /** Optional class name */
+  className?: string
 }
 
 interface ActionButtonConfig {
@@ -56,6 +68,10 @@ interface ActionButtonConfig {
   tooltip: string
   isEnabled: (state: PhaseState) => boolean
   isHighlighted: (state: PhaseState) => boolean
+  /** When this phase is complete (for showing checkmark) */
+  isComplete: (state: PhaseState) => boolean
+  /** When this button should be visible in inline mode */
+  isVisible: (state: PhaseState) => boolean
 }
 
 const ACTION_BUTTONS: ActionButtonConfig[] = [
@@ -67,6 +83,8 @@ const ACTION_BUTTONS: ActionButtonConfig[] = [
     tooltip: 'Run parallel research agents to analyze architecture, codebase, best practices, and risks',
     isEnabled: () => true,
     isHighlighted: (state) => !state.researchStarted,
+    isComplete: (state) => state.researchComplete,
+    isVisible: () => true, // Always visible
   },
   {
     action: 'requirements',
@@ -76,6 +94,8 @@ const ACTION_BUTTONS: ActionButtonConfig[] = [
     tooltip: 'Generate requirements from conversation and research',
     isEnabled: (state) => state.researchComplete || state.researchStarted,
     isHighlighted: (state) => state.researchComplete && !state.requirementsGenerated,
+    isComplete: (state) => state.requirementsGenerated,
+    isVisible: (state) => state.researchComplete, // Visible after research complete
   },
   {
     action: 'scope',
@@ -88,6 +108,8 @@ const ACTION_BUTTONS: ActionButtonConfig[] = [
       const hasUnscopedItems = (state.unscopedCount ?? 0) > 0
       return state.requirementsGenerated && !state.scopingComplete && hasUnscopedItems
     },
+    isComplete: (state) => state.scopingComplete,
+    isVisible: (state) => state.requirementsGenerated, // Visible after requirements generated
   },
   {
     action: 'roadmap',
@@ -97,6 +119,8 @@ const ACTION_BUTTONS: ActionButtonConfig[] = [
     tooltip: 'Generate execution roadmap from scoped requirements',
     isEnabled: (state) => state.scopingComplete,
     isHighlighted: (state) => state.scopingComplete && !state.roadmapGenerated,
+    isComplete: (state) => state.roadmapGenerated,
+    isVisible: (state) => state.scopingComplete, // Visible after scoping complete
   },
 ]
 
@@ -106,8 +130,6 @@ export function PhaseActionBar({
   disabled = false,
   className,
   compact = false,
-  showHint = false,
-  onDismissHint,
 }: PhaseActionBarProps) {
   return (
     <div className={cn('space-y-2', className)}>
@@ -152,23 +174,65 @@ export function PhaseActionBar({
         })}
       </div>
 
-      {/* Dismissible hint */}
-      {showHint && !phaseState.researchStarted && (
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground/60 px-1">
-          <div className="flex items-center gap-1">
-            <Sparkles className="h-3 w-3" />
-            <span>Click Research to run 4 parallel agents for deeper analysis</span>
-          </div>
-          {onDismissHint && (
-            <button
-              onClick={onDismissHint}
-              className="text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+    </div>
+  )
+}
+
+/**
+ * Inline Phase Buttons Component
+ *
+ * Icon-only buttons with progressive visibility for use inside the chat input.
+ * Shows completion checkmarks and spinner for running actions.
+ */
+export function InlinePhaseButtons({
+  phaseState,
+  onAction,
+  disabled = false,
+  className,
+}: InlinePhaseButtonsProps) {
+  // Filter to only visible buttons based on phase state
+  const visibleButtons = ACTION_BUTTONS.filter((config) => config.isVisible(phaseState))
+
+  return (
+    <div className={cn('flex items-center', className)}>
+      {visibleButtons.map((config) => {
+        const Icon = config.icon
+        const isEnabled = config.isEnabled(phaseState)
+        const isComplete = config.isComplete(phaseState)
+        const isRunning = phaseState.runningAction === config.action
+
+        return (
+          <Tooltip key={config.action} content={config.tooltip} side="top">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onAction(config.action)}
+              disabled={disabled || !isEnabled || phaseState.isRunning}
+              className={cn(
+                'h-9 w-9 rounded-xl flex-shrink-0 relative transition-all',
+                'text-muted-foreground hover:text-foreground',
+                'hover:bg-muted/80',
+                !isEnabled && 'opacity-40',
+                isComplete && 'text-emerald-600 dark:text-emerald-400'
+              )}
+              aria-label={config.label}
             >
-              Dismiss
-            </button>
-          )}
-        </div>
-      )}
+              {isRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Icon className="h-4 w-4" />
+              )}
+              {/* Completion checkmark badge */}
+              {isComplete && !isRunning && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+                  <Check className="h-2 w-2" strokeWidth={3} />
+                </span>
+              )}
+            </Button>
+          </Tooltip>
+        )
+      })}
     </div>
   )
 }

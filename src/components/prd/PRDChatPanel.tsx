@@ -48,7 +48,7 @@ import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
 import { FloatingQualityBadge } from './FloatingQualityBadge'
-import { PhaseActionBar, type PhaseAction, type PhaseState } from './PhaseActionBar'
+import { InlinePhaseButtons, type PhaseAction, type PhaseState } from './PhaseActionBar'
 import { ResearchProgressModal } from './ResearchProgressModal'
 import { RequirementsScopeSheet } from './RequirementsScopeSheet'
 import type { ResearchSynthesis, ResearchResult } from '@/types/gsd'
@@ -120,7 +120,6 @@ export function PRDChatPanel() {
   // Hybrid GSD modal states
   const [showResearchModal, setShowResearchModal] = useState(false)
   const [showScopeSheet, setShowScopeSheet] = useState(false)
-  const [showPhaseHint, setShowPhaseHint] = useState(true)
   const [runningPhaseAction, setRunningPhaseAction] = useState<PhaseAction | null>(null)
 
   const {
@@ -1090,8 +1089,8 @@ export function PRDChatPanel() {
             />
           )}
 
-          {/* Input Area with Phase Actions */}
-          <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background space-y-3">
+          {/* Input Area with Inline Phase Actions */}
+          <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background">
             <ChatInput
               onSend={handleSendMessage}
               disabled={isDisabled}
@@ -1100,19 +1099,16 @@ export function PRDChatPanel() {
                   ? 'Create a session to start chatting...'
                   : 'Describe your product requirements...'
               }
+              leftActions={
+                currentSession?.projectPath ? (
+                  <InlinePhaseButtons
+                    phaseState={currentPhaseState}
+                    onAction={handlePhaseAction}
+                    disabled={isDisabled}
+                  />
+                ) : undefined
+              }
             />
-
-            {/* Phase Action Bar - Hybrid GSD */}
-            {currentSession?.projectPath && (
-              <PhaseActionBar
-                phaseState={currentPhaseState}
-                onAction={handlePhaseAction}
-                disabled={isDisabled}
-                compact={isMobile}
-                showHint={showPhaseHint && hasMessages}
-                onDismissHint={() => setShowPhaseHint(false)}
-              />
-            )}
           </div>
         </CardContent>
       </Card>

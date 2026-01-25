@@ -18,9 +18,11 @@ interface ChatInputProps {
   onSend: (message: string, attachments?: ChatAttachment[]) => void
   disabled: boolean
   placeholder?: string
+  /** Optional left-side action buttons (e.g., phase buttons) */
+  leftActions?: React.ReactNode
 }
 
-export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatInputProps) {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
@@ -244,22 +246,28 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
         {/* Input row */}
         <div className="flex items-end gap-1 p-1.5">
-          {/* Attachment button */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'h-9 w-9 rounded-xl flex-shrink-0',
-              'text-muted-foreground hover:text-foreground',
-              'hover:bg-muted/80 transition-colors'
-            )}
-            disabled={disabled || attachments.length >= ATTACHMENT_LIMITS.MAX_COUNT}
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Add attachment"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
+          {/* Left actions group (phase buttons + attachment) */}
+          <div className="flex items-center flex-shrink-0">
+            {/* Phase action buttons (inline) */}
+            {leftActions}
+
+            {/* Attachment button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-9 w-9 rounded-xl flex-shrink-0',
+                'text-muted-foreground hover:text-foreground',
+                'hover:bg-muted/80 transition-colors'
+              )}
+              disabled={disabled || attachments.length >= ATTACHMENT_LIMITS.MAX_COUNT}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Add attachment"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+          </div>
 
           {/* Textarea */}
           <Textarea
