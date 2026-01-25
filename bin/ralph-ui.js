@@ -938,13 +938,26 @@ async function main() {
     env: process.env,
   })
 
+  // Forward signals to child process so Ctrl+C properly terminates the server
+  const forwardSignal = (signal) => {
+    if (child.pid) {
+      child.kill(signal)
+    }
+  }
+
+  process.on('SIGINT', () => forwardSignal('SIGINT'))
+  process.on('SIGTERM', () => forwardSignal('SIGTERM'))
+
   child.on('error', (error) => {
     console.error(c.error('Failed to start Ralph UI:'), error.message)
     process.exit(1)
   })
 
-  child.on('exit', (code) => {
-    process.exit(code || 0)
+  child.on('exit', (code, signal) => {
+    // Remove signal handlers to prevent duplicate handling
+    process.removeAllListeners('SIGINT')
+    process.removeAllListeners('SIGTERM')
+    process.exit(code ?? (signal === 'SIGINT' ? 130 : 1))
   })
 }
 

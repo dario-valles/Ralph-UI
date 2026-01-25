@@ -25,15 +25,19 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Pre-fill from existing config if available
+  // Pre-fill from existing config or derive from browser URL
   useEffect(() => {
     const config = getServerConfig()
     if (config) {
       setUrl(config.url)
       setToken(config.token)
     } else {
-      // Default to localhost
-      setUrl('http://localhost:3420')
+      // Default to current browser origin (works for tunnels, remote access, etc.)
+      // For localhost dev with separate Vite server, fall back to default port
+      const origin = window.location.origin
+      const isLocalDev =
+        origin.includes('localhost:1420') || origin.includes('127.0.0.1:1420')
+      setUrl(isLocalDev ? 'http://localhost:3420' : origin)
     }
   }, [])
 

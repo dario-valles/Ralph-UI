@@ -1,10 +1,10 @@
-import { usePWAUpdate } from '@/hooks/usePWAUpdate'
-import { RefreshCw, X } from 'lucide-react'
+import { useServerVersion } from '@/hooks/useServerVersion'
+import { ExternalLink, X } from 'lucide-react'
 
-export function PWAUpdatePrompt() {
-  const { showUpdatePrompt, acceptUpdate, dismissUpdate } = usePWAUpdate()
+export function ServerUpdateBanner() {
+  const { showUpdateBanner, latestVersion, lastSeenVersion, dismissUpdate } = useServerVersion()
 
-  if (!showUpdatePrompt) return null
+  if (!showUpdateBanner || !latestVersion) return null
 
   return (
     <div
@@ -12,26 +12,29 @@ export function PWAUpdatePrompt() {
                  bg-zinc-900 p-4 shadow-xl md:left-auto md:right-4 md:w-80"
     >
       <div className="flex items-start gap-3">
-        <RefreshCw className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-400" />
+        <ExternalLink className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-400" />
         <div className="flex-1">
-          <h4 className="font-medium text-white">Update Available</h4>
+          <h4 className="font-medium text-white">New Version Available</h4>
           <p className="mt-1 text-sm text-zinc-400">
-            A new version is ready. Update now for the latest features.
+            {lastSeenVersion} &rarr; {latestVersion.version}
           </p>
           <div className="mt-3 flex gap-2">
-            <button
-              onClick={acceptUpdate}
+            <a
+              href={latestVersion.release_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={dismissUpdate}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white
                          transition-colors hover:bg-blue-700"
             >
-              Update Now
-            </button>
+              View Changes
+            </a>
             <button
               onClick={dismissUpdate}
               className="rounded-md bg-zinc-700 px-3 py-1.5 text-sm text-zinc-300
                          transition-colors hover:bg-zinc-600"
             >
-              Later
+              Dismiss
             </button>
           </div>
         </div>

@@ -10,6 +10,7 @@ mod proxy;
 mod pty;
 pub mod pty_registry;
 mod state;
+mod static_files;
 
 pub use auth::{generate_auth_token, AuthLayer};
 pub use events::{EventBroadcaster, ServerEvent};
@@ -24,8 +25,15 @@ use axum::{
         HeaderValue,
     },
     routing::{get, post},
-    Router,
+    Json, Router,
 };
+
+/// Version information for the server
+#[derive(serde::Serialize)]
+struct VersionInfo {
+    version: String,
+    release_url: String,
+}
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -62,11 +70,14 @@ pub async fn run_server(
         }
     };
 
+    // Check if embedded frontend is available
+    let has_frontend = static_files::has_embedded_frontend();
+
     // Build the router
     // Layer order: cors (outer) -> auth -> handler
     // This ensures CORS preflight requests are handled before auth check
     // Note: /ws/pty handles its own auth via query param (WebSocket limitation)
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/api/invoke", post(proxy::invoke_handler))
         .route("/ws/events", get(events::ws_handler))
         .route("/ws/pty/:terminal_id", get(pty::pty_ws_handler))
@@ -76,7 +87,16 @@ pub async fn run_server(
             get(pty::pty_reconnect_handler),
         )
         .route("/health", get(health_handler))
-        .route("/", get(index_handler))
+        .route("/api/version", get(version_handler));
+
+    // Serve embedded frontend if available, otherwise show connection instructions
+    if has_frontend {
+        app = app.fallback(static_files::serve_static);
+    } else {
+        app = app.route("/", get(index_handler));
+    }
+
+    let app = app
         .layer(AuthLayer::new(state.auth_token.clone()))
         .layer(cors)
         .with_state(state.clone());
@@ -89,6 +109,7 @@ pub async fn run_server(
         Some(origins) if !origins.is_empty() => origins.join(", "),
         _ => "*".to_string(),
     };
+    let frontend_status = if has_frontend { "Embedded" } else { "External (use Vite dev server)" };
 
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    Ralph UI Server Mode                       ║");
@@ -99,9 +120,11 @@ pub async fn run_server(
     println!("║  Auth Token: {}  ║", state.auth_token);
     println!("║                                                               ║");
     println!("║  CORS Origins: {:<45}║", cors_display);
+    println!("║  Frontend: {:<49}║", frontend_status);
     println!("║                                                               ║");
     println!("║  Endpoints:                                                   ║");
     println!("║    POST /api/invoke      - Command proxy                     ║");
+    println!("║    GET  /api/version     - Server version info               ║");
     println!("║    GET  /ws/events       - WebSocket events                  ║");
     println!("║    GET  /ws/pty/:id      - WebSocket PTY terminal            ║");
     println!("║    GET  /health          - Health check                      ║");
@@ -122,6 +145,17 @@ pub async fn run_server(
 /// Health check endpoint
 async fn health_handler() -> &'static str {
     "OK"
+}
+
+/// Version endpoint - returns server version and release URL
+async fn version_handler() -> Json<VersionInfo> {
+    Json(VersionInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        release_url: format!(
+            "https://github.com/dario-valles/Ralph-UI/releases/tag/v{}",
+            env!("CARGO_PKG_VERSION")
+        ),
+    })
 }
 
 /// Index handler - shows connection instructions

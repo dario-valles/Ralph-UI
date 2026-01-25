@@ -6,7 +6,7 @@ import { PRDList } from './components/prd/PRDList'
 import { PRDFileEditor } from './components/prd/PRDFileEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
 import { ToastContainer } from './components/ui/toast'
-import { PWAUpdatePrompt } from './components/PWAUpdatePrompt'
+import { ServerUpdateBanner } from './components/ServerUpdateBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ServerConnectionDialog } from './components/ServerConnectionDialog'
 import { useServerConnection } from './hooks/useServerConnection'
@@ -111,7 +111,7 @@ function App() {
           </Route>
         </Routes>
         <ToastContainer />
-        <PWAUpdatePrompt />
+        <ServerUpdateBanner />
       </BrowserRouter>
     </ErrorBoundary>
   )
