@@ -869,15 +869,22 @@ async function main() {
   let config = loadConfig()
   const binaryPath = getBinaryPath()
   const isFirstRun = !existsSync(binaryPath)
+  const needsSetup = !config.setupCompleted
 
   // First run - download and setup
   if (isFirstRun) {
     config = await firstRunExperience()
     // After setup, start the server
   } else if (flags.setup) {
-    // Re-run setup wizard
+    // Re-run setup wizard explicitly requested
     config = await runSetupWizard(config, false)
-    return // Don't start server after setup
+    return // Don't start server after explicit --setup
+  } else if (needsSetup) {
+    // Binary exists but setup was never completed - run setup automatically
+    console.log()
+    console.log(`${c.info('👋')} ${c.bold('Welcome back!')} Setup wasn't completed last time.`)
+    config = await runSetupWizard(config, true)
+    // Continue to start the server after setup
   }
 
   // Force update
