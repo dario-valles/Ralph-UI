@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import type { Project } from '@/types'
@@ -6,6 +7,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FolderOpen, ChevronDown, Star, Clock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react'
 import { RemoteFolderBrowser } from './RemoteFolderBrowser'
+
+// Hook to detect mobile viewport
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < breakpoint)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [breakpoint])
+
+  return isMobile
+}
 
 interface ProjectSwitcherProps {
   collapsed?: boolean
@@ -23,6 +38,7 @@ export function ProjectSwitcher({
   const [editingName, setEditingName] = useState('')
   const [showBrowser, setShowBrowser] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
 
   const {
     projects,
@@ -177,8 +193,26 @@ export function ProjectSwitcher({
         />
       </div>
 
+      {/* Mobile Folder Browser Modal */}
+      {isOpen &&
+        showBrowser &&
+        isMobile &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4">
+            <div
+              className="fixed inset-0 bg-black/50"
+              onClick={handleBrowserCancel}
+              aria-hidden="true"
+            />
+            <div className="relative z-10 w-full max-w-lg bg-popover border rounded-lg shadow-lg overflow-hidden">
+              <RemoteFolderBrowser onSelect={handleBrowserSelect} onCancel={handleBrowserCancel} />
+            </div>
+          </div>,
+          document.body
+        )}
+
       {/* Dropdown */}
-      {isOpen && (
+      {isOpen && !(showBrowser && isMobile) && (
         <div
           className={cn(
             'absolute left-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden',

@@ -199,8 +199,8 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
           <FolderOpen className="h-4 w-4 text-primary shrink-0" />
           <span className="truncate flex-1 text-muted-foreground">{currentPath}</span>
         </div>
-        <div className="flex items-center gap-2 justify-end">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
             <X className="h-4 w-4 mr-1" />
             Cancel
           </Button>
@@ -209,9 +209,11 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
             size="sm"
             onClick={() => onSelect(currentPath)}
             disabled={!currentPath}
+            className="flex-1 sm:flex-none"
           >
             <Check className="h-4 w-4 mr-1" />
-            Select This Folder
+            <span className="sm:hidden">Select</span>
+            <span className="hidden sm:inline">Select This Folder</span>
           </Button>
         </div>
       </div>
