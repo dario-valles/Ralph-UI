@@ -32,6 +32,10 @@ pub struct GsdConfig {
 
     /// Custom prompts for research agents
     pub custom_prompts: Option<GsdCustomPrompts>,
+
+    /// Environment variables to pass to spawned agents (for API providers)
+    #[serde(skip)]
+    pub env_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 impl Default for GsdConfig {
@@ -45,6 +49,7 @@ impl Default for GsdConfig {
             min_context_items: 3,
             include_codebase_analysis: true,
             custom_prompts: None,
+            env_vars: None,
         }
     }
 }

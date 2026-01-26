@@ -100,6 +100,9 @@ pub struct RalphLoopConfig {
     /// Custom lint command (e.g., "npm run lint", "cargo clippy")
     /// If None, auto-detect based on project type
     pub lint_command: Option<String>,
+    /// Environment variables to inject when spawning the agent
+    /// Used for alternative API providers (z.ai, MiniMax)
+    pub env_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 impl Default for RalphLoopConfig {
@@ -123,6 +126,7 @@ impl Default for RalphLoopConfig {
             template_name: None,   // Use default prompt
             test_command: None,    // Auto-detect based on project type
             lint_command: None,    // Auto-detect based on project type
+            env_vars: None,        // No extra env vars by default
         }
     }
 }
@@ -940,6 +944,7 @@ impl RalphLoopOrchestrator {
                 model: self.config.model.clone(),
                 spawn_mode: AgentSpawnMode::Pty,
                 plugin_config: None,
+                env_vars: self.config.env_vars.clone(),
             };
             log::debug!(
                 "[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",

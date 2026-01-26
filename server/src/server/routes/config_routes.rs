@@ -28,6 +28,9 @@
 //! Also handles push notification commands: get_vapid_public_key, subscribe_push,
 //! unsubscribe_push, get_push_settings, update_push_settings, test_push,
 //! list_push_subscriptions, get_push_subscription_count
+//!
+//! Also handles API provider commands: get_api_providers, get_active_provider,
+//! set_active_provider, set_provider_token, delete_provider_token, test_provider_connection
 
 use crate::commands;
 use crate::models::AgentType;
@@ -509,6 +512,39 @@ pub async fn route_config_command(
             )
         }
 
+        // API Provider Commands
+        "get_api_providers" => {
+            route_sync!(commands::providers::get_api_providers(&state.config_state))
+        }
+
+        "get_active_provider" => {
+            route_sync!(commands::providers::get_active_provider(&state.config_state))
+        }
+
+        "set_active_provider" => {
+            let provider_id: String = get_arg(&args, "providerId")?;
+            route_unit_async!(commands::providers::set_active_provider(
+                provider_id,
+                &state.config_state
+            ))
+        }
+
+        "set_provider_token" => {
+            let provider_id: String = get_arg(&args, "providerId")?;
+            let token: String = get_arg(&args, "token")?;
+            route_unit!(commands::providers::set_provider_token(&provider_id, &token))
+        }
+
+        "delete_provider_token" => {
+            let provider_id: String = get_arg(&args, "providerId")?;
+            route_unit!(commands::providers::delete_provider_token(&provider_id))
+        }
+
+        "test_provider_connection" => {
+            let provider_id: String = get_arg(&args, "providerId")?;
+            route_sync!(commands::providers::test_provider_connection(&provider_id))
+        }
+
         _ => Err(format!("Unknown config command: {}", cmd)),
     }
 }
@@ -586,5 +622,12 @@ pub fn is_config_command(cmd: &str) -> bool {
             | "test_push"
             | "list_push_subscriptions"
             | "get_push_subscription_count"
+            // API providers
+            | "get_api_providers"
+            | "get_active_provider"
+            | "set_active_provider"
+            | "set_provider_token"
+            | "delete_provider_token"
+            | "test_provider_connection"
     )
 }

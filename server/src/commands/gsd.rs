@@ -141,6 +141,7 @@ pub async fn start_research(
     agent_type: Option<String>,
     model: Option<String>,
     research_types: Option<Vec<String>>,
+    env_vars: Option<std::collections::HashMap<String, String>>,
 ) -> Result<ResearchStatus, String> {
     let path = as_path(&project_path);
 
@@ -148,6 +149,7 @@ pub async fn start_research(
     let config = GsdConfig {
         research_agent_type: agent_type.unwrap_or_else(|| GsdConfig::default().research_agent_type),
         research_model: model,
+        env_vars,
         ..GsdConfig::default()
     };
 
@@ -1089,6 +1091,7 @@ pub async fn generate_requirements_from_prompt(
     count: Option<u32>,
     agent_type: Option<String>,
     model: Option<String>,
+    env_vars: Option<std::collections::HashMap<String, String>>,
 ) -> Result<GenerateRequirementsResult, String> {
     use crate::agents::providers::get_provider;
     use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
@@ -1150,6 +1153,7 @@ pub async fn generate_requirements_from_prompt(
         model,
         spawn_mode: AgentSpawnMode::Piped,
         plugin_config: None,
+        env_vars,
     };
 
     let std_cmd = provider

@@ -14,6 +14,8 @@ export interface RalphExecutionConfig {
   strategy: string
   /** Default model to use for agents */
   model?: string
+  /** API provider for Claude (e.g., "anthropic", "zai", "minimax") */
+  apiProvider?: string
 }
 
 export interface RalphGitConfig {
@@ -186,4 +188,36 @@ export interface FallbackConfig {
   fallbackChain: AgentType[]
   baseBackoffMs: number
   maxBackoffMs: number
+}
+
+// ============================================================================
+// API Provider Types (z.ai, MiniMax, etc.)
+// ============================================================================
+
+/** Model info for an API provider */
+export interface ProviderModelInfo {
+  name: string
+  isDefault: boolean
+}
+
+/** API provider information */
+export interface ApiProviderInfo {
+  /** Provider ID (e.g., "anthropic", "zai", "minimax") */
+  id: string
+  /** Display name */
+  name: string
+  /** Base URL for the API */
+  baseUrl: string
+  /** Whether this provider has an API token configured */
+  hasToken: boolean
+  /** Whether this provider is currently active */
+  isActive: boolean
+  /** Available models for this provider */
+  models: ProviderModelInfo[]
+}
+
+/** Result of testing a provider connection */
+export interface ProviderTestResult {
+  success: boolean
+  message: string
 }

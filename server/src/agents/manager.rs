@@ -53,6 +53,9 @@ pub struct AgentSpawnConfig {
     pub spawn_mode: AgentSpawnMode,
     /// Configuration for plugins (key-value pairs)
     pub plugin_config: Option<HashMap<String, serde_json::Value>>,
+    /// Environment variables to inject when spawning the agent
+    /// Used for alternative API providers (z.ai, MiniMax)
+    pub env_vars: Option<HashMap<String, String>>,
 }
 
 /// Agent lifecycle manager
@@ -1015,6 +1018,14 @@ impl AgentManager {
             );
         }
 
+        // Inject environment variables for alternative API providers
+        if let Some(env_vars) = &config.env_vars {
+            for (key, value) in env_vars {
+                log::info!("[AgentManager] Setting env var: {}=***", key);
+                cmd.env(key, value);
+            }
+        }
+
         let prompt = match &config.prompt {
             Some(prompt) if !prompt.trim().is_empty() => prompt.clone(),
             _ => {
@@ -1502,6 +1513,7 @@ mod tests {
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);
@@ -1524,6 +1536,7 @@ mod tests {
             model: Some("anthropic/claude-sonnet-4-5".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);
@@ -1546,6 +1559,7 @@ mod tests {
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);
@@ -1568,6 +1582,7 @@ mod tests {
             model: Some("gpt-4o".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);
@@ -1590,6 +1605,7 @@ mod tests {
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);
@@ -1612,6 +1628,7 @@ mod tests {
             model: Some("droid-model".to_string()),
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         let result = manager.build_command(&config);

@@ -158,6 +158,22 @@ pub async fn update_execution_config(
     Ok(config.execution.clone())
 }
 
+/// Update API provider
+pub async fn update_api_provider(
+    api_provider: Option<String>,
+    config_state: &ConfigState,
+) -> Result<(), String> {
+    let mut config = config_state
+        .config
+        .write()
+        .with_context("Failed to acquire lock")?;
+
+    // Set to None for "anthropic" (default), or Some(provider_id) for alternatives
+    config.execution.api_provider = api_provider.filter(|p| p != "anthropic");
+
+    Ok(())
+}
+
 /// Update git configuration
 pub async fn update_git_config(
     auto_create_prs: Option<bool>,

@@ -117,6 +117,9 @@ export type {
   IterationStats,
   ErrorStrategy,
   FallbackConfig,
+  ProviderModelInfo,
+  ApiProviderInfo,
+  ProviderTestResult,
 } from './config'
 
 // ============================================================================

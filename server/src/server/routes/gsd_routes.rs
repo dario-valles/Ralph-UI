@@ -93,6 +93,7 @@ pub async fn route_gsd_command(
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
             let research_types: Option<Vec<String>> = get_opt_arg(&args, "researchTypes")?;
+            let env_vars = commands::providers::get_provider_env_vars(&state.config_state).ok();
             let result = commands::gsd::start_research(
                 state.broadcaster.clone(),
                 project_path,
@@ -101,6 +102,7 @@ pub async fn route_gsd_command(
                 agent_type,
                 model,
                 research_types,
+                env_vars,
             )
             .await?;
             serde_json::to_value(result).map_err(|e| e.to_string())
@@ -315,6 +317,7 @@ pub async fn route_gsd_command(
             let count: Option<u32> = get_opt_arg(&args, "count")?;
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
+            let env_vars = commands::providers::get_provider_env_vars(&state.config_state).ok();
             let result = commands::gsd::generate_requirements_from_prompt(
                 state.broadcaster.clone(),
                 project_path,
@@ -323,6 +326,7 @@ pub async fn route_gsd_command(
                 count,
                 agent_type,
                 model,
+                env_vars,
             )
             .await?;
             serde_json::to_value(result).map_err(|e| e.to_string())

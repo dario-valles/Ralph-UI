@@ -9,6 +9,7 @@ export { UISettings } from './UISettings'
 export { KeyBarCustomizer } from './KeyBarCustomizer'
 export { GestureSettings } from './GestureSettings'
 export { PushNotificationSettings } from './PushNotificationSettings'
+export { ApiProviderSettings } from './ApiProviderSettings'
 
 // Hooks
 export { useSettingsState } from './hooks/useSettingsState'

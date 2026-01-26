@@ -356,6 +356,7 @@ impl ResearchOrchestrator {
             model: self.config.research_model.clone(),
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: self.config.env_vars.clone(),
         };
 
         // Build the command using the provider

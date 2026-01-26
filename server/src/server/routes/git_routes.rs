@@ -235,6 +235,7 @@ pub async fn route_git_command(
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
             let timeout_secs: Option<u64> = get_opt_arg(&args, "timeoutSecs")?;
+            let env_vars = commands::providers::get_provider_env_vars(&state.config_state).ok();
             route_async!(
                 cmd,
                 commands::git::git_resolve_conflicts_with_ai(
@@ -242,6 +243,7 @@ pub async fn route_git_command(
                     agent_type,
                     model,
                     timeout_secs,
+                    env_vars,
                     &state.git_state
                 )
             )

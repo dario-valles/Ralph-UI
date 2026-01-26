@@ -67,6 +67,10 @@ pub struct ExecutionConfig {
     /// Default model to use for agents (e.g., "anthropic/claude-sonnet-4-5")
     #[serde(default)]
     pub model: Option<String>,
+    /// API provider for Claude (e.g., "anthropic", "zai", "minimax")
+    /// Alternative providers like z.ai and MiniMax provide Claude-compatible APIs
+    #[serde(rename = "apiProvider", alias = "api_provider", default)]
+    pub api_provider: Option<String>,
 }
 
 fn default_max_parallel() -> i32 {
@@ -95,6 +99,7 @@ impl Default for ExecutionConfig {
             strategy: default_strategy(),
             dry_run: false,
             model: None,
+            api_provider: None,
         }
     }
 }

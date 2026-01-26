@@ -125,6 +125,7 @@ mod tests {
             model: None,
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: None,
         };
 
         // This test depends on environment, so we just check if it fails or returns command

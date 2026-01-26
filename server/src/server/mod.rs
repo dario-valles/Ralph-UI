@@ -10,7 +10,7 @@ mod proxy;
 mod pty;
 pub mod pty_registry;
 pub mod routes;
-mod state;
+pub mod state;
 mod static_files;
 
 pub use auth::{generate_auth_token, AuthLayer};

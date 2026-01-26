@@ -10,6 +10,7 @@ import { FallbackSettings } from './FallbackSettings'
 import { NotificationSettings } from './NotificationSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { UISettings } from './UISettings'
+import { ApiProviderSettings } from './ApiProviderSettings'
 
 export function SettingsPage() {
   const {
@@ -155,6 +156,9 @@ export function SettingsPage() {
           <TabsTrigger value="templates" className="text-xs sm:text-sm">
             Templates
           </TabsTrigger>
+          <TabsTrigger value="providers" className="text-xs sm:text-sm">
+            Providers
+          </TabsTrigger>
           <TabsTrigger value="ui" className="text-xs sm:text-sm">
             UI
           </TabsTrigger>
@@ -223,6 +227,11 @@ export function SettingsPage() {
             handleCancelEdit={handleCancelEdit}
             handlePreviewTemplate={handlePreviewTemplate}
           />
+        </TabsContent>
+
+        {/* API Provider Settings */}
+        <TabsContent value="providers" className="space-y-4">
+          <ApiProviderSettings />
         </TabsContent>
 
         {/* UI Settings */}

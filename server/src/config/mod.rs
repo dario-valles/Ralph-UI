@@ -2,6 +2,8 @@
 
 pub mod loader;
 pub mod merger;
+pub mod providers;
+pub mod secrets;
 
 // Re-export main types
 pub use loader::{
@@ -9,6 +11,10 @@ pub use loader::{
     ValidationConfig,
 };
 pub use merger::{ConfigMerger, PartialConfig};
+pub use providers::{
+    build_provider_env_vars, get_all_provider_presets, get_provider_preset, ApiProviderInfo,
+};
+pub use secrets::SecretsConfig;
 
 use anyhow::Result;
 use std::path::Path;

@@ -31,6 +31,7 @@ pub struct PartialExecutionConfig {
     pub strategy: Option<String>,
     pub dry_run: Option<bool>,
     pub model: Option<String>,
+    pub api_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -183,6 +184,7 @@ impl ConfigMerger {
             strategy: over.strategy.clone(),
             dry_run: over.dry_run,
             model: over.model.clone().or_else(|| base.model.clone()),
+            api_provider: over.api_provider.clone().or_else(|| base.api_provider.clone()),
         }
     }
 
@@ -275,6 +277,7 @@ impl ConfigMerger {
                 .unwrap_or_else(|| base.strategy.clone()),
             dry_run: partial.dry_run.unwrap_or(base.dry_run),
             model: partial.model.clone().or_else(|| base.model.clone()),
+            api_provider: partial.api_provider.clone().or_else(|| base.api_provider.clone()),
         }
     }
 
@@ -380,6 +383,7 @@ mod tests {
                 strategy: "priority".to_string(),
                 dry_run: false,
                 model: None,
+                api_provider: None,
             },
             git: GitConfig {
                 auto_create_prs: true,
@@ -400,6 +404,7 @@ mod tests {
                 strategy: "fifo".to_string(),
                 dry_run: false,
                 model: Some("anthropic/claude-sonnet-4-5".to_string()),
+                api_provider: None,
             },
             ..Default::default()
         }
@@ -529,6 +534,7 @@ mod tests {
                 strategy: "priority".to_string(),
                 dry_run: false,
                 model: None,
+                api_provider: None,
             },
             ..Default::default()
         };
@@ -542,6 +548,7 @@ mod tests {
                 strategy: "fifo".to_string(),
                 dry_run: false,
                 model: Some("anthropic/claude-sonnet-4-5".to_string()),
+                api_provider: None,
             },
             ..Default::default()
         };

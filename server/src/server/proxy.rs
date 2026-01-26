@@ -687,6 +687,9 @@ pub async fn start_ralph_loop_server(
         ..RetryConfig::default()
     };
 
+    // Get provider env vars for Claude agent
+    let env_vars = crate::commands::providers::get_provider_env_vars(&state.config_state).ok();
+
     // Build RalphLoopConfig
     let config = RalphLoopConfig {
         project_path: PathBuf::from(&request.project_path),
@@ -707,6 +710,7 @@ pub async fn start_ralph_loop_server(
         template_name: resolved_template,
         test_command: resolved_test_command,
         lint_command: resolved_lint_command,
+        env_vars,
     };
 
     // Create orchestrator

@@ -302,6 +302,7 @@ pub async fn git_resolve_conflicts_with_ai(
     agent_type: Option<String>,
     model: Option<String>,
     timeout_secs: Option<u64>,
+    env_vars: Option<std::collections::HashMap<String, String>>,
     state: &GitState,
 ) -> Result<MergeResolutionResult, String> {
     log::info!(
@@ -335,6 +336,7 @@ pub async fn git_resolve_conflicts_with_ai(
         model,
         timeout_secs: timeout_secs.unwrap_or(120),
         project_path: repo_path.clone(),
+        env_vars,
     };
 
     // Create resolver and run resolution

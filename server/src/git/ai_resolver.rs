@@ -53,6 +53,8 @@ pub struct ConflictResolverConfig {
     pub timeout_secs: u64,
     /// Project path for agent working directory
     pub project_path: String,
+    /// Environment variables to pass to spawned agents (for API providers)
+    pub env_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 impl Default for ConflictResolverConfig {
@@ -62,6 +64,7 @@ impl Default for ConflictResolverConfig {
             model: None,
             timeout_secs: 120,
             project_path: ".".to_string(),
+            env_vars: None,
         }
     }
 }
@@ -219,6 +222,7 @@ Output ONLY the final resolved file content, with no conflict markers, no explan
             model: self.config.model.clone(),
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
+            env_vars: self.config.env_vars.clone(),
         };
 
         // Build the command using the provider

@@ -76,3 +76,6 @@ export type {
 
 // Config API
 export { configApi, recoveryApi, traceApi } from './config-api'
+
+// Provider API
+export { providerApi } from './provider-api'
