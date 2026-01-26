@@ -10,6 +10,7 @@ lerna-debug.log*
 # Dependencies
 node_modules
 dist
+!dist/.gitkeep
 dist-ssr
 dev-dist
 *.local
