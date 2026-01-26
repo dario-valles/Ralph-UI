@@ -410,15 +410,26 @@ a:focus-visible,
    xterm.js Mobile Touch Scrolling
    ========================================================================== */
 
-/* Enable touch scrolling on xterm viewport */
+/*
+ * Mobile terminal scrolling uses two-finger gesture detection in JS.
+ * - touch-action: none lets our JS handler control all touch behavior
+ * - On desktop, we restore normal touch-action for trackpad gestures
+ */
 .xterm-viewport {
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: none; /* JS handles scroll via two-finger gesture */
 }
 
-/* Ensure xterm container allows touch events */
+/* Desktop: restore normal touch handling for trackpad */
+@media (hover: hover) and (pointer: fine) {
+  .xterm-viewport {
+    touch-action: auto;
+  }
+}
+
+/* Ensure xterm container allows pinch-zoom for font scaling */
 .xterm {
-  touch-action: pan-y pinch-zoom;
+  touch-action: pinch-zoom;
 }
 
 /* ==========================================================================

@@ -21,6 +21,7 @@ import {
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useGestureStore } from '@/stores/gestureStore'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { useTerminalTouchScroll, useIsMobile } from '@/hooks/useTerminalTouchScroll'
 import { Loader2, RefreshCw, WifiOff } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 
@@ -52,6 +53,14 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
 
   // Check PTY availability synchronously (before any effects run)
   const [ptyAvailable] = useState(() => isPtyAvailable())
+
+  // Mobile two-finger scroll support
+  const isMobile = useIsMobile()
+  useTerminalTouchScroll(containerRef, {
+    terminalRef,
+    enabled: isMobile && settings.enableTwoFingerScroll,
+    scrollSensitivity: settings.twoFingerScrollSensitivity,
+  })
 
   // Max reconnection attempts and delays
   const MAX_RECONNECT_ATTEMPTS = 10

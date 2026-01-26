@@ -15,6 +15,8 @@ import {
 } from '@/lib/agent-api'
 import { writeToTerminal, resizeTerminal, decodeTerminalData, getPty } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
+import { useGestureStore } from '@/stores/gestureStore'
+import { useTerminalTouchScroll, useIsMobile } from '@/hooks/useTerminalTouchScroll'
 import '@xterm/xterm/css/xterm.css'
 
 interface AgentTerminalInstanceProps {
@@ -45,6 +47,15 @@ export function AgentTerminalInstance({
   const unlistenRef = useRef<(() => void) | null>(null)
   const unlistenExitRef = useRef<(() => void) | null>(null)
   const { updateTerminalTitle, updateAgentTerminalStatus } = useTerminalStore()
+  const { settings } = useGestureStore()
+
+  // Mobile two-finger scroll support
+  const isMobile = useIsMobile()
+  useTerminalTouchScroll(containerRef, {
+    terminalRef,
+    enabled: isMobile && settings.enableTwoFingerScroll,
+    scrollSensitivity: settings.twoFingerScrollSensitivity,
+  })
 
   /**
    * Connect a terminal to a PTY for a specific agent.
