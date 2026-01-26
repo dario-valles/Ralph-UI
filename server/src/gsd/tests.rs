@@ -513,7 +513,7 @@ mod tests {
         let config = GsdConfig::default();
 
         assert_eq!(config.max_parallel_research, 4);
-        assert_eq!(config.research_timeout_secs, 300);
+        assert_eq!(config.research_timeout_secs, 600);
         assert!(!config.auto_advance);
         assert_eq!(config.min_context_items, 3);
         assert!(config.include_codebase_analysis);
