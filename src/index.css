@@ -27,6 +27,14 @@
 }
 
 :root {
+  /* Z-index scale for consistent layering */
+  --z-skip-link: 9999;
+  --z-toast: 150;
+  --z-modal: 100;
+  --z-sheet: 90;
+  --z-header: 80;
+  --z-floating: 50;
+
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
   --card: 0 0% 100%;
@@ -122,7 +130,7 @@
 
   /* Skip link for accessibility */
   .skip-link {
-    @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md;
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[var(--z-skip-link)] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md;
   }
 
   /* Dynamic viewport height for mobile keyboard handling */

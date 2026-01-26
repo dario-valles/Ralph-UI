@@ -1,6 +1,19 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+/** Dialog size presets for consistent sizing across the app */
+const dialogSizes = {
+  sm: 'max-w-sm', // 384px - confirmations, simple forms
+  md: 'max-w-md', // 448px - form dialogs (default)
+  lg: 'max-w-lg', // 512px - multi-step, complex forms
+  xl: 'max-w-xl', // 576px - content viewers, previews
+  '2xl': 'max-w-2xl', // 672px - file editors, settings
+  '3xl': 'max-w-3xl', // 768px - dashboards
+  '4xl': 'max-w-4xl', // 896px - full modals
+} as const
+
+type DialogSize = keyof typeof dialogSizes
+
 interface DialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -9,6 +22,8 @@ interface DialogProps {
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
+  /** Size preset for dialog width */
+  size?: DialogSize
 }
 
 interface DialogHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -126,20 +141,20 @@ const Dialog = ({ open, onOpenChange, children }: DialogProps) => {
 
   return (
     <DialogContext.Provider value={{ titleId, descriptionId, setContentElement }}>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center">
         <div
           className="fixed inset-0 bg-black/50"
           onClick={() => onOpenChange?.(false)}
           aria-hidden="true"
         />
-        <div className="relative z-50">{children}</div>
+        <div className="relative z-[var(--z-modal)]">{children}</div>
       </div>
     </DialogContext.Provider>
   )
 }
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, ...props }, forwardedRef) => {
+  ({ className, children, size = 'lg', ...props }, forwardedRef) => {
     const { titleId, descriptionId, setContentElement } = useDialogContext()
 
     // Merge refs using callback ref
@@ -165,7 +180,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         className={cn(
-          'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg',
+          'fixed left-[50%] top-[50%] z-[var(--z-modal)] grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg',
+          dialogSizes[size],
           className
         )}
         {...props}

@@ -29,7 +29,7 @@ interface PRDPlanSidebarProps {
 // Reusable markdown renderer component
 function MarkdownContent({ content, className }: { content: string; className?: string }) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+    <div className={cn('prose prose-xs sm:prose-sm dark:prose-invert max-w-none', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -271,7 +271,7 @@ export function PRDPlanSidebar({
 
       {/* Expanded View Dialog */}
       <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogContent size="4xl" className="h-[80vh] flex flex-col">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center gap-2">
