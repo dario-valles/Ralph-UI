@@ -2,6 +2,7 @@
 
 import { ATTACHMENT_LIMITS, type AttachmentMimeType, type ChatAttachment } from '@/types'
 import { PASTE_CONFIG } from './chat-constants'
+import { generateUUID } from './utils'
 
 /**
  * Validate a file for attachment
@@ -56,7 +57,7 @@ export async function fileToAttachment(file: File): Promise<ChatAttachment> {
   const dimensions = await getImageDimensions(file)
 
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     mimeType: file.type as AttachmentMimeType,
     data: base64,
     filename: file.name,
@@ -145,7 +146,7 @@ export function createPastedTextBlock(
     lines[0].length > PASTE_CONFIG.FIRST_LINE_PREVIEW_MAX ? firstLine + '...' : firstLine
 
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     content,
     lineCount: lines.length,
     pasteNumber,

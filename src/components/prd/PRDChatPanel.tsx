@@ -32,7 +32,7 @@ import type { PhaseAction, PhaseState } from './PhaseActionBar'
 import { prdChatApi, prdApi, gsdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ChatSession } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn, generateUUID } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 import { useIsMobile, useScrollDirection } from '@/hooks/useMediaQuery'
@@ -447,7 +447,7 @@ export function PRDChatPanel() {
 
     if (currentSession) {
       const synthesisMessage = {
-        id: `synthesis-${crypto.randomUUID()}`,
+        id: `synthesis-${generateUUID()}`,
         sessionId: currentSession.id,
         role: 'assistant' as const,
         content: `## Research Summary\n\n${synthesis.content}\n\n---\n*Research analyzed ${synthesis.filesIncluded} files across ${results.length} research areas. Click **Requirements** below to generate requirements from this research.*`,
@@ -514,7 +514,7 @@ export function PRDChatPanel() {
     // Add success message to chat
     if (currentSession) {
       const exportMessage = {
-        id: `export-${crypto.randomUUID()}`,
+        id: `export-${generateUUID()}`,
         sessionId: currentSession.id,
         role: 'assistant' as const,
         content: `## PRD Exported Successfully!\n\nYour PRD **${prdName}** has been created at \`.ralph-ui/prds/${prdName}.json\`.\n\n**Summary:**\n- ${result.storyCount} stories created from your requirements\n- Ready for execution with the Ralph Wiggum Loop\n\nYou can now execute this PRD from the PRD list or start a new planning session.`,

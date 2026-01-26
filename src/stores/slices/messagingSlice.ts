@@ -6,6 +6,7 @@
  */
 import { prdChatApi } from '@/lib/backend-api'
 import { asyncAction, errorToString } from '@/lib/store-utils'
+import { generateUUID } from '@/lib/utils'
 import type {
   SetState,
   GetState,
@@ -48,7 +49,7 @@ export const createMessagingSlice = (
 
     // Create optimistic user message with UUID to prevent collision
     const optimisticMessage: ChatMessage = {
-      id: `temp-${crypto.randomUUID()}`,
+      id: `temp-${generateUUID()}`,
       sessionId: sessionId,
       role: 'user',
       content,
