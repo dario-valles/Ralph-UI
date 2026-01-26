@@ -19,6 +19,11 @@ export type {
   ToolCall,
   ToolCallStartedPayload,
   ToolCallCompletedPayload,
+  TaskStatusChangedPayload,
+  SessionStatusChangedPayload,
+  AgentStatusChangedPayload,
+  AgentCompletedPayload,
+  AgentFailedPayload,
 } from './common'
 
 // ============================================================================

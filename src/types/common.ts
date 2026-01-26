@@ -125,3 +125,42 @@ export interface ToolCallCompletedPayload {
   timestamp: string
   isError: boolean
 }
+
+// ============================================================================
+// Cross-Device Sync Event Payloads
+// ============================================================================
+
+export interface TaskStatusChangedPayload {
+  taskId: string
+  sessionId: string
+  oldStatus: string
+  newStatus: string
+}
+
+export interface SessionStatusChangedPayload {
+  sessionId: string
+  oldStatus: string
+  newStatus: string
+}
+
+export interface AgentStatusChangedPayload {
+  agentId: string
+  sessionId: string
+  oldStatus: string
+  newStatus: string
+}
+
+export interface AgentCompletedPayload {
+  agentId: string
+  taskId: string
+  sessionId: string
+  exitCode?: number
+}
+
+export interface AgentFailedPayload {
+  agentId: string
+  taskId: string
+  sessionId: string
+  exitCode?: number
+  error: string
+}

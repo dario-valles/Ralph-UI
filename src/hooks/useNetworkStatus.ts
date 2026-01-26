@@ -10,13 +10,15 @@
  * - Page returns to foreground (visible)
  *
  * Syncs offline queue when connection is restored (US-5)
+ * Shows toast notifications for sync status
  */
 
 import { useEffect, useCallback, useRef } from 'react'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useOfflineQueueStore } from '@/stores/offlineQueueStore'
 import { forceEventsReconnect } from '@/lib/events-client'
-import { syncQueuedActions } from '@/lib/invoke'
+import { syncQueuedActions, retryFailedAction } from '@/lib/invoke'
+import { toast } from '@/stores/toastStore'
 
 /**
  * Hook to monitor network and visibility status
@@ -89,12 +91,44 @@ export function useNetworkStatus() {
 
     if (wasDisconnected && isNowConnected && queueLength > 0) {
       console.log(`[NetworkStatus] Connection restored, syncing ${queueLength} queued actions`)
+
+      const pluralize = (count: number) => (count === 1 ? 'action' : 'actions')
+      toast.default('Syncing...', `Syncing ${queueLength} offline ${pluralize(queueLength)}`)
+
       syncQueuedActions().then(({ synced, failed }) => {
         if (synced > 0) {
           console.log(`[NetworkStatus] Synced ${synced} actions`)
         }
         if (failed > 0) {
           console.warn(`[NetworkStatus] Failed to sync ${failed} actions`)
+        }
+
+        if (failed === 0 && synced > 0) {
+          toast.success('Synced', `${synced} ${pluralize(synced)} synced successfully`)
+        } else if (failed > 0) {
+          const failedActions = useOfflineQueueStore.getState().failedActions
+          const syncedSuffix = synced > 0 ? `, ${synced} synced successfully` : ''
+          toast.withActions(
+            'Sync Failed',
+            `${failed} ${pluralize(failed)} failed to sync${syncedSuffix}`,
+            'error',
+            [
+              {
+                label: 'Retry All',
+                onClick: () => {
+                  failedActions.forEach((action) => retryFailedAction(action.id))
+                  syncQueuedActions()
+                },
+                variant: 'default',
+              },
+              {
+                label: 'Dismiss',
+                onClick: () => useOfflineQueueStore.getState().clearFailedActions(),
+                variant: 'outline',
+              },
+            ],
+            15000
+          )
         }
       })
     }

@@ -12,6 +12,7 @@ import {
   cleanupOldActions,
 } from '@/stores/offlineQueueStore'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { toast } from '@/stores/toastStore'
 
 /**
  * Server configuration for browser mode
@@ -68,6 +69,21 @@ interface InvokeOptions {
 }
 
 /**
+ * Show toast notification for queued offline action
+ */
+function showQueuedToast(queueLength: number, isNetworkError = false): void {
+  const title = isNetworkError ? 'Connection lost' : 'Saved offline'
+  const description =
+    queueLength === 1
+      ? isNetworkError
+        ? 'Action saved offline, will sync when reconnected'
+        : 'Will sync when connected'
+      : `${queueLength} actions pending sync`
+
+  toast.default(title, description)
+}
+
+/**
  * Invoke a backend command via HTTP
  * All commands are routed through POST /api/invoke
  * Queueable commands will be queued when offline (US-5)
@@ -92,9 +108,7 @@ export async function invoke<T>(
   if (isOffline && !options?.skipQueue && isQueueableCommand(cmd)) {
     const store = useOfflineQueueStore.getState()
     store.queueAction(cmd, args || {})
-
-    // Return a "queued" placeholder - the caller should handle this
-    // For most write operations, undefined is acceptable
+    showQueuedToast(store.queue.length + 1)
     return undefined as T
   }
 
@@ -152,15 +166,12 @@ export async function invoke<T>(
     }
   } catch (e) {
     // Network error - if queueable, try to queue
-    if (
-      !options?.skipQueue &&
-      isQueueableCommand(cmd) &&
-      e instanceof Error &&
-      (e.message.includes('fetch') || e.message.includes('network'))
-    ) {
+    const isNetworkError =
+      e instanceof Error && (e.message.includes('fetch') || e.message.includes('network'))
+    if (!options?.skipQueue && isQueueableCommand(cmd) && isNetworkError) {
       const store = useOfflineQueueStore.getState()
       store.queueAction(cmd, args || {})
-      // Update connection status
+      showQueuedToast(store.queue.length + 1, true)
       useConnectionStore.getState().setStatus('disconnected')
       return undefined as T
     }
