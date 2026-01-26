@@ -445,12 +445,32 @@ export function PRDChatPanel() {
     usePRDChatStore.setState({ researchSynthesis: synthesis })
     usePRDChatStore.getState().updatePhaseState()
 
+    // Partition results once for reuse
+    const successfulResults = results.filter((r) => r.success)
+    const failedResults = results.filter((r) => !r.success)
+
     if (currentSession) {
+      const completedAreas = successfulResults.map((r) => r.researchType).join(', ')
+      const themesPreview = synthesis.keyThemes?.slice(0, 5).map((t) => `- ${t}`).join('\n') || ''
+
+      let content = `## Research Complete\n\n**Analyzed areas:** ${completedAreas || 'None'}`
+
+      if (failedResults.length > 0) {
+        const failedAreas = failedResults.map((r) => r.researchType).join(', ')
+        content += `\n\n**Failed:** ${failedAreas} (can be re-run from the research panel)`
+      }
+
+      if (themesPreview) {
+        content += `\n\n**Key themes:**\n${themesPreview}`
+      }
+
+      content += `\n\n---\n*Research saved to \`.ralph-ui/planning/\`. Click **Requirements** below to generate requirements.*`
+
       const synthesisMessage = {
         id: `synthesis-${generateUUID()}`,
         sessionId: currentSession.id,
         role: 'assistant' as const,
-        content: `## Research Summary\n\n${synthesis.content}\n\n---\n*Research analyzed ${synthesis.filesIncluded} files across ${results.length} research areas. Click **Requirements** below to generate requirements from this research.*`,
+        content,
         createdAt: new Date().toISOString(),
         metadata: { type: 'research-synthesis' },
       }
@@ -460,7 +480,12 @@ export function PRDChatPanel() {
     }
 
     setShowResearchModal(false)
-    toast.success('Research Complete', `${results.length} research reports generated. Click Requirements to generate requirements.`)
+
+    if (failedResults.length > 0) {
+      toast.warning('Research Partially Complete', `${successfulResults.length} succeeded, ${failedResults.length} failed.`)
+    } else {
+      toast.success('Research Complete', `${results.length} research reports generated.`)
+    }
   }
 
   const handleScopeComplete = () => {

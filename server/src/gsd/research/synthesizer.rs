@@ -2,12 +2,59 @@
 //!
 //! Reads all research output files and generates a consolidated SUMMARY.md
 
+use crate::agents::format_parsers::parse_agent_json_output;
 use crate::gsd::config::ResearchAgentType;
 use crate::gsd::planning_storage::{
     list_research_files, read_research_file, write_planning_file, PlanningFile,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// Check if content appears to be raw stream-json output (not clean markdown)
+fn is_raw_json_output(content: &str) -> bool {
+    let first_lines: Vec<&str> = content.lines().take(5).collect();
+    if first_lines.is_empty() {
+        return false;
+    }
+
+    // Count lines starting with { (stream-json format)
+    let json_lines = first_lines
+        .iter()
+        .filter(|line| line.trim().starts_with('{'))
+        .count();
+
+    // If >50% of first 5 lines are JSON, it's likely raw output
+    json_lines > first_lines.len() / 2
+}
+
+/// Sanitize content by extracting text from raw JSON lines if needed
+fn sanitize_research_content(content: &str) -> String {
+    // Quick check: if content doesn't look like raw JSON stream, return as-is
+    if !is_raw_json_output(content) {
+        return content.to_string();
+    }
+
+    // Use the existing format parser to extract text from each line
+    let extracted: Vec<String> = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with('{') {
+                parse_agent_json_output(trimmed)
+            } else {
+                trimmed.to_string()
+            }
+        })
+        .filter(|s| !s.trim().is_empty())
+        .collect();
+
+    if extracted.is_empty() {
+        "*(Research content could not be extracted - please re-run this research agent)*"
+            .to_string()
+    } else {
+        extracted.join("\n")
+    }
+}
 
 /// Synthesized research summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,9 +89,11 @@ pub fn synthesize_research(
         if files.contains(&filename.to_string()) {
             match read_research_file(project_path, session_id, filename) {
                 Ok(content) => {
+                    // Sanitize content to remove any raw JSON that slipped through
+                    let sanitized = sanitize_research_content(&content);
                     sections.push(ResearchSection {
                         title: agent_type.display_name().to_string(),
-                        content,
+                        content: sanitized,
                     });
 
                     // Extract themes from each section
@@ -267,5 +316,57 @@ mod tests {
 
         let content_no_h1 = "Content without heading";
         assert_eq!(remove_leading_h1(content_no_h1), "Content without heading");
+    }
+
+    #[test]
+    fn test_is_raw_json_output() {
+        // Clean markdown should not be detected as JSON
+        let clean_markdown = "# Architecture Research\n\n## Summary\n\nContent here...";
+        assert!(!is_raw_json_output(clean_markdown));
+
+        // Raw stream-json should be detected
+        let raw_json = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Working...\"}]}}\n\
+{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"# Research\"}";
+        assert!(is_raw_json_output(raw_json));
+
+        // Mixed content with some JSON lines should not trigger (less than 50%)
+        let mixed = "# Research\n\nSome content\n{\"debug\": true}\nMore content";
+        assert!(!is_raw_json_output(mixed));
+
+        // Empty content
+        assert!(!is_raw_json_output(""));
+    }
+
+    #[test]
+    fn test_sanitize_research_content_clean_markdown() {
+        // Clean markdown passes through unchanged
+        let clean = "# Architecture Research\n\n## Design Patterns\n\nContent here...";
+        assert_eq!(sanitize_research_content(clean), clean);
+    }
+
+    #[test]
+    fn test_sanitize_research_content_raw_json() {
+        // Raw JSON should be sanitized to extract text content
+        let raw_json = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Working on research...\"}]}}\n\
+{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"# Research Content\"}";
+
+        let sanitized = sanitize_research_content(raw_json);
+        // Should not contain raw JSON type field
+        assert!(!sanitized.contains("\"type\":\"system\""));
+        // Should contain extracted text (from format parser)
+        assert!(sanitized.len() < raw_json.len()); // Sanitized should be shorter
+    }
+
+    #[test]
+    fn test_sanitize_research_content_empty_extraction() {
+        // If extraction produces nothing useful, show error message
+        let only_system_json = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"user\",\"message\":\"input\"}";
+
+        let sanitized = sanitize_research_content(only_system_json);
+        // Should either have extracted something or show error message
+        assert!(!sanitized.is_empty());
     }
 }

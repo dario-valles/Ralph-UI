@@ -3,6 +3,7 @@
 //! Spawns multiple research agents in parallel using tokio::join! and
 //! collects their results for synthesis. Emits progress events via HTTP.
 
+use crate::agents::format_parsers::parse_agent_json_output;
 use crate::agents::providers::get_provider;
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
 use crate::gsd::config::{GsdConfig, ResearchAgentType};
@@ -149,6 +150,32 @@ impl ResearchResult {
             error: Some("Research timed out".to_string()),
             output_path: None,
             duration_secs: timeout_secs as f64,
+            cli_agent: cli_agent.to_string(),
+        }
+    }
+
+    /// Create a result from existing status (when agent was not re-run)
+    fn from_existing(research_type: &str, status: &AgentResearchStatus, cli_agent: &str) -> Self {
+        Self {
+            research_type: research_type.to_string(),
+            success: status.complete,
+            content: None,
+            error: status.error.clone(),
+            output_path: status.output_path.clone(),
+            duration_secs: 0.0,
+            cli_agent: cli_agent.to_string(),
+        }
+    }
+
+    /// Create a default (not run) result
+    fn not_run(research_type: &str, cli_agent: &str) -> Self {
+        Self {
+            research_type: research_type.to_string(),
+            success: false,
+            content: None,
+            error: None,
+            output_path: None,
+            duration_secs: 0.0,
             cli_agent: cli_agent.to_string(),
         }
     }
@@ -307,16 +334,28 @@ impl ResearchOrchestrator {
     ) -> Result<String, String> {
         // Try to run the actual agent with streaming
         match self.run_agent_streaming(research_type, prompt).await {
-            Ok(content) => Ok(content),
+            Ok(content) => {
+                // Validate content is not empty
+                if content.trim().is_empty() {
+                    log::warn!(
+                        "[ResearchOrchestrator] {:?} agent returned empty content for {:?}",
+                        self.config.get_agent_type(),
+                        research_type
+                    );
+                    return Err("Research agent produced no extractable content".to_string());
+                }
+                Ok(content)
+            }
             Err(e) => {
                 log::warn!(
-                    "[ResearchOrchestrator] Failed to run {:?} agent for {:?}: {}. Using placeholder.",
+                    "[ResearchOrchestrator] Failed to run {:?} agent for {:?}: {}",
                     self.config.get_agent_type(),
                     research_type,
                     e
                 );
-                // Fall back to placeholder content
-                Ok(self.get_placeholder_content(research_type))
+                // Return error to mark this research as failed
+                // The error will be displayed in the UI so users can retry
+                Err(e)
             }
         }
     }
@@ -389,10 +428,15 @@ impl ResearchOrchestrator {
 
         // Process lines as they come in
         while let Ok(Some(line)) = lines.next_line().await {
-            // Emit the line as an event
-            self.emit_output(&agent_type_str, &line, false);
+            // Use existing format parser to get displayable text (not raw JSON)
+            let display_text = parse_agent_json_output(&line);
 
-            // Append to buffer
+            // Only emit non-empty display text to avoid flooding with empty lines
+            if !display_text.trim().is_empty() {
+                self.emit_output(&agent_type_str, &display_text, false);
+            }
+
+            // Append raw line to buffer for extraction later
             let mut buffer = output_clone.lock().await;
             buffer.push_str(&line);
             buffer.push('\n');
@@ -439,13 +483,13 @@ impl ResearchOrchestrator {
                         Ok(clean_content)
                     }
                     Err(e) => {
-                        // Log warning but return raw output as fallback
-                        log::warn!(
-                            "[ResearchOrchestrator] Failed to extract clean research: {}, using raw output ({} bytes)",
+                        // Return error instead of raw JSON - this prevents garbage from being saved
+                        log::error!(
+                            "[ResearchOrchestrator] Failed to extract research content: {}. Raw size: {} bytes",
                             e,
                             raw_output.len()
                         );
-                        Ok(raw_output)
+                        Err(format!("Failed to extract research content: {}", e))
                     }
                 }
             }
@@ -457,37 +501,6 @@ impl ResearchOrchestrator {
                 code,
                 stderr_output.lines().take(5).collect::<Vec<_>>().join("\n")
             ))
-        }
-    }
-
-    /// Get placeholder content when agent is unavailable
-    fn get_placeholder_content(&self, research_type: ResearchAgentType) -> String {
-        let agent_name = &self.config.research_agent_type;
-        match research_type {
-            ResearchAgentType::Architecture => {
-                format!(
-                    "# Architecture Research\n\n*Research pending - {} CLI not available.*\n\n## To Enable Research\n\nInstall the {} CLI and ensure it's in your PATH.",
-                    agent_name, agent_name
-                )
-            }
-            ResearchAgentType::Codebase => {
-                format!(
-                    "# Codebase Analysis\n\n*Research pending - {} CLI not available.*\n\n## To Enable Research\n\nInstall the {} CLI and ensure it's in your PATH.",
-                    agent_name, agent_name
-                )
-            }
-            ResearchAgentType::BestPractices => {
-                format!(
-                    "# Best Practices Research\n\n*Research pending - {} CLI not available.*\n\n## To Enable Research\n\nInstall the {} CLI and ensure it's in your PATH.",
-                    agent_name, agent_name
-                )
-            }
-            ResearchAgentType::Risks => {
-                format!(
-                    "# Risks & Challenges\n\n*Research pending - {} CLI not available.*\n\n## To Enable Research\n\nInstall the {} CLI and ensure it's in your PATH.",
-                    agent_name, agent_name
-                )
-            }
         }
     }
 }
@@ -630,119 +643,41 @@ pub async fn run_research_agents_selective(
         risks_future
     );
 
-    // Convert results, preserving existing state for non-run agents
-    let arch = match arch_result {
-        Some(Ok(r)) => r,
-        Some(Err(_)) => ResearchResult::timeout("architecture", timeout_secs, &cli_agent),
-        None => {
-            // Preserve existing state if we didn't run this agent
-            if let Some(ref existing) = existing_status {
-                ResearchResult {
-                    research_type: "architecture".to_string(),
-                    success: existing.architecture.complete,
-                    content: None,
-                    error: existing.architecture.error.clone(),
-                    output_path: existing.architecture.output_path.clone(),
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            } else {
-                ResearchResult {
-                    research_type: "architecture".to_string(),
-                    success: false,
-                    content: None,
-                    error: None,
-                    output_path: None,
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            }
+    // Helper to convert optional result to ResearchResult, preserving existing state
+    let convert_result = |result: Option<Result<ResearchResult, _>>,
+                          research_type: &str,
+                          existing_status: Option<&AgentResearchStatus>|
+     -> ResearchResult {
+        match result {
+            Some(Ok(r)) => r,
+            Some(Err(_)) => ResearchResult::timeout(research_type, timeout_secs, &cli_agent),
+            None => match existing_status {
+                Some(status) => ResearchResult::from_existing(research_type, status, &cli_agent),
+                None => ResearchResult::not_run(research_type, &cli_agent),
+            },
         }
     };
 
-    let codebase = match codebase_result {
-        Some(Ok(r)) => r,
-        Some(Err(_)) => ResearchResult::timeout("codebase", timeout_secs, &cli_agent),
-        None => {
-            if let Some(ref existing) = existing_status {
-                ResearchResult {
-                    research_type: "codebase".to_string(),
-                    success: existing.codebase.complete,
-                    content: None,
-                    error: existing.codebase.error.clone(),
-                    output_path: existing.codebase.output_path.clone(),
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            } else {
-                ResearchResult {
-                    research_type: "codebase".to_string(),
-                    success: false,
-                    content: None,
-                    error: None,
-                    output_path: None,
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            }
-        }
-    };
-
-    let best_practices = match best_practices_result {
-        Some(Ok(r)) => r,
-        Some(Err(_)) => ResearchResult::timeout("best_practices", timeout_secs, &cli_agent),
-        None => {
-            if let Some(ref existing) = existing_status {
-                ResearchResult {
-                    research_type: "best_practices".to_string(),
-                    success: existing.best_practices.complete,
-                    content: None,
-                    error: existing.best_practices.error.clone(),
-                    output_path: existing.best_practices.output_path.clone(),
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            } else {
-                ResearchResult {
-                    research_type: "best_practices".to_string(),
-                    success: false,
-                    content: None,
-                    error: None,
-                    output_path: None,
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            }
-        }
-    };
-
-    let risks = match risks_result {
-        Some(Ok(r)) => r,
-        Some(Err(_)) => ResearchResult::timeout("risks", timeout_secs, &cli_agent),
-        None => {
-            if let Some(ref existing) = existing_status {
-                ResearchResult {
-                    research_type: "risks".to_string(),
-                    success: existing.risks.complete,
-                    content: None,
-                    error: existing.risks.error.clone(),
-                    output_path: existing.risks.output_path.clone(),
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            } else {
-                ResearchResult {
-                    research_type: "risks".to_string(),
-                    success: false,
-                    content: None,
-                    error: None,
-                    output_path: None,
-                    duration_secs: 0.0,
-                    cli_agent: cli_agent.clone(),
-                }
-            }
-        }
-    };
+    let arch = convert_result(
+        arch_result,
+        "architecture",
+        existing_status.as_ref().map(|s| &s.architecture),
+    );
+    let codebase = convert_result(
+        codebase_result,
+        "codebase",
+        existing_status.as_ref().map(|s| &s.codebase),
+    );
+    let best_practices = convert_result(
+        best_practices_result,
+        "best_practices",
+        existing_status.as_ref().map(|s| &s.best_practices),
+    );
+    let risks = convert_result(
+        risks_result,
+        "risks",
+        existing_status.as_ref().map(|s| &s.risks),
+    );
 
     // Build the status
     let status = ResearchStatus {
