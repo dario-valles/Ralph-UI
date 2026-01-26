@@ -78,7 +78,7 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                       </p>
                       {(config.fallback.errorStrategy?.type === 'retry' ||
                         !config.fallback.errorStrategy) && (
-                        <div className="grid grid-cols-2 gap-4 mt-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                           <div className="space-y-2">
                             <Label className="text-xs">
                               Max Attempts:{' '}
@@ -241,7 +241,7 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0"
+                          className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
                           disabled={index === 0 || !config.fallback.enabled}
                           onClick={() => {
                             const chain = [
@@ -253,12 +253,12 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                             updateFallbackConfig({ fallbackChain: chain })
                           }}
                         >
-                          <ArrowUp className="h-3.5 w-3.5" />
+                          <ArrowUp className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0"
+                          className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
                           disabled={
                             index === (config.fallback.fallbackChain || []).length - 1 ||
                             !config.fallback.enabled
@@ -273,12 +273,12 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                             updateFallbackConfig({ fallbackChain: chain })
                           }}
                         >
-                          <ArrowDown className="h-3.5 w-3.5" />
+                          <ArrowDown className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0 text-destructive hover:text-destructive"
                           disabled={
                             (config.fallback.fallbackChain || []).length <= 1 ||
                             !config.fallback.enabled
@@ -290,7 +290,7 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                             updateFallbackConfig({ fallbackChain: chain })
                           }}
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                         </Button>
                       </div>
                     </div>

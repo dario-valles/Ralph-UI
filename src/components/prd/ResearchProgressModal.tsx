@@ -6,13 +6,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +14,7 @@ import { ResearchProgress } from './ResearchProgress'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { gsdApi } from '@/lib/backend-api'
 import type { ResearchStatus, ResearchSynthesis, ResearchResult, ResearchSessionInfo } from '@/types/gsd'
-import { X, CheckCircle2, History, Loader2 } from 'lucide-react'
+import { CheckCircle2, History, Loader2 } from 'lucide-react'
 import { toast } from '@/stores/toastStore'
 
 interface ResearchProgressModalProps {
@@ -310,139 +304,126 @@ export function ResearchProgressModal({
     onOpenChange(false)
   }
 
+  // Footer content for when synthesis is complete
+  const footerContent = synthesis ? (
+    <>
+      <Button variant="outline" onClick={handleClose}>
+        Close
+      </Button>
+      <Button onClick={handleAddToChat} className="gap-2">
+        <CheckCircle2 className="h-4 w-4" />
+        Add Summary to Chat
+      </Button>
+    </>
+  ) : undefined
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle>Parallel Research</DialogTitle>
-              <DialogDescription>
-                Four AI agents are analyzing your project from different angles
-              </DialogDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              className="h-8 w-8 rounded-full"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </DialogHeader>
-
-        {/* Error display */}
-        {error && (
-          <div className="mx-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Reuse previous research prompt */}
-        {showReusePrompt && existingResearch.length > 0 && (
-          <Alert className="mx-4 border-blue-500/50 bg-blue-500/5">
-            <History className="h-4 w-4 text-blue-500" />
-            <AlertDescription className="mt-2">
-              <div className="space-y-3">
-                <p className="text-sm font-medium">
-                  Found research from {existingResearch.length} previous session
-                  {existingResearch.length > 1 ? 's' : ''} in this project
-                </p>
-                <div className="space-y-2">
-                  {existingResearch.slice(0, 3).map((session) => (
-                    <div
-                      key={session.sessionId}
-                      className="flex items-center justify-between p-2 rounded-md bg-background/50 border border-border/30"
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">
-                          {session.createdAt
-                            ? new Date(session.createdAt).toLocaleDateString()
-                            : 'Unknown date'}
-                        </span>
-                        <div className="flex gap-1">
-                          {session.hasArchitecture && (
-                            <Badge variant="outline" className="text-xs">
-                              Architecture
-                            </Badge>
-                          )}
-                          {session.hasCodebase && (
-                            <Badge variant="outline" className="text-xs">
-                              Codebase
-                            </Badge>
-                          )}
-                          {session.hasBestPractices && (
-                            <Badge variant="outline" className="text-xs">
-                              Best Practices
-                            </Badge>
-                          )}
-                          {session.hasRisks && (
-                            <Badge variant="outline" className="text-xs">
-                              Risks
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleReuseResearch(session)}
-                        disabled={isCopyingResearch}
-                      >
-                        {isCopyingResearch ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          'Use This'
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowReusePrompt(false)}
-                    disabled={isCopyingResearch}
-                  >
-                    Start Fresh Instead
-                  </Button>
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Research progress content */}
-        <div className="flex-1 overflow-y-auto -mx-6 px-6">
-          <ResearchProgress
-            status={researchStatus}
-            results={researchResults}
-            synthesis={synthesis}
-            onStartResearch={handleStartResearch}
-            onSynthesize={handleSynthesize}
-            onProceed={handleAddToChat}
-            isRunning={isRunning}
-            isSynthesizing={isSynthesizing}
-            questioningContext={conversationContext}
-            sessionId={sessionId}
-          />
+    <ResponsiveModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Parallel Research"
+      description="Four AI agents are analyzing your project from different angles"
+      size="4xl"
+      fullPageOnMobile={true}
+      footer={footerContent}
+    >
+      {/* Error display */}
+      {error && (
+        <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm mb-4">
+          {error}
         </div>
+      )}
 
-        {/* Footer actions */}
-        {synthesis && (
-          <div className="flex-shrink-0 flex items-center justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={handleClose}>
-              Close
-            </Button>
-            <Button onClick={handleAddToChat} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Add Summary to Chat
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+      {/* Reuse previous research prompt */}
+      {showReusePrompt && existingResearch.length > 0 && (
+        <Alert className="border-blue-500/50 bg-blue-500/5 mb-4">
+          <History className="h-4 w-4 text-blue-500" />
+          <AlertDescription className="mt-2">
+            <div className="space-y-3">
+              <p className="text-sm font-medium">
+                Found research from {existingResearch.length} previous session
+                {existingResearch.length > 1 ? 's' : ''} in this project
+              </p>
+              <div className="space-y-2">
+                {existingResearch.slice(0, 3).map((session) => (
+                  <div
+                    key={session.sessionId}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-md bg-background/50 border border-border/30"
+                  >
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {session.createdAt
+                          ? new Date(session.createdAt).toLocaleDateString()
+                          : 'Unknown date'}
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {session.hasArchitecture && (
+                          <Badge variant="outline" className="text-xs">
+                            Architecture
+                          </Badge>
+                        )}
+                        {session.hasCodebase && (
+                          <Badge variant="outline" className="text-xs">
+                            Codebase
+                          </Badge>
+                        )}
+                        {session.hasBestPractices && (
+                          <Badge variant="outline" className="text-xs">
+                            Best Practices
+                          </Badge>
+                        )}
+                        {session.hasRisks && (
+                          <Badge variant="outline" className="text-xs">
+                            Risks
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleReuseResearch(session)}
+                      disabled={isCopyingResearch}
+                      className="min-h-11 sm:min-h-9"
+                    >
+                      {isCopyingResearch ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        'Use This'
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowReusePrompt(false)}
+                  disabled={isCopyingResearch}
+                  className="min-h-11 sm:min-h-9"
+                >
+                  Start Fresh Instead
+                </Button>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Research progress content */}
+      <ResearchProgress
+        status={researchStatus}
+        results={researchResults}
+        synthesis={synthesis}
+        onStartResearch={handleStartResearch}
+        onSynthesize={handleSynthesize}
+        onProceed={handleAddToChat}
+        isRunning={isRunning}
+        isSynthesizing={isSynthesizing}
+        questioningContext={conversationContext}
+        sessionId={sessionId}
+      />
+    </ResponsiveModal>
   )
 }

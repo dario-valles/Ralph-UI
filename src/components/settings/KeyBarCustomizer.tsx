@@ -362,9 +362,9 @@ export function KeyBarCustomizer() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 text-sm"
               />
-              <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
                 {filteredAvailableKeys.length === 0 ? (
-                  <div className="col-span-3 text-center text-xs text-muted-foreground py-4">
+                  <div className="col-span-2 sm:col-span-3 text-center text-xs text-muted-foreground py-4">
                     {searchQuery ? 'No keys match your search' : 'All available keys are in use'}
                   </div>
                 ) : (

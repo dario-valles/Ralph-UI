@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { RequirementScoper } from './RequirementScoper'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import type { RequirementsDoc, ScopeSelection, Requirement, RequirementCategory } from '@/types/planning'
+import type { GeneratedRequirement, GenerateRequirementsResult } from '@/types/gsd'
 import { X } from 'lucide-react'
 
 interface RequirementsScopeSheetProps {
@@ -44,6 +45,12 @@ interface RequirementsScopeSheetProps {
   onComplete?: (scopedRequirements?: RequirementsDoc) => void
   /** Whether the component is in loading state */
   isLoading?: boolean
+  /** Callback to generate requirements from prompt */
+  onGenerateRequirements?: (prompt: string, count?: number) => Promise<GenerateRequirementsResult>
+  /** Callback when generated requirements are accepted */
+  onAcceptGeneratedRequirements?: (requirements: GeneratedRequirement[]) => Promise<void>
+  /** Whether AI generation is in progress */
+  isGenerating?: boolean
 }
 
 export function RequirementsScopeSheet({
@@ -54,6 +61,9 @@ export function RequirementsScopeSheet({
   onAddRequirement,
   onComplete,
   isLoading = false,
+  onGenerateRequirements,
+  onAcceptGeneratedRequirements,
+  isGenerating = false,
 }: RequirementsScopeSheetProps) {
   const isMobile = useIsMobile()
   const [localRequirements, setLocalRequirements] = useState<RequirementsDoc | null>(requirements)
@@ -109,6 +119,9 @@ export function RequirementsScopeSheet({
             onAddRequirement={onAddRequirement}
             onProceed={handleProceed}
             isLoading={isLoading}
+            onGenerateRequirements={onGenerateRequirements}
+            onAcceptGeneratedRequirements={onAcceptGeneratedRequirements}
+            isGenerating={isGenerating}
           />
         </div>
       ) : (

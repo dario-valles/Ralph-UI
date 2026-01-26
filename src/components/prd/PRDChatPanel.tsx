@@ -29,7 +29,7 @@ import { ChatInputArea } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
 import type { ResearchSynthesis, ResearchResult, GsdWorkflowState } from '@/types/gsd'
 import type { PhaseAction, PhaseState } from './PhaseActionBar'
-import { prdChatApi, prdApi } from '@/lib/backend-api'
+import { prdChatApi, prdApi, gsdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ChatSession } from '@/types'
 import { cn } from '@/lib/utils'
@@ -92,6 +92,7 @@ export function PRDChatPanel() {
   const [showResearchModal, setShowResearchModal] = useState(false)
   const [showScopeSheet, setShowScopeSheet] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [isGeneratingFromPrompt, setIsGeneratingFromPrompt] = useState(false)
   const [showCloneDialog, setShowCloneDialog] = useState(false)
   const [sessionToClone, setSessionToClone] = useState<ChatSession | null>(null)
   const [runningPhaseAction, setRunningPhaseAction] = useState<PhaseAction | null>(null)
@@ -466,6 +467,39 @@ export function PRDChatPanel() {
     toast.success('Scoping Complete', 'Requirements have been categorized. Click Roadmap to generate execution plan.')
   }
 
+  // AI-powered bulk requirement generation
+  const handleGenerateRequirementsFromPrompt = async (prompt: string, count?: number) => {
+    if (!currentSession || !activeProject?.path) {
+      throw new Error('No active session')
+    }
+    setIsGeneratingFromPrompt(true)
+    try {
+      const result = await gsdApi.generateRequirementsFromPrompt(
+        activeProject.path,
+        currentSession.id,
+        prompt,
+        count
+      )
+      return result
+    } finally {
+      setIsGeneratingFromPrompt(false)
+    }
+  }
+
+  const handleAcceptGeneratedRequirements = async (requirements: import('@/types/gsd').GeneratedRequirement[]) => {
+    if (!currentSession || !activeProject?.path) {
+      throw new Error('No active session')
+    }
+    await gsdApi.addGeneratedRequirements(
+      activeProject.path,
+      currentSession.id,
+      requirements
+    )
+    // Reload requirements to reflect changes
+    await loadRequirements()
+    toast.success('Requirements Added', `${requirements.length} requirements added successfully.`)
+  }
+
   const handleExportComplete = (prdName: string, result: { storyCount: number }) => {
     setShowExportDialog(false)
 
@@ -563,7 +597,7 @@ export function PRDChatPanel() {
         qualityAssessment={qualityAssessment}
         loading={loading}
         onRefreshQuality={assessQuality}
-        className="hidden lg:flex"
+        className="hidden md:flex"
       />
 
       {/* Chat Panel */}
@@ -657,7 +691,7 @@ export function PRDChatPanel() {
           path={watchedPlanPath}
           isWatching={isWatchingPlan}
           onRefresh={startWatchingPlanFile}
-          className="hidden lg:flex w-60 xl:w-72 2xl:w-80 shrink-0"
+          className="hidden md:flex w-48 lg:w-60 xl:w-72 2xl:w-80 shrink-0"
         />
       )}
 
@@ -717,6 +751,9 @@ export function PRDChatPanel() {
             onAddRequirement={addRequirement}
             onComplete={handleScopeComplete}
             isLoading={loading}
+            onGenerateRequirements={handleGenerateRequirementsFromPrompt}
+            onAcceptGeneratedRequirements={handleAcceptGeneratedRequirements}
+            isGenerating={isGeneratingFromPrompt}
           />
 
           <GsdExportDialog

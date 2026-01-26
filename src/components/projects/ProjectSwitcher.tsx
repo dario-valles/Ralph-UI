@@ -216,7 +216,7 @@ export function ProjectSwitcher({
         <div
           className={cn(
             'absolute left-0 top-full mt-1 z-50 bg-popover border rounded-lg shadow-lg overflow-hidden',
-            showBrowser ? 'min-w-[400px]' : 'min-w-[300px]'
+            showBrowser ? 'min-w-[min(400px,calc(100vw-2rem))]' : 'min-w-[min(300px,calc(100vw-2rem))]'
           )}
         >
           {/* Folder Browser or Add Button */}
@@ -344,11 +344,11 @@ function ProjectItem({
           autoFocus
           onClick={(e) => e.stopPropagation()}
         />
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSaveEdit}>
-          <Check className="h-3 w-3" />
+        <Button variant="ghost" size="icon" className="min-h-11 min-w-11 sm:h-6 sm:w-6 sm:min-h-0 sm:min-w-0" onClick={onSaveEdit}>
+          <Check className="h-4 w-4 sm:h-3 sm:w-3" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCancelEdit}>
-          <X className="h-3 w-3" />
+        <Button variant="ghost" size="icon" className="min-h-11 min-w-11 sm:h-6 sm:w-6 sm:min-h-0 sm:min-w-0" onClick={onCancelEdit}>
+          <X className="h-4 w-4 sm:h-3 sm:w-3" />
         </Button>
       </div>
     )
@@ -381,21 +381,21 @@ function ProjectItem({
       <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
         <button
           onClick={onToggleFavorite}
-          className="p-1 rounded hover:bg-background"
+          className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded hover:bg-background flex items-center justify-center"
           title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Star
             className={cn(
-              'h-3 w-3',
+              'h-4 w-4 sm:h-3 sm:w-3',
               project.isFavorite ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'
             )}
           />
         </button>
-        <button onClick={onStartEdit} className="p-1 rounded hover:bg-background" title="Rename">
-          <Pencil className="h-3 w-3 text-muted-foreground" />
+        <button onClick={onStartEdit} className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded hover:bg-background flex items-center justify-center" title="Rename">
+          <Pencil className="h-4 w-4 sm:h-3 sm:w-3 text-muted-foreground" />
         </button>
-        <button onClick={onDelete} className="p-1 rounded hover:bg-background" title="Remove">
-          <Trash2 className="h-3 w-3 text-destructive" />
+        <button onClick={onDelete} className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded hover:bg-background flex items-center justify-center" title="Remove">
+          <Trash2 className="h-4 w-4 sm:h-3 sm:w-3 text-destructive" />
         </button>
       </div>
     </div>
