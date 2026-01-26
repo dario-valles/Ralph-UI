@@ -184,7 +184,10 @@ impl ConfigMerger {
             strategy: over.strategy.clone(),
             dry_run: over.dry_run,
             model: over.model.clone().or_else(|| base.model.clone()),
-            api_provider: over.api_provider.clone().or_else(|| base.api_provider.clone()),
+            api_provider: over
+                .api_provider
+                .clone()
+                .or_else(|| base.api_provider.clone()),
         }
     }
 
@@ -277,7 +280,10 @@ impl ConfigMerger {
                 .unwrap_or_else(|| base.strategy.clone()),
             dry_run: partial.dry_run.unwrap_or(base.dry_run),
             model: partial.model.clone().or_else(|| base.model.clone()),
-            api_provider: partial.api_provider.clone().or_else(|| base.api_provider.clone()),
+            api_provider: partial
+                .api_provider
+                .clone()
+                .or_else(|| base.api_provider.clone()),
         }
     }
 

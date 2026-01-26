@@ -92,7 +92,8 @@ impl SecretsConfig {
 
     /// Set a provider's API token
     pub fn set_token(&mut self, provider_id: &str, token: &str) {
-        self.api_tokens.insert(provider_id.to_string(), token.to_string());
+        self.api_tokens
+            .insert(provider_id.to_string(), token.to_string());
     }
 
     /// Delete a provider's API token

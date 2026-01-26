@@ -126,13 +126,18 @@ pub fn test_provider_connection(provider_id: &str) -> Result<ProviderTestResult,
     // For now, just confirm the token is set
     Ok(ProviderTestResult {
         success: true,
-        message: format!("API token configured for {} ({})", preset.name, preset.base_url),
+        message: format!(
+            "API token configured for {} ({})",
+            preset.name, preset.base_url
+        ),
     })
 }
 
 /// Get provider environment variables for spawning Claude CLI
 /// This is used by the agent manager when spawning Claude with an alternative provider
-pub fn get_provider_env_vars(config_state: &ConfigState) -> Result<std::collections::HashMap<String, String>, String> {
+pub fn get_provider_env_vars(
+    config_state: &ConfigState,
+) -> Result<std::collections::HashMap<String, String>, String> {
     // Get active provider
     let provider_id = config_state
         .get_config()
