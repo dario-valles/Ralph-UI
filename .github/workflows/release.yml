@@ -56,6 +56,20 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Linux native: install OpenSSL dev packages
+      - name: Install OpenSSL (Linux)
+        if: runner.os == 'Linux' && !matrix.cross
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      # Windows: install OpenSSL via vcpkg
+      - name: Install OpenSSL (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:/vcpkg/installed/x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+
+      # Cross-compilation: use cross with Docker (has OpenSSL)
       - name: Install cross (for cross-compilation)
         if: matrix.cross
         run: cargo install cross --git https://github.com/cross-rs/cross

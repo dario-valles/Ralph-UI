@@ -52,8 +52,8 @@ pulldown-cmark = "0.12"
 # Regex for parsing
 regex = "1"
 
-# HTTP client for GitHub API
-reqwest = { version = "0.12", features = ["json"] }
+# HTTP client for GitHub API (rustls for cross-compilation without OpenSSL)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # System resource monitoring
 sysinfo = "0.32"
