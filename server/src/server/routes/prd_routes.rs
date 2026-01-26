@@ -1,7 +1,7 @@
 //! PRD and Chat command routing
 //!
 //! Handles PRD file operations and PRD chat commands including:
-//! scan_prd_files, get_prd_file, update_prd_file, delete_prd_file,
+//! scan_prd_files, get_prd_file, update_prd_file, delete_prd_file, get_prd_count,
 //! start_prd_chat_session, send_prd_chat_message, list_prd_chat_sessions,
 //! get_prd_chat_history, delete_prd_chat_session, update_prd_chat_agent,
 //! assess_prd_quality, preview_prd_extraction, check_agent_availability,
@@ -48,6 +48,12 @@ pub async fn route_prd_command(
             let project_path: String = get_arg(&args, "projectPath")?;
             let prd_name: String = get_arg(&args, "prdName")?;
             route_async!(cmd, commands::prd::delete_prd_file(project_path, prd_name))
+        }
+
+        "get_prd_count" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let result = commands::prd::get_prd_count(&project_path)?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
         }
 
         // PRD Chat Commands
@@ -197,6 +203,7 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "get_prd_file"
             | "update_prd_file"
             | "delete_prd_file"
+            | "get_prd_count"
             | "start_prd_chat_session"
             | "send_prd_chat_message"
             | "list_prd_chat_sessions"

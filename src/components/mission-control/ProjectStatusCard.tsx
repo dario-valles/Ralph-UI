@@ -1,7 +1,7 @@
 // Individual project summary card for Mission Control
 
 import { Link } from 'react-router-dom'
-import { FolderOpen, Play, Pause, Clock, ArrowRight } from 'lucide-react'
+import { FolderOpen, Play, Pause, Clock, ArrowRight, FileText } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,15 +14,14 @@ interface ProjectStatusCardProps {
   onNavigate?: () => void
 }
 
-const runningConfig = {
-  color: 'text-green-500',
-  bgColor: 'bg-green-500/10',
-  borderColor: 'border-green-500/20',
-  icon: Play,
-  label: 'Running',
-}
-
 const healthConfig = {
+  running: {
+    color: 'text-green-500',
+    bgColor: 'bg-green-500/10',
+    borderColor: 'border-green-500/20',
+    icon: Play,
+    label: 'Running',
+  },
   healthy: {
     color: 'text-green-500',
     bgColor: 'bg-green-500/10',
@@ -56,13 +55,14 @@ function formatLastActivity(date: Date | null): string {
 }
 
 export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCardProps) {
-  const { project, health, lastActivity, activeExecutionId } = projectStatus
+  const { project, health, lastActivity, activeExecutionId, prdCount } = projectStatus
 
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
 
   // Show "Running" badge when there's an active execution
   const isRunning = !!activeExecutionId
-  const config = isRunning ? runningConfig : healthConfig[health]
+  const configKey = isRunning ? 'running' : health
+  const config = healthConfig[configKey]
   const HealthIcon = config.icon
 
   return (
@@ -92,11 +92,17 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatLastActivity(lastActivity)}
           </div>
+          {prdCount !== null && prdCount > 0 && (
+            <div className="flex items-center gap-1">
+              <FileText className="h-3 w-3" />
+              {prdCount} PRD{prdCount !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>
 
         {/* Action */}

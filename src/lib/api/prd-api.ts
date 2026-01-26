@@ -28,4 +28,9 @@ export const prdApi = {
   importFile: async (projectPath: string, filePath: string): Promise<PRDFile> => {
     return await invoke('import_prd', { projectPath, filePath })
   },
+
+  /** Get count of PRD files (lightweight, no content reading) */
+  getCount: async (projectPath: string): Promise<{ count: number }> => {
+    return await invoke('get_prd_count', { projectPath })
+  },
 }

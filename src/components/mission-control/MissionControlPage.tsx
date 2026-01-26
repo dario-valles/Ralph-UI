@@ -60,34 +60,36 @@ export function MissionControlPage() {
             <QuickActionsBar onRefreshAll={handleRefreshAll} isRefreshing={isLoading} />
           </div>
 
-          {/* Ralph Loop Quick Access Card */}
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <Repeat className="h-5 w-5 text-primary" />
-                  <CardTitle className="text-lg">Ralph Loop</CardTitle>
+          {/* Ralph Loop Quick Access Card - Only shown when there are active executions */}
+          {globalStats.activeExecutionsCount > 0 && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="h-5 w-5 text-primary" />
+                    <CardTitle className="text-lg">Ralph Loop</CardTitle>
+                  </div>
+                  <Button onClick={() => navigate('/ralph-loop')} size="sm" className="w-fit">
+                    Go to Ralph Loop
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
                 </div>
-                <Button onClick={() => navigate('/ralph-loop')} size="sm" className="w-fit">
-                  Go to Ralph Loop
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-              <CardDescription>
-                Start autonomous AI coding sessions with the Ralph Wiggum Loop technique
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">{globalStats.activeExecutionsCount}</span>
-                  <span className="text-muted-foreground">
-                    active execution{globalStats.activeExecutionsCount !== 1 ? 's' : ''}
-                  </span>
+                <CardDescription>
+                  Autonomous AI coding sessions running with the Ralph Wiggum Loop technique
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium">{globalStats.activeExecutionsCount}</span>
+                    <span className="text-muted-foreground">
+                      active execution{globalStats.activeExecutionsCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Projects Overview */}
           <ProjectsOverview projectStatuses={projectStatuses} loading={projectsLoading} />

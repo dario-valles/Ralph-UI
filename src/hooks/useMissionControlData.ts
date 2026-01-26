@@ -1,12 +1,12 @@
 // Derived selectors for Mission Control dashboard
 // Simplified version that uses only Ralph Loop data and Projects
 
-import { useMemo, useCallback, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useRef } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useProjectStore } from '@/stores/projectStore'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
 import type { Project } from '@/types'
-import { ralphLoopApi } from '@/lib/backend-api'
+import { ralphLoopApi, prdApi } from '@/lib/backend-api'
 
 // ============================================================================
 // Types
@@ -32,6 +32,8 @@ export interface ProjectStatus {
   lastActivity: Date | null
   /** Execution ID if this project has an active execution */
   activeExecutionId?: string
+  /** Number of PRDs in this project (null = loading/error) */
+  prdCount: number | null
 }
 
 // ============================================================================
@@ -130,9 +132,44 @@ export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
   const activeExecutionId = useRalphLoopStore((s) => s.activeExecutionId)
   const currentProjectPath = useRalphLoopStore((s) => s.currentProjectPath)
 
-  const projectStatuses = useMemo(() => {
-    const { projects } = projectState
+  // PRD counts state - loaded lazily in background
+  const [prdCounts, setPrdCounts] = useState<Map<string, number>>(new Map())
+  const fetchedPathsRef = useRef<Set<string>>(new Set())
 
+  // Stable reference to projects for effect
+  const { projects } = projectState
+
+  // Fetch PRD counts in background when projects change
+  useEffect(() => {
+    const fetchPrdCounts = async () => {
+      const newPaths = projects.filter((p) => !fetchedPathsRef.current.has(p.path))
+
+      if (newPaths.length === 0) return
+
+      // Use Promise.allSettled to handle partial failures gracefully
+      const results = await Promise.allSettled(
+        newPaths.map(async (project) => {
+          const result = await prdApi.getCount(project.path)
+          return { path: project.path, count: result.count }
+        })
+      )
+
+      setPrdCounts((prev) => {
+        const newCounts = new Map(prev)
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            newCounts.set(result.value.path, result.value.count)
+            fetchedPathsRef.current.add(result.value.path)
+          }
+        }
+        return newCounts
+      })
+    }
+
+    fetchPrdCounts()
+  }, [projects])
+
+  const projectStatuses = useMemo(() => {
     return projects.map((project) => {
       // Check if this project has an active Ralph Loop execution
       // First check the passed activeProjectPaths map (from API), then fallback to store
@@ -145,9 +182,10 @@ export function useProjectStatuses(activeProjectPaths?: Map<string, string>): {
         health: activeExecId ? ('healthy' as const) : ('idle' as const),
         lastActivity: getLastActivityDate(project),
         activeExecutionId: activeExecId ?? undefined,
+        prdCount: prdCounts.get(project.path) ?? null,
       }
     })
-  }, [projectState, activeExecutionId, currentProjectPath, activeProjectPaths])
+  }, [projects, activeExecutionId, currentProjectPath, activeProjectPaths, prdCounts])
 
   return { projectStatuses, loading: projectState.loading, error: projectState.error }
 }
@@ -203,14 +241,8 @@ export function useVisibilityPolling(
 /**
  * Hook to create a refresh function for mission control data
  */
-export function useMissionControlRefresh() {
-  const loadProjects = useProjectStore((s) => s.loadProjects)
-
-  const refreshAll = useCallback(async () => {
-    await loadProjects()
-  }, [loadProjects])
-
-  return refreshAll
+export function useMissionControlRefresh(): () => Promise<void> {
+  return useProjectStore((s) => s.loadProjects)
 }
 
 /**

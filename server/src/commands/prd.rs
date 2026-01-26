@@ -3,6 +3,7 @@
 // All PRD operations now use file-based storage in .ralph-ui/prds/
 
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::Path;
 
 /// A PRD file found in the .ralph-ui/prds/ directory
@@ -362,4 +363,42 @@ pub async fn delete_prd_file(
         deleted_branches,
         warnings,
     })
+}
+
+/// Result of counting PRD files (lightweight, no content reading)
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrdCountResult {
+    /// Number of PRD markdown files found
+    pub count: usize,
+}
+
+/// Count PRD files without reading their content (lightweight for dashboard)
+///
+/// This function only counts .md files in .ralph-ui/prds/ without reading
+/// file contents, making it efficient for dashboard status displays.
+pub fn get_prd_count(project_path: &str) -> Result<PrdCountResult, String> {
+    use crate::utils::prds_dir;
+
+    let prds_dir = prds_dir(project_path);
+
+    if !prds_dir.exists() {
+        return Ok(PrdCountResult { count: 0 });
+    }
+
+    let count = fs::read_dir(&prds_dir)
+        .map_err(|e| format!("Failed to read prds directory: {}", e))?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let path = e.path();
+            // Only count .md files, skip -prompt.md files
+            path.extension().map_or(false, |ext| ext == "md")
+                && !path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map_or(false, |name| name.ends_with("-prompt"))
+        })
+        .count();
+
+    Ok(PrdCountResult { count })
 }
