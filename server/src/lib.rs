@@ -1,23 +1,25 @@
 // Clippy allows for reasonable defaults
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::new_without_default)]
-#![allow(clippy::redundant_closure)]
-#![allow(clippy::useless_conversion)]
-#![allow(clippy::needless_borrows_for_generic_args)]
-#![allow(clippy::derivable_impls)]
-#![allow(clippy::unnecessary_map_or)]
-#![allow(clippy::single_char_add_str)]
-#![allow(clippy::needless_borrow)]
-#![allow(clippy::needless_question_mark)]
-#![allow(clippy::manual_flatten)]
-#![allow(clippy::clone_on_copy)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::unwrap_or_default)]
-#![allow(clippy::field_reassign_with_default)]
-#![allow(clippy::double_ended_iterator_last)]
-#![allow(clippy::unnecessary_mut_passed)]
-#![allow(clippy::format_in_format_args)]
-#![allow(clippy::manual_strip)]
+// These suppress warnings that would require refactoring across many files
+// or where the suggested change doesn't improve readability
+#![allow(clippy::too_many_arguments)] // Command handlers often need many params
+#![allow(clippy::new_without_default)] // Default not always appropriate for stateful types
+#![allow(clippy::derivable_impls)] // Explicit Default impls can be clearer
+#![allow(clippy::field_reassign_with_default)] // Builder pattern is clearer
+#![allow(clippy::unnecessary_map_or)] // map_or can be clearer than alternatives
+#![allow(clippy::single_char_add_str)] // push_str("\n") reads better than push('\n')
+#![allow(clippy::needless_borrow)] // Explicit borrows can clarify ownership
+#![allow(clippy::useless_conversion)] // .into() can clarify type boundaries
+#![allow(clippy::clone_on_copy)] // .clone() can be clearer than implicit copy
+#![allow(clippy::collapsible_if)] // Separate ifs can be more readable
+#![allow(clippy::needless_question_mark)] // Explicit ? can clarify error propagation
+#![allow(clippy::manual_flatten)] // Explicit iteration can be clearer
+#![allow(clippy::double_ended_iterator_last)] // .last() on chains can be clearer
+#![allow(clippy::redundant_closure)] // |x| f(x) can be clearer than f
+#![allow(clippy::needless_borrows_for_generic_args)] // Explicit borrows clarify intent
+#![allow(clippy::unwrap_or_default)] // unwrap_or_else(Default::default) can be clearer
+#![allow(clippy::format_in_format_args)] // Nested format! can be clearer for complex strings
+#![allow(clippy::manual_strip)] // Manual prefix stripping can be clearer
+#![allow(clippy::unnecessary_mut_passed)] // Explicit mut can clarify intent
 
 // Module declarations
 pub mod agents;

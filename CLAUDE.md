@@ -30,7 +30,8 @@ bun run cargo:test             # Rust backend tests (650+ tests)
 bun run lint                   # ESLint (strict, 0 warnings allowed)
 bun run lint:fix               # Auto-fix lint issues
 bun run format                 # Prettier format (frontend)
-cargo fmt                      # Rust format (run from server/ dir, or use --manifest-path)
+cargo fmt                      # Rust format (run from server/ dir)
+cargo clippy -- -D warnings    # Rust lints (run from server/ dir)
 
 # Building
 bun run cargo:build            # Production backend build
@@ -395,6 +396,24 @@ Test files are organized in:
 - `e2e/responsive/` - Viewport-specific tests (mobile, tablet, desktop)
 
 See `e2e/README.md` for test format and writing guidelines.
+
+### CI Requirements
+
+Before pushing, ensure these checks pass locally:
+
+```bash
+# Frontend
+bun run lint                   # No ESLint warnings
+bun run typecheck              # TypeScript types
+bun run test:run               # Unit tests
+
+# Backend (from server/ directory)
+cargo fmt --check              # Rust formatting
+cargo clippy -- -D warnings    # Rust lints (strict, no warnings)
+cargo test                     # Backend tests
+```
+
+**Clippy Configuration:** Crate-level clippy allows are defined in `server/src/lib.rs` with explanatory comments. Only add new allows if fixing the warning would significantly reduce readability or require major refactoring.
 
 ## Deployment
 
