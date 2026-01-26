@@ -114,6 +114,41 @@ export const configApi = {
   save: async (): Promise<void> => {
     return await invoke('save_config')
   },
+
+  /**
+   * Load global terminal commands
+   */
+  loadGlobalCommands: async (): Promise<Record<string, string>> => {
+    return await invoke('load_global_commands')
+  },
+
+  /**
+   * Load project-specific terminal commands
+   */
+  loadProjectCommands: async (projectPath: string): Promise<Record<string, string>> => {
+    return await invoke('load_project_commands', { projectPath })
+  },
+
+  /**
+   * Get the user's home directory path
+   */
+  getHomeDirectory: async (): Promise<string> => {
+    return await invoke('get_home_directory')
+  },
+
+  /**
+   * List contents of a directory
+   */
+  listDirectory: async (path: string): Promise<string[]> => {
+    return await invoke('list_directory', { path })
+  },
+
+  /**
+   * Get available AI models
+   */
+  getAvailableModels: async (agentType?: string): Promise<string[]> => {
+    return await invoke('get_available_models', { agentType })
+  },
 }
 
 // ============================================================================

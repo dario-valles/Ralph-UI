@@ -60,7 +60,7 @@ export function ResearchProgressModal({
   const [isCopyingResearch, setIsCopyingResearch] = useState(false)
 
   // Get agent selection and research status checker from store
-  const { selectedResearchAgent, checkResearchStatus } = usePRDChatStore()
+  const { selectedResearchAgent, checkResearchStatus, setResearchStatus: setStoreResearchStatus } = usePRDChatStore()
 
   // Check research status when modal opens (to reconnect to running or completed research)
   useEffect(() => {
@@ -189,7 +189,7 @@ export function ResearchProgressModal({
           },
         }
         setResearchStatus(newStatus)
-        usePRDChatStore.setState({ researchStatus: newStatus })
+        setStoreResearchStatus(newStatus)
 
         // Load the copied research results
         const results = await gsdApi.getResearchResults(projectPath, sessionId)
@@ -210,7 +210,7 @@ export function ResearchProgressModal({
         setIsCopyingResearch(false)
       }
     },
-    [projectPath, sessionId]
+    [projectPath, sessionId, setStoreResearchStatus]
   )
 
   // Start research (optionally for specific research types only)
@@ -248,7 +248,7 @@ export function ResearchProgressModal({
         },
       }
       setResearchStatus(runningStatus)
-      usePRDChatStore.setState({ isResearchRunning: true, researchStatus: runningStatus })
+      setStoreResearchStatus(runningStatus, true)
 
       try {
         const status = await gsdApi.startResearch(
@@ -260,17 +260,17 @@ export function ResearchProgressModal({
           researchTypes
         )
         setResearchStatus(status)
-        usePRDChatStore.setState({ researchStatus: status })
+        setStoreResearchStatus(status)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start research')
         setResearchStatus(INITIAL_RESEARCH_STATUS)
-        usePRDChatStore.setState({ researchStatus: INITIAL_RESEARCH_STATUS })
+        setStoreResearchStatus(INITIAL_RESEARCH_STATUS)
       } finally {
         setIsRunning(false)
-        usePRDChatStore.setState({ isResearchRunning: false })
+        setStoreResearchStatus(null, false)
       }
     },
-    [projectPath, sessionId, conversationContext, selectedResearchAgent, researchStatus]
+    [projectPath, sessionId, conversationContext, selectedResearchAgent, researchStatus, setStoreResearchStatus]
   )
 
   // Synthesize research results

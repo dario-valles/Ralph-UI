@@ -1,7 +1,7 @@
 //! Git-related command routing
 //!
 //! Handles: git_list_branches, git_get_current_branch, git_get_status,
-//! git_get_commit_history, git_get_diff, git_is_repository, git_create_branch,
+//! git_get_commit_history, git_get_diff, git_is_repository, git_init_repository, git_create_branch,
 //! git_checkout_branch, git_delete_branch, git_list_worktrees, git_create_branch_from_commit,
 //! git_create_worktree, git_remove_worktree, git_get_commit, git_create_commit,
 //! git_stage_files, git_stage_all, git_get_working_diff, git_merge_branch,
@@ -64,6 +64,11 @@ pub async fn route_git_command(
             let path: String = get_arg(&args, "path")?;
             let is_repo = Path::new(&path).join(".git").exists();
             serde_json::to_value(is_repo).map_err(|e| e.to_string())
+        }
+
+        "git_init_repository" => {
+            let path: String = get_arg(&args, "path")?;
+            route_unit!(commands::git::git_init_repository(path))
         }
 
         "git_create_branch" => {

@@ -86,6 +86,10 @@ export interface ChatSession {
   structuredMode: boolean
   /** Extracted PRD structure (JSON string) */
   extractedStructure?: string
+  /** Whether GSD (Get Stuff Done) workflow mode is enabled */
+  gsdMode: boolean
+  /** GSD workflow state (JSON-serialized GsdWorkflowState) */
+  gsdState?: string
   createdAt: string
   updatedAt: string
   messageCount?: number

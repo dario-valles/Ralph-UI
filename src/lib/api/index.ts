@@ -7,6 +7,9 @@ export type { AgentAvailabilityResult, WatchFileResponse, ActivityEvent, GlobalS
 // Session API
 export { sessionApi } from './session-api'
 
+// Task API
+export { taskApi } from './task-api'
+
 // Project API
 export { projectApi } from './project-api'
 
@@ -30,10 +33,13 @@ export { templateApi } from './template-api'
 
 // Agent API
 export {
+  createAgent,
+  deleteAgent,
   getAgent,
   getAgentsForSession,
   getAgentsForTask,
   getActiveAgents,
+  getAllActiveAgents,
   updateAgentStatus,
   updateAgentMetrics,
   addAgentLog,
@@ -79,3 +85,7 @@ export { configApi, recoveryApi, traceApi } from './config-api'
 
 // Provider API
 export { providerApi } from './provider-api'
+
+// Push Notification API
+export { pushApi } from './push-api'
+export type { PushSettings, PushSubscription } from './push-api'

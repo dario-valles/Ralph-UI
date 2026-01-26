@@ -115,7 +115,7 @@ export function ProjectSwitcher({
     setEditingProjectId(null)
   }
 
-  const handleCancelEdit = (e: React.MouseEvent) => {
+  const handleCancelEdit = (e: React.SyntheticEvent) => {
     e.stopPropagation()
     setEditingProjectId(null)
   }
@@ -312,7 +312,7 @@ interface ProjectItemProps {
   onToggleFavorite: (e: React.MouseEvent) => void
   onStartEdit: (e: React.MouseEvent) => void
   onSaveEdit: (e: React.MouseEvent | React.KeyboardEvent) => void
-  onCancelEdit: (e: React.MouseEvent) => void
+  onCancelEdit: (e: React.SyntheticEvent) => void
   onDelete: (e: React.MouseEvent) => void
   onEditNameChange: (name: string) => void
 }
@@ -338,7 +338,7 @@ function ProjectItem({
           onChange={(e) => onEditNameChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSaveEdit(e)
-            if (e.key === 'Escape') onCancelEdit(e as unknown as React.MouseEvent)
+            if (e.key === 'Escape') onCancelEdit(e)
           }}
           className="h-7 text-sm flex-1"
           autoFocus

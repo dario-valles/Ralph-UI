@@ -154,6 +154,9 @@ export function useSubagentEvents({
       return
     }
 
+    // Track whether cleanup has been called to prevent setting listeners after unmount
+    let cleanedUp = false
+
     const setupListeners = async () => {
       const unlisteners: (() => void)[] = []
 
@@ -216,6 +219,12 @@ export function useSubagentEvents({
         })
       )
 
+      // If cleanup was called while setting up, clean up immediately
+      if (cleanedUp) {
+        unlisteners.forEach((unlisten) => unlisten())
+        return
+      }
+
       unlistenersRef.current = unlisteners
       setIsListening(true)
     }
@@ -223,6 +232,7 @@ export function useSubagentEvents({
     setupListeners()
 
     return () => {
+      cleanedUp = true
       unlistenersRef.current.forEach((unlisten) => unlisten())
       unlistenersRef.current = []
       setIsListening(false)

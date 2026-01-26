@@ -23,4 +23,9 @@ export const prdApi = {
   deleteFile: async (projectPath: string, prdName: string): Promise<DeletePrdResult> => {
     return await invoke('delete_prd_file', { projectPath, prdName })
   },
+
+  /** Import a PRD from a file path */
+  importFile: async (projectPath: string, filePath: string): Promise<PRDFile> => {
+    return await invoke('import_prd', { projectPath, filePath })
+  },
 }

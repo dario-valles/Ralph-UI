@@ -184,9 +184,14 @@ export function createWebSocketPty(options: WebSocketPtyOptions): Promise<WebSoc
         dataCallbacks.forEach((cb) => cb(event.data))
       } else if (event.data instanceof Blob) {
         // Handle binary data
-        event.data.arrayBuffer().then((buffer) => {
-          dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
-        })
+        event.data
+          .arrayBuffer()
+          .then((buffer) => {
+            dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+          })
+          .catch((err) => {
+            console.error('Failed to read blob data:', err)
+          })
       }
     }
 
@@ -326,9 +331,14 @@ export function reconnectWebSocketPty(options: ReconnectOptions): Promise<WebSoc
 
         dataCallbacks.forEach((cb) => cb(event.data))
       } else if (event.data instanceof Blob) {
-        event.data.arrayBuffer().then((buffer) => {
-          dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
-        })
+        event.data
+          .arrayBuffer()
+          .then((buffer) => {
+            dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+          })
+          .catch((err) => {
+            console.error('Failed to read blob data:', err)
+          })
       }
     }
 

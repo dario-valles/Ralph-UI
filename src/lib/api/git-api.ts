@@ -173,6 +173,20 @@ export type ConflictResolverAgent = 'claude' | 'opencode' | 'cursor' | 'codex' |
 
 export const gitApi = {
   /**
+   * Check if a path is a git repository
+   */
+  isRepository: async (path: string): Promise<boolean> => {
+    return invoke('git_is_repository', { path })
+  },
+
+  /**
+   * Initialize a new git repository
+   */
+  initRepository: async (path: string): Promise<void> => {
+    return invoke('git_init_repository', { path })
+  },
+
+  /**
    * Create a new branch
    */
   createBranch: async (

@@ -80,35 +80,23 @@ export function StreamingIndicator({
     }
   }, [sessionId, addToolCall, completeToolCall, clearToolCalls])
 
-  // Calculate initial values outside useEffect to avoid setState in effect body
-  const getInitialValues = () => {
-    if (!startedAt) {
-      return { elapsed: 0, state: 'normal' as StreamingState }
-    }
-    const startTime = typeof startedAt === 'string' ? new Date(startedAt) : startedAt
-    const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000)
-    let state: StreamingState = 'normal'
-    if (elapsed >= TIMEOUT_THRESHOLD) {
-      state = 'timeout'
-    } else if (elapsed >= CONCERN_THRESHOLD) {
-      state = 'concern'
-    } else if (elapsed >= WARNING_THRESHOLD) {
-      state = 'warning'
-    }
-    return { elapsed, state }
-  }
-
-  // Set initial state on mount and when startedAt changes
-  const initialValues = getInitialValues()
+  // Timer effect: calculate elapsed time and state, update every second
   useEffect(() => {
-    setElapsedSeconds(initialValues.elapsed)
-    setState(initialValues.state)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startedAt])
+    // Helper to calculate state from elapsed time
+    const calculateState = (elapsed: number): StreamingState => {
+      if (elapsed >= TIMEOUT_THRESHOLD) return 'timeout'
+      if (elapsed >= CONCERN_THRESHOLD) return 'concern'
+      if (elapsed >= WARNING_THRESHOLD) return 'warning'
+      return 'normal'
+    }
 
-  useEffect(() => {
+    // If no startedAt, reset to initial values via requestAnimationFrame to avoid sync setState in effect
     if (!startedAt) {
-      return
+      const frameId = requestAnimationFrame(() => {
+        setElapsedSeconds(0)
+        setState('normal')
+      })
+      return () => cancelAnimationFrame(frameId)
     }
 
     const startTime = typeof startedAt === 'string' ? new Date(startedAt) : startedAt
@@ -116,22 +104,21 @@ export function StreamingIndicator({
     const updateElapsed = () => {
       const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000)
       setElapsedSeconds(elapsed)
-
-      if (elapsed >= TIMEOUT_THRESHOLD) {
-        setState('timeout')
-      } else if (elapsed >= CONCERN_THRESHOLD) {
-        setState('concern')
-      } else if (elapsed >= WARNING_THRESHOLD) {
-        setState('warning')
-      } else {
-        setState('normal')
-      }
+      setState(calculateState(elapsed))
     }
+
+    // Calculate initial state via requestAnimationFrame, then start interval
+    const frameId = requestAnimationFrame(() => {
+      updateElapsed()
+    })
 
     // Update every second
     const interval = setInterval(updateElapsed, 1000)
 
-    return () => clearInterval(interval)
+    return () => {
+      cancelAnimationFrame(frameId)
+      clearInterval(interval)
+    }
   }, [startedAt])
 
   const formatElapsed = (seconds: number): string => {

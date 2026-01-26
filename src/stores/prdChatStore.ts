@@ -118,6 +118,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     // =========================================================================
     loadAvailableAgents: researchSlice.loadAvailableAgents,
     setSelectedResearchAgent: researchSlice.setSelectedResearchAgent,
+    setResearchStatus: researchSlice.setResearchStatus,
     checkResearchStatus: researchSlice.checkResearchStatus,
     loadSynthesis: researchSlice.loadSynthesis,
     startResearch: researchSlice.startResearch,

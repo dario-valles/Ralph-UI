@@ -9,6 +9,19 @@ export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 
 // Agent CRUD operations
 
+export async function createAgent(
+  sessionId: string,
+  taskId: string,
+  projectPath: string,
+  agent: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<Agent> {
+  return invoke('create_agent', { sessionId, taskId, projectPath, agent })
+}
+
+export async function deleteAgent(agentId: string, projectPath: string): Promise<void> {
+  return invoke('delete_agent', { agentId, projectPath })
+}
+
 export async function getAgent(agentId: string): Promise<Agent | null> {
   return invoke('get_agent', { agentId })
 }
@@ -23,6 +36,10 @@ export async function getAgentsForTask(taskId: string): Promise<Agent[]> {
 
 export async function getActiveAgents(sessionId: string): Promise<Agent[]> {
   return invoke('get_active_agents', { sessionId })
+}
+
+export async function getAllActiveAgents(): Promise<Agent[]> {
+  return invoke('get_all_active_agents')
 }
 
 export async function updateAgentStatus(agentId: string, status: AgentStatus): Promise<void> {

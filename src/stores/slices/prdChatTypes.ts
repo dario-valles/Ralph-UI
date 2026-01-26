@@ -158,6 +158,7 @@ export interface ResearchSlice {
   // Actions
   loadAvailableAgents: () => Promise<void>
   setSelectedResearchAgent: (agent: AgentType | null) => void
+  setResearchStatus: (status: ResearchStatus | null, isRunning?: boolean) => void
   checkResearchStatus: () => Promise<void>
   loadSynthesis: () => Promise<void>
   startResearch: (context: string, agentType?: string) => Promise<void>

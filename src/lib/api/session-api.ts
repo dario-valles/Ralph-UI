@@ -5,6 +5,16 @@ import { invoke } from '../invoke'
 
 export const sessionApi = {
   /**
+   * Create a new session
+   */
+  create: async (
+    projectPath: string,
+    session: Omit<Session, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<Session> => {
+    return await invoke('create_session', { projectPath, session })
+  },
+
+  /**
    * Get all sessions for a project (lightweight index entries).
    * Use this for session list views where full task details aren't needed.
    */

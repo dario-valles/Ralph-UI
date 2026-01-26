@@ -15,7 +15,7 @@ import type {
 } from './prdChatTypes'
 import { getSessionWithPath, INITIAL_RESEARCH_STATUS } from './prdChatTypes'
 import type { AgentType } from '@/types'
-import type { ResearchSynthesis } from '@/types/gsd'
+import type { ResearchStatus, ResearchSynthesis } from '@/types/gsd'
 
 /**
  * Creates the research slice
@@ -55,6 +55,19 @@ export const createResearchSlice = (
   // Set selected research agent
   setSelectedResearchAgent: (agent) => {
     set({ selectedResearchAgent: agent })
+  },
+
+  // Set research status (used by components to sync local state with store)
+  // status can be null to only update isRunning flag
+  setResearchStatus: (status, isRunning) => {
+    const updates: Partial<{ researchStatus: ResearchStatus; isResearchRunning: boolean }> = {}
+    if (status !== null) {
+      updates.researchStatus = status
+    }
+    if (isRunning !== undefined) {
+      updates.isResearchRunning = isRunning
+    }
+    set(updates)
   },
 
   // Check if research is currently running (for reconnecting to in-progress research)

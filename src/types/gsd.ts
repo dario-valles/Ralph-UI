@@ -261,6 +261,8 @@ export interface GsdCustomPrompts {
   bestPractices?: string
   /** Custom prompt for risks research */
   risks?: string
+  /** Custom prompt for AI requirement generation from user description */
+  requirementGeneration?: string
 }
 
 /**

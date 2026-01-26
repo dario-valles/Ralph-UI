@@ -236,7 +236,7 @@ impl AgentResearchStatus {
 
 /// User decisions made during the workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum GsdDecision {
     /// Ready to proceed to next phase
     Proceed,
@@ -249,14 +249,21 @@ pub enum GsdDecision {
         /// Requirements selected for v2
         v2: Vec<String>,
         /// Requirements marked out of scope
+        #[serde(rename = "outOfScope")]
         out_of_scope: Vec<String>,
     },
     /// User approved verification results
     VerificationApproved,
     /// User wants to edit requirements
-    EditRequirements { requirement_ids: Vec<String> },
+    EditRequirements {
+        #[serde(rename = "requirementIds")]
+        requirement_ids: Vec<String>,
+    },
     /// User exported to PRD
-    Exported { prd_name: String },
+    Exported {
+        #[serde(rename = "prdName")]
+        prd_name: String,
+    },
 }
 
 /// Complete state of a GSD workflow session
