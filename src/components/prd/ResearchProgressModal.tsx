@@ -8,7 +8,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { ResearchProgress } from './ResearchProgress'
 import { usePRDChatStore } from '@/stores/prdChatStore'
@@ -336,79 +335,85 @@ export function ResearchProgressModal({
 
       {/* Reuse previous research prompt */}
       {showReusePrompt && existingResearch.length > 0 && (
-        <Alert className="border-blue-500/50 bg-blue-500/5 mb-4">
-          <History className="h-4 w-4 text-blue-500" />
-          <AlertDescription className="mt-2">
-            <div className="space-y-3">
-              <p className="text-sm font-medium">
-                Found research from {existingResearch.length} previous session
-                {existingResearch.length > 1 ? 's' : ''} in this project
-              </p>
-              <div className="space-y-2">
-                {existingResearch.slice(0, 3).map((session) => (
-                  <div
-                    key={session.sessionId}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-md bg-background/50 border border-border/30"
-                  >
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">
-                        {session.createdAt
-                          ? new Date(session.createdAt).toLocaleDateString()
-                          : 'Unknown date'}
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {session.hasArchitecture && (
-                          <Badge variant="outline" className="text-xs">
-                            Architecture
-                          </Badge>
-                        )}
-                        {session.hasCodebase && (
-                          <Badge variant="outline" className="text-xs">
-                            Codebase
-                          </Badge>
-                        )}
-                        {session.hasBestPractices && (
-                          <Badge variant="outline" className="text-xs">
-                            Best Practices
-                          </Badge>
-                        )}
-                        {session.hasRisks && (
-                          <Badge variant="outline" className="text-xs">
-                            Risks
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleReuseResearch(session)}
-                      disabled={isCopyingResearch}
-                      className="min-h-11 sm:min-h-9"
-                    >
-                      {isCopyingResearch ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        'Use This'
-                      )}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowReusePrompt(false)}
-                  disabled={isCopyingResearch}
-                  className="min-h-11 sm:min-h-9"
-                >
-                  Start Fresh Instead
-                </Button>
-              </div>
+        <div className="mb-6 p-4 rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-blue-600/10">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <History className="h-5 w-5 text-blue-500" />
             </div>
-          </AlertDescription>
-        </Alert>
+            <div>
+              <p className="font-semibold text-base">
+                Found previous research
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {existingResearch.length} session{existingResearch.length > 1 ? 's' : ''} with existing research in this project
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 mb-4">
+            {existingResearch.slice(0, 3).map((session) => (
+              <div
+                key={session.sessionId}
+                className="flex flex-col gap-3 p-3 rounded-lg bg-background/80 border border-border/50"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {session.createdAt
+                      ? new Date(session.createdAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                      : 'Unknown date'}
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => handleReuseResearch(session)}
+                    disabled={isCopyingResearch}
+                    className="min-h-10 px-4"
+                  >
+                    {isCopyingResearch ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Use This'
+                    )}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {session.hasArchitecture && (
+                    <Badge variant="outline" className="text-xs bg-background">
+                      Architecture
+                    </Badge>
+                  )}
+                  {session.hasCodebase && (
+                    <Badge variant="outline" className="text-xs bg-background">
+                      Codebase
+                    </Badge>
+                  )}
+                  {session.hasBestPractices && (
+                    <Badge variant="outline" className="text-xs bg-background">
+                      Best Practices
+                    </Badge>
+                  )}
+                  {session.hasRisks && (
+                    <Badge variant="outline" className="text-xs bg-background">
+                      Risks
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button
+            variant="ghost"
+            onClick={() => setShowReusePrompt(false)}
+            disabled={isCopyingResearch}
+            className="w-full min-h-11 text-muted-foreground hover:text-foreground"
+          >
+            Start Fresh Instead
+          </Button>
+        </div>
       )}
 
       {/* Research progress content */}

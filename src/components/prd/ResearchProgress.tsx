@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -31,7 +31,6 @@ import {
   RefreshCw,
   Bot,
   ChevronDown,
-  ChevronRight,
   Terminal,
   Lightbulb,
   Building,
@@ -110,6 +109,22 @@ interface AgentStatusCardProps {
   showSelectionCheckbox?: boolean
 }
 
+/** Get icon for agent type */
+function getAgentIcon(agentName: string): React.ReactNode {
+  switch (agentName) {
+    case 'architecture':
+      return <Building className="h-4 w-4" />
+    case 'codebase':
+      return <FolderCode className="h-4 w-4" />
+    case 'bestPractices':
+      return <Sparkles className="h-4 w-4" />
+    case 'risks':
+      return <AlertTriangle className="h-4 w-4" />
+    default:
+      return <Search className="h-4 w-4" />
+  }
+}
+
 function AgentStatusCard({
   displayName,
   agentName,
@@ -143,11 +158,11 @@ function AgentStatusCard({
     }
   }, [streamingOutput, isOpen])
 
-  function getStatusIcon(): React.ReactNode {
-    if (status.running) return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-    if (status.error) return <XCircle className="h-4 w-4 text-red-500" />
-    if (status.complete) return <CheckCircle2 className="h-4 w-4 text-green-500" />
-    return <Search className="h-4 w-4 text-muted-foreground" />
+  function getStatusColor(): string {
+    if (status.running) return 'text-blue-500'
+    if (status.error) return 'text-red-500'
+    if (status.complete) return 'text-emerald-500'
+    return 'text-muted-foreground'
   }
 
   function getStatusText(): string {
@@ -157,91 +172,90 @@ function AgentStatusCard({
     return 'Pending'
   }
 
+  function getCardStyle(): string {
+    if (status.running) return 'border-blue-500/30 bg-blue-500/5'
+    if (status.error) return 'border-red-500/30 bg-red-500/5'
+    if (status.complete) return 'border-emerald-500/30 bg-emerald-500/5'
+    return 'border-border/50'
+  }
+
   const hasOutput = Boolean(streamingOutput?.trim())
 
   return (
-    <Card className="overflow-hidden">
-      <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {showSelectionCheckbox && (
-                <Checkbox
-                  id={`select-${agentName}`}
-                  checked={isSelected}
-                  onCheckedChange={(checked) => onSelectionChange?.(checked as boolean)}
-                  disabled={status.running}
-                  aria-label={`Select ${displayName} for re-run`}
-                />
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
+      <div className={cn(
+        'rounded-xl border p-3 transition-all',
+        getCardStyle()
+      )}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            {showSelectionCheckbox && (
+              <Checkbox
+                id={`select-${agentName}`}
+                checked={isSelected}
+                onCheckedChange={(checked) => onSelectionChange?.(checked as boolean)}
+                disabled={status.running}
+                aria-label={`Select ${displayName} for re-run`}
+              />
+            )}
+            <div className={cn('shrink-0', getStatusColor())}>
+              {status.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                getAgentIcon(agentName)
               )}
-              {getStatusIcon()}
-              <div>
-                <p className="font-medium text-sm">{displayName}</p>
-                <p className="text-xs text-muted-foreground">{getStatusText()}</p>
-              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {status.complete && result && onViewResult && (
-                <Button variant="ghost" size="sm" onClick={() => onViewResult(result)}>
-                  <FileText className="h-4 w-4" />
+            <div className="min-w-0">
+              <p className="font-medium text-sm truncate">{displayName}</p>
+              <p className={cn('text-xs', getStatusColor())}>{getStatusText()}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {status.complete && result && onViewResult && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onViewResult(result)}
+                className="h-8 w-8 p-0"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            )}
+            {(status.running || hasOutput) && (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 px-2 gap-1">
+                  <Terminal className="h-3.5 w-3.5" />
+                  <ChevronDown className={cn(
+                    'h-3 w-3 transition-transform',
+                    isOpen && 'rotate-180'
+                  )} />
                 </Button>
-              )}
-              {(status.running || hasOutput) && (
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-1">
-                    <Terminal className="h-4 w-4" />
-                    {isOpen ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                  </Button>
-                </CollapsibleTrigger>
-              )}
-            </div>
+              </CollapsibleTrigger>
+            )}
           </div>
-          {status.error && <p className="text-xs text-red-500 mt-2">{status.error}</p>}
         </div>
+        {status.error && (
+          <p className="text-xs text-red-500 mt-2 pl-7">{status.error}</p>
+        )}
+      </div>
 
-        <CollapsibleContent>
-          <div className="border-t bg-black/95 p-2">
-            <pre
-              ref={outputRef}
-              className="text-xs font-mono text-green-400 max-h-48 overflow-auto whitespace-pre-wrap"
-            >
-              {streamingOutput || (status.running ? 'Starting...' : 'No output')}
-              {status.running && <span className="animate-pulse">_</span>}
-            </pre>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+      <CollapsibleContent>
+        <div className="mt-1 rounded-lg bg-zinc-900 border border-zinc-800 p-2 overflow-hidden">
+          <pre
+            ref={outputRef}
+            className="text-xs font-mono text-emerald-400 max-h-40 overflow-auto whitespace-pre-wrap"
+          >
+            {streamingOutput || (status.running ? 'Starting...' : 'No output')}
+            {status.running && <span className="animate-pulse">█</span>}
+          </pre>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
 /** Local storage key for tracking if user has seen the research explanation */
 const RESEARCH_EXPLANATION_SEEN_KEY = 'research-explanation-seen'
-
-/** Small card showing what each research agent does */
-function AgentInfoCard({
-  icon: Icon,
-  title,
-  desc,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  desc: string
-}) {
-  return (
-    <div className="flex items-start gap-2 p-2 rounded-md bg-background/50 border border-border/30">
-      <Icon className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-      <div className="min-w-0">
-        <p className="text-xs font-medium truncate">{title}</p>
-        <p className="text-xs text-muted-foreground truncate">{desc}</p>
-      </div>
-    </div>
-  )
-}
 
 /** Collapsible explanation of what Research Mode does and when to use it */
 function ResearchExplanation() {
@@ -260,78 +274,54 @@ function ResearchExplanation() {
   }
 
   return (
-    <Card className="bg-muted/30">
-      <Collapsible open={isExpanded} onOpenChange={handleOpenChange}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer py-3 px-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="h-4 w-4 text-amber-500" />
-                <span className="font-medium text-sm">What is Research Mode?</span>
-              </div>
-              <ChevronDown
-                className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-180')}
-              />
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent className="pt-0 pb-4 px-4 space-y-4">
-            {/* Main explanation */}
-            <p className="text-sm text-muted-foreground">
-              Research runs 4 AI agents that analyze your <strong>actual codebase</strong> before
-              helping you write the PRD.
-            </p>
+    <Collapsible open={isExpanded} onOpenChange={handleOpenChange}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 hover:bg-amber-500/10 transition-colors text-left">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-amber-500" />
+            <span className="font-medium text-sm">What is Research Mode?</span>
+          </div>
+          <ChevronDown
+            className={cn('h-4 w-4 text-muted-foreground transition-transform', isExpanded && 'rotate-180')}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pt-3 pl-3 space-y-4">
+          {/* Main explanation */}
+          <p className="text-sm text-muted-foreground">
+            Research runs 4 AI agents that analyze your <strong className="text-foreground">actual codebase</strong> before
+            helping you write the PRD.
+          </p>
 
-            {/* 4 agent cards - 2x2 grid */}
-            <div className="grid grid-cols-2 gap-2">
-              <AgentInfoCard
-                icon={Building}
-                title="Architecture"
-                desc="Design patterns & structure"
-              />
-              <AgentInfoCard icon={FolderCode} title="Codebase" desc="Your code & conventions" />
-              <AgentInfoCard icon={Sparkles} title="Best Practices" desc="Industry standards" />
-              <AgentInfoCard
-                icon={AlertTriangle}
-                title="Risks"
-                desc="Edge cases & challenges"
-              />
+          {/* 4 agents inline */}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs">
+              <Building className="h-3.5 w-3.5 text-primary" />
+              <span>Architecture</span>
             </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs">
+              <FolderCode className="h-3.5 w-3.5 text-primary" />
+              <span>Codebase</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span>Best Practices</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs">
+              <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+              <span>Risks</span>
+            </div>
+          </div>
 
-            {/* Time estimate */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>Takes ~2-5 minutes</span>
-            </div>
-
-            {/* When to use */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <p className="font-medium text-green-600 dark:text-green-400 mb-1">
-                  ✓ Use Research when:
-                </p>
-                <ul className="space-y-0.5 text-muted-foreground">
-                  <li>• Complex features</li>
-                  <li>• New to codebase</li>
-                  <li>• Need risk analysis</li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-medium text-blue-600 dark:text-blue-400 mb-1">
-                  💬 Just chat when:
-                </p>
-                <ul className="space-y-0.5 text-muted-foreground">
-                  <li>• Simple features</li>
-                  <li>• Brainstorming</li>
-                  <li>• Know codebase well</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+          {/* Time estimate */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>Takes ~2-5 minutes</span>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -544,58 +534,54 @@ export function ResearchProgress({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-6 p-4">
+      {/* Header section - no card wrapper for cleaner look */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-lg bg-primary/10">
             <Search className="h-5 w-5 text-primary" />
-            <CardTitle>Research Phase</CardTitle>
           </div>
-          <CardDescription>
-            Parallel agents are researching architecture patterns, codebase structure, best
-            practices, and potential risks for your project.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+          <h2 className="text-xl font-semibold">Research Phase</h2>
+        </div>
+        <p className="text-sm text-muted-foreground pl-11">
+          Parallel agents are researching architecture patterns, codebase structure, best
+          practices, and potential risks for your project.
+        </p>
+      </div>
 
-      {/* Progress overview */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Research Progress</span>
-              <span className="text-sm text-muted-foreground">
-                {completedCount}/{agents.length} complete
-              </span>
-            </div>
-            <Progress value={progress} className="h-2" />
-            <div className="flex gap-2">
-              {runningCount > 0 && (
-                <Badge variant="outline" className="gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {runningCount} running
-                </Badge>
-              )}
-              {completedCount > 0 && (
-                <Badge variant="default" className="gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {completedCount} complete
-                </Badge>
-              )}
-              {failedCount > 0 && (
-                <Badge variant="destructive" className="gap-1">
-                  <XCircle className="h-3 w-3" />
-                  {failedCount} failed
-                </Badge>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Progress overview - compact inline design */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Research Progress</span>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {completedCount}/{agents.length} complete
+          </span>
+        </div>
+        <Progress value={progress} className="h-1.5" />
+        <div className="flex flex-wrap gap-2">
+          {runningCount > 0 && (
+            <Badge variant="outline" className="gap-1.5 border-blue-500/30 text-blue-600 dark:text-blue-400 bg-blue-500/5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {runningCount} running
+            </Badge>
+          )}
+          {completedCount > 0 && (
+            <Badge variant="outline" className="gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+              <CheckCircle2 className="h-3 w-3" />
+              {completedCount} complete
+            </Badge>
+          )}
+          {failedCount > 0 && (
+            <Badge variant="destructive" className="gap-1.5">
+              <XCircle className="h-3 w-3" />
+              {failedCount} failed
+            </Badge>
+          )}
+        </div>
+      </div>
 
-      {/* Agent status grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Agent status grid - single column on mobile for readability */}
+      <div className="space-y-2">
         {agents.map((agent) => (
           <AgentStatusCard
             key={agent.name}
@@ -612,18 +598,21 @@ export function ResearchProgress({
         ))}
       </div>
 
-      {/* Actions */}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          {/* Research explanation - only show before research starts */}
-          {!hasStarted && <ResearchExplanation />}
+      {/* Actions section */}
+      <div className="space-y-4 pt-2">
+        {/* Research explanation - only show before research starts */}
+        {!hasStarted && <ResearchExplanation />}
 
-          {/* Agent and Model selectors - only show before research starts */}
-          {!hasStarted && (
+        {/* Agent and Model selectors - only show before research starts */}
+        {!hasStarted && (
+          <div className="flex flex-col gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Configuration</span>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-muted-foreground" />
-                <label htmlFor="research-agent-selector" className="text-sm font-medium">Agent:</label>
+                <label htmlFor="research-agent-selector" className="text-sm text-muted-foreground">Agent:</label>
                 <NativeSelect
                   id="research-agent-selector"
                   aria-label="Research Agent"
@@ -644,7 +633,7 @@ export function ResearchProgress({
                 </NativeSelect>
               </div>
               <div className="flex items-center gap-2">
-                <label htmlFor="research-model-selector" className="text-sm font-medium">Model:</label>
+                <label htmlFor="research-model-selector" className="text-sm text-muted-foreground">Model:</label>
                 <ModelSelector
                   id="research-model-selector"
                   ariaLabel="Research Model"
@@ -657,94 +646,97 @@ export function ResearchProgress({
                 />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="flex items-center justify-between">
-            {!hasStarted ? (
-              <Button onClick={handleStartResearch} disabled={isLoading}>
-                <Search className="h-4 w-4 mr-2" />
-                Start Research
+        {/* Action buttons */}
+        <div className="flex flex-col gap-3">
+          {!hasStarted ? (
+            <Button onClick={handleStartResearch} disabled={isLoading} size="lg" className="w-full">
+              <Search className="h-4 w-4 mr-2" />
+              Start Research
+            </Button>
+          ) : isRunning ? (
+            <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+              Research in progress using {selectedResearchAgent || 'Claude'}...
+            </div>
+          ) : selectiveMode ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="default"
+                onClick={handleRunSelected}
+                disabled={isLoading || isRunning || selectedAgents.size === 0}
+                className="gap-2 flex-1"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Re-run Selected ({selectedAgents.size})
               </Button>
-            ) : isRunning ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Research in progress using {selectedResearchAgent || 'Claude'}...
-              </div>
-            ) : selectiveMode ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="default"
-                  onClick={handleRunSelected}
-                  disabled={isLoading || isRunning || selectedAgents.size === 0}
-                  className="gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Re-run Selected ({selectedAgents.size})
+              <Button
+                variant="outline"
+                onClick={handleToggleSelectiveMode}
+                disabled={isLoading || isRunning}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {/* Primary action */}
+              {!synthesis && isComplete && (
+                <Button onClick={handleSynthesize} disabled={isSynthesizing} size="lg" className="w-full">
+                  {isSynthesizing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  Synthesize Results
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleToggleSelectiveMode}
-                  disabled={isLoading || isRunning}
-                >
-                  Cancel
+              )}
+              {synthesis && (
+                <Button onClick={onProceed} disabled={isLoading} size="lg" className="w-full gap-2">
+                  Continue to Requirements
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Show "Retry Failed" if there are failed agents, otherwise "Re-run Research" */}
+              )}
+
+              {/* Secondary actions */}
+              <div className="flex items-center gap-2">
                 {hasFailedOnly ? (
                   <Button
-                    variant="default"
+                    variant="outline"
                     onClick={handleRetryFailed}
                     disabled={isLoading || isRunning}
-                    className="gap-2"
+                    className="gap-2 flex-1"
                   >
                     <RefreshCw className="h-4 w-4" />
                     Retry Failed ({failedCount})
                   </Button>
-                ) : (
+                ) : (completedCount > 0 || failedCount > 0) && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     onClick={handleStartResearch}
                     disabled={isLoading || isRunning}
+                    className="flex-1"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Re-run All
                   </Button>
                 )}
-                {/* Show selective re-run option when research has completed */}
                 {(completedCount > 0 || failedCount > 0) && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     onClick={handleToggleSelectiveMode}
                     disabled={isLoading || isRunning}
-                    className="gap-2"
                   >
                     Select Agents
                   </Button>
                 )}
-                {!synthesis && isComplete && (
-                  <Button onClick={handleSynthesize} disabled={isSynthesizing}>
-                    {isSynthesizing ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <FileText className="h-4 w-4 mr-2" />
-                    )}
-                    Synthesize Results
-                  </Button>
-                )}
               </div>
-            )}
-
-            {synthesis && (
-              <Button onClick={onProceed} disabled={isLoading} className="gap-2">
-                Continue to Requirements
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Research summary */}
       {shouldShowSummary && synthesis && (
@@ -754,7 +746,7 @@ export function ResearchProgress({
       {/* Selected result preview */}
       {selectedResult && (
         <Card>
-          <CardHeader>
+          <CardHeader size="compact">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm capitalize">
                 {selectedResult.researchType.replace('_', ' ')} Research
@@ -765,8 +757,8 @@ export function ResearchProgress({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="max-h-[400px] overflow-auto">
-              <pre className="text-xs whitespace-pre-wrap font-mono bg-muted p-4 rounded">
+            <div className="max-h-[300px] overflow-auto">
+              <pre className="text-xs whitespace-pre-wrap font-mono bg-muted p-3 rounded-lg">
                 {selectedResult.content || 'No content available'}
               </pre>
             </div>

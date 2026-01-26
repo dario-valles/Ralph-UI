@@ -92,7 +92,7 @@ export function FullPageModal({
       aria-labelledby="full-page-modal-title"
     >
       {/* Header with safe area for notch/status bar */}
-      <header className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[calc(1rem+env(safe-area-inset-top))]">
+      <header className="flex items-center justify-between px-4 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[calc(0.75rem+env(safe-area-inset-top))] sticky top-0 z-10">
         <h1
           id="full-page-modal-title"
           className="text-lg font-semibold leading-none tracking-tight truncate pr-2"
@@ -104,7 +104,7 @@ export function FullPageModal({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="min-h-11 min-w-11 -mr-2"
+            className="min-h-11 min-w-11 -mr-2 hover:bg-muted active:scale-95 transition-all"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -115,9 +115,7 @@ export function FullPageModal({
       {/* Scrollable content area */}
       <div
         className={cn(
-          'flex-1 overflow-y-auto p-4',
-          // Use dynamic viewport height for keyboard handling
-          'max-h-[calc(100dvh-8rem)]',
+          'flex-1 overflow-y-auto',
           contentClassName
         )}
       >
