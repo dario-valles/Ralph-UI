@@ -7,6 +7,8 @@
  * Supports two variants:
  * - 'default': Stacked with labels, wrapped in a config box with Bot icon
  * - 'compact': Inline selectors without wrapper (for headers/toolbars)
+ *
+ * For Claude agent, supports alternative providers (Z.AI, MiniMax) when configured.
  */
 
 import { Bot } from 'lucide-react'
@@ -15,12 +17,13 @@ import { ModelSelector } from '@/components/shared/ModelSelector'
 import { formatAgentName, type AgentType } from '@/types/agent'
 import type { ModelInfo } from '@/lib/model-api'
 import { cn } from '@/lib/utils'
+import type { AgentOption } from '@/hooks/useAgentModelSelector'
 
 export interface AgentModelSelectorProps {
   /** Currently selected agent type */
   agentType: AgentType
-  /** Callback when agent type changes */
-  onAgentChange: (agentType: AgentType) => void
+  /** Callback when agent type changes (legacy API) */
+  onAgentChange?: (agentType: AgentType) => void
   /** Currently selected model ID */
   modelId: string
   /** Callback when model changes */
@@ -37,10 +40,16 @@ export interface AgentModelSelectorProps {
   variant?: 'default' | 'compact'
   /** Additional CSS classes */
   className?: string
-  /** Available agent types (optional, defaults to common agents) */
+  /** Available agent types (legacy API, use agentOptions for provider support) */
   availableAgents?: AgentType[]
   /** Whether agents are loading */
   agentsLoading?: boolean
+  /** Agent options with provider support (preferred over availableAgents) */
+  agentOptions?: AgentOption[]
+  /** Current composite value for agent+provider select */
+  currentAgentOptionValue?: string
+  /** Callback when agent option changes (handles agent+provider together) */
+  onAgentOptionChange?: (value: string) => void
 }
 
 /**
@@ -58,7 +67,22 @@ export function AgentModelSelector({
   className,
   availableAgents = ['claude'],
   agentsLoading = false,
+  agentOptions,
+  currentAgentOptionValue,
+  onAgentOptionChange,
 }: AgentModelSelectorProps): React.JSX.Element {
+  // Determine which API to use for agent selection
+  const useNewApi = agentOptions && onAgentOptionChange && currentAgentOptionValue !== undefined
+  const currentValue = useNewApi ? currentAgentOptionValue : agentType
+
+  const handleAgentSelectChange = (value: string) => {
+    if (useNewApi && onAgentOptionChange) {
+      onAgentOptionChange(value)
+    } else if (onAgentChange) {
+      onAgentChange(value as AgentType)
+    }
+  }
+
   const selectorsContent = (
     <div
       className={cn(
@@ -76,14 +100,22 @@ export function AgentModelSelector({
         <NativeSelect
           id="agent-selector"
           aria-label="Agent"
-          value={agentType}
-          onChange={(e) => onAgentChange(e.target.value as AgentType)}
+          value={currentValue}
+          onChange={(e) => handleAgentSelectChange(e.target.value)}
           disabled={disabled || agentsLoading}
           className={cn('w-full sm:w-auto sm:min-w-[100px]', variant === 'compact' && 'w-auto min-w-[100px]')}
         >
           {agentsLoading ? (
             <option>Loading...</option>
+          ) : useNewApi && agentOptions ? (
+            // New API with provider support
+            agentOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))
           ) : availableAgents.length > 0 ? (
+            // Legacy API
             availableAgents.map((agent) => (
               <option key={agent} value={agent}>
                 {formatAgentName(agent)}

@@ -31,6 +31,12 @@ export type {
 // ============================================================================
 
 export type { AgentType, AgentStatus, LogEntry, Agent } from './agent'
+export {
+  formatAgentName,
+  parseAgentWithProvider,
+  formatAgentWithProvider,
+  buildAgentProviderValue,
+} from './agent'
 
 // ============================================================================
 // Session Types

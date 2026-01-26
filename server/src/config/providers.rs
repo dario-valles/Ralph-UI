@@ -45,7 +45,7 @@ pub static PROVIDERS: &[ApiProviderPreset] = &[
         name: "Z.AI",
         base_url: "https://api.z.ai/api/anthropic",
         models: Some(&[
-            ("GLM-4.7", true),      // default
+            ("GLM-4.7", true), // default
             ("GLM-4.5-Air", false),
         ]),
         model_mappings: Some(ModelMappings {
@@ -90,6 +90,7 @@ pub fn get_all_provider_presets() -> &'static [ApiProviderPreset] {
 
 /// API provider info returned to frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApiProviderInfo {
     /// Provider ID
     pub id: String,
@@ -107,6 +108,7 @@ pub struct ApiProviderInfo {
 
 /// Model info for a provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderModelInfo {
     pub name: String,
     pub is_default: bool,
@@ -115,7 +117,8 @@ pub struct ProviderModelInfo {
 impl ApiProviderPreset {
     /// Convert to ApiProviderInfo with runtime state
     pub fn to_info(&self, has_token: bool, is_active: bool) -> ApiProviderInfo {
-        let models = self.models
+        let models = self
+            .models
             .map(|m| {
                 m.iter()
                     .map(|(name, is_default)| ProviderModelInfo {
@@ -139,10 +142,7 @@ impl ApiProviderPreset {
 
 /// Build environment variables for a provider
 /// These are injected when spawning Claude CLI with an alternative provider
-pub fn build_provider_env_vars(
-    provider_id: &str,
-    token: Option<&str>,
-) -> HashMap<String, String> {
+pub fn build_provider_env_vars(provider_id: &str, token: Option<&str>) -> HashMap<String, String> {
     let mut env = HashMap::new();
 
     let preset = match get_provider_preset(provider_id) {
@@ -166,10 +166,7 @@ pub fn build_provider_env_vars(
     // Set model defaults if provider has mappings
     if let Some(ref mappings) = preset.model_mappings {
         if let Some(opus) = mappings.opus {
-            env.insert(
-                "ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(),
-                opus.to_string(),
-            );
+            env.insert("ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), opus.to_string());
         }
         if let Some(sonnet) = mappings.sonnet {
             env.insert(
@@ -217,7 +214,10 @@ mod tests {
         assert!(!env.contains_key("ANTHROPIC_BASE_URL"));
 
         // But should have the token
-        assert_eq!(env.get("ANTHROPIC_AUTH_TOKEN"), Some(&"sk-12345".to_string()));
+        assert_eq!(
+            env.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&"sk-12345".to_string())
+        );
     }
 
     #[test]
@@ -228,10 +228,22 @@ mod tests {
             env.get("ANTHROPIC_BASE_URL"),
             Some(&"https://api.z.ai/api/anthropic".to_string())
         );
-        assert_eq!(env.get("ANTHROPIC_AUTH_TOKEN"), Some(&"zai-token".to_string()));
-        assert_eq!(env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"), Some(&"GLM-4.7".to_string()));
-        assert_eq!(env.get("ANTHROPIC_DEFAULT_SONNET_MODEL"), Some(&"GLM-4.7".to_string()));
-        assert_eq!(env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL"), Some(&"GLM-4.5-Air".to_string()));
+        assert_eq!(
+            env.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&"zai-token".to_string())
+        );
+        assert_eq!(
+            env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+            Some(&"GLM-4.7".to_string())
+        );
+        assert_eq!(
+            env.get("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+            Some(&"GLM-4.7".to_string())
+        );
+        assert_eq!(
+            env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+            Some(&"GLM-4.5-Air".to_string())
+        );
     }
 
     #[test]
@@ -242,7 +254,10 @@ mod tests {
             env.get("ANTHROPIC_BASE_URL"),
             Some(&"https://api.minimax.io/anthropic".to_string())
         );
-        assert_eq!(env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"), Some(&"MiniMax-M2.1".to_string()));
+        assert_eq!(
+            env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+            Some(&"MiniMax-M2.1".to_string())
+        );
     }
 
     #[test]
@@ -261,6 +276,9 @@ mod tests {
         assert!(info.has_token);
         assert!(!info.is_active);
         assert_eq!(info.models.len(), 2);
-        assert!(info.models.iter().any(|m| m.name == "GLM-4.7" && m.is_default));
+        assert!(info
+            .models
+            .iter()
+            .any(|m| m.name == "GLM-4.7" && m.is_default));
     }
 }

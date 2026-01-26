@@ -123,6 +123,10 @@ pub struct SessionConfig {
     pub max_iterations: i32,
     pub max_retries: i32,
     pub agent_type: AgentType,
+    /// API provider for Claude agent (e.g., "anthropic", "zai", "minimax")
+    /// Only applies when agent_type is Claude. None means use global default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     pub auto_create_prs: bool,
     pub draft_prs: bool,
     pub run_tests: bool,
@@ -136,6 +140,7 @@ impl Default for SessionConfig {
             max_iterations: 10,
             max_retries: 3,
             agent_type: AgentType::Claude,
+            provider_id: None,
             auto_create_prs: true,
             draft_prs: false,
             run_tests: true,
@@ -183,6 +188,7 @@ impl From<&crate::config::RalphConfig> for SessionConfig {
             max_iterations: config.execution.max_iterations,
             max_retries: config.execution.max_retries,
             agent_type,
+            provider_id: config.execution.api_provider.clone(),
             auto_create_prs: config.git.auto_create_prs,
             draft_prs: config.git.draft_prs,
             run_tests: config.validation.run_tests,

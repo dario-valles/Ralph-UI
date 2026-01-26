@@ -362,7 +362,14 @@ pub async fn route_config_command(
         // Model Discovery Commands
         "get_available_models" => {
             let agent_type: AgentType = get_arg(&args, "agentType")?;
-            let models = state.model_cache_state.cache.get_or_fetch(agent_type);
+            let provider_id: Option<String> = get_opt_arg(&args, "providerId")?;
+            let models = commands::models::get_available_models(
+                agent_type,
+                provider_id.as_deref(),
+                &state.model_cache_state,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
             serde_json::to_value(models).map_err(|e| e.to_string())
         }
 
@@ -518,7 +525,9 @@ pub async fn route_config_command(
         }
 
         "get_active_provider" => {
-            route_sync!(commands::providers::get_active_provider(&state.config_state))
+            route_sync!(commands::providers::get_active_provider(
+                &state.config_state
+            ))
         }
 
         "set_active_provider" => {
@@ -532,7 +541,10 @@ pub async fn route_config_command(
         "set_provider_token" => {
             let provider_id: String = get_arg(&args, "providerId")?;
             let token: String = get_arg(&args, "token")?;
-            route_unit!(commands::providers::set_provider_token(&provider_id, &token))
+            route_unit!(commands::providers::set_provider_token(
+                &provider_id,
+                &token
+            ))
         }
 
         "delete_provider_token" => {

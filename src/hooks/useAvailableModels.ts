@@ -28,7 +28,11 @@ interface UseAvailableModelsReturn {
  * Fetches models from the backend, which discovers them from CLI or uses fallbacks.
  * Results are cached on the backend with a 5-minute TTL.
  *
+ * For Claude with alternative providers (Z.AI, MiniMax), returns the
+ * provider's predefined models instead of CLI discovery.
+ *
  * @param agentType - The type of agent to get models for
+ * @param providerId - Optional provider ID (only used for Claude with alternative providers)
  * @returns Object with models, loading state, error state, and refresh function
  *
  * @example
@@ -49,12 +53,15 @@ interface UseAvailableModelsReturn {
  * }
  * ```
  */
-export function useAvailableModels(agentType: AgentType): UseAvailableModelsReturn {
+export function useAvailableModels(
+  agentType: AgentType,
+  providerId?: string
+): UseAvailableModelsReturn {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Load models when agent type changes
+  // Load models when agent type or provider changes
   useEffect(() => {
     let cancelled = false
 
@@ -63,7 +70,7 @@ export function useAvailableModels(agentType: AgentType): UseAvailableModelsRetu
       setError(null)
 
       try {
-        const result = await getAvailableModels(agentType)
+        const result = await getAvailableModels(agentType, providerId)
         if (!cancelled) {
           setModels(result)
         }
@@ -83,7 +90,7 @@ export function useAvailableModels(agentType: AgentType): UseAvailableModelsRetu
     return () => {
       cancelled = true
     }
-  }, [agentType])
+  }, [agentType, providerId])
 
   // Refresh function that invalidates cache and reloads
   const refresh = useCallback(async () => {
@@ -94,14 +101,14 @@ export function useAvailableModels(agentType: AgentType): UseAvailableModelsRetu
       // Invalidate cache for this agent type
       await refreshModels(agentType)
       // Fetch fresh models
-      const result = await getAvailableModels(agentType)
+      const result = await getAvailableModels(agentType, providerId)
       setModels(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [agentType])
+  }, [agentType, providerId])
 
   // Compute default model ID
   const defaultModelId = getDefaultModelId(models)

@@ -23,11 +23,21 @@ export interface ModelInfo {
  * Returns models from cache if available, otherwise discovers them from CLI.
  * Falls back to default models if CLI discovery fails.
  *
+ * For Claude with alternative providers (Z.AI, MiniMax), returns the
+ * provider's predefined models instead of CLI discovery.
+ *
  * @param agentType - The type of agent to get models for
+ * @param providerId - Optional provider ID (only used for Claude with alternative providers)
  * @returns Array of available models
  */
-export async function getAvailableModels(agentType: AgentType): Promise<ModelInfo[]> {
-  return invoke<ModelInfo[]>('get_available_models', { agentType })
+export async function getAvailableModels(
+  agentType: AgentType,
+  providerId?: string
+): Promise<ModelInfo[]> {
+  return invoke<ModelInfo[]>('get_available_models', {
+    agentType,
+    providerId: providerId ?? null,
+  })
 }
 
 /**

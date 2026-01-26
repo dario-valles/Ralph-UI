@@ -73,6 +73,30 @@ pub fn infer_provider(model_id: &str) -> String {
     }
 }
 
+/// Get models for an alternative API provider (Z.AI, MiniMax, etc.)
+///
+/// Returns Some(models) if the provider has predefined models,
+/// or None if CLI discovery should be used instead.
+pub fn get_provider_models(provider_id: &str) -> Option<Vec<ModelInfo>> {
+    use crate::config::providers::get_provider_preset;
+
+    let preset = get_provider_preset(provider_id)?;
+    let preset_models = preset.models?;
+
+    // Convert preset models to ModelInfo
+    let models = preset_models
+        .iter()
+        .map(|(name, is_default)| ModelInfo {
+            id: (*name).to_string(),
+            name: (*name).to_string(),
+            provider: provider_id.to_string(),
+            is_default: *is_default,
+        })
+        .collect();
+
+    Some(models)
+}
+
 /// Get fallback models if CLI discovery fails
 pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
     match agent_type {
@@ -201,5 +225,38 @@ mod tests {
     fn test_infer_provider_unknown() {
         assert_eq!(infer_provider("unknown-model"), "unknown");
         assert_eq!(infer_provider("llama-2"), "unknown");
+    }
+
+    #[test]
+    fn test_get_provider_models_zai() {
+        let models = get_provider_models("zai");
+        assert!(models.is_some());
+        let models = models.unwrap();
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.id == "GLM-4.7" && m.is_default));
+        assert!(models.iter().any(|m| m.id == "GLM-4.5-Air" && !m.is_default));
+        assert!(models.iter().all(|m| m.provider == "zai"));
+    }
+
+    #[test]
+    fn test_get_provider_models_minimax() {
+        let models = get_provider_models("minimax");
+        assert!(models.is_some());
+        let models = models.unwrap();
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.id == "MiniMax-M2.1"));
+    }
+
+    #[test]
+    fn test_get_provider_models_anthropic_returns_none() {
+        // Anthropic uses CLI discovery, not predefined models
+        let models = get_provider_models("anthropic");
+        assert!(models.is_none());
+    }
+
+    #[test]
+    fn test_get_provider_models_unknown_returns_none() {
+        let models = get_provider_models("unknown-provider");
+        assert!(models.is_none());
     }
 }

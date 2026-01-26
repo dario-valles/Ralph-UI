@@ -17,6 +17,52 @@ export function formatAgentName(agent: AgentType): string {
   return AGENT_DISPLAY_NAMES[agent] || agent.charAt(0).toUpperCase() + agent.slice(1)
 }
 
+/**
+ * Parse a composite agent:provider value into its components
+ * Examples:
+ *   "claude" -> { agentType: "claude", providerId: undefined }
+ *   "claude:zai" -> { agentType: "claude", providerId: "zai" }
+ *   "cursor" -> { agentType: "cursor", providerId: undefined }
+ */
+export function parseAgentWithProvider(value: string): {
+  agentType: AgentType
+  providerId?: string
+} {
+  const [agentPart, providerPart] = value.split(':')
+  return {
+    agentType: agentPart as AgentType,
+    providerId: providerPart || undefined,
+  }
+}
+
+/**
+ * Format agent type with optional provider for display
+ * Examples:
+ *   ("claude", undefined) -> "Claude"
+ *   ("claude", "Z.AI") -> "Claude (Z.AI)"
+ *   ("cursor", undefined) -> "Cursor"
+ */
+export function formatAgentWithProvider(agentType: AgentType, providerName?: string): string {
+  const agentName = formatAgentName(agentType)
+  if (providerName && providerName !== 'Anthropic (Direct)') {
+    return `${agentName} (${providerName})`
+  }
+  return agentName
+}
+
+/**
+ * Build a composite value for agent selector options
+ * Examples:
+ *   ("claude", "anthropic") -> "claude"
+ *   ("claude", "zai") -> "claude:zai"
+ */
+export function buildAgentProviderValue(agentType: AgentType, providerId?: string): string {
+  if (!providerId || providerId === 'anthropic') {
+    return agentType
+  }
+  return `${agentType}:${providerId}`
+}
+
 export type AgentStatus =
   | 'idle'
   | 'thinking'

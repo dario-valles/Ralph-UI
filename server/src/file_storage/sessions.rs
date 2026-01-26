@@ -547,6 +547,7 @@ mod tests {
                 max_iterations: 10,
                 max_retries: 3,
                 agent_type: AgentType::Claude,
+                provider_id: None,
                 auto_create_prs: true,
                 draft_prs: false,
                 run_tests: true,

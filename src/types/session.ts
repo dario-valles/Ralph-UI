@@ -57,6 +57,8 @@ export interface SessionConfig {
   maxIterations: number
   maxRetries: number
   agentType: AgentType
+  /** API provider for Claude agent (e.g., "anthropic", "zai", "minimax"). Only applies to Claude. */
+  providerId?: string
   autoCreatePRs: boolean
   draftPRs: boolean
   runTests: boolean

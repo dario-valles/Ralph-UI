@@ -1,5 +1,6 @@
 // Model discovery Backend commands
 
+use crate::agents::models::get_provider_models;
 use crate::agents::{ModelCache, ModelInfo};
 use crate::models::AgentType;
 
@@ -28,11 +29,37 @@ impl Default for ModelCacheState {
 ///
 /// Returns models from cache if available, otherwise discovers them from CLI.
 /// Falls back to default models if CLI discovery fails.
+///
+/// If `provider_id` is specified and it's an alternative provider with
+/// predefined models (like Z.AI or MiniMax), returns those instead.
 pub async fn get_available_models(
     agent_type: AgentType,
+    provider_id: Option<&str>,
     model_cache: &ModelCacheState,
 ) -> Result<Vec<ModelInfo>, String> {
-    log::info!("[get_available_models] Getting models for {:?}", agent_type);
+    log::info!(
+        "[get_available_models] Getting models for {:?}, provider: {:?}",
+        agent_type,
+        provider_id
+    );
+
+    // For Claude agent with alternative provider, check for predefined models
+    if agent_type == AgentType::Claude {
+        if let Some(pid) = provider_id {
+            // Skip anthropic as it uses normal CLI discovery
+            if pid != "anthropic" {
+                if let Some(models) = get_provider_models(pid) {
+                    log::info!(
+                        "[get_available_models] Using predefined models for provider '{}'",
+                        pid
+                    );
+                    return Ok(models);
+                }
+            }
+        }
+    }
+
+    // Fall back to normal CLI discovery
     Ok(model_cache.cache.get_or_fetch(agent_type))
 }
 
@@ -70,5 +97,49 @@ mod tests {
         // Should still work (will refetch)
         let models = state.cache.get_or_fetch(AgentType::Claude);
         assert!(!models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_available_models_with_provider() {
+        let state = ModelCacheState::new();
+
+        // Without provider - should use CLI discovery / fallback
+        let models = get_available_models(AgentType::Claude, None, &state)
+            .await
+            .unwrap();
+        assert!(!models.is_empty());
+
+        // With anthropic provider - should still use CLI discovery
+        let models = get_available_models(AgentType::Claude, Some("anthropic"), &state)
+            .await
+            .unwrap();
+        assert!(!models.is_empty());
+
+        // With zai provider - should use predefined models
+        let models = get_available_models(AgentType::Claude, Some("zai"), &state)
+            .await
+            .unwrap();
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.id == "GLM-4.7"));
+        assert!(models.iter().any(|m| m.provider == "zai"));
+
+        // With minimax provider
+        let models = get_available_models(AgentType::Claude, Some("minimax"), &state)
+            .await
+            .unwrap();
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.id == "MiniMax-M2.1"));
+    }
+
+    #[tokio::test]
+    async fn test_get_available_models_non_claude_ignores_provider() {
+        let state = ModelCacheState::new();
+
+        // Provider should be ignored for non-Claude agents
+        let models = get_available_models(AgentType::Cursor, Some("zai"), &state)
+            .await
+            .unwrap();
+        // Should NOT return Z.AI models, should return Cursor models
+        assert!(!models.iter().any(|m| m.id == "GLM-4.7"));
     }
 }
