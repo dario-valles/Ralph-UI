@@ -54,7 +54,10 @@
     "release:local": "bun run release:build && mkdir -p ~/.ralph-ui/bin && cp server/target/release/ralph-ui ~/.ralph-ui/bin/ && echo 'local-dev' > ~/.ralph-ui/version.txt && echo '✓ Installed to ~/.ralph-ui/bin/ralph-ui'",
     "release:test": "bun run release:local && node bin/ralph-ui.js --skip-update",
     "release:pack": "bun run release:build && npm pack",
-    "release:npx": "bun run release:local && node bin/ralph-ui.js --skip-update"
+    "release:npx": "bun run release:local && node bin/ralph-ui.js --skip-update",
+    "release:version": "npm version",
+    "release:tag": "git push && git push --tags",
+    "release:npm": "npm publish --access public"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

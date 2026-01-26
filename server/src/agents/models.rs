@@ -234,7 +234,9 @@ mod tests {
         let models = models.unwrap();
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.id == "GLM-4.7" && m.is_default));
-        assert!(models.iter().any(|m| m.id == "GLM-4.5-Air" && !m.is_default));
+        assert!(models
+            .iter()
+            .any(|m| m.id == "GLM-4.5-Air" && !m.is_default));
         assert!(models.iter().all(|m| m.provider == "zai"));
     }
 
