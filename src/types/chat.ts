@@ -106,3 +106,23 @@ export interface SendMessageResponse {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
 }
+
+// ============================================================================
+// Pasted Text Block Types
+// ============================================================================
+
+/** Represents a block of pasted multiline text */
+export interface PastedTextBlock {
+  /** Unique identifier for the paste block */
+  id: string
+  /** Full pasted content */
+  content: string
+  /** Number of lines in the content */
+  lineCount: number
+  /** Sequential paste number for display (#1, #2, #3...) */
+  pasteNumber: number
+  /** First line of content (truncated for preview) */
+  firstLine: string
+  /** Timestamp when the paste occurred */
+  createdAt: number
+}

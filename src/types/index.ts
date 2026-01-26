@@ -88,6 +88,7 @@ export type {
   PRDTypeValue,
   ChatSession,
   SendMessageResponse,
+  PastedTextBlock,
 } from './chat'
 
 export { ATTACHMENT_LIMITS } from './chat'

@@ -1,7 +1,7 @@
 // Chat utility functions for attachments and paste handling
 
 import { ATTACHMENT_LIMITS, type AttachmentMimeType, type ChatAttachment } from '@/types'
-import { CODE_PATTERNS, PASTE_CONFIG } from './chat-constants'
+import { PASTE_CONFIG } from './chat-constants'
 
 /**
  * Validate a file for attachment
@@ -125,51 +125,57 @@ export async function blobToAttachment(blob: Blob, filename?: string): Promise<C
 }
 
 /**
- * Check if pasted text should trigger the preview dialog
+ * Check if pasted text is multiline (should be shown as collapsed chip)
  */
-export function shouldShowPastePreview(text: string): boolean {
+export function isMultilinePaste(text: string): boolean {
   const lineCount = text.split('\n').length
   return lineCount >= PASTE_CONFIG.PREVIEW_THRESHOLD
 }
 
 /**
- * Detect if text looks like code
+ * Create a pasted text block from content
  */
-export function detectCodeLikelihood(text: string): { isCode: boolean; language: string | null } {
-  // Check each language's patterns
-  for (const [language, patterns] of Object.entries(CODE_PATTERNS)) {
-    const matches = patterns.filter((pattern) => pattern.test(text))
-    // If more than half the patterns match, it's likely this language
-    if (matches.length >= Math.ceil(patterns.length / 3)) {
-      return { isCode: true, language }
-    }
+export function createPastedTextBlock(
+  content: string,
+  pasteNumber: number
+): import('@/types').PastedTextBlock {
+  const lines = content.split('\n')
+  const firstLine = lines[0].slice(0, PASTE_CONFIG.FIRST_LINE_PREVIEW_MAX)
+  const truncatedFirstLine =
+    lines[0].length > PASTE_CONFIG.FIRST_LINE_PREVIEW_MAX ? firstLine + '...' : firstLine
+
+  return {
+    id: crypto.randomUUID(),
+    content,
+    lineCount: lines.length,
+    pasteNumber,
+    firstLine: truncatedFirstLine,
+    createdAt: Date.now(),
   }
-
-  // General code indicators
-  const codeIndicators = [
-    /^\s*(\/\/|#|\/\*|\*|<!--)/, // Comments
-    /[{};]\s*$/, // Block endings
-    /^\s*\w+\s*\([^)]*\)\s*[{;]?/, // Function-like patterns
-    /[=!<>]=/, // Comparison operators
-    /&&|\|\|/, // Logical operators
-    /\$\{.*\}/, // Template literals
-  ]
-
-  const generalMatches = codeIndicators.filter((pattern) => pattern.test(text))
-  if (generalMatches.length >= 2) {
-    return { isCode: true, language: null }
-  }
-
-  return { isCode: false, language: null }
 }
 
 /**
- * Wrap text in a code block
+ * Combine paste blocks with typed text into a single message
  */
-export function wrapInCodeBlock(text: string, language: string = ''): string {
-  // Treat "auto" as no specific language (empty string for code fence)
-  const lang = language === 'auto' ? '' : language
-  return `\`\`\`${lang}\n${text}\n\`\`\``
+export function combinePasteBlocksWithText(
+  pasteBlocks: import('@/types').PastedTextBlock[],
+  typedText: string
+): string {
+  const parts: string[] = []
+
+  // Add paste blocks in order (by paste number)
+  const sortedBlocks = [...pasteBlocks].sort((a, b) => a.pasteNumber - b.pasteNumber)
+  for (const block of sortedBlocks) {
+    parts.push(block.content)
+  }
+
+  // Add typed text if present
+  const trimmedText = typedText.trim()
+  if (trimmedText) {
+    parts.push(trimmedText)
+  }
+
+  return parts.join('\n\n')
 }
 
 /**

@@ -1,42 +1,33 @@
 // Hook for handling clipboard paste events (text and images)
 
 import { useCallback, useRef } from 'react'
-import type { ChatAttachment } from '@/types'
-import {
-  blobToAttachment,
-  shouldShowPastePreview,
-  detectCodeLikelihood,
-  isSupportedImageType,
-} from '@/lib/chat-utils'
-
-export interface PasteResult {
-  /** Type of paste content */
-  type: 'text' | 'image' | 'multiline-text'
-  /** Text content (for text pastes) */
-  text?: string
-  /** Image attachment (for image pastes) */
-  attachment?: ChatAttachment
-  /** Whether code was detected (for multiline text) */
-  isCode?: boolean
-  /** Detected language (for multiline text) */
-  detectedLanguage?: string | null
-}
+import type { ChatAttachment, PastedTextBlock } from '@/types'
+import { blobToAttachment, isMultilinePaste, createPastedTextBlock, isSupportedImageType } from '@/lib/chat-utils'
 
 export interface UseClipboardPasteOptions {
-  /** Callback when text is pasted (single line, no dialog needed) */
+  /** Callback when text is pasted (single line, goes directly to textarea) */
   onTextPaste?: (text: string) => void
-  /** Callback when multiline text is pasted (needs preview dialog) */
-  onMultilinePaste?: (result: PasteResult) => void
+  /** Callback when multiline text is pasted (creates a paste block) */
+  onMultilinePaste?: (block: PastedTextBlock) => void
   /** Callback when an image is pasted */
   onImagePaste?: (attachment: ChatAttachment) => void
   /** Callback when paste fails */
   onPasteError?: (error: string) => void
   /** Whether paste handling is disabled */
   disabled?: boolean
+  /** Current paste count for numbering (used to set pasteNumber on new blocks) */
+  currentPasteCount?: number
 }
 
 export function useClipboardPaste(options: UseClipboardPasteOptions) {
-  const { onTextPaste, onMultilinePaste, onImagePaste, onPasteError, disabled = false } = options
+  const {
+    onTextPaste,
+    onMultilinePaste,
+    onImagePaste,
+    onPasteError,
+    disabled = false,
+    currentPasteCount = 0,
+  } = options
 
   const processingRef = useRef(false)
 
@@ -85,22 +76,18 @@ export function useClipboardPaste(options: UseClipboardPasteOptions) {
       const text = clipboardData.getData('text/plain')
       if (!text) return
 
-      // Check if we should show the preview dialog
-      if (shouldShowPastePreview(text)) {
+      // Check if this is multiline text
+      if (isMultilinePaste(text)) {
         event.preventDefault()
-        const codeInfo = detectCodeLikelihood(text)
-        onMultilinePaste?.({
-          type: 'multiline-text',
-          text,
-          isCode: codeInfo.isCode,
-          detectedLanguage: codeInfo.language,
-        })
+        // Create a paste block with the next paste number
+        const block = createPastedTextBlock(text, currentPasteCount + 1)
+        onMultilinePaste?.(block)
       } else {
-        // Let the default paste happen for short text
+        // Let the default paste happen for single-line text
         onTextPaste?.(text)
       }
     },
-    [disabled, onTextPaste, onMultilinePaste, onImagePaste, onPasteError]
+    [disabled, onTextPaste, onMultilinePaste, onImagePaste, onPasteError, currentPasteCount]
   )
 
   return { handlePaste }
