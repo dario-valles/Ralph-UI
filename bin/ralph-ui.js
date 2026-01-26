@@ -586,9 +586,9 @@ async function getTailscaleServeUrl() {
       encoding: 'utf-8',
     })
 
-    // Parse the output to find the HTTPS URL
+    // Parse the output to find the HTTPS URL (including port if present)
     // Example output: "https://mac.tail18652a.ts.net:80 (tailnet only)"
-    const match = output.match(/https:\/\/([^\s:]+)/)
+    const match = output.match(/https:\/\/([^\s]+)/)
     if (match) {
       return `https://${match[1]}`
     }
