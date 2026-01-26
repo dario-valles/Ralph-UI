@@ -11,6 +11,7 @@ import type {
   RalphTemplateConfig,
   TemplateInfo,
   TemplatePreviewResult,
+  Project,
 } from '@/types'
 import { type SoundMode } from '@/lib/audio'
 
@@ -105,9 +106,7 @@ export interface UseSettingsStateReturn {
   setPreviewResult: React.Dispatch<React.SetStateAction<TemplatePreviewResult | null>>
 
   // Active project
-  activeProject: ReturnType<typeof useProjectStore>['getActiveProject'] extends () => infer R
-    ? R
-    : never
+  activeProject: Project | undefined
 
   // Update functions
   updateExecutionConfig: (updates: Partial<RalphExecutionConfig>) => void

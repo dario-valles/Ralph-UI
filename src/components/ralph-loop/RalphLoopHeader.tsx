@@ -24,7 +24,7 @@ import type { RalphPrd, RalphPrdStatus, RalphLoopMetrics, AgentType } from '@/ty
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { getDefaultModel } from '@/lib/fallback-models'
 import type { ConfigOverrides } from './hooks/useRalphLoopDashboard'
-import type { ModelInfo } from '@/lib/fallback-models'
+import type { ModelInfo } from '@/lib/model-api'
 import { WorktreeActions } from './WorktreeActions'
 
 export interface RalphLoopHeaderProps {
