@@ -1,6 +1,7 @@
 // PRD Chat messaging operations - send messages, get history, build prompts
 
 use crate::file_storage::{attachments, chat_ops};
+use std::path::Path;
 use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
 use crate::parsers::structured_output;
@@ -14,6 +15,33 @@ use super::parse_agent_type;
 // ============================================================================
 // Message Commands
 // ============================================================================
+
+/// Extracts all attachment file paths from chat history.
+/// Used to include historical image attachments in the prompt even when
+/// conversation history text is omitted during session resumption.
+fn extract_historical_attachment_paths(
+    project_path: &Path,
+    history: &[ChatMessage],
+) -> Vec<String> {
+    history
+        .iter()
+        .filter_map(|msg| {
+            msg.attachments.as_ref().map(|atts| {
+                atts.iter()
+                    .filter_map(|att| {
+                        let path = attachments::get_attachment_file_path(
+                            project_path,
+                            &msg.id,
+                            att,
+                        );
+                        path.to_str().map(String::from)
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .flatten()
+        .collect()
+}
 
 /// Send a message to the chat and get an AI response
 pub async fn send_prd_chat_message(
@@ -73,6 +101,17 @@ pub async fn send_prd_chat_message(
     // Check if we have an existing external session for resume support
     let has_external_session = session.external_session_id.is_some();
 
+    // Extract attachment paths from historical messages.
+    // This ensures the agent can see images from previous messages even when
+    // conversation history text is omitted during session resumption.
+    let historical_attachment_paths = extract_historical_attachment_paths(project_path_obj, &history);
+
+    // Combine current message attachments with historical attachments
+    let all_attachment_paths: Vec<String> = attachment_paths
+        .into_iter()
+        .chain(historical_attachment_paths)
+        .collect();
+
     // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
     // When resuming an external session, history is omitted (agent maintains its own context)
     let prompt = match get_gsd_phase(&session) {
@@ -81,7 +120,7 @@ pub async fn send_prd_chat_message(
                 &session,
                 &history,
                 &request.content,
-                &attachment_paths,
+                &all_attachment_paths,
                 has_external_session,
             )
         }
@@ -89,7 +128,7 @@ pub async fn send_prd_chat_message(
             &session,
             &history,
             &request.content,
-            &attachment_paths,
+            &all_attachment_paths,
             has_external_session,
         ),
     };
@@ -696,5 +735,139 @@ mod tests {
         // Should NOT include structured output instructions
         assert!(!prompt.contains("STRUCTURED OUTPUT MODE"));
         assert!(!prompt.contains("JSON code block"));
+    }
+
+    #[test]
+    fn test_extract_historical_attachment_paths_empty_history() {
+        let project_path = Path::new("/home/user/project");
+        let history: Vec<ChatMessage> = vec![];
+
+        let paths = extract_historical_attachment_paths(project_path, &history);
+
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_extract_historical_attachment_paths_no_attachments() {
+        let project_path = Path::new("/home/user/project");
+        let history = vec![
+            ChatMessage {
+                id: "msg-1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "Hello".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "msg-2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "Hi there".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+        ];
+
+        let paths = extract_historical_attachment_paths(project_path, &history);
+
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_extract_historical_attachment_paths_with_attachments() {
+        use crate::models::{AttachmentMimeType, ChatAttachment};
+
+        let project_path = Path::new("/home/user/project");
+        let history = vec![
+            ChatMessage {
+                id: "msg-1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "Here is an image".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: Some(vec![ChatAttachment {
+                    id: "att-1".to_string(),
+                    mime_type: AttachmentMimeType::ImagePng,
+                    data: String::new(), // Data not needed for path extraction
+                    filename: Some("screenshot.png".to_string()),
+                    size: 1000,
+                    width: Some(800),
+                    height: Some(600),
+                }]),
+            },
+            ChatMessage {
+                id: "msg-2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "I see the image".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "msg-3".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "Here is another".to_string(),
+                created_at: "2026-01-17T00:02:00Z".to_string(),
+                attachments: Some(vec![ChatAttachment {
+                    id: "att-2".to_string(),
+                    mime_type: AttachmentMimeType::ImageJpeg,
+                    data: String::new(),
+                    filename: Some("photo.jpg".to_string()),
+                    size: 2000,
+                    width: Some(1024),
+                    height: Some(768),
+                }]),
+            },
+        ];
+
+        let paths = extract_historical_attachment_paths(project_path, &history);
+
+        assert_eq!(paths.len(), 2);
+        assert!(paths[0].contains("msg-1"));
+        assert!(paths[0].contains("screenshot.png"));
+        assert!(paths[1].contains("msg-3"));
+        assert!(paths[1].contains("photo.jpg"));
+    }
+
+    #[test]
+    fn test_extract_historical_attachment_paths_multiple_per_message() {
+        use crate::models::{AttachmentMimeType, ChatAttachment};
+
+        let project_path = Path::new("/home/user/project");
+        let history = vec![ChatMessage {
+            id: "msg-1".to_string(),
+            session_id: "test".to_string(),
+            role: MessageRole::User,
+            content: "Multiple images".to_string(),
+            created_at: "2026-01-17T00:00:00Z".to_string(),
+            attachments: Some(vec![
+                ChatAttachment {
+                    id: "att-1".to_string(),
+                    mime_type: AttachmentMimeType::ImagePng,
+                    data: String::new(),
+                    filename: Some("img1.png".to_string()),
+                    size: 1000,
+                    width: Some(800),
+                    height: Some(600),
+                },
+                ChatAttachment {
+                    id: "att-2".to_string(),
+                    mime_type: AttachmentMimeType::ImageGif,
+                    data: String::new(),
+                    filename: Some("img2.gif".to_string()),
+                    size: 500,
+                    width: Some(400),
+                    height: Some(300),
+                },
+            ]),
+        }];
+
+        let paths = extract_historical_attachment_paths(project_path, &history);
+
+        assert_eq!(paths.len(), 2);
+        assert!(paths[0].contains("img1.png"));
+        assert!(paths[1].contains("img2.gif"));
     }
 }
