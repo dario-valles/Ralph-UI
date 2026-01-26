@@ -59,7 +59,11 @@ pub async fn route_task_command(
             let task_id: String = get_arg(&args, "taskId")?;
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
-            route_unit_async!(commands::tasks::delete_task(task_id, session_id, project_path))
+            route_unit_async!(commands::tasks::delete_task(
+                task_id,
+                session_id,
+                project_path
+            ))
         }
 
         "import_prd" => {

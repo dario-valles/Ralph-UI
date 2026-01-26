@@ -78,7 +78,7 @@ pub fn next_state(current: TaskStatus) -> Option<TaskStatus> {
     match current {
         TaskStatus::Pending => Some(TaskStatus::InProgress),
         TaskStatus::InProgress => Some(TaskStatus::Completed),
-        TaskStatus::Completed => None, // Terminal
+        TaskStatus::Completed => None,                   // Terminal
         TaskStatus::Failed => Some(TaskStatus::Pending), // Retry
     }
 }
@@ -112,7 +112,10 @@ mod tests {
 
     #[test]
     fn test_in_progress_to_completed() {
-        assert!(can_transition(TaskStatus::InProgress, TaskStatus::Completed));
+        assert!(can_transition(
+            TaskStatus::InProgress,
+            TaskStatus::Completed
+        ));
         let result = transition_state(TaskStatus::InProgress, TaskStatus::Completed);
         assert!(result.is_ok());
     }
@@ -140,13 +143,19 @@ mod tests {
     #[test]
     fn test_completed_can_reopen() {
         assert!(can_transition(TaskStatus::Completed, TaskStatus::Pending));
-        assert!(can_transition(TaskStatus::Completed, TaskStatus::InProgress));
+        assert!(can_transition(
+            TaskStatus::Completed,
+            TaskStatus::InProgress
+        ));
     }
 
     #[test]
     fn test_same_state_allowed() {
         assert!(can_transition(TaskStatus::Pending, TaskStatus::Pending));
-        assert!(can_transition(TaskStatus::InProgress, TaskStatus::InProgress));
+        assert!(can_transition(
+            TaskStatus::InProgress,
+            TaskStatus::InProgress
+        ));
         assert!(can_transition(TaskStatus::Completed, TaskStatus::Completed));
         assert!(can_transition(TaskStatus::Failed, TaskStatus::Failed));
     }
@@ -174,8 +183,14 @@ mod tests {
 
     #[test]
     fn test_next_state() {
-        assert_eq!(next_state(TaskStatus::Pending), Some(TaskStatus::InProgress));
-        assert_eq!(next_state(TaskStatus::InProgress), Some(TaskStatus::Completed));
+        assert_eq!(
+            next_state(TaskStatus::Pending),
+            Some(TaskStatus::InProgress)
+        );
+        assert_eq!(
+            next_state(TaskStatus::InProgress),
+            Some(TaskStatus::Completed)
+        );
         assert_eq!(next_state(TaskStatus::Completed), None);
         assert_eq!(next_state(TaskStatus::Failed), Some(TaskStatus::Pending));
     }

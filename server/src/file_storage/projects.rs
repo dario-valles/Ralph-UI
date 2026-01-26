@@ -55,9 +55,7 @@ pub struct ProjectEntry {
 impl ProjectEntry {
     /// Create a new project entry
     pub fn new(path: &str, name: Option<&str>) -> Self {
-        let derived_name = name.unwrap_or_else(|| {
-            path.split(['/', '\\']).last().unwrap_or(path)
-        });
+        let derived_name = name.unwrap_or_else(|| path.split(['/', '\\']).last().unwrap_or(path));
 
         let id = format!(
             "proj_{}",
@@ -145,7 +143,11 @@ pub fn register_project(path: &str, name: Option<&str>) -> FileResult<ProjectEnt
 }
 
 /// Register a project in a specific directory (for testing)
-fn register_project_in(base_dir: &Path, path: &str, name: Option<&str>) -> FileResult<ProjectEntry> {
+fn register_project_in(
+    base_dir: &Path,
+    path: &str,
+    name: Option<&str>,
+) -> FileResult<ProjectEntry> {
     let mut registry = read_projects_registry_from(base_dir)?;
 
     // Check if project with this path already exists
@@ -232,7 +234,11 @@ pub fn get_favorite_projects() -> FileResult<Vec<ProjectEntry>> {
 /// Get favorite projects from a specific directory
 fn get_favorite_projects_in(base_dir: &Path) -> FileResult<Vec<ProjectEntry>> {
     let registry = read_projects_registry_from(base_dir)?;
-    let mut favorites: Vec<_> = registry.projects.into_iter().filter(|p| p.is_favorite).collect();
+    let mut favorites: Vec<_> = registry
+        .projects
+        .into_iter()
+        .filter(|p| p.is_favorite)
+        .collect();
     favorites.sort_by(|a, b| b.last_used_at.cmp(&a.last_used_at));
     Ok(favorites)
 }
@@ -350,7 +356,9 @@ mod tests {
     #[test]
     fn test_register_project_with_name() {
         let temp_dir = TempDir::new().unwrap();
-        let project = register_project_in(temp_dir.path(), "/test/my-project", Some("My Custom Name")).unwrap();
+        let project =
+            register_project_in(temp_dir.path(), "/test/my-project", Some("My Custom Name"))
+                .unwrap();
 
         assert_eq!(project.name, "My Custom Name");
     }
@@ -452,7 +460,9 @@ mod tests {
 
         update_project_name_in(temp_dir.path(), &project.id, "New Name").unwrap();
 
-        let updated = get_project_in(temp_dir.path(), &project.id).unwrap().unwrap();
+        let updated = get_project_in(temp_dir.path(), &project.id)
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.name, "New Name");
     }
 
@@ -476,7 +486,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         touch_project_in(temp_dir.path(), &project.id).unwrap();
 
-        let touched = get_project_in(temp_dir.path(), &project.id).unwrap().unwrap();
+        let touched = get_project_in(temp_dir.path(), &project.id)
+            .unwrap()
+            .unwrap();
         assert!(touched.last_used_at > original_time);
     }
 }

@@ -4,14 +4,14 @@ use crate::file_storage::{attachments, chat_ops};
 use crate::gsd::planning_storage::{read_planning_file, PlanningFile};
 use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
-use std::path::Path;
 use crate::parsers::structured_output;
 use crate::utils::as_path;
+use std::path::Path;
 use uuid::Uuid;
 
 use super::agent_executor::{self, generate_session_title};
-use super::types::{SendMessageRequest, SendMessageResponse};
 use super::parse_agent_type;
+use super::types::{SendMessageRequest, SendMessageResponse};
 
 // ============================================================================
 // Message Commands
@@ -49,11 +49,8 @@ fn extract_historical_attachment_paths(
             msg.attachments.as_ref().map(|atts| {
                 atts.iter()
                     .filter_map(|att| {
-                        let path = attachments::get_attachment_file_path(
-                            project_path,
-                            &msg.id,
-                            att,
-                        );
+                        let path =
+                            attachments::get_attachment_file_path(project_path, &msg.id, att);
                         path.to_str().map(String::from)
                     })
                     .collect::<Vec<_>>()
@@ -124,7 +121,8 @@ pub async fn send_prd_chat_message(
     // Extract attachment paths from historical messages.
     // This ensures the agent can see images from previous messages even when
     // conversation history text is omitted during session resumption.
-    let historical_attachment_paths = extract_historical_attachment_paths(project_path_obj, &history);
+    let historical_attachment_paths =
+        extract_historical_attachment_paths(project_path_obj, &history);
 
     // Combine current message attachments with historical attachments
     let all_attachment_paths: Vec<String> = attachment_paths
@@ -681,8 +679,14 @@ mod tests {
         let session = make_test_session("test");
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt =
-            build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[], false, None);
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Create a PRD for a todo app",
+            &[],
+            false,
+            None,
+        );
 
         assert!(prompt.contains("expert product manager"));
         assert!(prompt.contains("Create a PRD for a todo app"));
@@ -713,8 +717,14 @@ mod tests {
             },
         ];
 
-        let prompt =
-            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], false, None);
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Add a due date feature",
+            &[],
+            false,
+            None,
+        );
 
         assert!(prompt.contains("Project path: /my/project"));
         assert!(prompt.contains("Conversation History"));
@@ -748,8 +758,14 @@ mod tests {
         ];
 
         // When has_external_session is true, history should be omitted (token savings)
-        let prompt =
-            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], true, None);
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Add a due date feature",
+            &[],
+            true,
+            None,
+        );
 
         assert!(prompt.contains("Project path: /my/project"));
         // History should NOT be included when resuming external session

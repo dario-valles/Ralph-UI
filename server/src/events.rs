@@ -550,10 +550,22 @@ mod tests {
 
     #[test]
     fn test_subagent_event_type_serialization() {
-        assert_eq!(serde_json::to_string(&SubagentEventType::Spawned).unwrap(), "\"spawned\"");
-        assert_eq!(serde_json::to_string(&SubagentEventType::Progress).unwrap(), "\"progress\"");
-        assert_eq!(serde_json::to_string(&SubagentEventType::Completed).unwrap(), "\"completed\"");
-        assert_eq!(serde_json::to_string(&SubagentEventType::Failed).unwrap(), "\"failed\"");
+        assert_eq!(
+            serde_json::to_string(&SubagentEventType::Spawned).unwrap(),
+            "\"spawned\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SubagentEventType::Progress).unwrap(),
+            "\"progress\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SubagentEventType::Completed).unwrap(),
+            "\"completed\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SubagentEventType::Failed).unwrap(),
+            "\"failed\""
+        );
     }
 
     #[test]

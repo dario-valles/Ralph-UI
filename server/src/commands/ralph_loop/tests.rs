@@ -140,7 +140,9 @@ fn test_parse_stories_markdown_format() {
 
     assert_eq!(stories[1].id, "US-1.2");
     assert_eq!(stories[1].title, "User Registration");
-    assert!(stories[1].acceptance.contains("User can create new account"));
+    assert!(stories[1]
+        .acceptance
+        .contains("User can create new account"));
 }
 
 #[test]

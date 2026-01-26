@@ -16,12 +16,18 @@ pub fn get_builtin_templates() -> HashMap<String, String> {
     let mut templates = HashMap::new();
 
     templates.insert(TASK_PROMPT.to_string(), TASK_PROMPT_TEMPLATE.to_string());
-    templates.insert(TASK_WITH_PRD.to_string(), TASK_WITH_PRD_TEMPLATE.to_string());
+    templates.insert(
+        TASK_WITH_PRD.to_string(),
+        TASK_WITH_PRD_TEMPLATE.to_string(),
+    );
     templates.insert(BUG_FIX.to_string(), BUG_FIX_TEMPLATE.to_string());
     templates.insert(FEATURE.to_string(), FEATURE_TEMPLATE.to_string());
     templates.insert(REFACTOR.to_string(), REFACTOR_TEMPLATE.to_string());
     templates.insert(TEST.to_string(), TEST_TEMPLATE.to_string());
-    templates.insert(REQUIREMENT_GENERATION.to_string(), REQUIREMENT_GENERATION_TEMPLATE.to_string());
+    templates.insert(
+        REQUIREMENT_GENERATION.to_string(),
+        REQUIREMENT_GENERATION_TEMPLATE.to_string(),
+    );
 
     templates
 }
@@ -42,7 +48,15 @@ pub fn get_builtin_template(name: &str) -> Option<&'static str> {
 
 /// List all built-in template names
 pub fn list_builtin_templates() -> Vec<&'static str> {
-    vec![TASK_PROMPT, TASK_WITH_PRD, BUG_FIX, FEATURE, REFACTOR, TEST, REQUIREMENT_GENERATION]
+    vec![
+        TASK_PROMPT,
+        TASK_WITH_PRD,
+        BUG_FIX,
+        FEATURE,
+        REFACTOR,
+        TEST,
+        REQUIREMENT_GENERATION,
+    ]
 }
 
 // Template definitions

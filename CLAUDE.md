@@ -29,7 +29,8 @@ bun run cargo:test             # Rust backend tests (650+ tests)
 # Code Quality
 bun run lint                   # ESLint (strict, 0 warnings allowed)
 bun run lint:fix               # Auto-fix lint issues
-bun run format                 # Prettier format
+bun run format                 # Prettier format (frontend)
+cargo fmt                      # Rust format (run from server/ dir, or use --manifest-path)
 
 # Building
 bun run cargo:build            # Production backend build

@@ -197,7 +197,10 @@ impl ResearchOrchestrator {
                 chunk: chunk.to_string(),
                 is_complete,
             };
-            app_handle.broadcast("gsd:research_output", serde_json::to_value(&event).unwrap_or_default());
+            app_handle.broadcast(
+                "gsd:research_output",
+                serde_json::to_value(&event).unwrap_or_default(),
+            );
         }
     }
 
@@ -210,7 +213,10 @@ impl ResearchOrchestrator {
                 status: status.to_string(),
                 error,
             };
-            app_handle.broadcast("gsd:research_status", serde_json::to_value(&event).unwrap_or_default());
+            app_handle.broadcast(
+                "gsd:research_status",
+                serde_json::to_value(&event).unwrap_or_default(),
+            );
         }
     }
 
@@ -547,17 +553,17 @@ pub async fn run_research_agents_selective(
     let should_run = |research_type: &str| -> bool {
         match &research_types {
             None => true, // Run all if no specific types provided
-            Some(types) => types.iter().any(|t| t.to_lowercase() == research_type.to_lowercase()),
+            Some(types) => types
+                .iter()
+                .any(|t| t.to_lowercase() == research_type.to_lowercase()),
         }
     };
 
     // Load existing status to preserve completed results
-    let existing_status = crate::gsd::planning_storage::load_workflow_state(
-        Path::new(project_path),
-        session_id,
-    )
-    .map(|state| state.research_status)
-    .ok();
+    let existing_status =
+        crate::gsd::planning_storage::load_workflow_state(Path::new(project_path), session_id)
+            .map(|state| state.research_status)
+            .ok();
 
     // Run only the requested research agents in parallel
     let arch_future = async {
@@ -616,8 +622,12 @@ pub async fn run_research_agents_selective(
         }
     };
 
-    let (arch_result, codebase_result, best_practices_result, risks_result) =
-        tokio::join!(arch_future, codebase_future, best_practices_future, risks_future);
+    let (arch_result, codebase_result, best_practices_result, risks_result) = tokio::join!(
+        arch_future,
+        codebase_future,
+        best_practices_future,
+        risks_future
+    );
 
     // Convert results, preserving existing state for non-run agents
     let arch = match arch_result {

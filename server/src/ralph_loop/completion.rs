@@ -107,7 +107,10 @@ pub enum CompletionState {
     /// Completion promise detected
     Complete,
     /// Agent exited with error before completion
-    Failed { exit_code: i32, error: Option<String> },
+    Failed {
+        exit_code: i32,
+        error: Option<String>,
+    },
     /// Max iterations reached
     MaxIterationsReached { iterations: u32 },
     /// Max cost exceeded
@@ -186,7 +189,9 @@ impl ExtendedCompletionDetector {
     /// Check for completion using all signals
     pub fn check(&self, output: &str, exit_code: Option<i32>) -> DetectionResult {
         let lines: Vec<&str> = output.lines().collect();
-        let start_line = lines.len().saturating_sub(self.promise_detector.max_lines_from_end);
+        let start_line = lines
+            .len()
+            .saturating_sub(self.promise_detector.max_lines_from_end);
         let recent_output: String = lines[start_line..].join("\n");
 
         // Check primary promise
@@ -207,7 +212,10 @@ impl ExtendedCompletionDetector {
 
         // Check failure patterns
         for pattern in &self.failure_patterns {
-            if output.to_lowercase().contains(&pattern.pattern.to_lowercase()) {
+            if output
+                .to_lowercase()
+                .contains(&pattern.pattern.to_lowercase())
+            {
                 if pattern.fatal {
                     return DetectionResult::FatalError {
                         pattern: pattern.pattern.clone(),
@@ -331,7 +339,10 @@ mod tests {
 
         // No signal, exit error
         let result = detector.check("Error occurred", Some(1));
-        assert!(matches!(result, DetectionResult::ExitedWithError { exit_code: 1 }));
+        assert!(matches!(
+            result,
+            DetectionResult::ExitedWithError { exit_code: 1 }
+        ));
     }
 
     #[test]

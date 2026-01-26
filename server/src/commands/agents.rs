@@ -468,16 +468,11 @@ mod tests {
         let agent = create_test_agent("agent-1", "session-1");
         create_agent(agent, project_path.clone()).unwrap();
 
-        update_agent_metrics(
-            "agent-1".to_string(),
-            1000,
-            0.05,
-            5,
-            project_path.clone(),
-        )
-        .unwrap();
+        update_agent_metrics("agent-1".to_string(), 1000, 0.05, 5, project_path.clone()).unwrap();
 
-        let retrieved = get_agent("agent-1".to_string(), project_path).unwrap().unwrap();
+        let retrieved = get_agent("agent-1".to_string(), project_path)
+            .unwrap()
+            .unwrap();
         assert_eq!(retrieved.tokens, 1000);
         assert_eq!(retrieved.cost, 0.05);
         assert_eq!(retrieved.iteration_count, 5);

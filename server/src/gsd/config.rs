@@ -52,9 +52,7 @@ impl Default for GsdConfig {
 impl GsdConfig {
     /// Parse the research_agent_type string into an AgentType
     pub fn get_agent_type(&self) -> AgentType {
-        self.research_agent_type
-            .parse()
-            .unwrap_or_default()
+        self.research_agent_type.parse().unwrap_or_default()
     }
 }
 

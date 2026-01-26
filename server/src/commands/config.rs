@@ -1,8 +1,8 @@
 // Configuration Backend commands
 
 use crate::config::{
-    load_merged_config, get_config_paths, RalphConfig, ExecutionConfig, GitConfig, ValidationConfig,
-    FallbackSettings, ConfigLoader,
+    get_config_paths, load_merged_config, ConfigLoader, ExecutionConfig, FallbackSettings,
+    GitConfig, RalphConfig, ValidationConfig,
 };
 use crate::utils::ResultExt;
 use serde::{Deserialize, Serialize};
@@ -27,8 +27,11 @@ impl ConfigState {
         let config = load_merged_config(None, None).unwrap_or_default();
         let (global_path, _) = get_config_paths(None);
         log::info!("[ConfigState::new] Global path: {:?}", global_path);
-        log::info!("[ConfigState::new] Loaded config: max_parallel={}, agent_type={}",
-            config.execution.max_parallel, config.execution.agent_type);
+        log::info!(
+            "[ConfigState::new] Loaded config: max_parallel={}, agent_type={}",
+            config.execution.max_parallel,
+            config.execution.agent_type
+        );
 
         Self {
             config: RwLock::new(config),
@@ -39,16 +42,17 @@ impl ConfigState {
 
     /// Set project path and reload config
     pub fn set_project_path(&self, path: Option<PathBuf>) -> Result<(), String> {
-        let mut project_path = self.project_path.write()
+        let mut project_path = self
+            .project_path
+            .write()
             .with_context("Failed to acquire lock")?;
         *project_path = path.clone();
 
         // Reload config with new project path
-        let new_config = load_merged_config(path.as_deref(), None)
-            .with_context("Failed to load config")?;
+        let new_config =
+            load_merged_config(path.as_deref(), None).with_context("Failed to load config")?;
 
-        let mut config = self.config.write()
-            .with_context("Failed to acquire lock")?;
+        let mut config = self.config.write().with_context("Failed to acquire lock")?;
         *config = new_config;
 
         Ok(())
@@ -56,7 +60,8 @@ impl ConfigState {
 
     /// Get current config
     pub fn get_config(&self) -> Result<RalphConfig, String> {
-        self.config.read()
+        self.config
+            .read()
             .map(|c| c.clone())
             .map_err(|e| format!("Failed to acquire lock: {}", e))
     }
@@ -80,9 +85,7 @@ pub struct ConfigPaths {
 
 /// Get current configuration
 
-pub async fn get_config(
-    config_state: &ConfigState,
-) -> Result<RalphConfig, String> {
+pub async fn get_config(config_state: &ConfigState) -> Result<RalphConfig, String> {
     config_state.get_config()
 }
 
@@ -99,10 +102,10 @@ pub async fn set_config_project_path(
 
 /// Get configuration file paths
 
-pub async fn get_config_paths_cmd(
-    config_state: &ConfigState,
-) -> Result<ConfigPaths, String> {
-    let project_path = config_state.project_path.read()
+pub async fn get_config_paths_cmd(config_state: &ConfigState) -> Result<ConfigPaths, String> {
+    let project_path = config_state
+        .project_path
+        .read()
         .with_context("Failed to acquire lock")?;
 
     let (global, project) = get_config_paths(project_path.as_deref());
@@ -126,7 +129,9 @@ pub async fn update_execution_config(
     model: Option<String>,
     config_state: &ConfigState,
 ) -> Result<ExecutionConfig, String> {
-    let mut config = config_state.config.write()
+    let mut config = config_state
+        .config
+        .write()
         .with_context("Failed to acquire lock")?;
 
     if let Some(v) = max_parallel {
@@ -165,7 +170,9 @@ pub async fn update_git_config(
     branch_pattern: Option<String>,
     config_state: &ConfigState,
 ) -> Result<GitConfig, String> {
-    let mut config = config_state.config.write()
+    let mut config = config_state
+        .config
+        .write()
         .with_context("Failed to acquire lock")?;
 
     if let Some(v) = auto_create_prs {
@@ -190,7 +197,9 @@ pub async fn update_validation_config(
     lint_command: Option<String>,
     config_state: &ConfigState,
 ) -> Result<ValidationConfig, String> {
-    let mut config = config_state.config.write()
+    let mut config = config_state
+        .config
+        .write()
         .with_context("Failed to acquire lock")?;
 
     if let Some(v) = run_tests {
@@ -222,7 +231,9 @@ pub async fn update_fallback_config(
     recovery_test_interval: Option<u32>,
     config_state: &ConfigState,
 ) -> Result<FallbackSettings, String> {
-    let mut config = config_state.config.write()
+    let mut config = config_state
+        .config
+        .write()
         .with_context("Failed to acquire lock")?;
 
     if let Some(v) = enabled {
@@ -255,16 +266,18 @@ pub async fn update_fallback_config(
 
 /// Reload configuration from files
 
-pub async fn reload_config(
-    config_state: &ConfigState,
-) -> Result<RalphConfig, String> {
-    let project_path = config_state.project_path.read()
+pub async fn reload_config(config_state: &ConfigState) -> Result<RalphConfig, String> {
+    let project_path = config_state
+        .project_path
+        .read()
         .with_context("Failed to acquire lock")?;
 
-    let new_config = load_merged_config(project_path.as_deref(), None)
-        .with_context("Failed to load config")?;
+    let new_config =
+        load_merged_config(project_path.as_deref(), None).with_context("Failed to load config")?;
 
-    let mut config = config_state.config.write()
+    let mut config = config_state
+        .config
+        .write()
         .with_context("Failed to acquire lock")?;
     *config = new_config.clone();
 
@@ -274,28 +287,32 @@ pub async fn reload_config(
 /// Save configuration to global config file
 /// Settings from the Settings page are app-level defaults, so always save to global config
 
-pub async fn save_config(
-    config_state: &ConfigState,
-) -> Result<(), String> {
+pub async fn save_config(config_state: &ConfigState) -> Result<(), String> {
     log::info!("[save_config] Starting save to global config...");
 
-    let config = config_state.config.read()
+    let config = config_state
+        .config
+        .read()
         .with_context("Failed to acquire lock")?;
 
-    log::info!("[save_config] Config to save: max_parallel={}, agent_type={}, model={:?}",
+    log::info!(
+        "[save_config] Config to save: max_parallel={}, agent_type={}, model={:?}",
         config.execution.max_parallel,
         config.execution.agent_type,
-        config.execution.model);
+        config.execution.model
+    );
 
     let loader = ConfigLoader::new();
 
-    log::info!("[save_config] Global config path: {:?}", loader.global_config_path());
+    log::info!(
+        "[save_config] Global config path: {:?}",
+        loader.global_config_path()
+    );
 
-    loader.save_global(&config)
-        .map_err(|e| {
-            log::error!("[save_config] Failed to save global config: {}", e);
-            format!("Failed to save global config: {}", e)
-        })?;
+    loader.save_global(&config).map_err(|e| {
+        log::error!("[save_config] Failed to save global config: {}", e);
+        format!("Failed to save global config: {}", e)
+    })?;
 
     log::info!("[save_config] Save completed successfully");
     Ok(())

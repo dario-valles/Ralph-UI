@@ -33,7 +33,9 @@ use crate::commands;
 use crate::models::AgentType;
 use serde_json::Value;
 
-use super::{get_arg, get_opt_arg, route_async, route_sync, route_unit, route_unit_async, ServerAppState};
+use super::{
+    get_arg, get_opt_arg, route_async, route_sync, route_unit, route_unit_async, ServerAppState,
+};
 
 /// Route configuration and misc commands
 pub async fn route_config_command(
@@ -55,7 +57,10 @@ pub async fn route_config_command(
         "reload_config" => route_sync!(state.config_state.get_config()),
 
         "get_config_paths_cmd" => {
-            route_async!(cmd, commands::config::get_config_paths_cmd(&state.config_state))
+            route_async!(
+                cmd,
+                commands::config::get_config_paths_cmd(&state.config_state)
+            )
         }
 
         "update_execution_config" => {
@@ -65,19 +70,33 @@ pub async fn route_config_command(
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let strategy: Option<String> = get_opt_arg(&args, "strategy")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
-            route_async!(cmd, commands::config::update_execution_config(
-                max_parallel, max_iterations, max_retries, agent_type, strategy, model,
-                &state.config_state
-            ))
+            route_async!(
+                cmd,
+                commands::config::update_execution_config(
+                    max_parallel,
+                    max_iterations,
+                    max_retries,
+                    agent_type,
+                    strategy,
+                    model,
+                    &state.config_state
+                )
+            )
         }
 
         "update_git_config" => {
             let auto_create_prs: Option<bool> = get_opt_arg(&args, "autoCreatePrs")?;
             let draft_prs: Option<bool> = get_opt_arg(&args, "draftPrs")?;
             let branch_pattern: Option<String> = get_opt_arg(&args, "branchPattern")?;
-            route_async!(cmd, commands::config::update_git_config(
-                auto_create_prs, draft_prs, branch_pattern, &state.config_state
-            ))
+            route_async!(
+                cmd,
+                commands::config::update_git_config(
+                    auto_create_prs,
+                    draft_prs,
+                    branch_pattern,
+                    &state.config_state
+                )
+            )
         }
 
         "update_validation_config" => {
@@ -85,9 +104,16 @@ pub async fn route_config_command(
             let run_lint: Option<bool> = get_opt_arg(&args, "runLint")?;
             let test_command: Option<String> = get_opt_arg(&args, "testCommand")?;
             let lint_command: Option<String> = get_opt_arg(&args, "lintCommand")?;
-            route_async!(cmd, commands::config::update_validation_config(
-                run_tests, run_lint, test_command, lint_command, &state.config_state
-            ))
+            route_async!(
+                cmd,
+                commands::config::update_validation_config(
+                    run_tests,
+                    run_lint,
+                    test_command,
+                    lint_command,
+                    &state.config_state
+                )
+            )
         }
 
         "update_fallback_config" => {
@@ -99,11 +125,20 @@ pub async fn route_config_command(
             let fallback_chain: Option<Vec<String>> = get_opt_arg(&args, "fallbackChain")?;
             let test_primary_recovery: Option<bool> = get_opt_arg(&args, "testPrimaryRecovery")?;
             let recovery_test_interval: Option<u32> = get_opt_arg(&args, "recoveryTestInterval")?;
-            route_async!(cmd, commands::config::update_fallback_config(
-                enabled, base_backoff_ms, max_backoff_ms, fallback_model,
-                error_strategy, fallback_chain, test_primary_recovery, recovery_test_interval,
-                &state.config_state
-            ))
+            route_async!(
+                cmd,
+                commands::config::update_fallback_config(
+                    enabled,
+                    base_backoff_ms,
+                    max_backoff_ms,
+                    fallback_model,
+                    error_strategy,
+                    fallback_chain,
+                    test_primary_recovery,
+                    recovery_test_interval,
+                    &state.config_state
+                )
+            )
         }
 
         "save_config" => {
@@ -266,9 +301,7 @@ pub async fn route_config_command(
         "parse_agent_output" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             let output: String = get_arg(&args, "output")?;
-            super::with_agent_manager(state, |mgr| {
-                Ok(mgr.parse_text_output(&agent_id, &output))
-            })
+            super::with_agent_manager(state, |mgr| Ok(mgr.parse_text_output(&agent_id, &output)))
         }
 
         "get_subagent_tree" => {
@@ -279,9 +312,9 @@ pub async fn route_config_command(
         "get_subagent_summary" => {
             let agent_id: String = get_arg(&args, "agentId")?;
             super::with_agent_manager(state, |mgr| {
-                let summary = mgr.get_subagent_tree(&agent_id).map(|t| {
-                    commands::traces::build_subagent_summary(&t)
-                });
+                let summary = mgr
+                    .get_subagent_tree(&agent_id)
+                    .map(|t| commands::traces::build_subagent_summary(&t));
                 Ok(summary)
             })
         }
@@ -292,7 +325,12 @@ pub async fn route_config_command(
             super::with_agent_manager(state, |mgr| {
                 let events: Vec<_> = mgr
                     .get_subagent_tree(&agent_id)
-                    .map(|t| t.get_subagent_events(&subagent_id).into_iter().cloned().collect())
+                    .map(|t| {
+                        t.get_subagent_events(&subagent_id)
+                            .into_iter()
+                            .cloned()
+                            .collect()
+                    })
                     .unwrap_or_default();
                 Ok(events)
             })
@@ -357,32 +395,47 @@ pub async fn route_config_command(
         "acquire_session_lock" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            route_async!(cmd, commands::recovery::acquire_session_lock(project_path, session_id))
+            route_async!(
+                cmd,
+                commands::recovery::acquire_session_lock(project_path, session_id)
+            )
         }
 
         "release_session_lock" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            route_async!(cmd, commands::recovery::release_session_lock(project_path, session_id))
+            route_async!(
+                cmd,
+                commands::recovery::release_session_lock(project_path, session_id)
+            )
         }
 
         "get_session_lock_info" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            route_async!(cmd, commands::recovery::get_session_lock_info(project_path, session_id))
+            route_async!(
+                cmd,
+                commands::recovery::get_session_lock_info(project_path, session_id)
+            )
         }
 
         "refresh_session_lock" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            route_async!(cmd, commands::recovery::refresh_session_lock(project_path, session_id))
+            route_async!(
+                cmd,
+                commands::recovery::refresh_session_lock(project_path, session_id)
+            )
         }
 
         // Terminal Commands
         "save_project_commands" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let commands: Vec<serde_json::Value> = get_arg(&args, "commands")?;
-            route_async!(cmd, commands::terminal::save_project_commands(project_path, commands))
+            route_async!(
+                cmd,
+                commands::terminal::save_project_commands(project_path, commands)
+            )
         }
 
         "load_project_commands" => {
@@ -407,13 +460,19 @@ pub async fn route_config_command(
         "subscribe_push" => {
             let input: commands::push::SubscribePushInput = serde_json::from_value(args.clone())
                 .map_err(|e| format!("Invalid input: {}", e))?;
-            route_async!(cmd, commands::push::subscribe_push(input, &state.push_state))
+            route_async!(
+                cmd,
+                commands::push::subscribe_push(input, &state.push_state)
+            )
         }
 
         "unsubscribe_push" => {
             let input: commands::push::UnsubscribePushInput = serde_json::from_value(args.clone())
                 .map_err(|e| format!("Invalid input: {}", e))?;
-            route_async!(cmd, commands::push::unsubscribe_push(input, &state.push_state))
+            route_async!(
+                cmd,
+                commands::push::unsubscribe_push(input, &state.push_state)
+            )
         }
 
         "get_push_settings" => {
@@ -422,14 +481,21 @@ pub async fn route_config_command(
         }
 
         "update_push_settings" => {
-            let input: commands::push::UpdatePushSettingsInput = serde_json::from_value(args.clone())
-                .map_err(|e| format!("Invalid input: {}", e))?;
-            route_async!(cmd, commands::push::update_push_settings(input, &state.push_state))
+            let input: commands::push::UpdatePushSettingsInput =
+                serde_json::from_value(args.clone())
+                    .map_err(|e| format!("Invalid input: {}", e))?;
+            route_async!(
+                cmd,
+                commands::push::update_push_settings(input, &state.push_state)
+            )
         }
 
         "test_push" => {
             let subscription_id: String = get_arg(&args, "subscriptionId")?;
-            route_unit_async!(commands::push::test_push(subscription_id, &state.push_state))
+            route_unit_async!(commands::push::test_push(
+                subscription_id,
+                &state.push_state
+            ))
         }
 
         "list_push_subscriptions" => {
@@ -437,7 +503,10 @@ pub async fn route_config_command(
         }
 
         "get_push_subscription_count" => {
-            route_async!(cmd, commands::push::get_push_subscription_count(&state.push_state))
+            route_async!(
+                cmd,
+                commands::push::get_push_subscription_count(&state.push_state)
+            )
         }
 
         _ => Err(format!("Unknown config command: {}", cmd)),

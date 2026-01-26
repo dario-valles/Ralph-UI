@@ -8,8 +8,8 @@ use super::vapid::get_or_create_vapid_keys;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use web_push::{
-    ContentEncoding, IsahcWebPushClient, SubscriptionInfo, VapidSignatureBuilder,
-    WebPushClient, WebPushError, WebPushMessageBuilder, URL_SAFE_NO_PAD,
+    ContentEncoding, IsahcWebPushClient, SubscriptionInfo, VapidSignatureBuilder, WebPushClient,
+    WebPushError, WebPushMessageBuilder, URL_SAFE_NO_PAD,
 };
 
 /// Push notification sender
@@ -80,10 +80,7 @@ impl PushNotifier {
             {
                 Ok(()) => {
                     result.sent += 1;
-                    log::debug!(
-                        "Sent push notification to subscription {}",
-                        subscription.id
-                    );
+                    log::debug!("Sent push notification to subscription {}", subscription.id);
                 }
                 Err(e) => {
                     result.failed += 1;
@@ -188,11 +185,9 @@ impl PushNotifier {
             .clone();
         drop(subscriptions);
 
-        let payload = NotificationPayload::new(
-            "Ralph UI Test",
-            "Push notifications are working correctly!",
-        )
-        .with_tag("test");
+        let payload =
+            NotificationPayload::new("Ralph UI Test", "Push notifications are working correctly!")
+                .with_tag("test");
 
         let payload_json = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize payload: {}", e))?;

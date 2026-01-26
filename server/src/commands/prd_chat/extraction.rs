@@ -100,10 +100,9 @@ pub fn extract_user_stories(content: &str) -> Vec<String> {
     let mut stories = vec![];
 
     // Pattern: "As a [user], I want [feature] so that [benefit]"
-    let user_story_pattern = Regex::new(
-        r"(?i)as (?:a|an) ([^,]+),?\s*I want ([^,]+?)(?:,?\s*so that ([^\n.]+))?",
-    )
-    .unwrap();
+    let user_story_pattern =
+        Regex::new(r"(?i)as (?:a|an) ([^,]+),?\s*I want ([^,]+?)(?:,?\s*so that ([^\n.]+))?")
+            .unwrap();
 
     for cap in user_story_pattern.captures_iter(content) {
         let user = cap.get(1).map_or("", |m| m.as_str()).trim();
@@ -395,7 +394,8 @@ pub fn extract_acceptance_criteria(content: &str) -> Vec<String> {
     }
 
     // Look for "verify that" or "ensure that" patterns
-    let verify_pattern = Regex::new(r"(?i)(?:verify|ensure|confirm|check) that\s+([^\n.]+)").unwrap();
+    let verify_pattern =
+        Regex::new(r"(?i)(?:verify|ensure|confirm|check) that\s+([^\n.]+)").unwrap();
 
     for cap in verify_pattern.captures_iter(content) {
         if let Some(m) = cap.get(1) {

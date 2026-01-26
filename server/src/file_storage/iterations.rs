@@ -216,7 +216,10 @@ pub fn get_execution_stats(project_path: &Path, execution_id: &str) -> FileResul
 }
 
 /// Delete iterations for an execution
-pub fn delete_iterations_for_execution(project_path: &Path, execution_id: &str) -> FileResult<usize> {
+pub fn delete_iterations_for_execution(
+    project_path: &Path,
+    execution_id: &str,
+) -> FileResult<usize> {
     let file_path = get_execution_file_path(project_path, execution_id);
 
     if !file_path.exists() {
@@ -244,7 +247,11 @@ pub fn save_execution_state(
 }
 
 /// Update heartbeat for an execution
-pub fn update_heartbeat(project_path: &Path, execution_id: &str, heartbeat: &str) -> FileResult<usize> {
+pub fn update_heartbeat(
+    project_path: &Path,
+    execution_id: &str,
+    heartbeat: &str,
+) -> FileResult<usize> {
     let mut file = get_or_create_execution_file(project_path, execution_id)?;
     file.last_heartbeat = Some(heartbeat.to_string());
     save_execution_file(project_path, &file)?;
@@ -474,7 +481,9 @@ mod tests {
         // Update heartbeat
         update_heartbeat(temp_dir.path(), "exec-1", "2024-01-01T00:01:00Z").unwrap();
 
-        let retrieved = get_execution_state(temp_dir.path(), "exec-1").unwrap().unwrap();
+        let retrieved = get_execution_state(temp_dir.path(), "exec-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(retrieved.last_heartbeat, "2024-01-01T00:01:00Z");
 
         // Delete
@@ -491,7 +500,8 @@ mod tests {
         record.completed_at = None;
         insert_iteration(temp_dir.path(), &record).unwrap();
 
-        let updated = mark_interrupted_iterations(temp_dir.path(), "exec-1", "2024-01-01T00:05:00Z").unwrap();
+        let updated =
+            mark_interrupted_iterations(temp_dir.path(), "exec-1", "2024-01-01T00:05:00Z").unwrap();
 
         assert_eq!(updated, 1);
 

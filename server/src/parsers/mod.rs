@@ -1,10 +1,10 @@
 // PRD (Product Requirements Document) parsers
 
-pub mod types;
 pub mod json;
-pub mod yaml;
 pub mod markdown;
 pub mod structured_output;
+pub mod types;
+pub mod yaml;
 
 use anyhow::{anyhow, Result};
 pub use types::{PRDDocument, PRDTask};
@@ -76,14 +76,20 @@ mod tests {
         assert_eq!(PRDFormat::from_extension("yaml"), Some(PRDFormat::Yaml));
         assert_eq!(PRDFormat::from_extension("yml"), Some(PRDFormat::Yaml));
         assert_eq!(PRDFormat::from_extension("md"), Some(PRDFormat::Markdown));
-        assert_eq!(PRDFormat::from_extension("markdown"), Some(PRDFormat::Markdown));
+        assert_eq!(
+            PRDFormat::from_extension("markdown"),
+            Some(PRDFormat::Markdown)
+        );
         assert_eq!(PRDFormat::from_extension("txt"), None);
     }
 
     #[test]
     fn test_format_from_path() {
         assert_eq!(PRDFormat::from_path("tasks.json"), Some(PRDFormat::Json));
-        assert_eq!(PRDFormat::from_path("/path/to/prd.yaml"), Some(PRDFormat::Yaml));
+        assert_eq!(
+            PRDFormat::from_path("/path/to/prd.yaml"),
+            Some(PRDFormat::Yaml)
+        );
         assert_eq!(PRDFormat::from_path("README.md"), Some(PRDFormat::Markdown));
         assert_eq!(PRDFormat::from_path("file.txt"), None);
     }

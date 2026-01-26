@@ -93,7 +93,10 @@ impl RequirementsDoc {
     /// Generate the next REQ-ID for a category
     pub fn next_id(&mut self, category: &RequirementCategory) -> String {
         let prefix = category.prefix();
-        let counter = self.category_counters.entry(prefix.to_string()).or_insert(0);
+        let counter = self
+            .category_counters
+            .entry(prefix.to_string())
+            .or_insert(0);
         *counter += 1;
         format!("{}-{:02}", prefix, counter)
     }
@@ -125,7 +128,8 @@ impl RequirementsDoc {
                 }
             }
         }
-        self.requirements.insert(requirement.id.clone(), requirement);
+        self.requirements
+            .insert(requirement.id.clone(), requirement);
     }
 
     /// Get a requirement by ID
@@ -265,16 +269,28 @@ pub fn generate_requirements_from_research(
         // Detect category headers
         if trimmed.starts_with("## ") || trimmed.starts_with("### ") {
             let header = trimmed.trim_start_matches('#').trim().to_lowercase();
-            if header.contains("authentication") || header.contains("auth") || header.contains("security") {
+            if header.contains("authentication")
+                || header.contains("auth")
+                || header.contains("security")
+            {
                 current_category = RequirementCategory::Security;
                 in_feature_section = true;
-            } else if header.contains("user interface") || header.contains("ui") || header.contains("frontend") {
+            } else if header.contains("user interface")
+                || header.contains("ui")
+                || header.contains("frontend")
+            {
                 current_category = RequirementCategory::Ui;
                 in_feature_section = true;
-            } else if header.contains("api") || header.contains("backend") || header.contains("server") {
+            } else if header.contains("api")
+                || header.contains("backend")
+                || header.contains("server")
+            {
                 current_category = RequirementCategory::Integration;
                 in_feature_section = true;
-            } else if header.contains("data") || header.contains("storage") || header.contains("database") {
+            } else if header.contains("data")
+                || header.contains("storage")
+                || header.contains("database")
+            {
                 current_category = RequirementCategory::Data;
                 in_feature_section = true;
             } else if header.contains("performance") || header.contains("optimization") {
@@ -283,17 +299,25 @@ pub fn generate_requirements_from_research(
             } else if header.contains("integration") || header.contains("external") {
                 current_category = RequirementCategory::Integration;
                 in_feature_section = true;
-            } else if header.contains("feature") || header.contains("core") || header.contains("functionality") {
+            } else if header.contains("feature")
+                || header.contains("core")
+                || header.contains("functionality")
+            {
                 current_category = RequirementCategory::Core;
                 in_feature_section = true;
-            } else if header.contains("pitfall") || header.contains("risk") || header.contains("avoid") {
+            } else if header.contains("pitfall")
+                || header.contains("risk")
+                || header.contains("avoid")
+            {
                 in_feature_section = false; // Skip pitfalls section
             }
             continue;
         }
 
         // Parse list items as potential requirements
-        if in_feature_section && (trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("• ")) {
+        if in_feature_section
+            && (trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("• "))
+        {
             let content = trimmed
                 .trim_start_matches("- ")
                 .trim_start_matches("* ")
@@ -317,10 +341,22 @@ pub fn generate_requirements_from_research(
             // Extract title and description
             let (title, description) = if content.contains(':') {
                 let parts: Vec<&str> = content.splitn(2, ':').collect();
-                (parts[0].trim().to_string(), parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default())
+                (
+                    parts[0].trim().to_string(),
+                    parts
+                        .get(1)
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_default(),
+                )
             } else if content.contains(" - ") {
                 let parts: Vec<&str> = content.splitn(2, " - ").collect();
-                (parts[0].trim().to_string(), parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default())
+                (
+                    parts[0].trim().to_string(),
+                    parts
+                        .get(1)
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_default(),
+                )
             } else {
                 // Use the whole content as both title and description
                 let title = if content.len() > 60 {
@@ -341,7 +377,10 @@ pub fn generate_requirements_from_research(
         // Extract key terms from project context
         let context_lower = project_context.to_lowercase();
 
-        if context_lower.contains("auth") || context_lower.contains("login") || context_lower.contains("user") {
+        if context_lower.contains("auth")
+            || context_lower.contains("login")
+            || context_lower.contains("user")
+        {
             doc.add_requirement(
                 RequirementCategory::Security,
                 "User Authentication".to_string(),
@@ -357,7 +396,10 @@ pub fn generate_requirements_from_research(
             );
         }
 
-        if context_lower.contains("ui") || context_lower.contains("interface") || context_lower.contains("dashboard") {
+        if context_lower.contains("ui")
+            || context_lower.contains("interface")
+            || context_lower.contains("dashboard")
+        {
             doc.add_requirement(
                 RequirementCategory::Ui,
                 "User Interface".to_string(),
@@ -424,15 +466,28 @@ pub enum QualityIssueType {
 
 /// Words that indicate vagueness
 const VAGUE_WORDS: &[&str] = &[
-    "good", "fast", "simple", "easy", "efficient", "better", "nice",
-    "intuitive", "user-friendly", "robust", "scalable", "flexible",
-    "seamless", "smooth", "elegant", "clean", "modern", "powerful",
+    "good",
+    "fast",
+    "simple",
+    "easy",
+    "efficient",
+    "better",
+    "nice",
+    "intuitive",
+    "user-friendly",
+    "robust",
+    "scalable",
+    "flexible",
+    "seamless",
+    "smooth",
+    "elegant",
+    "clean",
+    "modern",
+    "powerful",
 ];
 
 /// Words that indicate non-atomic requirements
-const COMPOUND_WORDS: &[&str] = &[
-    " and ", " as well as ", " also ", " plus ", " along with ",
-];
+const COMPOUND_WORDS: &[&str] = &[" and ", " as well as ", " also ", " plus ", " along with "];
 
 /// Validate a single requirement for quality
 pub fn validate_requirement(req: &Requirement) -> RequirementQualityResult {
@@ -471,9 +526,17 @@ pub fn validate_requirement(req: &Requirement) -> RequirementQualityResult {
 
     // Check if user-centric (should reference user actions)
     let user_centric_patterns = [
-        "user can", "users can", "user should", "users should",
-        "allow user", "enable user", "let user", "user must",
-        "as a user", "the user", "a user",
+        "user can",
+        "users can",
+        "user should",
+        "users should",
+        "allow user",
+        "enable user",
+        "let user",
+        "user must",
+        "as a user",
+        "the user",
+        "a user",
     ];
     let is_user_centric = user_centric_patterns
         .iter()
@@ -536,10 +599,7 @@ pub fn calculate_quality_score(doc: &RequirementsDoc) -> u32 {
     let results = validate_requirements_doc(doc);
     let total = results.len() as f64;
     let valid = results.iter().filter(|r| r.is_valid).count() as f64;
-    let low_issue_count = results
-        .iter()
-        .filter(|r| r.issues.len() <= 1)
-        .count() as f64;
+    let low_issue_count = results.iter().filter(|r| r.issues.len() <= 1).count() as f64;
 
     // Score based on: 50% valid requirements, 50% low issue count
     let score = ((valid / total) * 50.0 + (low_issue_count / total) * 50.0) as u32;
@@ -626,11 +686,7 @@ mod tests {
             "B".to_string(),
             "Desc".to_string(),
         );
-        doc.add_requirement(
-            RequirementCategory::Ui,
-            "C".to_string(),
-            "Desc".to_string(),
-        );
+        doc.add_requirement(RequirementCategory::Ui, "C".to_string(), "Desc".to_string());
 
         let selection = ScopeSelection {
             v1: vec!["CORE-01".to_string()],

@@ -24,7 +24,11 @@ struct Cli {
 
     /// Allowed CORS origins (can be specified multiple times, or set RALPH_CORS_ORIGINS as comma-separated list)
     /// If not provided, all origins are allowed
-    #[arg(long = "cors-origin", env = "RALPH_CORS_ORIGINS", value_delimiter = ',')]
+    #[arg(
+        long = "cors-origin",
+        env = "RALPH_CORS_ORIGINS",
+        value_delimiter = ','
+    )]
     cors_origins: Option<Vec<String>>,
 }
 
@@ -87,8 +91,9 @@ fn run_server(port: u16, bind: &str, token: Option<String>, cors_origins: Option
         let agent_manager = Arc::new(std::sync::Mutex::new(agent_manager));
 
         // Initialize Plugin Registry
-        let plugin_registry =
-            Arc::new(std::sync::Mutex::new(ralph_ui_lib::plugins::PluginRegistry::new()));
+        let plugin_registry = Arc::new(std::sync::Mutex::new(
+            ralph_ui_lib::plugins::PluginRegistry::new(),
+        ));
 
         // Initialize Ralph loop state
         let ralph_loop_state = ralph_ui_lib::commands::ralph_loop::RalphLoopManagerState::new();
@@ -124,7 +129,10 @@ fn run_server(port: u16, bind: &str, token: Option<String>, cors_origins: Option
         tokio::spawn(forward_tool_call_events(broadcaster, tool_call_rx));
 
         let broadcaster = state.broadcaster.clone();
-        tokio::spawn(forward_tool_call_complete_events(broadcaster, tool_call_complete_rx));
+        tokio::spawn(forward_tool_call_complete_events(
+            broadcaster,
+            tool_call_complete_rx,
+        ));
 
         // Run the server
         if let Err(e) = server::run_server(port, bind, state, cors_origins).await {

@@ -116,8 +116,9 @@ pub fn calculate_quality_assessment(
         completeness_score += 15;
     } else {
         missing_sections.push("Functional Requirements".to_string());
-        suggestions
-            .push("List what the system must do using 'must', 'shall', or 'should' language".to_string());
+        suggestions.push(
+            "List what the system must do using 'must', 'shall', or 'should' language".to_string(),
+        );
     }
 
     if !extracted.tasks.is_empty() {
@@ -274,7 +275,8 @@ pub fn calculate_quality_from_markdown(content: &str, prd_type: Option<&str>) ->
         completeness_score += 15;
     } else {
         missing_sections.push("Functional Requirements".to_string());
-        suggestions.push("List what the system must do using clear requirement language".to_string());
+        suggestions
+            .push("List what the system must do using clear requirement language".to_string());
     }
 
     // Tasks / Implementation - Check for various common patterns
@@ -667,9 +669,11 @@ fn add_type_specific_suggestions(
             }) {
                 suggestions.push("Document technology stack choices".to_string());
             }
-            if !extracted.technical_constraints.iter().any(|c| {
-                c.to_lowercase().contains("deploy") || c.to_lowercase().contains("host")
-            }) {
+            if !extracted
+                .technical_constraints
+                .iter()
+                .any(|c| c.to_lowercase().contains("deploy") || c.to_lowercase().contains("host"))
+            {
                 suggestions.push("Include deployment and hosting strategy".to_string());
             }
         }
@@ -812,9 +816,7 @@ pub fn generate_guided_questions(prd_type: PRDType) -> Vec<GuidedQuestion> {
                     question_type: QuestionType::FreeText,
                     options: None,
                     required: true,
-                    hint: Some(
-                        "Name of the service and link to API docs if available".to_string(),
-                    ),
+                    hint: Some("Name of the service and link to API docs if available".to_string()),
                 },
                 GuidedQuestion {
                     id: "auth_method".to_string(),

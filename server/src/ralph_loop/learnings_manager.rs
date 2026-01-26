@@ -112,7 +112,11 @@ impl LearningEntry {
     }
 
     /// Create a new learning with a type
-    pub fn with_type(iteration: u32, learning_type: LearningType, content: impl Into<String>) -> Self {
+    pub fn with_type(
+        iteration: u32,
+        learning_type: LearningType,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             iteration,
@@ -199,7 +203,10 @@ impl LearningsFile {
 
     /// Get learnings for a specific iteration
     pub fn get_for_iteration(&self, iteration: u32) -> Vec<&LearningEntry> {
-        self.entries.iter().filter(|e| e.iteration == iteration).collect()
+        self.entries
+            .iter()
+            .filter(|e| e.iteration == iteration)
+            .collect()
     }
 
     /// Get count by type
@@ -265,23 +272,33 @@ impl LearningsFile {
         let code_lower = code.to_lowercase();
 
         // Rust patterns
-        if code.contains("fn ") || code.contains("let mut ")
-            || code.contains("impl ") || code.contains("pub fn")
+        if code.contains("fn ")
+            || code.contains("let mut ")
+            || code.contains("impl ")
+            || code.contains("pub fn")
             || code.contains("::") && (code.contains("Result<") || code.contains("Option<"))
-            || code.contains("unwrap()") || code.contains(".map_err(")
+            || code.contains("unwrap()")
+            || code.contains(".map_err(")
         {
             return "rust";
         }
 
         // TypeScript/JavaScript patterns
-        if code.contains("const ") || code.contains("interface ")
-            || code.contains("export ") || code.contains("import ")
-            || code.contains("=> {") || code.contains("useState")
-            || code.contains(": string") || code.contains(": number")
-            || code.contains("async function") || code.contains(".tsx")
+        if code.contains("const ")
+            || code.contains("interface ")
+            || code.contains("export ")
+            || code.contains("import ")
+            || code.contains("=> {")
+            || code.contains("useState")
+            || code.contains(": string")
+            || code.contains(": number")
+            || code.contains("async function")
+            || code.contains(".tsx")
         {
-            if code.contains(": string") || code.contains(": number")
-                || code.contains("interface ") || code.contains("<T>")
+            if code.contains(": string")
+                || code.contains(": number")
+                || code.contains("interface ")
+                || code.contains("<T>")
             {
                 return "typescript";
             }
@@ -289,25 +306,30 @@ impl LearningsFile {
         }
 
         // Python patterns
-        if code.contains("def ") || code.contains("import ")
-            || code_lower.contains("self.") || code.contains("__init__")
-            || code.contains("elif ") || code.contains("print(")
+        if code.contains("def ")
+            || code.contains("import ")
+            || code_lower.contains("self.")
+            || code.contains("__init__")
+            || code.contains("elif ")
+            || code.contains("print(")
         {
             return "python";
         }
 
         // JSON patterns
-        if code.trim().starts_with('{') && code.trim().ends_with('}')
-            && code.contains("\":")
-        {
+        if code.trim().starts_with('{') && code.trim().ends_with('}') && code.contains("\":") {
             return "json";
         }
 
         // Shell/bash patterns
-        if code.contains("#!/") || code.starts_with("$")
-            || code.contains("&&") || code.contains("echo ")
-            || code.contains("cargo ") || code.contains("npm ")
-            || code.contains("bun ") || code.contains("git ")
+        if code.contains("#!/")
+            || code.starts_with("$")
+            || code.contains("&&")
+            || code.contains("echo ")
+            || code.contains("cargo ")
+            || code.contains("npm ")
+            || code.contains("bun ")
+            || code.contains("git ")
         {
             return "bash";
         }
@@ -320,10 +342,7 @@ impl LearningsFile {
     pub fn export_to_markdown(&self) -> String {
         let mut output = String::new();
         output.push_str("# Accumulated Learnings\n\n");
-        output.push_str(&format!(
-            "Generated: {}\n",
-            chrono::Utc::now().to_rfc3339()
-        ));
+        output.push_str(&format!("Generated: {}\n", chrono::Utc::now().to_rfc3339()));
         output.push_str(&format!("Total iterations: {}\n\n", self.total_iterations));
 
         output.push_str(&self.format_for_brief());
@@ -632,9 +651,18 @@ mod tests {
 
     #[test]
     fn test_learning_type_from_str() {
-        assert_eq!("architecture".parse::<LearningType>().unwrap(), LearningType::Architecture);
-        assert_eq!("gotcha".parse::<LearningType>().unwrap(), LearningType::Gotcha);
-        assert_eq!("PATTERN".parse::<LearningType>().unwrap(), LearningType::Pattern);
+        assert_eq!(
+            "architecture".parse::<LearningType>().unwrap(),
+            LearningType::Architecture
+        );
+        assert_eq!(
+            "gotcha".parse::<LearningType>().unwrap(),
+            LearningType::Gotcha
+        );
+        assert_eq!(
+            "PATTERN".parse::<LearningType>().unwrap(),
+            LearningType::Pattern
+        );
         assert!("unknown".parse::<LearningType>().is_err());
     }
 
@@ -686,9 +714,21 @@ mod tests {
     fn test_learnings_file_get_by_type() {
         let mut file = LearningsFile::default();
 
-        file.add_entry(LearningEntry::with_type(1, LearningType::Gotcha, "Gotcha 1"));
-        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Pattern 1"));
-        file.add_entry(LearningEntry::with_type(2, LearningType::Gotcha, "Gotcha 2"));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Gotcha,
+            "Gotcha 1",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Pattern,
+            "Pattern 1",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            2,
+            LearningType::Gotcha,
+            "Gotcha 2",
+        ));
 
         let gotchas = file.get_by_type(LearningType::Gotcha);
         assert_eq!(gotchas.len(), 2);
@@ -701,8 +741,16 @@ mod tests {
     fn test_learnings_file_format_for_brief() {
         let mut file = LearningsFile::default();
 
-        file.add_entry(LearningEntry::with_type(1, LearningType::Gotcha, "Watch out for X"));
-        file.add_entry(LearningEntry::with_type(2, LearningType::Pattern, "Use pattern Y"));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Gotcha,
+            "Watch out for X",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            2,
+            LearningType::Pattern,
+            "Use pattern Y",
+        ));
 
         let formatted = file.format_for_brief();
         assert!(formatted.contains("### Gotcha"));
@@ -757,7 +805,9 @@ mod tests {
         let temp_dir = setup_test_dir();
         let manager = LearningsManager::new(temp_dir.path(), "test-prd");
 
-        manager.add_typed(1, LearningType::Gotcha, "Watch out!").unwrap();
+        manager
+            .add_typed(1, LearningType::Gotcha, "Watch out!")
+            .unwrap();
 
         let counts = manager.get_counts().unwrap();
         assert_eq!(counts.get(&LearningType::Gotcha), Some(&1));
@@ -768,8 +818,12 @@ mod tests {
         let temp_dir = setup_test_dir();
         let manager = LearningsManager::new(temp_dir.path(), "test-prd");
 
-        manager.add_typed(1, LearningType::Pattern, "Use pattern X").unwrap();
-        manager.add_typed(2, LearningType::Gotcha, "Avoid Y").unwrap();
+        manager
+            .add_typed(1, LearningType::Pattern, "Use pattern X")
+            .unwrap();
+        manager
+            .add_typed(2, LearningType::Gotcha, "Avoid Y")
+            .unwrap();
 
         let formatted = manager.format_for_brief().unwrap();
         assert!(formatted.contains("### Gotcha"));
@@ -836,7 +890,10 @@ More output
         let learnings = LearningsManager::parse_learnings_from_output(output);
         assert_eq!(learnings.len(), 1);
         assert_eq!(learnings[0].learning_type, LearningType::Pattern);
-        assert_eq!(learnings[0].content, "Use atomic writes for file operations");
+        assert_eq!(
+            learnings[0].content,
+            "Use atomic writes for file operations"
+        );
         assert!(learnings[0].code_example.is_none());
     }
 
@@ -899,7 +956,11 @@ Some other text here
             let output = format!(r#"<learning type="{}">Test content</learning>"#, type_str);
             let learnings = LearningsManager::parse_learnings_from_output(&output);
             assert_eq!(learnings.len(), 1);
-            assert_eq!(learnings[0].learning_type, expected_type, "Failed for type: {}", type_str);
+            assert_eq!(
+                learnings[0].learning_type, expected_type,
+                "Failed for type: {}",
+                type_str
+            );
         }
     }
 
@@ -954,7 +1015,9 @@ if value.is_none() { return Err(...) }
 Task complete!
 "#;
 
-        let count = manager.extract_and_save_learnings(output, 1, Some("US-1.1")).unwrap();
+        let count = manager
+            .extract_and_save_learnings(output, 1, Some("US-1.1"))
+            .unwrap();
         assert_eq!(count, 2);
 
         // Verify they were saved
@@ -993,11 +1056,21 @@ Task complete!
         let manager = LearningsManager::new(temp_dir.path(), "test-prd");
 
         // Add learnings of different types
-        manager.add_typed(1, LearningType::Architecture, "Codebase uses MVC pattern").unwrap();
-        manager.add_typed(1, LearningType::Gotcha, "Watch out for async timing").unwrap();
-        manager.add_typed(2, LearningType::Pattern, "Use builder pattern for configs").unwrap();
-        manager.add_typed(2, LearningType::Testing, "Always test edge cases").unwrap();
-        manager.add_typed(3, LearningType::Tooling, "Run cargo fmt before commit").unwrap();
+        manager
+            .add_typed(1, LearningType::Architecture, "Codebase uses MVC pattern")
+            .unwrap();
+        manager
+            .add_typed(1, LearningType::Gotcha, "Watch out for async timing")
+            .unwrap();
+        manager
+            .add_typed(2, LearningType::Pattern, "Use builder pattern for configs")
+            .unwrap();
+        manager
+            .add_typed(2, LearningType::Testing, "Always test edge cases")
+            .unwrap();
+        manager
+            .add_typed(3, LearningType::Tooling, "Run cargo fmt before commit")
+            .unwrap();
 
         let file = manager.read().unwrap();
 
@@ -1031,8 +1104,12 @@ Task complete!
         // Session 1: Add learnings
         {
             let manager = LearningsManager::new(temp_dir.path(), "test-prd");
-            manager.add_typed(1, LearningType::Pattern, "Learning from session 1").unwrap();
-            manager.add_typed(2, LearningType::Gotcha, "Another learning").unwrap();
+            manager
+                .add_typed(1, LearningType::Pattern, "Learning from session 1")
+                .unwrap();
+            manager
+                .add_typed(2, LearningType::Gotcha, "Another learning")
+                .unwrap();
         }
 
         // Session 2: Verify learnings persisted
@@ -1042,7 +1119,9 @@ Task complete!
             assert_eq!(file.entries.len(), 2);
 
             // Add more learnings
-            manager.add_typed(3, LearningType::Architecture, "New learning").unwrap();
+            manager
+                .add_typed(3, LearningType::Architecture, "New learning")
+                .unwrap();
         }
 
         // Session 3: Verify all learnings present
@@ -1095,10 +1174,26 @@ Task complete!
         // US-3.2: Learnings grouped by type for easy scanning
         let mut file = LearningsFile::default();
 
-        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Pattern A"));
-        file.add_entry(LearningEntry::with_type(2, LearningType::Gotcha, "Gotcha A"));
-        file.add_entry(LearningEntry::with_type(3, LearningType::Architecture, "Arch A"));
-        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Pattern B"));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Pattern,
+            "Pattern A",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            2,
+            LearningType::Gotcha,
+            "Gotcha A",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            3,
+            LearningType::Architecture,
+            "Arch A",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Pattern,
+            "Pattern B",
+        ));
 
         let formatted = file.format_for_brief();
 
@@ -1110,7 +1205,10 @@ Task complete!
         // Verify Gotcha comes before Pattern (prioritized as more actionable)
         let gotcha_pos = formatted.find("### Gotcha").unwrap();
         let pattern_pos = formatted.find("### Pattern").unwrap();
-        assert!(gotcha_pos < pattern_pos, "Gotcha should appear before Pattern");
+        assert!(
+            gotcha_pos < pattern_pos,
+            "Gotcha should appear before Pattern"
+        );
     }
 
     #[test]
@@ -1119,14 +1217,17 @@ Task complete!
         let mut file = LearningsFile::default();
 
         let rust_code = "fn main() {\n    let x = 5;\n    println!(\"{}\", x);\n}";
-        let entry = LearningEntry::with_type(1, LearningType::Pattern, "Rust example")
-            .with_code(rust_code);
+        let entry =
+            LearningEntry::with_type(1, LearningType::Pattern, "Rust example").with_code(rust_code);
         file.add_entry(entry);
 
         let formatted = file.format_for_brief();
 
         // Should contain rust language specifier
-        assert!(formatted.contains("```rust"), "Should have rust syntax highlighting");
+        assert!(
+            formatted.contains("```rust"),
+            "Should have rust syntax highlighting"
+        );
         assert!(formatted.contains("fn main()"));
     }
 
@@ -1136,7 +1237,8 @@ Task complete!
         let mut file = LearningsFile::default();
 
         // Use clearer TypeScript-specific syntax with type annotations
-        let ts_code = "interface Config { name: string; value: number }\nconst x: string = 'hello';";
+        let ts_code =
+            "interface Config { name: string; value: number }\nconst x: string = 'hello';";
         let entry = LearningEntry::with_type(1, LearningType::Pattern, "TypeScript example")
             .with_code(ts_code);
         file.add_entry(entry);
@@ -1144,7 +1246,10 @@ Task complete!
         let formatted = file.format_for_brief();
 
         // Should contain typescript language specifier
-        assert!(formatted.contains("```typescript"), "Should have typescript syntax highlighting");
+        assert!(
+            formatted.contains("```typescript"),
+            "Should have typescript syntax highlighting"
+        );
     }
 
     #[test]
@@ -1160,7 +1265,10 @@ Task complete!
         let formatted = file.format_for_brief();
 
         // Should contain bash language specifier
-        assert!(formatted.contains("```bash"), "Should have bash syntax highlighting");
+        assert!(
+            formatted.contains("```bash"),
+            "Should have bash syntax highlighting"
+        );
     }
 
     #[test]
@@ -1169,9 +1277,21 @@ Task complete!
         let mut file = LearningsFile::default();
 
         // Add learnings in order: iter 1, iter 3, iter 2
-        file.add_entry(LearningEntry::with_type(1, LearningType::Pattern, "Old pattern from iter 1"));
-        file.add_entry(LearningEntry::with_type(3, LearningType::Pattern, "Newest pattern from iter 3"));
-        file.add_entry(LearningEntry::with_type(2, LearningType::Pattern, "Middle pattern from iter 2"));
+        file.add_entry(LearningEntry::with_type(
+            1,
+            LearningType::Pattern,
+            "Old pattern from iter 1",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            3,
+            LearningType::Pattern,
+            "Newest pattern from iter 3",
+        ));
+        file.add_entry(LearningEntry::with_type(
+            2,
+            LearningType::Pattern,
+            "Middle pattern from iter 2",
+        ));
 
         let formatted = file.format_for_brief();
 
@@ -1187,33 +1307,66 @@ Task complete!
     #[test]
     fn test_detect_code_language_rust() {
         assert_eq!(LearningsFile::detect_code_language("fn main() {}"), "rust");
-        assert_eq!(LearningsFile::detect_code_language("let mut x = 5;"), "rust");
-        assert_eq!(LearningsFile::detect_code_language("impl Foo for Bar"), "rust");
-        assert_eq!(LearningsFile::detect_code_language("pub fn test() { x.unwrap() }"), "rust");
+        assert_eq!(
+            LearningsFile::detect_code_language("let mut x = 5;"),
+            "rust"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("impl Foo for Bar"),
+            "rust"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("pub fn test() { x.unwrap() }"),
+            "rust"
+        );
     }
 
     #[test]
     fn test_detect_code_language_typescript() {
-        assert_eq!(LearningsFile::detect_code_language("const x: string = 'hello'"), "typescript");
-        assert_eq!(LearningsFile::detect_code_language("interface Foo { bar: number }"), "typescript");
+        assert_eq!(
+            LearningsFile::detect_code_language("const x: string = 'hello'"),
+            "typescript"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("interface Foo { bar: number }"),
+            "typescript"
+        );
     }
 
     #[test]
     fn test_detect_code_language_javascript() {
-        assert_eq!(LearningsFile::detect_code_language("const x = () => {}"), "javascript");
-        assert_eq!(LearningsFile::detect_code_language("export default function foo()"), "javascript");
+        assert_eq!(
+            LearningsFile::detect_code_language("const x = () => {}"),
+            "javascript"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("export default function foo()"),
+            "javascript"
+        );
     }
 
     #[test]
     fn test_detect_code_language_bash() {
-        assert_eq!(LearningsFile::detect_code_language("cargo build && cargo test"), "bash");
-        assert_eq!(LearningsFile::detect_code_language("npm install express"), "bash");
-        assert_eq!(LearningsFile::detect_code_language("git commit -m 'test'"), "bash");
+        assert_eq!(
+            LearningsFile::detect_code_language("cargo build && cargo test"),
+            "bash"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("npm install express"),
+            "bash"
+        );
+        assert_eq!(
+            LearningsFile::detect_code_language("git commit -m 'test'"),
+            "bash"
+        );
     }
 
     #[test]
     fn test_detect_code_language_json() {
-        assert_eq!(LearningsFile::detect_code_language("{\"key\": \"value\"}"), "json");
+        assert_eq!(
+            LearningsFile::detect_code_language("{\"key\": \"value\"}"),
+            "json"
+        );
     }
 
     #[test]

@@ -342,10 +342,7 @@ async fn handle_pty_io(
     output_task.abort();
     state.pty_registry.mark_disconnected(&session_id).await;
 
-    log::info!(
-        "PTY client disconnected, session preserved: {}",
-        session_id
-    );
+    log::info!("PTY client disconnected, session preserved: {}", session_id);
 }
 
 #[cfg(test)]

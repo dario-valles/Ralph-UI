@@ -159,11 +159,7 @@ impl SessionRecovery {
             match self.recover_session(&session.session_id) {
                 Ok(result) => results.push(result),
                 Err(e) => {
-                    log::warn!(
-                        "Failed to recover session {}: {}",
-                        session.session_id,
-                        e
-                    );
+                    log::warn!("Failed to recover session {}: {}", session.session_id, e);
                 }
             }
         }

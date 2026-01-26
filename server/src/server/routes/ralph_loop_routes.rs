@@ -218,11 +218,17 @@ pub async fn route_ralph_loop_command(
         }
 
         "list_ralph_loop_executions" => {
-            route_sync!(commands::ralph_loop::list_ralph_loop_executions(&state.ralph_loop_state))
+            route_sync!(commands::ralph_loop::list_ralph_loop_executions(
+                &state.ralph_loop_state
+            ))
         }
 
         "list_ralph_loop_executions_with_details" => {
-            route_sync!(commands::ralph_loop::list_ralph_loop_executions_with_details(&state.ralph_loop_state))
+            route_sync!(
+                commands::ralph_loop::list_ralph_loop_executions_with_details(
+                    &state.ralph_loop_state
+                )
+            )
         }
 
         "get_ralph_iteration_history" => {
@@ -441,7 +447,8 @@ pub async fn route_ralph_loop_command(
             let request: commands::ralph_loop::RegenerateStoriesRequest =
                 get_arg(&args, "request")?;
             // Use server-compatible version with EventBroadcaster for streaming
-            let response = super::regenerate_ralph_prd_stories_server(request, &state.broadcaster).await?;
+            let response =
+                super::regenerate_ralph_prd_stories_server(request, &state.broadcaster).await?;
             serde_json::to_value(response).map_err(|e| e.to_string())
         }
 
@@ -460,8 +467,12 @@ pub async fn route_ralph_loop_command(
 
         "get_ralph_loop_state" => get_snapshot_field(state, &args, |s| s.state.clone()),
         "get_ralph_loop_metrics" => get_snapshot_field(state, &args, |s| s.metrics.clone()),
-        "get_ralph_loop_current_agent" => get_snapshot_field(state, &args, |s| s.current_agent_id.clone()),
-        "get_ralph_loop_worktree_path" => get_snapshot_field(state, &args, |s| s.worktree_path.clone()),
+        "get_ralph_loop_current_agent" => {
+            get_snapshot_field(state, &args, |s| s.current_agent_id.clone())
+        }
+        "get_ralph_loop_worktree_path" => {
+            get_snapshot_field(state, &args, |s| s.worktree_path.clone())
+        }
 
         "get_ralph_loop_snapshot" => {
             let execution_id: String = get_arg(&args, "executionId")?;

@@ -4,7 +4,9 @@
 //! This allows notifications to be sent regardless of which project is active.
 
 use super::types::{PushNotificationSettings, PushSubscription};
-use crate::file_storage::{get_global_ralph_ui_dir, init_global_ralph_ui_dir, read_json, write_json};
+use crate::file_storage::{
+    get_global_ralph_ui_dir, init_global_ralph_ui_dir, read_json, write_json,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -126,7 +128,10 @@ pub fn get_push_subscription_settings(
     subscription_id: &str,
 ) -> Result<Option<PushNotificationSettings>, String> {
     let data = load_subscriptions()?;
-    Ok(data.subscriptions.get(subscription_id).map(|s| s.settings.clone()))
+    Ok(data
+        .subscriptions
+        .get(subscription_id)
+        .map(|s| s.settings.clone()))
 }
 
 #[cfg(test)]

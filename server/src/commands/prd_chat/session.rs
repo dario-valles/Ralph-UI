@@ -119,7 +119,10 @@ pub async fn list_prd_chat_sessions(project_path: String) -> Result<Vec<ChatSess
 }
 
 /// Delete a chat session and all its messages
-pub async fn delete_prd_chat_session(session_id: String, project_path: String) -> Result<(), String> {
+pub async fn delete_prd_chat_session(
+    session_id: String,
+    project_path: String,
+) -> Result<(), String> {
     let project_path_obj = as_path(&project_path);
 
     // Delete session (messages are embedded in the file)
@@ -204,13 +207,9 @@ pub async fn check_agent_availability(
     };
 
     // Check if the program exists in PATH using `which` on Unix or `where` on Windows
-    let check_result = std::process::Command::new(if cfg!(windows) {
-        "where"
-    } else {
-        "which"
-    })
-    .arg(program)
-    .output();
+    let check_result = std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
+        .arg(program)
+        .output();
 
     match check_result {
         Ok(output) => {

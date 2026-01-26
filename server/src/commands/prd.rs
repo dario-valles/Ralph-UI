@@ -35,7 +35,10 @@ fn extract_markdown_title(content: &str, fallback_name: &str) -> String {
         .map(|line| line.trim_start_matches("# ").trim().to_string())
         .unwrap_or_else(|| {
             // Convert filename to title (e.g., "new-feature-prd" -> "New Feature Prd")
-            let name_part = fallback_name.rsplitn(2, '-').last().unwrap_or(fallback_name);
+            let name_part = fallback_name
+                .rsplitn(2, '-')
+                .last()
+                .unwrap_or(fallback_name);
             name_part
                 .split('-')
                 .map(|word| {
@@ -119,7 +122,10 @@ pub async fn scan_prd_files(project_path: String) -> Result<Vec<PRDFile>, String
             continue;
         }
 
-        let filename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+        let filename = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
 
         // Skip prompt files (e.g., my-prd-prompt.md)
         if filename.ends_with("-prompt") {
@@ -171,8 +177,7 @@ pub async fn update_prd_file(
     }
 
     // Write updated content
-    fs::write(&file_path, &content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(&file_path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     // Return updated PRDFile
     get_prd_file(project_path, prd_name).await
@@ -217,7 +222,8 @@ pub async fn delete_prd_file(
             if let Ok(prd) = serde_json::from_str::<serde_json::Value>(&json_content) {
                 // Extract lastWorktreePath from metadata
                 if let Some(metadata) = prd.get("metadata") {
-                    if let Some(wt_path) = metadata.get("lastWorktreePath").and_then(|v| v.as_str()) {
+                    if let Some(wt_path) = metadata.get("lastWorktreePath").and_then(|v| v.as_str())
+                    {
                         worktree_path_from_metadata = Some(wt_path.to_string());
                     }
                 }
@@ -237,7 +243,10 @@ pub async fn delete_prd_file(
             match crate::git::GitManager::new(&project_path) {
                 Ok(git_mgr) => {
                     if let Err(e) = git_mgr.remove_worktree(wt_path) {
-                        warnings.push(format!("Failed to remove worktree via git: {}. Will try deleting directory.", e));
+                        warnings.push(format!(
+                            "Failed to remove worktree via git: {}. Will try deleting directory.",
+                            e
+                        ));
                     } else {
                         removed_worktrees.push(wt_path.clone());
                     }
@@ -270,7 +279,8 @@ pub async fn delete_prd_file(
                         if wt_branch_name == *branch || wt_branch_name.contains(branch.as_str()) {
                             // This worktree belongs to this PRD
                             if let Err(e) = git_mgr.remove_worktree(&wt.path) {
-                                warnings.push(format!("Failed to remove worktree {}: {}", wt.path, e));
+                                warnings
+                                    .push(format!("Failed to remove worktree {}: {}", wt.path, e));
                             } else {
                                 removed_worktrees.push(wt.path.clone());
                             }
@@ -295,11 +305,15 @@ pub async fn delete_prd_file(
                                     deleted_branches.push(b.name.clone());
                                 }
                                 Err(e) => {
-                                    warnings.push(format!("Failed to delete branch {}: {}", b.name, e));
+                                    warnings
+                                        .push(format!("Failed to delete branch {}: {}", b.name, e));
                                 }
                             }
                         } else {
-                            warnings.push(format!("Cannot delete branch {} - it is currently checked out", b.name));
+                            warnings.push(format!(
+                                "Cannot delete branch {} - it is currently checked out",
+                                b.name
+                            ));
                         }
                     }
                 }
@@ -331,7 +345,10 @@ pub async fn delete_prd_file(
     // Check that at least the main .md file was deleted
     let md_path = prds_dir.join(format!("{}.md", prd_name));
     if md_path.exists() {
-        return Err(format!("Failed to delete PRD file: {}.md still exists", prd_name));
+        return Err(format!(
+            "Failed to delete PRD file: {}.md still exists",
+            prd_name
+        ));
     }
 
     log::info!(

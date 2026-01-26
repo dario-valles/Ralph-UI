@@ -76,8 +76,8 @@ pub fn atomic_write(path: &Path, content: &str) -> FileResult<()> {
 
 /// Read a JSON file and deserialize it
 pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> FileResult<T> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
 
     serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse JSON from {:?}: {}", path, e))
@@ -137,7 +137,10 @@ mod tests {
     fn test_get_ralph_ui_dir() {
         let project_path = Path::new("/home/user/my-project");
         let ralph_ui_dir = get_ralph_ui_dir(project_path);
-        assert_eq!(ralph_ui_dir, PathBuf::from("/home/user/my-project/.ralph-ui"));
+        assert_eq!(
+            ralph_ui_dir,
+            PathBuf::from("/home/user/my-project/.ralph-ui")
+        );
     }
 
     #[test]

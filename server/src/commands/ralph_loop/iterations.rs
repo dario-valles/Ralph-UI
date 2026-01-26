@@ -139,9 +139,8 @@ pub fn recover_stale_ralph_iterations(
     let path = as_path(&project_path);
     let completed_at = chrono::Utc::now().to_rfc3339();
 
-    let count =
-        iteration_storage::mark_interrupted_iterations(path, &execution_id, &completed_at)
-            .map_err(|e| format!("Failed to recover iterations: {}", e))?;
+    let count = iteration_storage::mark_interrupted_iterations(path, &execution_id, &completed_at)
+        .map_err(|e| format!("Failed to recover iterations: {}", e))?;
 
     // Clean up execution state
     iteration_storage::delete_execution_state(path, &execution_id)

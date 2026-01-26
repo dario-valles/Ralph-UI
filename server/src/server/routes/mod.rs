@@ -41,7 +41,10 @@ pub fn get_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Resu
 }
 
 /// Extract an optional argument from JSON args
-pub fn get_opt_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<Option<T>, String> {
+pub fn get_opt_arg<T: serde::de::DeserializeOwned>(
+    args: &Value,
+    name: &str,
+) -> Result<Option<T>, String> {
     match args.get(name) {
         Some(v) if !v.is_null() => serde_json::from_value(v.clone())
             .map(Some)
@@ -112,7 +115,11 @@ pub use route_unit_async;
 // =============================================================================
 
 /// Route a command to its implementation by dispatching to the appropriate sub-router
-pub async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Result<Value, String> {
+pub async fn route_command(
+    cmd: &str,
+    args: Value,
+    state: &ServerAppState,
+) -> Result<Value, String> {
     // Dispatch to the appropriate sub-router based on command name/prefix
 
     if session_routes::is_session_command(cmd) {
@@ -159,8 +166,6 @@ pub async fn route_command(cmd: &str, args: Value, state: &ServerAppState) -> Re
 // =============================================================================
 
 pub use super::proxy::{
-    regenerate_ralph_prd_stories_server,
-    send_prd_chat_message_server,
-    start_ralph_loop_server,
+    regenerate_ralph_prd_stories_server, send_prd_chat_message_server, start_ralph_loop_server,
     stop_ralph_loop_server,
 };

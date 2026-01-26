@@ -127,10 +127,7 @@ pub async fn route_gsd_command(
         "load_synthesis" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            route_async!(
-                cmd,
-                commands::gsd::load_synthesis(project_path, session_id)
-            )
+            route_async!(cmd, commands::gsd::load_synthesis(project_path, session_id))
         }
 
         "generate_requirements_from_research" => {
@@ -334,7 +331,8 @@ pub async fn route_gsd_command(
         "add_generated_requirements" => {
             let project_path: String = get_arg(&args, "projectPath")?;
             let session_id: String = get_arg(&args, "sessionId")?;
-            let generated: Vec<commands::gsd::GeneratedRequirement> = get_arg(&args, "requirements")?;
+            let generated: Vec<commands::gsd::GeneratedRequirement> =
+                get_arg(&args, "requirements")?;
             route_async!(
                 cmd,
                 commands::gsd::add_generated_requirements(project_path, session_id, generated)

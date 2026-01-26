@@ -41,8 +41,7 @@ mod tests;
 pub use config::GsdConfig;
 pub use conversion::{convert_to_ralph_prd, ConversionOptions, ConversionResult};
 pub use planning_storage::{
-    get_planning_dir, init_planning_session, read_planning_file, write_planning_file,
-    PlanningFile,
+    get_planning_dir, init_planning_session, read_planning_file, write_planning_file, PlanningFile,
 };
 pub use requirements::{Requirement, RequirementsDoc, ScopeSelection};
 pub use research::{run_research_agents, synthesize_research, ResearchResult, ResearchSynthesis};

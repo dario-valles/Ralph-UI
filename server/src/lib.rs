@@ -1,22 +1,22 @@
 // Module declarations
-pub mod commands;
-mod models;
-mod git;
-mod github;
 pub mod agents;
-mod utils;
-pub mod parsers;
-mod session;
-mod templates;
+pub mod commands;
 mod config;
 pub mod events;
-pub mod shutdown;
-pub mod watchers;
-pub mod ralph_loop;
 pub mod file_storage;
-pub mod plugins;
+mod git;
+mod github;
 pub mod gsd;
+mod models;
+pub mod parsers;
+pub mod plugins;
 pub mod push;
+pub mod ralph_loop;
+mod session;
+pub mod shutdown;
+mod templates;
+mod utils;
+pub mod watchers;
 
 // Server module (HTTP/WebSocket API)
 pub mod server;
@@ -148,7 +148,10 @@ pub fn perform_auto_recovery() {
         return;
     }
 
-    log::info!("Checking {} project paths for stale sessions", project_paths.len());
+    log::info!(
+        "Checking {} project paths for stale sessions",
+        project_paths.len()
+    );
 
     let mut total_recovered = 0;
 
@@ -174,11 +177,7 @@ pub fn perform_auto_recovery() {
                 total_recovered += results.len();
             }
             Err(e) => {
-                log::warn!(
-                    "Auto-recovery failed for project '{}': {}",
-                    project_path,
-                    e
-                );
+                log::warn!("Auto-recovery failed for project '{}': {}", project_path, e);
             }
         }
 
@@ -187,7 +186,10 @@ pub fn perform_auto_recovery() {
     }
 
     if total_recovered > 0 {
-        log::info!("Auto-recovery complete: {} sessions recovered", total_recovered);
+        log::info!(
+            "Auto-recovery complete: {} sessions recovered",
+            total_recovered
+        );
     } else {
         log::debug!("Auto-recovery complete: no stale sessions found");
     }
@@ -201,19 +203,28 @@ fn recover_stale_ralph_executions(project_path: &str) {
     const STALE_THRESHOLD_SECS: i64 = 120;
 
     let path = as_path(project_path);
-    let stale_executions = match file_storage::iterations::get_stale_executions(path, STALE_THRESHOLD_SECS) {
-        Ok(executions) => executions,
-        Err(e) => {
-            log::warn!("Failed to check for stale Ralph loop executions in {}: {}", project_path, e);
-            return;
-        }
-    };
+    let stale_executions =
+        match file_storage::iterations::get_stale_executions(path, STALE_THRESHOLD_SECS) {
+            Ok(executions) => executions,
+            Err(e) => {
+                log::warn!(
+                    "Failed to check for stale Ralph loop executions in {}: {}",
+                    project_path,
+                    e
+                );
+                return;
+            }
+        };
 
     if stale_executions.is_empty() {
         return;
     }
 
-    log::info!("Found {} stale Ralph loop executions to recover in {}", stale_executions.len(), project_path);
+    log::info!(
+        "Found {} stale Ralph loop executions to recover in {}",
+        stale_executions.len(),
+        project_path
+    );
 
     for snapshot in stale_executions {
         let completed_at = chrono::Utc::now().to_rfc3339();
@@ -243,7 +254,9 @@ fn recover_stale_ralph_executions(project_path: &str) {
         }
 
         // Clean up the execution state
-        if let Err(e) = file_storage::iterations::delete_execution_state(path, &snapshot.execution_id) {
+        if let Err(e) =
+            file_storage::iterations::delete_execution_state(path, &snapshot.execution_id)
+        {
             log::warn!(
                 "Failed to delete execution state for {}: {}",
                 snapshot.execution_id,

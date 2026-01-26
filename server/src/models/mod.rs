@@ -364,7 +364,10 @@ impl std::str::FromStr for EffortSize {
             "small" | "s" => Ok(EffortSize::Small),
             "medium" | "m" => Ok(EffortSize::Medium),
             "large" | "l" => Ok(EffortSize::Large),
-            _ => Err(format!("Invalid effort size: '{}'. Expected 'small', 'medium', or 'large'", s)),
+            _ => Err(format!(
+                "Invalid effort size: '{}'. Expected 'small', 'medium', or 'large'",
+                s
+            )),
         }
     }
 }

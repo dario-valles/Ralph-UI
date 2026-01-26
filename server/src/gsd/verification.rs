@@ -230,10 +230,7 @@ pub struct VerificationStats {
 }
 
 /// Verify requirements and roadmap for completeness
-pub fn verify_plans(
-    requirements: &RequirementsDoc,
-    roadmap: &RoadmapDoc,
-) -> VerificationResult {
+pub fn verify_plans(requirements: &RequirementsDoc, roadmap: &RoadmapDoc) -> VerificationResult {
     let mut issues = Vec::new();
     let mut warnings = Vec::new();
     let mut stats = VerificationStats::default();
@@ -268,7 +265,9 @@ pub fn verify_plans(
             severity: IssueSeverity::High,
             message: format!("{} requirements have not been scoped", stats.unscoped_count),
             related_requirements: unscoped,
-            suggestion: Some("Review and assign scope (v1/v2/out-of-scope) to all requirements".to_string()),
+            suggestion: Some(
+                "Review and assign scope (v1/v2/out-of-scope) to all requirements".to_string(),
+            ),
         });
     }
 
@@ -279,10 +278,7 @@ pub fn verify_plans(
         .map(|r| r.id.clone())
         .collect();
 
-    let missing_from_roadmap: Vec<String> = v1_ids
-        .difference(&roadmap_req_ids)
-        .cloned()
-        .collect();
+    let missing_from_roadmap: Vec<String> = v1_ids.difference(&roadmap_req_ids).cloned().collect();
 
     if !missing_from_roadmap.is_empty() {
         issues.push(VerificationIssue {
@@ -298,10 +294,7 @@ pub fn verify_plans(
     }
 
     // Check 3: Requirements in roadmap that aren't v1
-    let not_v1_in_roadmap: Vec<String> = roadmap_req_ids
-        .difference(&v1_ids)
-        .cloned()
-        .collect();
+    let not_v1_in_roadmap: Vec<String> = roadmap_req_ids.difference(&v1_ids).cloned().collect();
 
     if !not_v1_in_roadmap.is_empty() {
         warnings.push(VerificationWarning {
@@ -333,7 +326,10 @@ pub fn verify_plans(
                         req.id, dep
                     ),
                     related_requirements: vec![req.id.clone()],
-                    suggestion: Some(format!("Create requirement {} or remove the dependency", dep)),
+                    suggestion: Some(format!(
+                        "Create requirement {} or remove the dependency",
+                        dep
+                    )),
                 });
             }
         }
@@ -410,7 +406,10 @@ pub fn verification_to_markdown(result: &VerificationResult) -> String {
         md.push_str("**Status:** ❌ FAILED\n\n");
     }
 
-    md.push_str(&format!("**Coverage:** {}%\n\n", result.coverage_percentage));
+    md.push_str(&format!(
+        "**Coverage:** {}%\n\n",
+        result.coverage_percentage
+    ));
 
     // Stats
     md.push_str("## Statistics\n\n");
@@ -464,7 +463,10 @@ pub fn verification_to_markdown(result: &VerificationResult) -> String {
     if !result.warnings.is_empty() {
         md.push_str("## Warnings\n\n");
         for warning in &result.warnings {
-            md.push_str(&format!("### ⚠️ [{}] {}\n\n", warning.code, warning.message));
+            md.push_str(&format!(
+                "### ⚠️ [{}] {}\n\n",
+                warning.code, warning.message
+            ));
 
             if !warning.related_requirements.is_empty() {
                 md.push_str("**Affected:** ");
@@ -554,10 +556,7 @@ mod tests {
         let result = verify_plans(&requirements, &roadmap);
 
         assert!(!result.passed);
-        assert!(result
-            .issues
-            .iter()
-            .any(|i| i.code == "V1_NOT_IN_ROADMAP"));
+        assert!(result.issues.iter().any(|i| i.code == "V1_NOT_IN_ROADMAP"));
     }
 
     #[test]

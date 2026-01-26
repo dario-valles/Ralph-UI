@@ -14,32 +14,32 @@
 //! - worktrees: Worktree management (cleanup, list)
 //! - iterations: Iteration history operations
 
-mod prd_ops;
-mod story_ops;
-mod execution;
 mod assignments;
-mod learnings;
-mod progress;
 mod brief;
 mod config;
-mod worktrees;
-mod iterations;
-mod notifications;
+mod execution;
 mod helpers;
+mod iterations;
+mod learnings;
+mod notifications;
+mod prd_ops;
+mod progress;
+mod story_ops;
+mod worktrees;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export all public items
-pub use prd_ops::*;
-pub use story_ops::*;
-pub use execution::*;
 pub use assignments::*;
-pub use learnings::*;
-pub use progress::*;
 pub use brief::*;
 pub use config::*;
-pub use worktrees::*;
+pub use execution::*;
+pub use helpers::{RalphFiles, RalphLoopManagerState};
 pub use iterations::*;
+pub use learnings::*;
 pub use notifications::send_test_notification;
-pub use helpers::{RalphLoopManagerState, RalphFiles};
+pub use prd_ops::*;
+pub use progress::*;
+pub use story_ops::*;
+pub use worktrees::*;

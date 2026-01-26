@@ -97,10 +97,12 @@ pub async fn get_subagent_events(
     let tree = manager.get_subagent_tree(&agent_id);
 
     Ok(tree
-        .map(|t| t.get_subagent_events(&subagent_id)
-            .into_iter()
-            .cloned()
-            .collect())
+        .map(|t| {
+            t.get_subagent_events(&subagent_id)
+                .into_iter()
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default())
 }
 
@@ -125,7 +127,5 @@ pub async fn is_subagent_active(
     let manager = agent_manager.manager.lock().map_err(|e| e.to_string())?;
     let tree = manager.get_subagent_tree(&agent_id);
 
-    Ok(tree
-        .map(|t| t.is_active(&subagent_id))
-        .unwrap_or(false))
+    Ok(tree.map(|t| t.is_active(&subagent_id)).unwrap_or(false))
 }

@@ -65,18 +65,14 @@ pub fn add_ralph_learning(
     let manager = LearningsManager::new(&to_path_buf(&project_path), &prd_name);
 
     // Parse learning type
-    let learning_type: LearningType = input
-        .learning_type
-        .parse()
-        .unwrap_or(LearningType::General);
+    let learning_type: LearningType = input.learning_type.parse().unwrap_or(LearningType::General);
 
     // Get current iteration from learnings file (or default to 0 for manual entries)
     let file = manager.read()?;
     let iteration = file.total_iterations;
 
     // Create the learning entry
-    let mut entry =
-        LearningEntry::with_type(iteration, learning_type, &input.content).from_human();
+    let mut entry = LearningEntry::with_type(iteration, learning_type, &input.content).from_human();
 
     if let Some(story_id) = input.story_id {
         entry = entry.for_story(story_id);

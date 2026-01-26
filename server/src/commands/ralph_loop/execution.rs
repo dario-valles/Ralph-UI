@@ -4,9 +4,9 @@ use crate::commands::ConfigState;
 use crate::file_storage::iterations as iteration_storage;
 use crate::models::AgentType;
 use crate::ralph_loop::{
-    ErrorStrategy, ExecutionSnapshot, ExecutionStateSnapshot, FallbackChainConfig,
-    IterationRecord, PrdExecutor, PrdMetadata, RalphLoopConfig, RalphLoopMetrics,
-    RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RetryConfig,
+    ErrorStrategy, ExecutionSnapshot, ExecutionStateSnapshot, FallbackChainConfig, IterationRecord,
+    PrdExecutor, PrdMetadata, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
+    RalphLoopState as RalphLoopExecutionState, RetryConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -498,9 +498,10 @@ pub async fn start_ralph_loop(
         let result = orchestrator.run(agent_manager_arc).await;
 
         // Clean up execution state from file storage
-        if let Err(e) =
-            iteration_storage::delete_execution_state(&project_path_for_loop, &execution_id_for_loop)
-        {
+        if let Err(e) = iteration_storage::delete_execution_state(
+            &project_path_for_loop,
+            &execution_id_for_loop,
+        ) {
             log::warn!(
                 "[RalphLoop] Failed to delete execution state for {}: {}",
                 execution_id_for_loop,
@@ -747,7 +748,9 @@ pub async fn get_ralph_loop_metrics(
 }
 
 /// List all active Ralph loop executions
-pub fn list_ralph_loop_executions(ralph_state: &RalphLoopManagerState) -> Result<Vec<String>, String> {
+pub fn list_ralph_loop_executions(
+    ralph_state: &RalphLoopManagerState,
+) -> Result<Vec<String>, String> {
     let executions = ralph_state
         .executions
         .lock()

@@ -199,10 +199,7 @@ fn handle_file_event(
     sender: &mpsc::UnboundedSender<PrdFileUpdate>,
 ) {
     // Only handle modify/create events
-    let is_relevant = matches!(
-        event.kind,
-        EventKind::Modify(_) | EventKind::Create(_)
-    );
+    let is_relevant = matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_));
 
     if !is_relevant {
         return;
@@ -257,7 +254,12 @@ fn handle_file_event(
 ///
 /// Uses `make_prd_filename` from ralph_loop::types for consistency with the Ralph Loop.
 /// This ensures the markdown filename matches what the Ralph Loop expects for its JSON files.
-pub fn get_prd_plan_file_path(project_path: &str, session_id: &str, title: Option<&str>, prd_id: Option<&str>) -> PathBuf {
+pub fn get_prd_plan_file_path(
+    project_path: &str,
+    session_id: &str,
+    title: Option<&str>,
+    prd_id: Option<&str>,
+) -> PathBuf {
     // If we have a file-based PRD ID, use that to locate the file
     if let Some(id) = prd_id {
         if id.starts_with("file:") {
@@ -286,25 +288,41 @@ mod tests {
     #[test]
     fn test_get_prd_plan_file_path() {
         // With title: includes sanitized title + short session ID
-        let path = get_prd_plan_file_path("/projects/myapp", "session-123-abc", Some("My Feature PRD"), None);
+        let path = get_prd_plan_file_path(
+            "/projects/myapp",
+            "session-123-abc",
+            Some("My Feature PRD"),
+            None,
+        );
         let path_str = path.to_string_lossy();
         assert!(path_str.contains(".ralph-ui/prds/"));
         assert!(path_str.contains("my-feature-prd-"));
         assert!(path_str.ends_with(".md"));
 
         // Without title: uses "prd" as default + short session ID
-        let path_no_title = get_prd_plan_file_path("/projects/myapp", "session-123-abc", None, None);
+        let path_no_title =
+            get_prd_plan_file_path("/projects/myapp", "session-123-abc", None, None);
         let path_str = path_no_title.to_string_lossy();
         assert!(path_str.contains("prd-session-"));
         assert!(path_str.ends_with(".md"));
 
         // UUID-style session ID (only first 8 chars used)
-        let path_uuid = get_prd_plan_file_path("/projects/myapp", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Some("Test"), None);
+        let path_uuid = get_prd_plan_file_path(
+            "/projects/myapp",
+            "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            Some("Test"),
+            None,
+        );
         let path_str = path_uuid.to_string_lossy();
         assert!(path_str.contains("test-a1b2c3d4.md"));
 
         // File-based PRD ID
-        let path_file = get_prd_plan_file_path("/projects/myapp", "session-123", None, Some("file:existing-prd"));
+        let path_file = get_prd_plan_file_path(
+            "/projects/myapp",
+            "session-123",
+            None,
+            Some("file:existing-prd"),
+        );
         let path_str = path_file.to_string_lossy();
         assert!(path_str.contains("existing-prd.md"));
         assert!(!path_str.contains("session-123"));

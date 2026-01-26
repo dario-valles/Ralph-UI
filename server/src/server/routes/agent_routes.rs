@@ -62,7 +62,10 @@ pub async fn route_agent_command(
         "get_active_agents" => {
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
-            route_sync!(commands::agents::get_active_agents(session_id, project_path))
+            route_sync!(commands::agents::get_active_agents(
+                session_id,
+                project_path
+            ))
         }
 
         "get_all_active_agents" => {
@@ -163,12 +166,16 @@ pub async fn route_agent_command(
 
         "agent_has_pty" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            with_agent_manager(state, |mgr| commands::agents::agent_has_pty_internal(mgr, &agent_id))
+            with_agent_manager(state, |mgr| {
+                commands::agents::agent_has_pty_internal(mgr, &agent_id)
+            })
         }
 
         "get_agent_pty_id" => {
             let agent_id: String = get_arg(&args, "agentId")?;
-            with_agent_manager(state, |mgr| commands::agents::get_agent_pty_id_internal(mgr, &agent_id))
+            with_agent_manager(state, |mgr| {
+                commands::agents::get_agent_pty_id_internal(mgr, &agent_id)
+            })
         }
 
         "process_agent_pty_data" => {

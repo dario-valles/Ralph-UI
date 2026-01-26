@@ -221,8 +221,7 @@ pub fn delete_session(project_path: &Path, session_id: &str) -> FileResult<()> {
     let file_path = get_session_file_path(project_path, session_id);
 
     if file_path.exists() {
-        fs::remove_file(&file_path)
-            .map_err(|e| format!("Failed to delete session file: {}", e))?;
+        fs::remove_file(&file_path).map_err(|e| format!("Failed to delete session file: {}", e))?;
         log::info!("Deleted session file: {:?}", file_path);
     }
 
@@ -293,7 +292,10 @@ pub fn list_sessions_from_index(project_path: &Path) -> FileResult<Vec<SessionIn
                 .unwrap_or(false);
 
             if has_files {
-                log::info!("Index empty but session files exist, rebuilding index for {:?}", project_path);
+                log::info!(
+                    "Index empty but session files exist, rebuilding index for {:?}",
+                    project_path
+                );
                 return rebuild_session_index(project_path);
             }
         }
@@ -403,7 +405,10 @@ pub fn create_task(project_path: &Path, session_id: &str, task: &Task) -> FileRe
 
     // Check if task already exists
     if session.tasks.iter().any(|t| t.id == task.id) {
-        return Err(format!("Task {} already exists in session {}", task.id, session_id));
+        return Err(format!(
+            "Task {} already exists in session {}",
+            task.id, session_id
+        ));
     }
 
     session.tasks.push(task.clone());
@@ -437,7 +442,10 @@ pub fn update_task(project_path: &Path, session_id: &str, task: &Task) -> FileRe
         save_session(project_path, &session)?;
         Ok(())
     } else {
-        Err(format!("Task {} not found in session {}", task.id, session_id))
+        Err(format!(
+            "Task {} not found in session {}",
+            task.id, session_id
+        ))
     }
 }
 
@@ -448,7 +456,10 @@ pub fn delete_task(project_path: &Path, session_id: &str, task_id: &str) -> File
     session.tasks.retain(|t| t.id != task_id);
 
     if session.tasks.len() == initial_len {
-        return Err(format!("Task {} not found in session {}", task_id, session_id));
+        return Err(format!(
+            "Task {} not found in session {}",
+            task_id, session_id
+        ));
     }
 
     save_session(project_path, &session)?;
@@ -475,13 +486,19 @@ pub fn update_task_status(
         save_session(project_path, &session)?;
         Ok(())
     } else {
-        Err(format!("Task {} not found in session {}", task_id, session_id))
+        Err(format!(
+            "Task {} not found in session {}",
+            task_id, session_id
+        ))
     }
 }
 
 /// Find task across all sessions in a project
 /// Returns (session_id, task) if found
-pub fn find_task_in_project(project_path: &Path, task_id: &str) -> FileResult<Option<(String, Task)>> {
+pub fn find_task_in_project(
+    project_path: &Path,
+    task_id: &str,
+) -> FileResult<Option<(String, Task)>> {
     let sessions = list_sessions(project_path)?;
     for session in sessions {
         if let Some(task) = session.tasks.iter().find(|t| t.id == task_id) {
@@ -611,7 +628,8 @@ mod tests {
         super::super::init_ralph_ui_dir(temp_dir.path()).unwrap();
 
         for i in 1..=3 {
-            let session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            let session =
+                create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
             save_session(temp_dir.path(), &session).unwrap();
         }
 
@@ -705,7 +723,13 @@ mod tests {
         session.tasks.push(create_test_task("task-1"));
         save_session(temp_dir.path(), &session).unwrap();
 
-        update_task_status(temp_dir.path(), "session-1", "task-1", TaskStatus::InProgress).unwrap();
+        update_task_status(
+            temp_dir.path(),
+            "session-1",
+            "task-1",
+            TaskStatus::InProgress,
+        )
+        .unwrap();
 
         let task = get_task(temp_dir.path(), "session-1", "task-1").unwrap();
         assert_eq!(task.status, TaskStatus::InProgress);
@@ -758,7 +782,8 @@ mod tests {
 
         // Create sessions (save_session updates the index)
         for i in 1..=3 {
-            let mut session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            let mut session =
+                create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
             session.tasks.push(create_test_task(&format!("task-{}", i)));
             save_session(temp_dir.path(), &session).unwrap();
         }
@@ -784,7 +809,8 @@ mod tests {
 
         // Create sessions
         for i in 1..=2 {
-            let session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            let session =
+                create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
             save_session(temp_dir.path(), &session).unwrap();
         }
 
@@ -807,7 +833,8 @@ mod tests {
 
         // Create sessions
         for i in 1..=2 {
-            let session = create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
+            let session =
+                create_test_session(&format!("session-{}", i), temp_dir.path().to_str().unwrap());
             save_session(temp_dir.path(), &session).unwrap();
         }
 

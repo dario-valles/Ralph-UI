@@ -81,16 +81,18 @@ pub async fn github_list_issues(
 
 /// Get the PRD file path for a given project and PRD name
 fn get_prd_path(project_path: &Path, prd_name: &str) -> PathBuf {
-    project_path.join(".ralph-ui").join("prds").join(format!("{}.json", prd_name))
+    project_path
+        .join(".ralph-ui")
+        .join("prds")
+        .join(format!("{}.json", prd_name))
 }
 
 /// Load a PRD from the file system
 fn load_prd_file(project_path: &Path, prd_name: &str) -> Result<RalphPrd, String> {
     let prd_path = get_prd_path(project_path, prd_name);
-    let content = fs::read_to_string(&prd_path)
-        .map_err(|e| format!("Failed to read PRD file: {}", e))?;
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse PRD file: {}", e))
+    let content =
+        fs::read_to_string(&prd_path).map_err(|e| format!("Failed to read PRD file: {}", e))?;
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse PRD file: {}", e))
 }
 
 /// Save a PRD to the file system
@@ -99,14 +101,12 @@ fn save_prd_file(project_path: &Path, prd_name: &str, prd: &RalphPrd) -> Result<
 
     // Ensure directory exists
     if let Some(parent) = prd_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create PRD directory: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create PRD directory: {}", e))?;
     }
 
-    let content = serde_json::to_string_pretty(prd)
-        .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
-    fs::write(&prd_path, content)
-        .map_err(|e| format!("Failed to write PRD file: {}", e))
+    let content =
+        serde_json::to_string_pretty(prd).map_err(|e| format!("Failed to serialize PRD: {}", e))?;
+    fs::write(&prd_path, content).map_err(|e| format!("Failed to write PRD file: {}", e))
 }
 
 /// Import GitHub issues into a Ralph PRD as stories

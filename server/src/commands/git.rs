@@ -1,5 +1,5 @@
 use crate::git::{
-    ai_resolver::{ConflictResolverConfig, ConflictResolver, MergeResolutionResult},
+    ai_resolver::{ConflictResolver, ConflictResolverConfig, MergeResolutionResult},
     BranchInfo, CommitInfo, ConflictInfo, DiffInfo, FileStatus, GitManager, MergeResult,
     WorktreeInfo,
 };
@@ -68,27 +68,17 @@ pub fn git_create_branch_from_commit(
 }
 
 /// Delete a branch
-pub fn git_delete_branch(
-    repo_path: String,
-    name: String,
-    state: &GitState,
-) -> Result<(), String> {
+pub fn git_delete_branch(repo_path: String, name: String, state: &GitState) -> Result<(), String> {
     state.with_manager(&repo_path, |manager| manager.delete_branch(&name))
 }
 
 /// List all branches
-pub fn git_list_branches(
-    repo_path: String,
-    state: &GitState,
-) -> Result<Vec<BranchInfo>, String> {
+pub fn git_list_branches(repo_path: String, state: &GitState) -> Result<Vec<BranchInfo>, String> {
     state.with_manager(&repo_path, |manager| manager.list_branches())
 }
 
 /// Get current branch
-pub fn git_get_current_branch(
-    repo_path: String,
-    state: &GitState,
-) -> Result<BranchInfo, String> {
+pub fn git_get_current_branch(repo_path: String, state: &GitState) -> Result<BranchInfo, String> {
     state.with_manager(&repo_path, |manager| manager.get_current_branch())
 }
 
@@ -131,10 +121,7 @@ pub fn git_remove_worktree(
 }
 
 /// Get git status
-pub fn git_get_status(
-    repo_path: String,
-    state: &GitState,
-) -> Result<Vec<FileStatus>, String> {
+pub fn git_get_status(repo_path: String, state: &GitState) -> Result<Vec<FileStatus>, String> {
     state.with_manager(&repo_path, |manager| manager.get_status())
 }
 

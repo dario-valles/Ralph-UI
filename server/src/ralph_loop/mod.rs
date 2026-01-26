@@ -120,9 +120,9 @@ impl Default for RalphLoopConfig {
             fallback_config: None,
             agent_timeout_secs: 0, // No timeout by default (wait indefinitely)
             prd_name: String::new(), // Must be set before use
-            template_name: None, // Use default prompt
-            test_command: None, // Auto-detect based on project type
-            lint_command: None, // Auto-detect based on project type
+            template_name: None,   // Use default prompt
+            test_command: None,    // Auto-detect based on project type
+            lint_command: None,    // Auto-detect based on project type
         }
     }
 }
@@ -296,7 +296,10 @@ impl RalphLoopOrchestrator {
             .unwrap_or_else(|| "<promise>COMPLETE</promise>".to_string());
 
         // Initialize fallback orchestrator if config is provided
-        let fallback_orchestrator = config.fallback_config.clone().map(FallbackOrchestrator::new);
+        let fallback_orchestrator = config
+            .fallback_config
+            .clone()
+            .map(FallbackOrchestrator::new);
         let active_agent_type = config.agent_type;
 
         // Create executors for .ralph-ui/prds/{prd_name}.*
@@ -367,7 +370,11 @@ impl RalphLoopOrchestrator {
     /// Report an error to the fallback orchestrator
     ///
     /// Returns the next agent to try if a fallback is available.
-    fn report_iteration_error(&mut self, agent: AgentType, is_rate_limit: bool) -> Option<AgentType> {
+    fn report_iteration_error(
+        &mut self,
+        agent: AgentType,
+        is_rate_limit: bool,
+    ) -> Option<AgentType> {
         if let Some(ref mut fo) = self.fallback_orchestrator {
             fo.report_error(agent, is_rate_limit)
         } else {
@@ -435,7 +442,11 @@ impl RalphLoopOrchestrator {
 
         // Generate initial BRIEF.md (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
         // Use learnings manager for structured learnings from all agents
-        self.brief_builder.generate_brief_with_learnings_manager(prd, &self.learnings_manager, Some(1))?;
+        self.brief_builder.generate_brief_with_learnings_manager(
+            prd,
+            &self.learnings_manager,
+            Some(1),
+        )?;
 
         // Initialize crash recovery state (US-1.2: Resume After Crash)
         self.assignments_manager.initialize(&self.execution_id)?;
@@ -476,12 +487,18 @@ impl RalphLoopOrchestrator {
 
         // Log completed stories from assignments
         let completed = self.assignments_manager.get_completed_story_ids()?;
-        log::info!("[RalphLoop] Completed stories from crash recovery: {:?}", completed);
+        log::info!(
+            "[RalphLoop] Completed stories from crash recovery: {:?}",
+            completed
+        );
 
         // Check learnings
         if self.learnings_manager.has_learnings()? {
             let count = self.learnings_manager.count()?;
-            log::info!("[RalphLoop] Found {} learnings from previous execution", count);
+            log::info!(
+                "[RalphLoop] Found {} learnings from previous execution",
+                count
+            );
         }
 
         Ok(Some(iteration))
@@ -523,7 +540,10 @@ impl RalphLoopOrchestrator {
         &mut self,
         agent_manager_arc: std::sync::Arc<std::sync::Mutex<AgentManager>>,
     ) -> Result<RalphLoopMetrics, String> {
-        log::debug!("[RalphLoop] run() starting for execution {}", self.execution_id);
+        log::debug!(
+            "[RalphLoop] run() starting for execution {}",
+            self.execution_id
+        );
         let start_time = std::time::Instant::now();
         let mut iteration: u32 = 1;
 
@@ -540,7 +560,10 @@ impl RalphLoopOrchestrator {
         if let Ok(Some(resume_iter)) = self.load_state_for_resume() {
             // Resume from the next iteration (the one that was interrupted)
             iteration = resume_iter + 1;
-            log::info!("[RalphLoop] Resuming from iteration {} after crash", iteration);
+            log::info!(
+                "[RalphLoop] Resuming from iteration {} after crash",
+                iteration
+            );
         } else {
             // Initialize fresh state for new execution
             if let Err(e) = self.assignments_manager.initialize(&self.execution_id) {
@@ -557,11 +580,17 @@ impl RalphLoopOrchestrator {
         log::debug!("[RalphLoop] State set to Running, emitted status");
 
         loop {
-            log::info!("[RalphLoop] ======== Loop iteration {} starting ========", iteration);
+            log::info!(
+                "[RalphLoop] ======== Loop iteration {} starting ========",
+                iteration
+            );
 
             // Check for cancellation
             if *lock_mutex_recover(&self.cancelled) {
-                log::warn!("[RalphLoop] EXIT REASON: Cancelled at iteration {}", iteration);
+                log::warn!(
+                    "[RalphLoop] EXIT REASON: Cancelled at iteration {}",
+                    iteration
+                );
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -578,7 +607,11 @@ impl RalphLoopOrchestrator {
 
             // Check max iterations
             if iteration > self.config.max_iterations {
-                log::warn!("[RalphLoop] EXIT REASON: Max iterations ({}) reached at iteration {}", self.config.max_iterations, iteration);
+                log::warn!(
+                    "[RalphLoop] EXIT REASON: Max iterations ({}) reached at iteration {}",
+                    self.config.max_iterations,
+                    iteration
+                );
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -599,7 +632,11 @@ impl RalphLoopOrchestrator {
             // Check max cost
             if let Some(max_cost) = self.config.max_cost {
                 if self.metrics.total_cost >= max_cost {
-                    log::warn!("[RalphLoop] EXIT REASON: Max cost (${:.2}) exceeded at iteration {}", max_cost, iteration);
+                    log::warn!(
+                        "[RalphLoop] EXIT REASON: Max cost (${:.2}) exceeded at iteration {}",
+                        max_cost,
+                        iteration
+                    );
                     // Clean up current agent PTY before returning
                     if let Some(agent_id) = self.current_agent_id.take() {
                         let manager = lock_mutex_recover(&agent_manager_arc);
@@ -619,10 +656,16 @@ impl RalphLoopOrchestrator {
             }
 
             // Read current PRD status
-            log::info!("[RalphLoop] Reading PRD from {:?}", self.prd_executor.prd_path());
+            log::info!(
+                "[RalphLoop] Reading PRD from {:?}",
+                self.prd_executor.prd_path()
+            );
             let prd = match self.prd_executor.read_prd() {
                 Ok(p) => {
-                    log::info!("[RalphLoop] PRD read successfully with {} stories", p.stories.len());
+                    log::info!(
+                        "[RalphLoop] PRD read successfully with {} stories",
+                        p.stories.len()
+                    );
                     p
                 }
                 Err(e) => {
@@ -636,13 +679,22 @@ impl RalphLoopOrchestrator {
                 }
             };
             let prd_status = self.prd_executor.get_status(&prd);
-            log::info!("[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}",
-                prd_status.passed, prd_status.total, prd_status.progress_percent as u32,
-                prd_status.all_pass, prd_status.incomplete_story_ids);
+            log::info!(
+                "[RalphLoop] PRD status: {}/{} passing ({}%), all_pass={}, incomplete: {:?}",
+                prd_status.passed,
+                prd_status.total,
+                prd_status.progress_percent as u32,
+                prd_status.all_pass,
+                prd_status.incomplete_story_ids
+            );
 
             // Generate BRIEF.md for this iteration (US-1.1: Resume After Rate Limit, US-1.3: Context Handoff)
             // Use structured learnings manager to include accumulated learnings from all agents
-            if let Err(e) = self.brief_builder.generate_brief_with_learnings_manager(&prd, &self.learnings_manager, Some(iteration)) {
+            if let Err(e) = self.brief_builder.generate_brief_with_learnings_manager(
+                &prd,
+                &self.learnings_manager,
+                Some(iteration),
+            ) {
                 log::warn!("[RalphLoop] Failed to generate BRIEF.md: {}", e);
             } else {
                 log::debug!("[RalphLoop] Generated BRIEF.md for iteration {}", iteration);
@@ -650,7 +702,11 @@ impl RalphLoopOrchestrator {
 
             // Check if all stories pass
             if prd_status.all_pass {
-                log::warn!("[RalphLoop] EXIT REASON: All {} stories pass! Completing at iteration {}.", prd_status.total, iteration);
+                log::warn!(
+                    "[RalphLoop] EXIT REASON: All {} stories pass! Completing at iteration {}.",
+                    prd_status.total,
+                    iteration
+                );
                 // Clean up current agent PTY before returning
                 if let Some(agent_id) = self.current_agent_id.take() {
                     let manager = lock_mutex_recover(&agent_manager_arc);
@@ -678,16 +734,29 @@ impl RalphLoopOrchestrator {
             // Determine which agent to use (primary or fallback)
             let agent_to_use = self.get_agent_for_iteration();
             if agent_to_use != self.config.agent_type {
-                log::debug!("[RalphLoop] Using fallback agent {:?} (primary {:?} may be rate-limited)",
-                    agent_to_use, self.config.agent_type);
+                log::debug!(
+                    "[RalphLoop] Using fallback agent {:?} (primary {:?} may be rate-limited)",
+                    agent_to_use,
+                    self.config.agent_type
+                );
                 self.active_agent_type = agent_to_use.clone();
             }
 
             // Run one iteration with the shared manager
-            log::debug!("[RalphLoop] Starting iteration {} execution with agent {:?}...", iteration, agent_to_use);
+            log::debug!(
+                "[RalphLoop] Starting iteration {} execution with agent {:?}...",
+                iteration,
+                agent_to_use
+            );
             let iteration_start = std::time::Instant::now();
-            let iteration_result = self.run_iteration(iteration, &agent_manager_arc, agent_to_use.clone()).await?;
-            log::debug!("[RalphLoop] Iteration {} completed with exit_code={}", iteration, iteration_result.exit_code);
+            let iteration_result = self
+                .run_iteration(iteration, &agent_manager_arc, agent_to_use.clone())
+                .await?;
+            log::debug!(
+                "[RalphLoop] Iteration {} completed with exit_code={}",
+                iteration,
+                iteration_result.exit_code
+            );
 
             // Update metrics
             let iteration_metrics = IterationMetrics {
@@ -716,18 +785,27 @@ impl RalphLoopOrchestrator {
             } else if iteration_result.rate_limit_detected {
                 // Rate limit detected - report error and potentially switch agents
                 if let Some(next_agent) = self.report_iteration_error(agent_to_use.clone(), true) {
-                    log::debug!("[RalphLoop] Switching to fallback agent {:?} due to rate limit", next_agent);
+                    log::debug!(
+                        "[RalphLoop] Switching to fallback agent {:?} due to rate limit",
+                        next_agent
+                    );
                 }
             }
 
             // Check for completion promise in output
             if iteration_result.completion_detected {
-                log::info!("[RalphLoop] Completion promise detected in output, verifying PRD status...");
+                log::info!(
+                    "[RalphLoop] Completion promise detected in output, verifying PRD status..."
+                );
                 // Double-check PRD status
                 let prd = self.prd_executor.read_prd()?;
                 let prd_status = self.prd_executor.get_status(&prd);
-                log::info!("[RalphLoop] Post-completion check: {}/{} passing, all_pass={}", 
-                    prd_status.passed, prd_status.total, prd_status.all_pass);
+                log::info!(
+                    "[RalphLoop] Post-completion check: {}/{} passing, all_pass={}",
+                    prd_status.passed,
+                    prd_status.total,
+                    prd_status.all_pass
+                );
 
                 if prd_status.all_pass {
                     log::warn!("[RalphLoop] EXIT REASON: Completion promise confirmed - all {} stories pass!", prd_status.total);
@@ -738,7 +816,10 @@ impl RalphLoopOrchestrator {
                     }
                     // Sync PRD files to main project before exiting
                     if let Err(e) = self.sync_prd_to_main() {
-                        log::warn!("[RalphLoop] Failed to sync PRD on completion promise: {}", e);
+                        log::warn!(
+                            "[RalphLoop] Failed to sync PRD on completion promise: {}",
+                            e
+                        );
                     }
                     self.state = RalphLoopState::Completed {
                         total_iterations: iteration,
@@ -757,7 +838,11 @@ impl RalphLoopOrchestrator {
             // Sync PRD files to main project after each iteration
             // This ensures progress is persisted even if the app crashes or restarts
             if let Err(e) = self.sync_prd_to_main() {
-                log::warn!("[RalphLoop] Failed to sync PRD after iteration {}: {}", iteration, e);
+                log::warn!(
+                    "[RalphLoop] Failed to sync PRD after iteration {}: {}",
+                    iteration,
+                    e
+                );
             }
 
             // US-1.2: Save iteration state for crash recovery
@@ -769,7 +854,6 @@ impl RalphLoopOrchestrator {
             iteration += 1;
         }
     }
-
 
     /// Run a single iteration of the Ralph loop
     ///
@@ -784,7 +868,11 @@ impl RalphLoopOrchestrator {
         agent_manager_arc: &std::sync::Arc<std::sync::Mutex<AgentManager>>,
         agent_type: AgentType,
     ) -> Result<IterationResult, String> {
-        log::debug!("[RalphLoop] run_iteration() entered for iteration {} with agent {:?}", iteration, agent_type);
+        log::debug!(
+            "[RalphLoop] run_iteration() entered for iteration {} with agent {:?}",
+            iteration,
+            agent_type
+        );
 
         // Track if rate limit is detected during this iteration
         let mut rate_limit_detected = false;
@@ -792,7 +880,10 @@ impl RalphLoopOrchestrator {
         // Clean up previous agent's PTY if there was one
         // (We keep it around after iteration completes so terminal can still show output)
         if let Some(prev_agent_id) = self.current_agent_id.take() {
-            log::debug!("[RalphLoop] Cleaning up previous agent PTY: {}", prev_agent_id);
+            log::debug!(
+                "[RalphLoop] Cleaning up previous agent PTY: {}",
+                prev_agent_id
+            );
             let manager = lock_mutex_recover(&agent_manager_arc);
             manager.unregister_pty(&prev_agent_id);
         }
@@ -822,26 +913,40 @@ impl RalphLoopOrchestrator {
             ));
 
             // Generate unique agent ID for this iteration/attempt
-            let agent_id = format!("{}-iter-{}-attempt-{}", self.execution_id, iteration, attempt);
+            let agent_id = format!(
+                "{}-iter-{}-attempt-{}",
+                self.execution_id, iteration, attempt
+            );
             let task_id = agent_id.clone();
             log::debug!("[RalphLoop] Agent ID: {}", agent_id);
 
             // Build agent spawn config - use working_path (worktree if enabled)
             // Use the passed agent_type (may be primary or fallback)
-            log::debug!("[RalphLoop] Building spawn config for {:?} agent...", agent_type);
+            log::debug!(
+                "[RalphLoop] Building spawn config for {:?} agent...",
+                agent_type
+            );
             let spawn_config = AgentSpawnConfig {
                 agent_type,
                 task_id,
                 worktree_path: self.working_path.to_string_lossy().to_string(),
-                branch: self.config.branch.clone().unwrap_or_else(|| "main".to_string()),
+                branch: self
+                    .config
+                    .branch
+                    .clone()
+                    .unwrap_or_else(|| "main".to_string()),
                 max_iterations: 0, // Let agent run until completion
                 prompt: Some(prompt.clone()),
                 model: self.config.model.clone(),
                 spawn_mode: AgentSpawnMode::Pty,
                 plugin_config: None,
             };
-            log::debug!("[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
-                spawn_config.worktree_path, spawn_config.branch, spawn_config.model);
+            log::debug!(
+                "[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
+                spawn_config.worktree_path,
+                spawn_config.branch,
+                spawn_config.model
+            );
 
             // Spawn fresh agent instance (creates PTY)
             // Lock, spawn, unlock
@@ -850,7 +955,10 @@ impl RalphLoopOrchestrator {
                 let mut manager = lock_mutex_recover(&agent_manager_arc);
                 manager.spawn_agent(&agent_id, spawn_config)
             };
-            log::debug!("[RalphLoop] spawn_agent returned: {:?}", spawn_result.is_ok());
+            log::debug!(
+                "[RalphLoop] spawn_agent returned: {:?}",
+                spawn_result.is_ok()
+            );
 
             if let Err(e) = spawn_result {
                 let error_str = e.to_string();
@@ -859,7 +967,10 @@ impl RalphLoopOrchestrator {
                 if attempt < max_attempts && is_retryable_error(&error_str) {
                     log::warn!(
                         "[RalphLoop] Spawn failed on attempt {}/{}: {}. Retrying in {}ms...",
-                        attempt, max_attempts, error_str, current_delay_ms
+                        attempt,
+                        max_attempts,
+                        error_str,
+                        current_delay_ms
                     );
 
                     // Update state to retrying and emit status
@@ -872,7 +983,8 @@ impl RalphLoopOrchestrator {
                     self.set_progress(format!("Retrying after error: {}", error_str));
 
                     // Record retry in progress file
-                    let retry_note = retry::format_retry_note(attempt, &error_str, current_delay_ms);
+                    let retry_note =
+                        retry::format_retry_note(attempt, &error_str, current_delay_ms);
                     let _ = self.progress_tracker.add_note(iteration, &retry_note);
 
                     // Wait before retrying
@@ -907,7 +1019,10 @@ impl RalphLoopOrchestrator {
                 let mut manager = lock_mutex_recover(&agent_manager_arc);
                 manager.take_child_process(&agent_id)
             };
-            log::debug!("[RalphLoop] Got child_process: {:?}", child_process.is_some());
+            log::debug!(
+                "[RalphLoop] Got child_process: {:?}",
+                child_process.is_some()
+            );
 
             // Step 2: Wait on the process WITHOUT holding the manager lock
             // Use configurable timeout (0 = no timeout, wait indefinitely)
@@ -928,14 +1043,20 @@ impl RalphLoopOrchestrator {
                             }
                         }
                     } else {
-                        log::debug!("[RalphLoop] Waiting for agent process (timeout: {}s)...", timeout_secs);
+                        log::debug!(
+                            "[RalphLoop] Waiting for agent process (timeout: {}s)...",
+                            timeout_secs
+                        );
 
                         // Use polling-based wait with timeout
                         match AgentManager::wait_with_timeout(&mut child, timeout_secs) {
                             Ok(Some(code)) => code,
                             Ok(None) => {
                                 // Timeout - kill the process
-                                log::warn!("[RalphLoop] Agent timed out after {}s, killing process", timeout_secs);
+                                log::warn!(
+                                    "[RalphLoop] Agent timed out after {}s, killing process",
+                                    timeout_secs
+                                );
                                 let _ = child.kill();
                                 let _ = child.wait(); // Clean up zombie
 
@@ -943,7 +1064,10 @@ impl RalphLoopOrchestrator {
                                 let manager = lock_mutex_recover(&agent_manager_arc);
                                 manager.unregister_pty(&agent_id);
                                 self.current_agent_id = None;
-                                return Err(format!("Agent timed out after {} seconds", timeout_secs));
+                                return Err(format!(
+                                    "Agent timed out after {} seconds",
+                                    timeout_secs
+                                ));
                             }
                             Err(e) => {
                                 // Clean up agent PTY before returning error
@@ -1004,21 +1128,30 @@ impl RalphLoopOrchestrator {
             }
 
             // Check if we should retry based on exit code and output
-            if exit_code != 0 && attempt < max_attempts && retry::should_retry_agent(exit_code, &output_str) {
+            if exit_code != 0
+                && attempt < max_attempts
+                && retry::should_retry_agent(exit_code, &output_str)
+            {
                 log::warn!(
                     "[RalphLoop] Agent failed on attempt {}/{} with exit code {}. Retrying in {}ms...",
                     attempt, max_attempts, exit_code, current_delay_ms
                 );
 
                 // Update state to retrying
-                let error_reason = format!("Agent exited with code {} (retryable error detected)", exit_code);
+                let error_reason = format!(
+                    "Agent exited with code {} (retryable error detected)",
+                    exit_code
+                );
                 self.state = RalphLoopState::Retrying {
                     iteration,
                     attempt,
                     reason: error_reason.clone(),
                     delay_ms: current_delay_ms,
                 };
-                self.set_progress(format!("Retrying after agent failure (exit code {})", exit_code));
+                self.set_progress(format!(
+                    "Retrying after agent failure (exit code {})",
+                    exit_code
+                ));
 
                 // Record retry in progress file
                 let retry_note = retry::format_retry_note(attempt, &error_reason, current_delay_ms);
@@ -1049,7 +1182,8 @@ impl RalphLoopOrchestrator {
             let token_metrics = self.parse_metrics_from_output(&output_str);
 
             // Record end of iteration in progress.txt
-            self.progress_tracker.end_iteration(iteration, exit_code == 0)?;
+            self.progress_tracker
+                .end_iteration(iteration, exit_code == 0)?;
 
             // US-3.1: Extract learnings from agent output using structured protocol
             // The <learning> tags in the output are parsed and saved to learnings.json
@@ -1060,7 +1194,10 @@ impl RalphLoopOrchestrator {
                 story_id_ref.as_deref(),
             ) {
                 Ok(count) if count > 0 => {
-                    log::info!("[RalphLoop] Extracted {} learning(s) from agent output", count);
+                    log::info!(
+                        "[RalphLoop] Extracted {} learning(s) from agent output",
+                        count
+                    );
                 }
                 Ok(_) => {
                     log::debug!("[RalphLoop] No learnings found in agent output");
@@ -1075,7 +1212,10 @@ impl RalphLoopOrchestrator {
             // The PTY will be unregistered when a new iteration starts (or loop ends).
             // Old agent cleanup happens at the START of run_iteration, not at the end.
 
-            self.set_progress(format!("Iteration {} complete (exit code {})", iteration, exit_code));
+            self.set_progress(format!(
+                "Iteration {} complete (exit code {})",
+                iteration, exit_code
+            ));
 
             return Ok(IterationResult {
                 exit_code,
@@ -1133,20 +1273,16 @@ impl RalphLoopOrchestrator {
                 // OpenCode format: step_finish event with tokens
                 if json.get("type").and_then(|v| v.as_str()) == Some("step_finish") {
                     if let Some(tokens) = json.get("tokens") {
-                        total_input +=
-                            tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
-                        total_output +=
-                            tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
+                        total_input += tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
+                        total_output += tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
                     }
                 }
 
                 // OpenCode alternate: summary with total_tokens
                 if let Some(summary) = json.get("summary") {
                     if let Some(tokens) = summary.get("tokens") {
-                        total_input +=
-                            tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
-                        total_output +=
-                            tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
+                        total_input += tokens.get("input").and_then(|v| v.as_u64()).unwrap_or(0);
+                        total_output += tokens.get("output").and_then(|v| v.as_u64()).unwrap_or(0);
                     }
                 }
             }
@@ -1172,11 +1308,20 @@ impl RalphLoopOrchestrator {
             if let Some(snapshot) = snapshots.get_mut(&self.execution_id) {
                 snapshot.state = Some(self.state.clone());
                 snapshot.current_agent_id = self.current_agent_id.clone();
-                snapshot.worktree_path = self.worktree_path.as_ref().map(|p| p.to_string_lossy().to_string());
+                snapshot.worktree_path = self
+                    .worktree_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string());
                 snapshot.metrics = Some(self.metrics.clone());
-                log::debug!("[DEBUG] emit_status: updated snapshot agent_id={:?}", snapshot.current_agent_id);
+                log::debug!(
+                    "[DEBUG] emit_status: updated snapshot agent_id={:?}",
+                    snapshot.current_agent_id
+                );
             } else {
-                log::debug!("[DEBUG] emit_status: snapshot NOT FOUND for {}", self.execution_id);
+                log::debug!(
+                    "[DEBUG] emit_status: snapshot NOT FOUND for {}",
+                    self.execution_id
+                );
             }
         } else {
             log::debug!("[DEBUG] emit_status: NO snapshot_store!");
@@ -1184,7 +1329,11 @@ impl RalphLoopOrchestrator {
 
         // Also send to channel for compatibility
         if let Some(tx) = &self.status_tx {
-            let prd_status = self.prd_executor.read_prd().ok().map(|prd| self.prd_executor.get_status(&prd));
+            let prd_status = self
+                .prd_executor
+                .read_prd()
+                .ok()
+                .map(|prd| self.prd_executor.get_status(&prd));
 
             let event = RalphLoopStatusEvent {
                 execution_id: self.execution_id.clone(),
@@ -1193,7 +1342,10 @@ impl RalphLoopOrchestrator {
                 iteration_metrics: self.metrics.iterations.last().cloned(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 current_agent_id: self.current_agent_id.clone(),
-                worktree_path: self.worktree_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                worktree_path: self
+                    .worktree_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
                 branch: self.config.branch.clone(),
                 progress_message: self.progress_message.clone(),
             };
@@ -1257,7 +1409,11 @@ impl RalphLoopOrchestrator {
 
             if src.exists() {
                 if let Err(e) = std::fs::copy(&src, &dst) {
-                    log::warn!("[RalphLoop] Failed to sync {} to main project: {}", filename, e);
+                    log::warn!(
+                        "[RalphLoop] Failed to sync {} to main project: {}",
+                        filename,
+                        e
+                    );
                 } else {
                     log::debug!("[RalphLoop] Synced {} to main project", filename);
                 }
@@ -1280,10 +1436,17 @@ impl RalphLoopOrchestrator {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        log::info!("[RalphLoop] Setting up worktree for execution {}", self.execution_id);
+        log::info!(
+            "[RalphLoop] Setting up worktree for execution {}",
+            self.execution_id
+        );
 
         // Get the base branch (the branch to start from)
-        let base_branch = self.config.branch.clone().unwrap_or_else(|| "main".to_string());
+        let base_branch = self
+            .config
+            .branch
+            .clone()
+            .unwrap_or_else(|| "main".to_string());
 
         // Generate a STABLE worktree ID based on project path + branch
         // This allows reusing the same worktree when restarting the same PRD
@@ -1347,13 +1510,20 @@ impl RalphLoopOrchestrator {
                     log::warn!("[RalphLoop] Failed to prune worktree from git: {}", e);
                 }
                 if let Err(e) = std::fs::remove_dir_all(&worktree_path) {
-                    log::warn!("[RalphLoop] Failed to remove stale worktree directory: {}", e);
+                    log::warn!(
+                        "[RalphLoop] Failed to remove stale worktree directory: {}",
+                        e
+                    );
                 }
             }
 
             // Try to delete any stale branch with the same name
             if let Err(e) = git_manager.delete_branch(&execution_branch) {
-                log::debug!("[RalphLoop] Branch {} didn't exist or couldn't be deleted: {}", execution_branch, e);
+                log::debug!(
+                    "[RalphLoop] Branch {} didn't exist or couldn't be deleted: {}",
+                    execution_branch,
+                    e
+                );
             }
 
             // Create git worktree with stable branch
@@ -1426,7 +1596,10 @@ impl RalphLoopOrchestrator {
         if let Err(e) = main_executor.update_metadata(|meta| {
             meta.last_worktree_path = Some(worktree_path.to_string_lossy().to_string());
         }) {
-            log::warn!("[RalphLoop] Failed to save worktree path to PRD metadata: {}", e);
+            log::warn!(
+                "[RalphLoop] Failed to save worktree path to PRD metadata: {}",
+                e
+            );
         }
 
         Ok(())

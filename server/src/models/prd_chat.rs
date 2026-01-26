@@ -133,7 +133,10 @@ impl std::str::FromStr for MessageRole {
             "user" => Ok(MessageRole::User),
             "assistant" => Ok(MessageRole::Assistant),
             "system" => Ok(MessageRole::System),
-            _ => Err(format!("Invalid message role: '{}'. Expected 'user', 'assistant', or 'system'", s)),
+            _ => Err(format!(
+                "Invalid message role: '{}'. Expected 'user', 'assistant', or 'system'",
+                s
+            )),
         }
     }
 }

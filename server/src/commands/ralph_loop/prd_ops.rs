@@ -322,7 +322,9 @@ pub fn get_ralph_files(project_path: String) -> Result<RalphFiles, String> {
 /// This reads a markdown PRD file and its associated structure JSON (if any),
 /// then creates the Ralph loop files (prd.json, progress.txt, config.yaml, prompt.md).
 /// Execution settings from the request are stored in the PRD JSON for future executions.
-pub fn convert_prd_file_to_ralph(request: ConvertPrdFileToRalphRequest) -> Result<RalphPrd, String> {
+pub fn convert_prd_file_to_ralph(
+    request: ConvertPrdFileToRalphRequest,
+) -> Result<RalphPrd, String> {
     use std::fs;
 
     let project_path = PathBuf::from(&request.project_path);
@@ -450,8 +452,8 @@ pub fn convert_prd_file_to_ralph(request: ConvertPrdFileToRalphRequest) -> Resul
             completion_promise: "<promise>COMPLETE</promise>".to_string(),
         },
     };
-    let config_yaml =
-        serde_yaml::to_string(&ralph_config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+    let config_yaml = serde_yaml::to_string(&ralph_config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
     fs::write(&config_path, config_yaml).map_err(|e| format!("Failed to write config: {}", e))?;
 
     // Generate prompt.md
@@ -491,7 +493,8 @@ pub fn regenerate_ralph_prd_acceptance(
     // Read the markdown file for content
     let md_path = prds_dir.join(format!("{}.md", request.prd_name));
     let content = if md_path.exists() {
-        fs::read_to_string(&md_path).map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
+        fs::read_to_string(&md_path)
+            .map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
     } else {
         // No markdown file - use PRD description as context
         prd.description.clone().unwrap_or_default()
@@ -554,7 +557,8 @@ pub async fn regenerate_ralph_prd_stories(
     // Read the markdown file
     let md_path = prds_dir.join(format!("{}.md", request.prd_name));
     let content = if md_path.exists() {
-        fs::read_to_string(&md_path).map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
+        fs::read_to_string(&md_path)
+            .map_err(|e| format!("Failed to read PRD markdown file: {}", e))?
     } else {
         return Err(
             "No PRD markdown file found. Cannot regenerate stories without source content."
@@ -596,8 +600,11 @@ pub async fn regenerate_ralph_prd_stories(
     }
 
     // Replace stories in the PRD, preserving any pass/fail status for matching IDs
-    let old_status: std::collections::HashMap<String, bool> =
-        prd.stories.iter().map(|s| (s.id.clone(), s.passes)).collect();
+    let old_status: std::collections::HashMap<String, bool> = prd
+        .stories
+        .iter()
+        .map(|s| (s.id.clone(), s.passes))
+        .collect();
 
     prd.stories = extracted_stories
         .into_iter()
@@ -924,6 +931,10 @@ pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String
 }
 
 /// Update the prompt.md content
-pub fn set_ralph_prompt(project_path: String, prd_name: String, content: String) -> Result<(), String> {
+pub fn set_ralph_prompt(
+    project_path: String,
+    prd_name: String,
+    content: String,
+) -> Result<(), String> {
     super::helpers::prompt_builder(&project_path, &prd_name).write_prompt(&content)
 }

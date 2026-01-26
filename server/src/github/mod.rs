@@ -152,7 +152,10 @@ impl GitHubClient {
     }
 
     /// List pull requests
-    pub async fn list_pull_requests(&self, state: Option<String>) -> Result<Vec<PullRequest>, String> {
+    pub async fn list_pull_requests(
+        &self,
+        state: Option<String>,
+    ) -> Result<Vec<PullRequest>, String> {
         let client = reqwest::Client::new();
         let state_param = state.unwrap_or_else(|| "open".to_string());
         let url = format!(

@@ -65,7 +65,10 @@ pub async fn route_prd_command(
 
         "list_prd_chat_sessions" => {
             let project_path: String = get_arg(&args, "projectPath")?;
-            route_async!(cmd, commands::prd_chat::list_prd_chat_sessions(project_path))
+            route_async!(
+                cmd,
+                commands::prd_chat::list_prd_chat_sessions(project_path)
+            )
         }
 
         "get_prd_chat_history" => {
@@ -117,7 +120,10 @@ pub async fn route_prd_command(
 
         "check_agent_availability" => {
             let agent_type: String = get_arg(&args, "agentType")?;
-            route_async!(cmd, commands::prd_chat::check_agent_availability(agent_type))
+            route_async!(
+                cmd,
+                commands::prd_chat::check_agent_availability(agent_type)
+            )
         }
 
         "get_guided_questions" => {
@@ -159,11 +165,8 @@ pub async fn route_prd_command(
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
 
-            let session = chat_ops::get_chat_session(
-                as_path(&project_path),
-                &session_id,
-            )
-            .map_err(|e| format!("Failed to get session: {}", e))?;
+            let session = chat_ops::get_chat_session(as_path(&project_path), &session_id)
+                .map_err(|e| format!("Failed to get session: {}", e))?;
 
             let file_path = crate::watchers::get_prd_plan_file_path(
                 &project_path,

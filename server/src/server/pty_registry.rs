@@ -241,7 +241,9 @@ impl PtySession {
         writer
             .write_all(data)
             .map_err(|e| format!("Failed to write to PTY: {}", e))?;
-        writer.flush().map_err(|e| format!("Failed to flush PTY: {}", e))?;
+        writer
+            .flush()
+            .map_err(|e| format!("Failed to flush PTY: {}", e))?;
         *self.last_activity.write().await = Instant::now();
         Ok(())
     }
@@ -320,14 +322,8 @@ impl PtyRegistry {
         cwd: Option<String>,
     ) -> Result<Arc<PtySession>, String> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        let session = PtySession::new(
-            session_id.clone(),
-            terminal_id.clone(),
-            cols,
-            rows,
-            cwd,
-        )
-        .await?;
+        let session =
+            PtySession::new(session_id.clone(), terminal_id.clone(), cols, rows, cwd).await?;
 
         let session = Arc::new(session);
         self.sessions

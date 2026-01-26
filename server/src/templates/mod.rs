@@ -2,15 +2,15 @@
 
 #![allow(dead_code)] // Template infrastructure (some builders not yet used)
 
-pub mod engine;
 pub mod builtin;
+pub mod engine;
 pub mod resolver;
 
 // Re-export main types
-pub use engine::{TemplateEngine, TemplateContext, DependencyContext};
+pub use engine::{DependencyContext, TemplateContext, TemplateEngine};
 pub use resolver::TemplateResolver;
 
-use crate::models::{Task, Session};
+use crate::models::{Session, Task};
 use anyhow::Result;
 
 /// Convenience function to render a task prompt

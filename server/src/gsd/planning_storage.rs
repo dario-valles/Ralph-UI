@@ -74,11 +74,7 @@ pub fn get_planning_file_path(
 }
 
 /// Get the path for a research output file
-pub fn get_research_file_path(
-    project_path: &Path,
-    session_id: &str,
-    filename: &str,
-) -> PathBuf {
+pub fn get_research_file_path(project_path: &Path, session_id: &str, filename: &str) -> PathBuf {
     get_research_dir(project_path, session_id).join(filename)
 }
 
@@ -91,10 +87,7 @@ pub fn init_planning_session(project_path: &Path, session_id: &str) -> FileResul
     let research_dir = get_research_dir(project_path, session_id);
     ensure_dir(&research_dir)?;
 
-    log::info!(
-        "Initialized planning session directory: {:?}",
-        planning_dir
-    );
+    log::info!("Initialized planning session directory: {:?}", planning_dir);
     Ok(planning_dir)
 }
 
@@ -217,10 +210,7 @@ pub fn save_workflow_state(
 }
 
 /// Load workflow state from file
-pub fn load_workflow_state(
-    project_path: &Path,
-    session_id: &str,
-) -> FileResult<GsdWorkflowState> {
+pub fn load_workflow_state(project_path: &Path, session_id: &str) -> FileResult<GsdWorkflowState> {
     let file_path = get_planning_file_path(project_path, session_id, PlanningFile::State);
     read_json(&file_path)
 }
@@ -331,7 +321,9 @@ pub fn list_project_research(project_path: &Path) -> FileResult<Vec<ResearchSess
                 let has_codebase = research_dir.join("codebase.md").exists();
                 let has_best_practices = research_dir.join("best_practices.md").exists();
                 let has_risks = research_dir.join("risks.md").exists();
-                let has_synthesis = get_planning_file_path(project_path, &session_id, PlanningFile::Summary).exists();
+                let has_synthesis =
+                    get_planning_file_path(project_path, &session_id, PlanningFile::Summary)
+                        .exists();
 
                 // Skip sessions without any research
                 if !has_architecture && !has_codebase && !has_best_practices && !has_risks {
@@ -400,7 +392,11 @@ pub fn copy_research_to_session(
             fs::copy(&source_file, &target_file)
                 .map_err(|e| format!("Failed to copy {}: {}", filename, e))?;
             copied_count += 1;
-            log::info!("Copied research file: {:?} -> {:?}", source_file, target_file);
+            log::info!(
+                "Copied research file: {:?} -> {:?}",
+                source_file,
+                target_file
+            );
         }
     }
 
@@ -469,7 +465,9 @@ pub fn generate_project_md(context: &QuestioningContext) -> String {
 
     // Constraints placeholder
     content.push_str("## Constraints\n\n");
-    content.push_str("*Technical and business constraints to be identified during research phase.*\n\n");
+    content.push_str(
+        "*Technical and business constraints to be identified during research phase.*\n\n",
+    );
 
     // Non-goals placeholder
     content.push_str("## Non-Goals\n\n");
@@ -567,10 +565,20 @@ mod tests {
         init_planning_session(project_path, session_id).unwrap();
 
         // Write research files
-        write_research_file(project_path, session_id, "architecture.md", "# Architecture")
-            .unwrap();
-        write_research_file(project_path, session_id, "codebase.md", "# Codebase Analysis")
-            .unwrap();
+        write_research_file(
+            project_path,
+            session_id,
+            "architecture.md",
+            "# Architecture",
+        )
+        .unwrap();
+        write_research_file(
+            project_path,
+            session_id,
+            "codebase.md",
+            "# Codebase Analysis",
+        )
+        .unwrap();
 
         // List files
         let files = list_research_files(project_path, session_id).unwrap();
@@ -650,7 +658,10 @@ mod tests {
             why: Some("Teams need better collaboration tools".to_string()),
             who: Some("Remote workers and distributed teams".to_string()),
             done: Some("Users can create, assign, and track tasks across projects".to_string()),
-            notes: vec!["Should integrate with Slack".to_string(), "Mobile support important".to_string()],
+            notes: vec![
+                "Should integrate with Slack".to_string(),
+                "Mobile support important".to_string(),
+            ],
         };
 
         let content = generate_project_md(&context);

@@ -53,10 +53,8 @@ pub async fn run_server(
     let cors = match &cors_origins {
         Some(origins) if !origins.is_empty() => {
             // Restricted CORS: only allow specified origins
-            let allowed_origins: Vec<HeaderValue> = origins
-                .iter()
-                .filter_map(|o| o.parse().ok())
-                .collect();
+            let allowed_origins: Vec<HeaderValue> =
+                origins.iter().filter_map(|o| o.parse().ok()).collect();
             CorsLayer::new()
                 .allow_origin(allowed_origins)
                 .allow_methods(Any)
@@ -110,7 +108,11 @@ pub async fn run_server(
         Some(origins) if !origins.is_empty() => origins.join(", "),
         _ => "*".to_string(),
     };
-    let frontend_status = if has_frontend { "Embedded" } else { "External (use Vite dev server)" };
+    let frontend_status = if has_frontend {
+        "Embedded"
+    } else {
+        "External (use Vite dev server)"
+    };
 
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    Ralph UI Server Mode                       ║");

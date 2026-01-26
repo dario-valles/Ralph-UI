@@ -264,7 +264,8 @@ Focus ONLY on one story. Make minimal changes. Be honest about completion.
         let prd_path = self.prd_file_path();
         let progress_path = self.progress_file_path();
 
-        format!(r#"# Ralph Wiggum Loop - Task Instructions
+        format!(
+            r#"# Ralph Wiggum Loop - Task Instructions
 
 You are working on a PRD using the Ralph Wiggum Loop pattern.
 
@@ -281,7 +282,10 @@ You are working on a PRD using the Ralph Wiggum Loop pattern.
 9. If ALL stories pass, output: <promise>COMPLETE</promise>
 
 Now begin!
-"#, prd = prd_path, progress = progress_path)
+"#,
+            prd = prd_path,
+            progress = progress_path
+        )
     }
 
     /// Check if a custom prompt exists

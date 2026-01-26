@@ -146,7 +146,10 @@ impl LogCollector {
     }
 
     /// Set the tool call complete event sender
-    pub fn set_tool_call_complete_sender(&mut self, tx: mpsc::UnboundedSender<ToolCallCompleteEvent>) {
+    pub fn set_tool_call_complete_sender(
+        &mut self,
+        tx: mpsc::UnboundedSender<ToolCallCompleteEvent>,
+    ) {
         self.tool_call_complete_tx = Some(tx);
     }
 

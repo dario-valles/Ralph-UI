@@ -8,11 +8,11 @@
 #![allow(dead_code)] // Template resolver infrastructure
 
 use crate::templates::builtin;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use log::{debug, info};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use log::{debug, info};
 
 /// Template source indicating where a template was resolved from
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,10 +118,7 @@ impl TemplateResolver {
 
         // Try builtin templates (compiled-in defaults)
         if let Some(template) = self.try_builtin_template(name)? {
-            info!(
-                "Template '{}' resolved from builtin templates",
-                name
-            );
+            info!("Template '{}' resolved from builtin templates", name);
             if self.use_cache {
                 self.cache.insert(name.to_string(), template.clone());
             }
@@ -136,8 +133,13 @@ impl TemplateResolver {
     ///
     /// Checks: project (.ralph-ui/templates/) → global (~/.ralph-ui/templates/) → builtin
     pub fn exists(&self, name: &str) -> bool {
-        self.project_template_path(name).map(|p| p.exists()).unwrap_or(false)
-            || self.global_template_path(name).map(|p| p.exists()).unwrap_or(false)
+        self.project_template_path(name)
+            .map(|p| p.exists())
+            .unwrap_or(false)
+            || self
+                .global_template_path(name)
+                .map(|p| p.exists())
+                .unwrap_or(false)
             || builtin::get_builtin_template(name).is_some()
     }
 
@@ -220,12 +222,14 @@ impl TemplateResolver {
 
     /// Get the path to a project template by name
     fn project_template_path(&self, name: &str) -> Option<PathBuf> {
-        self.project_templates_dir().map(|d| d.join(format!("{}.tera", name)))
+        self.project_templates_dir()
+            .map(|d| d.join(format!("{}.tera", name)))
     }
 
     /// Get the path to a global template by name
     fn global_template_path(&self, name: &str) -> Option<PathBuf> {
-        self.global_templates_dir().map(|d| d.join(format!("{}.tera", name)))
+        self.global_templates_dir()
+            .map(|d| d.join(format!("{}.tera", name)))
     }
 
     /// Try to load a template from the project directory
@@ -300,8 +304,7 @@ mod tests {
         fs::create_dir_all(&project_dir).unwrap();
         fs::write(project_dir.join("my_template.tera"), "Project content").unwrap();
 
-        let mut resolver = TemplateResolver::new()
-            .with_project_path(temp_dir.path());
+        let mut resolver = TemplateResolver::new().with_project_path(temp_dir.path());
 
         let template = resolver.resolve("my_template").unwrap();
         assert_eq!(template.source, TemplateSource::Project);
@@ -383,7 +386,9 @@ mod tests {
         let templates = resolver.list_all();
 
         // Should include builtin templates
-        assert!(templates.iter().any(|(name, _)| name == builtin::TASK_PROMPT));
+        assert!(templates
+            .iter()
+            .any(|(name, _)| name == builtin::TASK_PROMPT));
         assert!(templates.iter().any(|(name, _)| name == builtin::BUG_FIX));
     }
 
@@ -395,8 +400,7 @@ mod tests {
         fs::create_dir_all(&project_dir).unwrap();
         fs::write(project_dir.join("task_prompt.tera"), "Custom task prompt").unwrap();
 
-        let mut resolver = TemplateResolver::new()
-            .with_project_path(temp_dir.path());
+        let mut resolver = TemplateResolver::new().with_project_path(temp_dir.path());
 
         let template = resolver.resolve("task_prompt").unwrap();
         assert_eq!(template.source, TemplateSource::Project);
@@ -414,8 +418,7 @@ mod tests {
         // Create a project template that overrides a builtin
         fs::write(project_dir.join("task_prompt.tera"), "Project override").unwrap();
 
-        let mut resolver = TemplateResolver::new()
-            .with_project_path(temp_dir.path());
+        let mut resolver = TemplateResolver::new().with_project_path(temp_dir.path());
 
         // Project template should win
         let template = resolver.resolve("task_prompt").unwrap();
@@ -438,8 +441,7 @@ mod tests {
         // Write template with wrong extension
         fs::write(project_dir.join("my_template.txt"), "Wrong extension").unwrap();
 
-        let mut resolver = TemplateResolver::new()
-            .with_project_path(temp_dir.path());
+        let mut resolver = TemplateResolver::new().with_project_path(temp_dir.path());
 
         // Should not find it
         let result = resolver.resolve("my_template");
@@ -460,8 +462,7 @@ mod tests {
         fs::create_dir_all(&project_dir).unwrap();
         fs::write(project_dir.join("custom_template.tera"), "Custom").unwrap();
 
-        let resolver = TemplateResolver::new()
-            .with_project_path(temp_dir.path());
+        let resolver = TemplateResolver::new().with_project_path(temp_dir.path());
 
         let templates = resolver.list_all();
 
@@ -471,7 +472,9 @@ mod tests {
         assert_eq!(custom.unwrap().1, TemplateSource::Project);
 
         // Should have builtin templates with correct source
-        let builtin = templates.iter().find(|(name, _)| name == builtin::TASK_PROMPT);
+        let builtin = templates
+            .iter()
+            .find(|(name, _)| name == builtin::TASK_PROMPT);
         assert!(builtin.is_some());
         assert_eq!(builtin.unwrap().1, TemplateSource::Builtin);
     }

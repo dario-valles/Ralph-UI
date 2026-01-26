@@ -160,7 +160,9 @@ impl ChatFile {
             created_at: self.created_at.to_rfc3339(),
             updated_at: self.updated_at.to_rfc3339(),
             message_count: Some(self.messages.len() as i32),
-            pending_operation_started_at: self.pending_operation_started_at.map(|dt| dt.to_rfc3339()),
+            pending_operation_started_at: self
+                .pending_operation_started_at
+                .map(|dt| dt.to_rfc3339()),
             external_session_id: self.external_session_id.clone(),
         }
     }
@@ -240,14 +242,15 @@ pub fn delete_chat_file(project_path: &Path, chat_id: &str) -> FileResult<()> {
     if file_path.exists() {
         // Try to read and delete attachments, but don't fail if we can't
         if let Ok(chat_file) = read_chat_file(project_path, chat_id) {
-            let message_ids: Vec<String> = chat_file.messages.iter().map(|m| m.id.clone()).collect();
-            if let Err(e) = super::attachments::delete_chat_attachments(project_path, &message_ids) {
+            let message_ids: Vec<String> =
+                chat_file.messages.iter().map(|m| m.id.clone()).collect();
+            if let Err(e) = super::attachments::delete_chat_attachments(project_path, &message_ids)
+            {
                 log::warn!("Failed to delete chat attachments: {}", e);
             }
         }
 
-        fs::remove_file(&file_path)
-            .map_err(|e| format!("Failed to delete chat file: {}", e))?;
+        fs::remove_file(&file_path).map_err(|e| format!("Failed to delete chat file: {}", e))?;
         log::info!("Deleted chat file: {:?}", file_path);
     }
 
@@ -265,8 +268,8 @@ pub fn list_chat_files(project_path: &Path) -> FileResult<Vec<ChatFile>> {
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(&chat_dir)
-        .map_err(|e| format!("Failed to read chat directory: {}", e))?;
+    let entries =
+        fs::read_dir(&chat_dir).map_err(|e| format!("Failed to read chat directory: {}", e))?;
 
     let mut chats = Vec::new();
 
@@ -431,8 +434,8 @@ mod tests {
         // Create multiple chat files
         for i in 1..=3 {
             let mut chat = create_test_chat_file(&format!("chat-{}", i));
-            chat.updated_at = Utc::now()
-                - chrono::Duration::try_hours(3 - i as i64).unwrap_or_default();
+            chat.updated_at =
+                Utc::now() - chrono::Duration::try_hours(3 - i as i64).unwrap_or_default();
             save_chat_file(temp_dir.path(), &chat).unwrap();
         }
 

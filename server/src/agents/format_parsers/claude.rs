@@ -40,8 +40,11 @@ pub fn parse_claude_stream_json_with_tools(
                         } else if item.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
                             let tool_name =
                                 item.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
-                            let tool_id =
-                                item.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+                            let tool_id = item
+                                .get("id")
+                                .and_then(|i| i.as_str())
+                                .unwrap_or("")
+                                .to_string();
                             let tool_input = item.get("input").cloned();
 
                             // Add to tool calls
@@ -73,8 +76,10 @@ pub fn parse_claude_stream_json_with_tools(
                                 .to_string();
                             let content_str =
                                 item.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                            let is_error =
-                                item.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
+                            let is_error = item
+                                .get("is_error")
+                                .and_then(|e| e.as_bool())
+                                .unwrap_or(false);
 
                             // Add to tool results
                             result.tool_results.push(ParsedToolResult {

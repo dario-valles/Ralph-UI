@@ -70,8 +70,9 @@ pub async fn route_git_command(
             let repo_path: String = get_arg(&args, "repoPath")?;
             let branch_name: String = get_arg(&args, "branchName")?;
             let force: bool = get_opt_arg(&args, "force")?.unwrap_or(false);
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .create_branch(&branch_name, force)))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.create_branch(&branch_name, force)))
         }
 
         "git_checkout_branch" => {
@@ -110,22 +111,25 @@ pub async fn route_git_command(
             let repo_path: String = get_arg(&args, "repoPath")?;
             let branch: String = get_arg(&args, "branch")?;
             let path: String = get_arg(&args, "path")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .create_worktree(&branch, &path)))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.create_worktree(&branch, &path)))
         }
 
         "git_remove_worktree" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
             let name: String = get_arg(&args, "name")?;
-            route_unit!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .remove_worktree(&name)))
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.remove_worktree(&name)))
         }
 
         "git_get_commit" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
             let commit_id: String = get_arg(&args, "commitId")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .get_commit(&commit_id)))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.get_commit(&commit_id)))
         }
 
         "git_create_commit" => {
@@ -133,8 +137,13 @@ pub async fn route_git_command(
             let message: String = get_arg(&args, "message")?;
             let author_name: String = get_arg(&args, "authorName")?;
             let author_email: String = get_arg(&args, "authorEmail")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .create_commit(&message, &author_name, &author_email)))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.create_commit(
+                    &message,
+                    &author_name,
+                    &author_email
+                )))
         }
 
         "git_stage_files" => {
@@ -148,12 +157,16 @@ pub async fn route_git_command(
 
         "git_stage_all" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
-            route_unit!(state.git_state.with_manager(&repo_path, |mgr| mgr.stage_all()))
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.stage_all()))
         }
 
         "git_get_working_diff" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr.get_working_diff()))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.get_working_diff()))
         }
 
         "git_merge_branch" => {
@@ -166,7 +179,9 @@ pub async fn route_git_command(
 
         "git_merge_abort" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
-            route_unit!(state.git_state.with_manager(&repo_path, |mgr| mgr.merge_abort()))
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.merge_abort()))
         }
 
         "git_check_merge_conflicts" => {
@@ -179,8 +194,9 @@ pub async fn route_git_command(
 
         "git_get_conflict_details" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .get_conflict_details()))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.get_conflict_details()))
         }
 
         "git_resolve_conflict" => {
@@ -196,16 +212,22 @@ pub async fn route_git_command(
             let message: String = get_arg(&args, "message")?;
             let author_name: String = get_arg(&args, "authorName")?;
             let author_email: String = get_arg(&args, "authorEmail")?;
-            route_sync!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .complete_merge(&message, &author_name, &author_email)))
+            route_sync!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.complete_merge(
+                    &message,
+                    &author_name,
+                    &author_email
+                )))
         }
 
         "git_push_branch" => {
             let repo_path: String = get_arg(&args, "repoPath")?;
             let branch_name: String = get_arg(&args, "branchName")?;
             let force: bool = get_opt_arg(&args, "force")?.unwrap_or(false);
-            route_unit!(state.git_state.with_manager(&repo_path, |mgr| mgr
-                .push_branch(&branch_name, force)))
+            route_unit!(state
+                .git_state
+                .with_manager(&repo_path, |mgr| mgr.push_branch(&branch_name, force)))
         }
 
         "git_resolve_conflicts_with_ai" => {
@@ -213,13 +235,16 @@ pub async fn route_git_command(
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
             let timeout_secs: Option<u64> = get_opt_arg(&args, "timeoutSecs")?;
-            route_async!(cmd, commands::git::git_resolve_conflicts_with_ai(
-                repo_path,
-                agent_type,
-                model,
-                timeout_secs,
-                &state.git_state
-            ))
+            route_async!(
+                cmd,
+                commands::git::git_resolve_conflicts_with_ai(
+                    repo_path,
+                    agent_type,
+                    model,
+                    timeout_secs,
+                    &state.git_state
+                )
+            )
         }
 
         // GitHub Commands
@@ -232,9 +257,12 @@ pub async fn route_git_command(
             let head: String = get_arg(&args, "head")?;
             let base: String = get_arg(&args, "base")?;
             let draft: bool = get_opt_arg(&args, "draft")?.unwrap_or(false);
-            route_async!(cmd, commands::github::github_create_pull_request(
-                token, owner, repo, title, body, head, base, draft
-            ))
+            route_async!(
+                cmd,
+                commands::github::github_create_pull_request(
+                    token, owner, repo, title, body, head, base, draft
+                )
+            )
         }
 
         "github_get_pull_request" => {
@@ -242,7 +270,10 @@ pub async fn route_git_command(
             let owner: String = get_arg(&args, "owner")?;
             let repo: String = get_arg(&args, "repo")?;
             let number: u32 = get_arg(&args, "number")?;
-            route_async!(cmd, commands::github::github_get_pull_request(token, owner, repo, number))
+            route_async!(
+                cmd,
+                commands::github::github_get_pull_request(token, owner, repo, number)
+            )
         }
 
         "github_list_pull_requests" => {
@@ -250,7 +281,10 @@ pub async fn route_git_command(
             let owner: String = get_arg(&args, "owner")?;
             let repo: String = get_arg(&args, "repo")?;
             let pr_state: Option<String> = get_opt_arg(&args, "state")?;
-            route_async!(cmd, commands::github::github_list_pull_requests(token, owner, repo, pr_state))
+            route_async!(
+                cmd,
+                commands::github::github_list_pull_requests(token, owner, repo, pr_state)
+            )
         }
 
         "github_get_issue" => {
@@ -258,7 +292,10 @@ pub async fn route_git_command(
             let owner: String = get_arg(&args, "owner")?;
             let repo: String = get_arg(&args, "repo")?;
             let number: u32 = get_arg(&args, "number")?;
-            route_async!(cmd, commands::github::github_get_issue(token, owner, repo, number))
+            route_async!(
+                cmd,
+                commands::github::github_get_issue(token, owner, repo, number)
+            )
         }
 
         "github_list_issues" => {
@@ -266,7 +303,10 @@ pub async fn route_git_command(
             let owner: String = get_arg(&args, "owner")?;
             let repo: String = get_arg(&args, "repo")?;
             let issue_state: Option<String> = get_opt_arg(&args, "state")?;
-            route_async!(cmd, commands::github::github_list_issues(token, owner, repo, issue_state))
+            route_async!(
+                cmd,
+                commands::github::github_list_issues(token, owner, repo, issue_state)
+            )
         }
 
         "github_import_issues_to_prd" => {
@@ -278,9 +318,19 @@ pub async fn route_git_command(
             let labels: Option<Vec<String>> = get_opt_arg(&args, "labels")?;
             let include_body: Option<bool> = get_opt_arg(&args, "includeBody")?;
             let use_labels_as_tags: Option<bool> = get_opt_arg(&args, "useLabelsAsTags")?;
-            route_async!(cmd, commands::github::github_import_issues_to_prd(
-                token, owner, repo, project_path, prd_name, labels, include_body, use_labels_as_tags
-            ))
+            route_async!(
+                cmd,
+                commands::github::github_import_issues_to_prd(
+                    token,
+                    owner,
+                    repo,
+                    project_path,
+                    prd_name,
+                    labels,
+                    include_body,
+                    use_labels_as_tags
+                )
+            )
         }
 
         _ => Err(format!("Unknown git command: {}", cmd)),

@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 fn get_global_commands_dir() -> Result<PathBuf, String> {
     // Get home directory
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    let home_dir =
+        dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())?;
 
     let commands_dir = home_dir.join(".ralph-ui").join("terminal");
     Ok(commands_dir)
@@ -48,9 +48,7 @@ pub async fn save_project_commands(
 }
 
 /// Load project-scoped commands from .ralph-ui/terminal/commands.json
-pub async fn load_project_commands(
-    project_path: String,
-) -> Result<Vec<Value>, String> {
+pub async fn load_project_commands(project_path: String) -> Result<Vec<Value>, String> {
     let project_dir = Path::new(&project_path);
     let commands_file = project_dir
         .join(".ralph-ui")
@@ -71,9 +69,7 @@ pub async fn load_project_commands(
 }
 
 /// Save global commands to ~/.ralph-ui/terminal/commands.json
-pub async fn save_global_commands(
-    commands: Vec<Value>,
-) -> Result<Value, String> {
+pub async fn save_global_commands(commands: Vec<Value>) -> Result<Value, String> {
     let commands_dir = get_global_commands_dir()?;
 
     // Create the directory if it doesn't exist

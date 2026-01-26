@@ -391,8 +391,7 @@ impl AgentManager {
             };
 
             if !data_to_send.is_empty() {
-                self.log_collector
-                    .emit_pty_data(agent_id, data_to_send);
+                self.log_collector.emit_pty_data(agent_id, data_to_send);
             }
         }
     }
@@ -1074,9 +1073,7 @@ impl AgentManager {
                     log::info!("[AgentManager] Created opencode.json with permission: allow");
                 }
             } else {
-                log::info!(
-                    "[AgentManager] opencode.json already exists, using existing config"
-                );
+                log::info!("[AgentManager] opencode.json already exists, using existing config");
             }
         }
 

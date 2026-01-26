@@ -105,7 +105,11 @@ pub struct Assignment {
 
 impl Assignment {
     /// Create a new active assignment
-    pub fn new(agent_id: impl Into<String>, agent_type: AgentType, story_id: impl Into<String>) -> Self {
+    pub fn new(
+        agent_id: impl Into<String>,
+        agent_type: AgentType,
+        story_id: impl Into<String>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             agent_id: agent_id.into(),
@@ -213,7 +217,11 @@ impl AssignmentsFile {
     }
 
     /// Update an existing assignment
-    pub fn update_assignment(&mut self, assignment_id: &str, updater: impl FnOnce(&mut Assignment)) {
+    pub fn update_assignment(
+        &mut self,
+        assignment_id: &str,
+        updater: impl FnOnce(&mut Assignment),
+    ) {
         if let Some(assignment) = self.assignments.iter_mut().find(|a| a.id == assignment_id) {
             updater(assignment);
             self.last_updated = chrono::Utc::now().to_rfc3339();
@@ -453,7 +461,10 @@ impl AssignmentsManager {
     /// Get files in use by other agents (excluding a specific agent)
     ///
     /// This is used to show files that the current agent should avoid.
-    pub fn get_files_in_use_by_others(&self, exclude_agent_id: &str) -> Result<Vec<FileInUse>, String> {
+    pub fn get_files_in_use_by_others(
+        &self,
+        exclude_agent_id: &str,
+    ) -> Result<Vec<FileInUse>, String> {
         let all_files = self.get_files_in_use()?;
         Ok(all_files
             .into_iter()
@@ -465,10 +476,7 @@ impl AssignmentsManager {
     ///
     /// Returns a list of potential conflicts if the estimated files overlap with
     /// files already being modified by other agents.
-    pub fn check_conflicts(
-        &self,
-        estimated_files: &[String],
-    ) -> Result<Vec<FileConflict>, String> {
+    pub fn check_conflicts(&self, estimated_files: &[String]) -> Result<Vec<FileConflict>, String> {
         let files_in_use = self.get_files_in_use()?;
         let mut conflicts = Vec::new();
 
@@ -651,12 +659,17 @@ impl AssignmentsManager {
     ///
     /// # Returns
     /// HashMap where keys are story IDs and values are vectors of estimated files
-    pub fn get_active_assignment_files(&self) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+    pub fn get_active_assignment_files(
+        &self,
+    ) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
         let file = self.read()?;
         let mut map = std::collections::HashMap::new();
 
         for assignment in file.active_assignments() {
-            map.insert(assignment.story_id.clone(), assignment.estimated_files.clone());
+            map.insert(
+                assignment.story_id.clone(),
+                assignment.estimated_files.clone(),
+            );
         }
 
         Ok(map)
@@ -700,7 +713,10 @@ mod tests {
 
         assignment.mark_failed("Rate limit exceeded");
         assert_eq!(assignment.status, AssignmentStatus::Failed);
-        assert_eq!(assignment.error_message, Some("Rate limit exceeded".to_string()));
+        assert_eq!(
+            assignment.error_message,
+            Some("Rate limit exceeded".to_string())
+        );
     }
 
     #[test]
@@ -1015,7 +1031,10 @@ mod tests {
         let manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
         manager.initialize("exec-123").unwrap();
 
-        let files = vec!["src/components/foo.tsx".to_string(), "src/stores/bar.ts".to_string()];
+        let files = vec![
+            "src/components/foo.tsx".to_string(),
+            "src/stores/bar.ts".to_string(),
+        ];
         let assignment = manager
             .assign_story_with_files("agent-1", AgentType::Claude, "US-1.1", files.clone())
             .unwrap();
@@ -1110,7 +1129,10 @@ mod tests {
                 "agent-1",
                 AgentType::Claude,
                 "US-1.1",
-                vec!["src/shared.ts".to_string(), "src/only_agent1.ts".to_string()],
+                vec![
+                    "src/shared.ts".to_string(),
+                    "src/only_agent1.ts".to_string(),
+                ],
             )
             .unwrap();
 
@@ -1169,7 +1191,9 @@ mod tests {
             "src/also_needed.ts".to_string(),
             "src/discovered.ts".to_string(),
         ];
-        manager.update_estimated_files("US-1.1", updated_files.clone()).unwrap();
+        manager
+            .update_estimated_files("US-1.1", updated_files.clone())
+            .unwrap();
 
         // Verify update
         let files_in_use = manager.get_files_in_use().unwrap();
@@ -1322,7 +1346,13 @@ mod tests {
 
         let files = vec!["src/a.ts".to_string(), "src/b.ts".to_string()];
         let assignment = manager
-            .manual_assign_story_with_files("agent-1", AgentType::Claude, "US-1.1", files.clone(), false)
+            .manual_assign_story_with_files(
+                "agent-1",
+                AgentType::Claude,
+                "US-1.1",
+                files.clone(),
+                false,
+            )
             .unwrap();
 
         assert_eq!(assignment.estimated_files, files);
@@ -1401,7 +1431,10 @@ mod tests {
                 "agent-1",
                 AgentType::Claude,
                 "US-1.1",
-                vec!["src/components/Button.tsx".to_string(), "src/lib/api.ts".to_string()],
+                vec![
+                    "src/components/Button.tsx".to_string(),
+                    "src/lib/api.ts".to_string(),
+                ],
             )
             .unwrap();
 
@@ -1442,9 +1475,7 @@ mod tests {
             )
             .unwrap();
 
-        manager
-            .complete_story("US-1.1")
-            .unwrap();
+        manager.complete_story("US-1.1").unwrap();
 
         // Map should be empty
         let map = manager.get_active_assignment_files().unwrap();
@@ -1496,7 +1527,6 @@ pub fn estimate_files_from_story(
         ("type", "src/types/"),
         ("test", "src/test/"),
         ("layout", "src/components/layout/"),
-
         // Backend patterns
         ("command", "server/src/commands/"),
         ("handler", "server/src/commands/"),
@@ -1512,7 +1542,6 @@ pub fn estimate_files_from_story(
         ("event", "server/src/events.rs"),
         ("websocket", "server/src/server/events.rs"),
         ("proxy", "server/src/server/proxy.rs"),
-
         // Config patterns
         ("config", ".ralph-ui/"),
         ("prd", ".ralph-ui/prds/"),
@@ -1578,21 +1607,13 @@ mod estimate_files_tests {
 
     #[test]
     fn test_estimate_files_store() {
-        let files = estimate_files_from_story(
-            "Add zustand store",
-            None,
-            "- Store manages state",
-        );
+        let files = estimate_files_from_story("Add zustand store", None, "- Store manages state");
         assert!(files.contains(&"src/stores/".to_string()));
     }
 
     #[test]
     fn test_estimate_files_empty_when_no_matches() {
-        let files = estimate_files_from_story(
-            "Generic task",
-            Some("Do something"),
-            "- It works",
-        );
+        let files = estimate_files_from_story("Generic task", Some("Do something"), "- It works");
         // Should still work but may return empty or generic matches
         // This is acceptable behavior
         assert!(files.is_empty() || !files.is_empty()); // Always passes, just verifies no panic

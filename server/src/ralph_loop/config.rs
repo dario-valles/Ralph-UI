@@ -32,8 +32,7 @@ impl ConfigManager {
         let content = std::fs::read_to_string(&self.config_path)
             .map_err(|e| format!("Failed to read config file: {}", e))?;
 
-        serde_yaml::from_str(&content)
-            .map_err(|e| format!("Failed to parse config file: {}", e))
+        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config file: {}", e))
     }
 
     /// Write config to file

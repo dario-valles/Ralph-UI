@@ -11,10 +11,7 @@ use crate::gsd::{
         PlanningFile, PlanningSessionInfo,
     },
     requirements::{Requirement, RequirementsDoc, ScopeSelection},
-    research::{
-        get_available_agents, synthesize_research, ResearchResult,
-        ResearchSynthesis,
-    },
+    research::{get_available_agents, synthesize_research, ResearchResult, ResearchSynthesis},
     roadmap::{derive_roadmap, RoadmapDoc},
     state::{GsdPhase, GsdWorkflowState, QuestioningContext, ResearchStatus},
     verification::{verify_plans, VerificationResult},
@@ -257,12 +254,18 @@ pub async fn generate_requirements_from_research(
 
     // Try to load synthesis first, fall back to individual research files
     let synthesis_content = read_planning_file(path, &session_id, PlanningFile::Summary)
-        .or_else(|_| read_planning_file(path, &session_id, PlanningFile::Research("features.md".to_string())))
+        .or_else(|_| {
+            read_planning_file(
+                path,
+                &session_id,
+                PlanningFile::Research("features.md".to_string()),
+            )
+        })
         .unwrap_or_default();
 
     // Load project context
-    let project_content = read_planning_file(path, &session_id, PlanningFile::Project)
-        .unwrap_or_default();
+    let project_content =
+        read_planning_file(path, &session_id, PlanningFile::Project).unwrap_or_default();
 
     // Generate requirements from research
     let doc = gen_reqs(&synthesis_content, &project_content);
@@ -303,7 +306,12 @@ pub async fn scope_requirements(
 
     // Save updated requirements
     let updated_content = doc.serialize_to_json("requirements")?;
-    write_planning_file(path, &session_id, PlanningFile::Requirements, &updated_content)?;
+    write_planning_file(
+        path,
+        &session_id,
+        PlanningFile::Requirements,
+        &updated_content,
+    )?;
 
     // Also save a scoped markdown version
     let scoped_md = doc.to_markdown();
@@ -479,7 +487,12 @@ pub async fn verify_gsd_plans(
 
     // Save verification result as markdown
     let verification_md = crate::gsd::verification::verification_to_markdown(&result);
-    write_planning_file(path, &session_id, PlanningFile::Verification, &verification_md)?;
+    write_planning_file(
+        path,
+        &session_id,
+        PlanningFile::Verification,
+        &verification_md,
+    )?;
 
     Ok(VerificationIterationResult {
         result,
@@ -578,7 +591,14 @@ pub async fn export_gsd_to_ralph(
                 .take_while(|l| !l.trim().is_empty())
                 .collect::<Vec<_>>()
                 .join(" ");
-            (title, if description.is_empty() { None } else { Some(description) })
+            (
+                title,
+                if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                },
+            )
         }
         Err(_) => (None, None),
     };
@@ -586,7 +606,9 @@ pub async fn export_gsd_to_ralph(
     // Validate and log execution config if provided
     let validated_config = if let Some(ref config) = execution_config {
         // Validate config
-        config.validate().map_err(|e| format!("Invalid execution config: {}", e))?;
+        config
+            .validate()
+            .map_err(|e| format!("Invalid execution config: {}", e))?;
 
         // Log the captured settings
         if config.has_any_fields() {
@@ -634,8 +656,7 @@ pub async fn export_gsd_to_ralph(
     let prds_dir = crate::file_storage::get_ralph_ui_dir(path).join("prds");
     crate::file_storage::ensure_dir(&prds_dir)?;
     let prd_path = prds_dir.join(format!("{}.json", prd_name));
-    std::fs::write(&prd_path, prd_json)
-        .map_err(|e| format!("Failed to write PRD file: {}", e))?;
+    std::fs::write(&prd_path, prd_json).map_err(|e| format!("Failed to write PRD file: {}", e))?;
 
     // Mark workflow as complete
     if let Ok(mut state) = load_workflow_state(path, &session_id) {
@@ -813,11 +834,20 @@ pub async fn clone_gsd_session(
 
     // Copy requirements if requested
     if options.copy_requirements {
-        if let Ok(content) = read_planning_file(path, &source_session_id, PlanningFile::Requirements) {
+        if let Ok(content) =
+            read_planning_file(path, &source_session_id, PlanningFile::Requirements)
+        {
             write_planning_file(path, &new_session_id, PlanningFile::Requirements, &content)?;
         }
-        if let Ok(content) = read_planning_file(path, &source_session_id, PlanningFile::RequirementsMd) {
-            write_planning_file(path, &new_session_id, PlanningFile::RequirementsMd, &content)?;
+        if let Ok(content) =
+            read_planning_file(path, &source_session_id, PlanningFile::RequirementsMd)
+        {
+            write_planning_file(
+                path,
+                &new_session_id,
+                PlanningFile::RequirementsMd,
+                &content,
+            )?;
         }
     }
 
@@ -1135,9 +1165,7 @@ pub async fn generate_requirements_from_prompt(
         ));
     }
 
-    log::info!(
-        "[GenerateRequirements] Running {agent:?} to generate {target_count} requirements"
-    );
+    log::info!("[GenerateRequirements] Running {agent:?} to generate {target_count} requirements");
     broadcast_status(&app_handle, &session_id, "running", None);
 
     // Spawn the agent
@@ -1202,11 +1230,8 @@ pub async fn generate_requirements_from_prompt(
     let output_str = String::from_utf8_lossy(&output);
 
     // Wait for process with timeout
-    let wait_result = tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
-        child.wait(),
-    )
-    .await;
+    let wait_result =
+        tokio::time::timeout(tokio::time::Duration::from_secs(10), child.wait()).await;
 
     if wait_result.is_err() {
         let _ = child.kill().await;
@@ -1246,7 +1271,11 @@ fn parse_requirement_item(
     let acceptance_criteria = item
         .get("acceptanceCriteria")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     Ok(GeneratedRequirement {
@@ -1273,8 +1302,7 @@ fn parse_requirement_item(
 
 /// Parse generated requirements from AI agent output
 fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement>, String> {
-    let json_str =
-        extract_json_array(output).ok_or("Could not find JSON array in agent output")?;
+    let json_str = extract_json_array(output).ok_or("Could not find JSON array in agent output")?;
 
     let parsed: Vec<serde_json::Value> =
         serde_json::from_str(&json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
@@ -1403,7 +1431,12 @@ impl FileLockGuard {
                 Ok(mut file) => {
                     // Write PID and timestamp for debugging
                     use std::io::Write;
-                    let _ = writeln!(file, "{}:{}", std::process::id(), chrono::Utc::now().to_rfc3339());
+                    let _ = writeln!(
+                        file,
+                        "{}:{}",
+                        std::process::id(),
+                        chrono::Utc::now().to_rfc3339()
+                    );
                     return Ok(Self { lock_path });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {

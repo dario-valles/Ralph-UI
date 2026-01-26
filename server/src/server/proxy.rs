@@ -186,7 +186,11 @@ pub async fn send_prd_chat_message_server(
 
     // If we captured a new external session ID, save it for future resume
     if let Some(captured_id) = agent_result.captured_session_id {
-        if let Err(e) = chat_ops::update_chat_session_external_id(project_path_obj, &request.session_id, Some(&captured_id)) {
+        if let Err(e) = chat_ops::update_chat_session_external_id(
+            project_path_obj,
+            &request.session_id,
+            Some(&captured_id),
+        ) {
             log::warn!("Failed to save external session ID for resume: {}", e);
         }
     }
@@ -515,16 +519,16 @@ pub async fn start_ralph_loop_server(
         .model
         .clone()
         .or_else(|| prd_config.and_then(|c| c.model.clone()))
-        .or_else(|| {
-            user_config
-                .as_ref()
-                .and_then(|c| c.execution.model.clone())
-        });
+        .or_else(|| user_config.as_ref().and_then(|c| c.execution.model.clone()));
 
     let resolved_max_iterations = request
         .max_iterations
         .or_else(|| prd_config.and_then(|c| c.max_iterations))
-        .or_else(|| user_config.as_ref().map(|c| c.execution.max_iterations as u32))
+        .or_else(|| {
+            user_config
+                .as_ref()
+                .map(|c| c.execution.max_iterations as u32)
+        })
         .unwrap_or(50);
 
     let resolved_max_cost = request
@@ -557,19 +561,31 @@ pub async fn start_ralph_loop_server(
         .template_name
         .clone()
         .or_else(|| prd_config.and_then(|c| c.template_name.clone()))
-        .or_else(|| user_config.as_ref().and_then(|c| c.templates.default_template.clone()));
+        .or_else(|| {
+            user_config
+                .as_ref()
+                .and_then(|c| c.templates.default_template.clone())
+        });
 
     let resolved_test_command = request
         .test_command
         .clone()
         .or_else(|| prd_config.and_then(|c| c.test_command.clone()))
-        .or_else(|| user_config.as_ref().and_then(|c| c.validation.test_command.clone()));
+        .or_else(|| {
+            user_config
+                .as_ref()
+                .and_then(|c| c.validation.test_command.clone())
+        });
 
     let resolved_lint_command = request
         .lint_command
         .clone()
         .or_else(|| prd_config.and_then(|c| c.lint_command.clone()))
-        .or_else(|| user_config.as_ref().and_then(|c| c.validation.lint_command.clone()));
+        .or_else(|| {
+            user_config
+                .as_ref()
+                .and_then(|c| c.validation.lint_command.clone())
+        });
 
     let resolved_max_retries = user_config
         .as_ref()
@@ -823,9 +839,10 @@ pub async fn start_ralph_loop_server(
         let result = orchestrator.run(agent_manager_arc).await;
 
         // Clean up execution state from file storage
-        if let Err(e) =
-            iteration_storage::delete_execution_state(&project_path_for_loop, &execution_id_for_loop)
-        {
+        if let Err(e) = iteration_storage::delete_execution_state(
+            &project_path_for_loop,
+            &execution_id_for_loop,
+        ) {
             log::warn!(
                 "[RalphLoop] Failed to delete execution state for {}: {}",
                 execution_id_for_loop,
@@ -974,13 +991,17 @@ pub async fn start_ralph_loop_server(
 }
 
 /// Server-compatible version of stop_ralph_loop
-pub async fn stop_ralph_loop_server(execution_id: String, state: &ServerAppState) -> Result<(), String> {
+pub async fn stop_ralph_loop_server(
+    execution_id: String,
+    state: &ServerAppState,
+) -> Result<(), String> {
     use crate::ralph_loop::RalphLoopOrchestrator;
 
     let orchestrator_arc = state.ralph_loop_state.get_execution(&execution_id)?;
 
     if let Some(orchestrator_arc) = orchestrator_arc {
-        let mut orchestrator: tokio::sync::MutexGuard<'_, RalphLoopOrchestrator> = orchestrator_arc.lock().await;
+        let mut orchestrator: tokio::sync::MutexGuard<'_, RalphLoopOrchestrator> =
+            orchestrator_arc.lock().await;
         orchestrator.cancel();
         Ok(())
     } else {
@@ -1007,7 +1028,10 @@ mod tests {
     }
 
     /// Extract an optional argument from JSON args (for tests)
-    fn get_opt_arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Result<Option<T>, String> {
+    fn get_opt_arg<T: serde::de::DeserializeOwned>(
+        args: &Value,
+        name: &str,
+    ) -> Result<Option<T>, String> {
         match args.get(name) {
             Some(v) if !v.is_null() => serde_json::from_value(v.clone())
                 .map(Some)
