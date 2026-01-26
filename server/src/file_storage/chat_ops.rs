@@ -4,8 +4,8 @@
 //! Chat sessions are stored in `{project}/.ralph-ui/chat/{id}.json`
 
 use super::chat::{
-    add_message_to_chat, chat_file_exists, clear_chat_messages, delete_chat_file,
-    list_chat_files, read_chat_file, save_chat_file, ChatFile,
+    add_message_to_chat, chat_file_exists, clear_chat_messages, delete_chat_file, list_chat_files,
+    read_chat_file, save_chat_file, ChatFile,
 };
 use crate::models::{ChatMessage, ChatSession};
 use chrono::Utc;

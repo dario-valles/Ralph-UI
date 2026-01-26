@@ -2,7 +2,7 @@
 
 #![allow(dead_code)] // Session lock infrastructure
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -174,15 +174,14 @@ impl SessionLock {
     // Private methods
 
     fn read_lock_info(&self) -> Result<LockInfo> {
-        let mut file = File::open(&self.lock_path)
-            .map_err(|e| anyhow!("Failed to open lock file: {}", e))?;
+        let mut file =
+            File::open(&self.lock_path).map_err(|e| anyhow!("Failed to open lock file: {}", e))?;
 
         let mut contents = String::new();
         file.read_to_string(&mut contents)
             .map_err(|e| anyhow!("Failed to read lock file: {}", e))?;
 
-        serde_json::from_str(&contents)
-            .map_err(|e| anyhow!("Failed to parse lock file: {}", e))
+        serde_json::from_str(&contents).map_err(|e| anyhow!("Failed to parse lock file: {}", e))
     }
 
     fn write_lock(&self) -> Result<()> {
@@ -200,7 +199,7 @@ impl SessionLock {
     }
 
     fn is_process_alive(&self, pid: u32) -> bool {
-        use sysinfo::{System, Pid};
+        use sysinfo::{Pid, System};
 
         let mut system = System::new();
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);

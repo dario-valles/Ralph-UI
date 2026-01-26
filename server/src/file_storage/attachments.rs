@@ -107,8 +107,12 @@ pub fn delete_message_attachments(project_path: &Path, message_id: &str) -> File
     let message_dir = get_message_attachments_dir(project_path, message_id);
 
     if message_dir.exists() {
-        fs::remove_dir_all(&message_dir)
-            .map_err(|e| format!("Failed to delete attachments directory {:?}: {}", message_dir, e))?;
+        fs::remove_dir_all(&message_dir).map_err(|e| {
+            format!(
+                "Failed to delete attachments directory {:?}: {}",
+                message_dir, e
+            )
+        })?;
         log::debug!("Deleted attachments directory: {:?}", message_dir);
     }
 
@@ -139,7 +143,10 @@ pub fn delete_chat_attachments(project_path: &Path, message_ids: &[String]) -> F
 }
 
 /// List all attachment files for a message
-pub fn list_message_attachment_files(project_path: &Path, message_id: &str) -> FileResult<Vec<PathBuf>> {
+pub fn list_message_attachment_files(
+    project_path: &Path,
+    message_id: &str,
+) -> FileResult<Vec<PathBuf>> {
     let message_dir = get_message_attachments_dir(project_path, message_id);
 
     if !message_dir.exists() {
@@ -187,7 +194,10 @@ mod tests {
     fn test_get_attachments_dir() {
         let project_path = Path::new("/home/user/project");
         let dir = get_attachments_dir(project_path);
-        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui/attachments"));
+        assert_eq!(
+            dir,
+            PathBuf::from("/home/user/project/.ralph-ui/attachments")
+        );
     }
 
     #[test]
@@ -286,11 +296,8 @@ mod tests {
         assert!(msg1_dir.exists());
         assert!(msg2_dir.exists());
 
-        delete_chat_attachments(
-            temp_dir.path(),
-            &["msg-1".to_string(), "msg-2".to_string()],
-        )
-        .unwrap();
+        delete_chat_attachments(temp_dir.path(), &["msg-1".to_string(), "msg-2".to_string()])
+            .unwrap();
 
         assert!(!msg1_dir.exists());
         assert!(!msg2_dir.exists());

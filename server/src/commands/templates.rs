@@ -1,8 +1,8 @@
 // Template Backend commands
 
 use crate::templates::{
-    engine::{TemplateEngine, TemplateContext, DependencyContext, TaskContext},
     builtin::get_builtin_templates,
+    engine::{DependencyContext, TaskContext, TemplateContext, TemplateEngine},
     resolver::{TemplateResolver, TemplateSource},
 };
 use serde::{Deserialize, Serialize};
@@ -33,10 +33,7 @@ pub struct RenderRequest {
 }
 
 /// List all available templates
-
-pub async fn list_templates(
-    project_path: Option<String>,
-) -> Result<Vec<TemplateInfo>, String> {
+pub async fn list_templates(project_path: Option<String>) -> Result<Vec<TemplateInfo>, String> {
     let resolver = if let Some(path) = project_path {
         TemplateResolver::new().with_project_path(std::path::Path::new(&path))
     } else {
@@ -64,19 +61,12 @@ pub async fn list_templates(
 }
 
 /// Get builtin template names
-
 pub async fn list_builtin_templates() -> Result<Vec<String>, String> {
-    Ok(get_builtin_templates()
-        .keys()
-        .cloned()
-        .collect())
+    Ok(get_builtin_templates().keys().cloned().collect())
 }
 
 /// Render a template with context
-
-pub async fn render_template(
-    request: RenderRequest,
-) -> Result<String, String> {
+pub async fn render_template(request: RenderRequest) -> Result<String, String> {
     let engine = TemplateEngine::new();
 
     // Build context using builder pattern
@@ -139,7 +129,6 @@ pub async fn render_template(
 }
 
 /// Get template content by name
-
 pub async fn get_template_content(
     name: String,
     project_path: Option<String>,
@@ -150,7 +139,8 @@ pub async fn get_template_content(
         TemplateResolver::new()
     };
 
-    let template = resolver.resolve(&name)
+    let template = resolver
+        .resolve(&name)
         .map_err(|e| format!("Failed to get template: {}", e))?;
 
     Ok(template.content)
@@ -161,7 +151,6 @@ pub async fn get_template_content(
 /// - If project_path is provided, saves to {project_path}/.ralph-ui/templates/{name}.tera
 /// - Otherwise saves to ~/.ralph-ui/templates/{name}.tera
 /// - Cannot save to builtin templates (read-only)
-
 pub async fn save_template(
     name: String,
     content: String,
@@ -174,20 +163,22 @@ pub async fn save_template(
     // Determine target directory based on scope
     let template_dir: PathBuf = match scope.as_str() {
         "project" => {
-            let project = project_path.ok_or("Project path required for project-scoped template")?;
+            let project =
+                project_path.ok_or("Project path required for project-scoped template")?;
             PathBuf::from(&project).join(".ralph-ui").join("templates")
         }
-        "global" => {
-            dirs::home_dir()
-                .ok_or("Could not determine home directory")?
-                .join(".ralph-ui")
-                .join("templates")
-        }
+        "global" => dirs::home_dir()
+            .ok_or("Could not determine home directory")?
+            .join(".ralph-ui")
+            .join("templates"),
         "builtin" => {
             return Err("Cannot save to builtin templates (read-only)".to_string());
         }
         _ => {
-            return Err(format!("Invalid scope '{}'. Use 'project' or 'global'", scope));
+            return Err(format!(
+                "Invalid scope '{}'. Use 'project' or 'global'",
+                scope
+            ));
         }
     };
 
@@ -197,8 +188,7 @@ pub async fn save_template(
 
     // Write template file with .tera extension
     let template_path = template_dir.join(format!("{}.tera", name));
-    fs::write(&template_path, &content)
-        .map_err(|e| format!("Failed to write template: {}", e))?;
+    fs::write(&template_path, &content).map_err(|e| format!("Failed to write template: {}", e))?;
 
     log::info!("Saved template '{}' to {:?}", name, template_path);
 
@@ -278,7 +268,8 @@ fn extract_template_variables(content: &str) -> Vec<String> {
 
     // Match {{ variable }} patterns - capture the variable name
     // Handles: {{ var }}, {{ var.field }}, {{ var | filter }}, {{ var.field | filter }}
-    let var_pattern = Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)").unwrap();
+    let var_pattern =
+        Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?)").unwrap();
 
     for cap in var_pattern.captures_iter(content) {
         if let Some(var) = cap.get(1) {
@@ -333,7 +324,6 @@ fn get_available_variables() -> Vec<String> {
 /// - The rendered output (if successful)
 /// - Syntax errors with line numbers (if failed)
 /// - List of variables used/unused for highlighting
-
 pub async fn preview_template(
     content: String,
     project_path: Option<String>,
@@ -344,11 +334,17 @@ pub async fn preview_template(
     // Build context with sample data
     let mut context = TemplateContext::new()
         .with_acceptance_criteria(sample.acceptance_criteria.clone())
-        .with_dependencies(sample.dependencies.iter().map(|d| DependencyContext {
-            id: "dep-1".to_string(),
-            title: d.clone(),
-            status: "completed".to_string(),
-        }).collect())
+        .with_dependencies(
+            sample
+                .dependencies
+                .iter()
+                .map(|d| DependencyContext {
+                    id: "dep-1".to_string(),
+                    title: d.clone(),
+                    status: "completed".to_string(),
+                })
+                .collect(),
+        )
         .with_prd(&sample.prd_content)
         .with_recent_progress(&sample.recent_progress)
         .with_codebase_patterns(&sample.codebase_patterns)
@@ -442,7 +438,6 @@ fn extract_error_line(error_msg: &str) -> Option<usize> {
 /// - If project_path is provided, deletes from {project_path}/.ralph-ui/templates/{name}.tera
 /// - Otherwise deletes from ~/.ralph-ui/templates/{name}.tera
 /// - Cannot delete builtin templates (read-only)
-
 pub async fn delete_template(
     name: String,
     scope: String,
@@ -454,35 +449,39 @@ pub async fn delete_template(
     // Determine target directory based on scope
     let template_path: PathBuf = match scope.as_str() {
         "project" => {
-            let project = project_path.ok_or("Project path required for project-scoped template")?;
+            let project =
+                project_path.ok_or("Project path required for project-scoped template")?;
             PathBuf::from(&project)
                 .join(".ralph-ui")
                 .join("templates")
                 .join(format!("{}.tera", name))
         }
-        "global" => {
-            dirs::home_dir()
-                .ok_or("Could not determine home directory")?
-                .join(".ralph-ui")
-                .join("templates")
-                .join(format!("{}.tera", name))
-        }
+        "global" => dirs::home_dir()
+            .ok_or("Could not determine home directory")?
+            .join(".ralph-ui")
+            .join("templates")
+            .join(format!("{}.tera", name)),
         "builtin" => {
             return Err("Cannot delete builtin templates (read-only)".to_string());
         }
         _ => {
-            return Err(format!("Invalid scope '{}'. Use 'project' or 'global'", scope));
+            return Err(format!(
+                "Invalid scope '{}'. Use 'project' or 'global'",
+                scope
+            ));
         }
     };
 
     // Check if file exists
     if !template_path.exists() {
-        return Err(format!("Template '{}' not found at {:?}", name, template_path));
+        return Err(format!(
+            "Template '{}' not found at {:?}",
+            name, template_path
+        ));
     }
 
     // Delete the file
-    fs::remove_file(&template_path)
-        .map_err(|e| format!("Failed to delete template: {}", e))?;
+    fs::remove_file(&template_path).map_err(|e| format!("Failed to delete template: {}", e))?;
 
     log::info!("Deleted template '{}' from {:?}", name, template_path);
 
@@ -551,12 +550,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_preview_template_variables_used() {
-        let content = "{{ task.title }} - {{ acceptance_criteria }} - {{ current_date }}".to_string();
+        let content =
+            "{{ task.title }} - {{ acceptance_criteria }} - {{ current_date }}".to_string();
         let result = preview_template(content, None).await.unwrap();
 
         assert!(result.success);
         assert!(result.variables_used.contains(&"task".to_string()));
-        assert!(result.variables_used.contains(&"acceptance_criteria".to_string()));
+        assert!(result
+            .variables_used
+            .contains(&"acceptance_criteria".to_string()));
         assert!(result.variables_used.contains(&"current_date".to_string()));
     }
 
@@ -569,9 +571,13 @@ mod tests {
         assert!(result.success);
         assert!(result.variables_used.contains(&"task".to_string()));
         // These should be in unused list
-        assert!(result.variables_unused.contains(&"acceptance_criteria".to_string()));
+        assert!(result
+            .variables_unused
+            .contains(&"acceptance_criteria".to_string()));
         assert!(result.variables_unused.contains(&"prd_content".to_string()));
-        assert!(result.variables_unused.contains(&"recent_progress".to_string()));
+        assert!(result
+            .variables_unused
+            .contains(&"recent_progress".to_string()));
     }
 
     #[tokio::test]
@@ -580,7 +586,10 @@ mod tests {
         let result = preview_template(content, None).await.unwrap();
 
         // Check that sample context has expected values
-        assert_eq!(result.sample_context.task_title, "Implement user authentication");
+        assert_eq!(
+            result.sample_context.task_title,
+            "Implement user authentication"
+        );
         assert_eq!(result.sample_context.prd_completed_count, 3);
         assert_eq!(result.sample_context.prd_total_count, 10);
         assert!(result.sample_context.acceptance_criteria.len() > 0);
@@ -592,7 +601,8 @@ mod tests {
 {% for criterion in acceptance_criteria %}
 - {{ criterion }}
 {% endfor %}
-"#.to_string();
+"#
+        .to_string();
         let result = preview_template(content, None).await.unwrap();
 
         assert!(result.success);
@@ -607,7 +617,8 @@ mod tests {
 {% if prd_completed_count %}
 Completed: {{ prd_completed_count }}/{{ prd_total_count }}
 {% endif %}
-"#.to_string();
+"#
+        .to_string();
         let result = preview_template(content, None).await.unwrap();
 
         assert!(result.success);

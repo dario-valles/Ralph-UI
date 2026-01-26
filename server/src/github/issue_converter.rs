@@ -132,9 +132,7 @@ fn extract_acceptance_criteria(body: &Option<String>) -> Option<String> {
     }
 
     // Look for bold acceptance criteria pattern
-    let bold_patterns = [
-        r"(?i)\*\*acceptance\s+criteria:?\*\*\s*\n([\s\S]*?)(?=\n+\*\*|$)",
-    ];
+    let bold_patterns = [r"(?i)\*\*acceptance\s+criteria:?\*\*\s*\n([\s\S]*?)(?=\n+\*\*|$)"];
 
     for pattern in bold_patterns {
         if let Ok(re) = Regex::new(pattern) {
@@ -179,7 +177,9 @@ fn extract_effort_from_labels(labels: &[String]) -> Option<String> {
         if lower.contains("medium") || lower == "m" || lower.ends_with("/m") {
             return Some("M".to_string());
         }
-        if lower.contains("large") && !lower.contains("extra") || lower == "l" || lower.ends_with("/l")
+        if lower.contains("large") && !lower.contains("extra")
+            || lower == "l"
+            || lower.ends_with("/l")
         {
             return Some("L".to_string());
         }
@@ -237,9 +237,12 @@ pub fn filter_issues<'a>(issues: &'a [Issue], options: &IssueImportOptions) -> V
         .filter(|issue| {
             // Filter by labels if specified
             if let Some(ref required_labels) = options.labels {
-                let has_required = required_labels
-                    .iter()
-                    .any(|required| issue.labels.iter().any(|l| l.eq_ignore_ascii_case(required)));
+                let has_required = required_labels.iter().any(|required| {
+                    issue
+                        .labels
+                        .iter()
+                        .any(|l| l.eq_ignore_ascii_case(required))
+                });
                 if !has_required {
                     return false;
                 }
@@ -268,14 +271,22 @@ mod tests {
 
     #[test]
     fn test_issue_to_story_basic() {
-        let issue = make_issue(123, "Add login feature", Some("User should be able to log in"), vec![]);
+        let issue = make_issue(
+            123,
+            "Add login feature",
+            Some("User should be able to log in"),
+            vec![],
+        );
         let options = IssueImportOptions::default();
 
         let story = issue_to_story(&issue, &options);
 
         assert_eq!(story.id, "gh-123");
         assert_eq!(story.title, "Add login feature");
-        assert_eq!(story.description.as_deref(), Some("User should be able to log in"));
+        assert_eq!(
+            story.description.as_deref(),
+            Some("User should be able to log in")
+        );
     }
 
     #[test]
@@ -296,16 +307,28 @@ mod tests {
 
     #[test]
     fn test_extract_effort_from_labels() {
-        assert_eq!(extract_effort_from_labels(&["size/s".to_string()]), Some("S".to_string()));
-        assert_eq!(extract_effort_from_labels(&["medium".to_string()]), Some("M".to_string()));
-        assert_eq!(extract_effort_from_labels(&["extra large".to_string()]), Some("XL".to_string()));
+        assert_eq!(
+            extract_effort_from_labels(&["size/s".to_string()]),
+            Some("S".to_string())
+        );
+        assert_eq!(
+            extract_effort_from_labels(&["medium".to_string()]),
+            Some("M".to_string())
+        );
+        assert_eq!(
+            extract_effort_from_labels(&["extra large".to_string()]),
+            Some("XL".to_string())
+        );
         assert_eq!(extract_effort_from_labels(&["bug".to_string()]), None);
     }
 
     #[test]
     fn test_estimate_priority_from_labels() {
         assert_eq!(estimate_priority_from_labels(&["critical".to_string()]), 10);
-        assert_eq!(estimate_priority_from_labels(&["high priority".to_string()]), 30);
+        assert_eq!(
+            estimate_priority_from_labels(&["high priority".to_string()]),
+            30
+        );
         assert_eq!(estimate_priority_from_labels(&["bug".to_string()]), 50);
     }
 

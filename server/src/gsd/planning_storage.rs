@@ -74,11 +74,7 @@ pub fn get_planning_file_path(
 }
 
 /// Get the path for a research output file
-pub fn get_research_file_path(
-    project_path: &Path,
-    session_id: &str,
-    filename: &str,
-) -> PathBuf {
+pub fn get_research_file_path(project_path: &Path, session_id: &str, filename: &str) -> PathBuf {
     get_research_dir(project_path, session_id).join(filename)
 }
 
@@ -91,10 +87,7 @@ pub fn init_planning_session(project_path: &Path, session_id: &str) -> FileResul
     let research_dir = get_research_dir(project_path, session_id);
     ensure_dir(&research_dir)?;
 
-    log::info!(
-        "Initialized planning session directory: {:?}",
-        planning_dir
-    );
+    log::info!("Initialized planning session directory: {:?}", planning_dir);
     Ok(planning_dir)
 }
 
@@ -217,10 +210,7 @@ pub fn save_workflow_state(
 }
 
 /// Load workflow state from file
-pub fn load_workflow_state(
-    project_path: &Path,
-    session_id: &str,
-) -> FileResult<GsdWorkflowState> {
+pub fn load_workflow_state(project_path: &Path, session_id: &str) -> FileResult<GsdWorkflowState> {
     let file_path = get_planning_file_path(project_path, session_id, PlanningFile::State);
     read_json(&file_path)
 }
@@ -286,6 +276,140 @@ pub struct PlanningSessionInfo {
     pub updated_at: Option<String>,
 }
 
+/// Information about research in a session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResearchSessionInfo {
+    pub session_id: String,
+    pub created_at: Option<String>,
+    pub has_architecture: bool,
+    pub has_codebase: bool,
+    pub has_best_practices: bool,
+    pub has_risks: bool,
+    pub has_synthesis: bool,
+    /// Total size of research files in bytes
+    pub total_size_bytes: u64,
+}
+
+/// List all sessions that have research results
+pub fn list_project_research(project_path: &Path) -> FileResult<Vec<ResearchSessionInfo>> {
+    let planning_base = get_planning_base_dir(project_path);
+
+    if !planning_base.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&planning_base)
+        .map_err(|e| format!("Failed to read planning directory: {}", e))?;
+
+    let mut sessions = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if let Some(session_id) = path.file_name() {
+                let session_id = session_id.to_string_lossy().to_string();
+                let research_dir = get_research_dir(project_path, &session_id);
+
+                // Check if research directory exists and has files
+                if !research_dir.exists() {
+                    continue;
+                }
+
+                let has_architecture = research_dir.join("architecture.md").exists();
+                let has_codebase = research_dir.join("codebase.md").exists();
+                let has_best_practices = research_dir.join("best_practices.md").exists();
+                let has_risks = research_dir.join("risks.md").exists();
+                let has_synthesis =
+                    get_planning_file_path(project_path, &session_id, PlanningFile::Summary)
+                        .exists();
+
+                // Skip sessions without any research
+                if !has_architecture && !has_codebase && !has_best_practices && !has_risks {
+                    continue;
+                }
+
+                // Calculate total size
+                let mut total_size: u64 = 0;
+                if let Ok(entries) = fs::read_dir(&research_dir) {
+                    for entry in entries.flatten() {
+                        if let Ok(meta) = entry.metadata() {
+                            total_size += meta.len();
+                        }
+                    }
+                }
+
+                // Get creation time from state
+                let state = load_workflow_state(project_path, &session_id).ok();
+                let created_at = state.map(|s| s.started_at.to_rfc3339());
+
+                sessions.push(ResearchSessionInfo {
+                    session_id,
+                    created_at,
+                    has_architecture,
+                    has_codebase,
+                    has_best_practices,
+                    has_risks,
+                    has_synthesis,
+                    total_size_bytes: total_size,
+                });
+            }
+        }
+    }
+
+    // Sort by created_at descending (most recent first)
+    sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(sessions)
+}
+
+/// Copy research files from one session to another
+pub fn copy_research_to_session(
+    project_path: &Path,
+    source_session_id: &str,
+    target_session_id: &str,
+    research_types: Option<Vec<String>>,
+) -> FileResult<u32> {
+    let source_research_dir = get_research_dir(project_path, source_session_id);
+    let target_research_dir = get_research_dir(project_path, target_session_id);
+
+    // Ensure target directory exists
+    ensure_dir(&target_research_dir)?;
+
+    let all_types = vec!["architecture", "codebase", "best_practices", "risks"];
+    let types_to_copy: Vec<&str> = match &research_types {
+        Some(types) => types.iter().map(|s| s.as_str()).collect(),
+        None => all_types,
+    };
+
+    let mut copied_count = 0u32;
+    for research_type in types_to_copy {
+        let filename = format!("{}.md", research_type);
+        let source_file = source_research_dir.join(&filename);
+        let target_file = target_research_dir.join(&filename);
+
+        if source_file.exists() {
+            fs::copy(&source_file, &target_file)
+                .map_err(|e| format!("Failed to copy {}: {}", filename, e))?;
+            copied_count += 1;
+            log::info!(
+                "Copied research file: {:?} -> {:?}",
+                source_file,
+                target_file
+            );
+        }
+    }
+
+    log::info!(
+        "Copied {} research files from {} to {}",
+        copied_count,
+        source_session_id,
+        target_session_id
+    );
+
+    Ok(copied_count)
+}
+
 /// Generate PROJECT.md content from questioning context
 pub fn generate_project_md(context: &QuestioningContext) -> String {
     let mut content = String::new();
@@ -341,7 +465,9 @@ pub fn generate_project_md(context: &QuestioningContext) -> String {
 
     // Constraints placeholder
     content.push_str("## Constraints\n\n");
-    content.push_str("*Technical and business constraints to be identified during research phase.*\n\n");
+    content.push_str(
+        "*Technical and business constraints to be identified during research phase.*\n\n",
+    );
 
     // Non-goals placeholder
     content.push_str("## Non-Goals\n\n");
@@ -439,10 +565,20 @@ mod tests {
         init_planning_session(project_path, session_id).unwrap();
 
         // Write research files
-        write_research_file(project_path, session_id, "architecture.md", "# Architecture")
-            .unwrap();
-        write_research_file(project_path, session_id, "codebase.md", "# Codebase Analysis")
-            .unwrap();
+        write_research_file(
+            project_path,
+            session_id,
+            "architecture.md",
+            "# Architecture",
+        )
+        .unwrap();
+        write_research_file(
+            project_path,
+            session_id,
+            "codebase.md",
+            "# Codebase Analysis",
+        )
+        .unwrap();
 
         // List files
         let files = list_research_files(project_path, session_id).unwrap();
@@ -522,7 +658,10 @@ mod tests {
             why: Some("Teams need better collaboration tools".to_string()),
             who: Some("Remote workers and distributed teams".to_string()),
             done: Some("Users can create, assign, and track tasks across projects".to_string()),
-            notes: vec!["Should integrate with Slack".to_string(), "Mobile support important".to_string()],
+            notes: vec![
+                "Should integrate with Slack".to_string(),
+                "Mobile support important".to_string(),
+            ],
         };
 
         let content = generate_project_md(&context);

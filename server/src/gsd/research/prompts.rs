@@ -72,6 +72,10 @@ Write your findings in Markdown format with clear sections:
 [Pros and cons of the recommended approach]
 ```
 
+## IMPORTANT - Output Instructions
+
+DO NOT create any files. Output your research directly as text - it will be captured and saved automatically. Just print the markdown content to stdout.
+
 Be specific and practical. Reference the project context in your recommendations.
 "#,
             project_info = project_info
@@ -125,6 +129,10 @@ Write your findings in Markdown format:
 [Suggestions for new code]
 ```
 
+## IMPORTANT - Output Instructions
+
+DO NOT create any files. Output your research directly as text - it will be captured and saved automatically. Just print the markdown content to stdout.
+
 If you can't access the codebase, provide general recommendations based on the project context.
 "#,
             project_info = project_info
@@ -177,6 +185,10 @@ Write your findings in Markdown format:
 ## Common Pitfalls
 [Mistakes to avoid]
 ```
+
+## IMPORTANT - Output Instructions
+
+DO NOT create any files. Output your research directly as text - it will be captured and saved automatically. Just print the markdown content to stdout.
 
 Focus on practical, actionable recommendations.
 "#,
@@ -232,6 +244,10 @@ Write your findings in Markdown format:
 ## Unknowns
 [Things that need more investigation]
 ```
+
+## IMPORTANT - Output Instructions
+
+DO NOT create any files. Output your research directly as text - it will be captured and saved automatically. Just print the markdown content to stdout.
 
 Be honest about risks but also provide actionable mitigations.
 "#,

@@ -154,7 +154,7 @@ function EditPhaseDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{phase ? 'Edit Phase' : 'Add Phase'}</DialogTitle>
           <DialogDescription>Configure the phase details and milestones.</DialogDescription>
@@ -305,7 +305,7 @@ export function RoadmapEditor({
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-3">
           <p className="text-xs text-muted-foreground">Phases</p>
           <p className="text-2xl font-bold">{stats.phases}</p>

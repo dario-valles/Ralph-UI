@@ -5,8 +5,8 @@ pub mod merger;
 
 // Re-export main types
 pub use loader::{
-    ConfigLoader, RalphConfig, ExecutionConfig, GitConfig,
-    ValidationConfig, FallbackSettings, ErrorStrategyConfig,
+    ConfigLoader, ErrorStrategyConfig, ExecutionConfig, FallbackSettings, GitConfig, RalphConfig,
+    ValidationConfig,
 };
 pub use merger::{ConfigMerger, PartialConfig};
 
@@ -25,13 +25,22 @@ pub fn load_merged_config(
         ConfigLoader::new()
     };
 
-    log::info!("[load_merged_config] Global config path: {:?}", loader.global_config_path());
-    log::info!("[load_merged_config] Project config path: {:?}", loader.project_config_path());
+    log::info!(
+        "[load_merged_config] Global config path: {:?}",
+        loader.global_config_path()
+    );
+    log::info!(
+        "[load_merged_config] Project config path: {:?}",
+        loader.project_config_path()
+    );
 
     let global = match loader.load_global() {
         Ok(Some(cfg)) => {
-            log::info!("[load_merged_config] Loaded global config: max_parallel={}, agent_type={}",
-                cfg.execution.max_parallel, cfg.execution.agent_type);
+            log::info!(
+                "[load_merged_config] Loaded global config: max_parallel={}, agent_type={}",
+                cfg.execution.max_parallel,
+                cfg.execution.agent_type
+            );
             Some(cfg)
         }
         Ok(None) => {
@@ -46,7 +55,10 @@ pub fn load_merged_config(
 
     let project = match loader.load_project() {
         Ok(Some(cfg)) => {
-            log::info!("[load_merged_config] Loaded project config: max_parallel={}", cfg.execution.max_parallel);
+            log::info!(
+                "[load_merged_config] Loaded project config: max_parallel={}",
+                cfg.execution.max_parallel
+            );
             Some(cfg)
         }
         Ok(None) => {
@@ -65,14 +77,19 @@ pub fn load_merged_config(
         .with_cli(cli_overrides)
         .merge();
 
-    log::info!("[load_merged_config] Final merged config: max_parallel={}, agent_type={}",
-        config.execution.max_parallel, config.execution.agent_type);
+    log::info!(
+        "[load_merged_config] Final merged config: max_parallel={}, agent_type={}",
+        config.execution.max_parallel,
+        config.execution.agent_type
+    );
 
     Ok(config)
 }
 
 /// Get config file paths for debugging
-pub fn get_config_paths(project_path: Option<&Path>) -> (Option<std::path::PathBuf>, Option<std::path::PathBuf>) {
+pub fn get_config_paths(
+    project_path: Option<&Path>,
+) -> (Option<std::path::PathBuf>, Option<std::path::PathBuf>) {
     let loader = if let Some(path) = project_path {
         ConfigLoader::new().with_project_path(path)
     } else {
@@ -89,8 +106,8 @@ pub fn get_config_paths(project_path: Option<&Path>) -> (Option<std::path::PathB
 mod tests {
     use super::*;
     use crate::config::merger::PartialExecutionConfig;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_load_merged_config_defaults() {

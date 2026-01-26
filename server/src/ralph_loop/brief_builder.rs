@@ -25,7 +25,7 @@
 //!
 //! File location: `.ralph-ui/briefs/{prd_name}/BRIEF.md`
 
-use super::assignments_manager::{AssignmentsManager, AssignmentStatus, FileInUse};
+use super::assignments_manager::{AssignmentStatus, AssignmentsManager, FileInUse};
 use super::learnings_manager::LearningsManager;
 use super::types::{RalphPrd, RalphStory};
 use std::path::{Path, PathBuf};
@@ -91,10 +91,7 @@ impl BriefBuilder {
             let path = entry.path();
 
             if path.is_file() {
-                let filename = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
                 // Match both BRIEF-N.md and BRIEF.md patterns
                 if filename == "BRIEF.md" {
@@ -235,8 +232,8 @@ impl BriefBuilder {
         let active_assignments = assignments_manager.get_active_assignments().ok();
 
         // US-2.2: Get files in use by other agents
-        let files_in_use = current_agent_id
-            .and_then(|id| assignments_manager.get_files_in_use_by_others(id).ok());
+        let files_in_use =
+            current_agent_id.and_then(|id| assignments_manager.get_files_in_use_by_others(id).ok());
 
         let brief = self.build_brief_content_with_full_context(
             prd,
@@ -320,11 +317,12 @@ impl BriefBuilder {
         ));
 
         // Completed stories (so agent knows to skip these)
-        let completed_stories: Vec<&RalphStory> =
-            prd.stories.iter().filter(|s| s.passes).collect();
+        let completed_stories: Vec<&RalphStory> = prd.stories.iter().filter(|s| s.passes).collect();
         if !completed_stories.is_empty() {
             brief.push_str("## Completed Stories (SKIP THESE)\n\n");
-            brief.push_str("These stories have been implemented and verified. **Do not work on these.**\n\n");
+            brief.push_str(
+                "These stories have been implemented and verified. **Do not work on these.**\n\n",
+            );
             for story in &completed_stories {
                 brief.push_str(&format!("- [x] **{}**: {}\n", story.id, story.title));
             }
@@ -370,7 +368,8 @@ impl BriefBuilder {
                 brief.push_str("These files are currently being modified by other agents. **Avoid modifying these files** to prevent merge conflicts:\n\n");
 
                 // Group files by agent/story for clarity
-                let mut files_by_story: std::collections::HashMap<&str, Vec<&FileInUse>> = std::collections::HashMap::new();
+                let mut files_by_story: std::collections::HashMap<&str, Vec<&FileInUse>> =
+                    std::collections::HashMap::new();
                 for file in files {
                     files_by_story
                         .entry(file.story_id.as_str())
@@ -494,9 +493,15 @@ impl BriefBuilder {
         brief.push_str("### Format\n\n");
         brief.push_str("Use the `<learning>` tag with a `type` attribute:\n\n");
         brief.push_str("```\n");
-        brief.push_str("<learning type=\"pattern\">Description of the coding pattern to follow</learning>\n");
-        brief.push_str("<learning type=\"gotcha\">Warning about something that caused problems</learning>\n");
-        brief.push_str("<learning type=\"architecture\">Insight about the codebase architecture</learning>\n");
+        brief.push_str(
+            "<learning type=\"pattern\">Description of the coding pattern to follow</learning>\n",
+        );
+        brief.push_str(
+            "<learning type=\"gotcha\">Warning about something that caused problems</learning>\n",
+        );
+        brief.push_str(
+            "<learning type=\"architecture\">Insight about the codebase architecture</learning>\n",
+        );
         brief.push_str("<learning type=\"testing\">Testing-related insight</learning>\n");
         brief.push_str("<learning type=\"tooling\">Build/tooling insight</learning>\n");
         brief.push_str("```\n\n");
@@ -523,11 +528,14 @@ impl BriefBuilder {
         brief.push_str("1. **Focus on the Current Story above** - implement only this story\n");
         brief.push_str("2. **Skip Completed Stories** - they are already done\n");
         brief.push_str("3. **Avoid In-Progress Work** - other agents are working on those\n");
-        brief.push_str("4. **Avoid Files Listed Above** - other agents are modifying those (US-2.2)\n");
+        brief.push_str(
+            "4. **Avoid Files Listed Above** - other agents are modifying those (US-2.2)\n",
+        );
         brief.push_str("5. **Meet all Acceptance Criteria** before marking as complete\n");
         brief.push_str("6. **Report useful discoveries** using `<learning>` tags (see above)\n");
         brief.push_str("7. **Update PRD JSON** - set `passes: true` for the story when complete\n");
-        brief.push_str("8. **Commit your changes** with a clear message referencing the story ID\n");
+        brief
+            .push_str("8. **Commit your changes** with a clear message referencing the story ID\n");
 
         brief
     }
@@ -794,7 +802,9 @@ mod tests {
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
         let prd = create_test_prd();
 
-        builder.generate_brief(&prd, Some("Test learning"), Some(1)).unwrap();
+        builder
+            .generate_brief(&prd, Some("Test learning"), Some(1))
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -818,8 +828,8 @@ mod tests {
     #[test]
     fn test_brief_includes_completed_inprogress_pending() {
         // US-1.3: Brief includes completed work, in-progress work, and pending work
-        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
         use crate::models::AgentType;
+        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -856,13 +866,18 @@ mod tests {
         assignments_manager.add_assignment(assignment).unwrap();
 
         // Generate brief with full context
-        builder.generate_brief_with_full_context(
-            &prd,
-            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
-            &assignments_manager,
-            Some(1),
-            Some("current-agent"),
-        ).unwrap();
+        builder
+            .generate_brief_with_full_context(
+                &prd,
+                &crate::ralph_loop::learnings_manager::LearningsManager::new(
+                    temp_dir.path(),
+                    "test-prd",
+                ),
+                &assignments_manager,
+                Some(1),
+                Some("current-agent"),
+            )
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -888,7 +903,7 @@ mod tests {
     #[test]
     fn test_brief_includes_accumulated_learnings_from_all_agents() {
         // US-1.3: Brief includes accumulated learnings from all previous agents
-        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+        use crate::ralph_loop::learnings_manager::{LearningEntry, LearningType, LearningsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -899,19 +914,33 @@ mod tests {
         learnings_manager.initialize().unwrap();
 
         // Add learning from iteration 1 (simulating Claude agent)
-        let learning1 = LearningEntry::with_type(1, LearningType::Pattern, "Use existing patterns from codebase");
+        let learning1 = LearningEntry::with_type(
+            1,
+            LearningType::Pattern,
+            "Use existing patterns from codebase",
+        );
         learnings_manager.add_learning(learning1).unwrap();
 
         // Add learning from iteration 2 (simulating OpenCode agent)
-        let learning2 = LearningEntry::with_type(2, LearningType::Gotcha, "Watch out for async race conditions");
+        let learning2 = LearningEntry::with_type(
+            2,
+            LearningType::Gotcha,
+            "Watch out for async race conditions",
+        );
         learnings_manager.add_learning(learning2).unwrap();
 
         // Add learning from iteration 3 (simulating Cursor agent)
-        let learning3 = LearningEntry::with_type(3, LearningType::Architecture, "Follow hexagonal architecture");
+        let learning3 = LearningEntry::with_type(
+            3,
+            LearningType::Architecture,
+            "Follow hexagonal architecture",
+        );
         learnings_manager.add_learning(learning3).unwrap();
 
         // Generate brief with learnings manager
-        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+        builder
+            .generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4))
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -937,7 +966,13 @@ mod tests {
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
         let prd = create_test_prd();
 
-        builder.generate_brief(&prd, Some("### Test Section\n- Point 1\n- Point 2"), Some(1)).unwrap();
+        builder
+            .generate_brief(
+                &prd,
+                Some("### Test Section\n- Point 1\n- Point 2"),
+                Some(1),
+            )
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -945,7 +980,10 @@ mod tests {
         assert!(brief.is_ascii() || brief.chars().all(|c| c.is_ascii() || c == '🎉'));
 
         // Verify clear section markers that any agent can parse
-        assert!(brief.contains("## Completed Stories (SKIP THESE)") || brief.contains("## Current Story"));
+        assert!(
+            brief.contains("## Completed Stories (SKIP THESE)")
+                || brief.contains("## Current Story")
+        );
         assert!(brief.contains("## Instructions"));
 
         // Verify actionable instructions are clear and universal
@@ -961,8 +999,8 @@ mod tests {
     #[test]
     fn test_brief_excludes_current_agent_from_inprogress() {
         // Ensure the current agent's work is not shown in "In-Progress" section
-        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
         use crate::models::AgentType;
+        use crate::ralph_loop::assignments_manager::{Assignment, AssignmentsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -988,13 +1026,18 @@ mod tests {
         assignments_manager.add_assignment(assignment2).unwrap();
 
         // Generate brief as current-agent
-        builder.generate_brief_with_full_context(
-            &prd,
-            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
-            &assignments_manager,
-            Some(1),
-            Some("current-agent"),
-        ).unwrap();
+        builder
+            .generate_brief_with_full_context(
+                &prd,
+                &crate::ralph_loop::learnings_manager::LearningsManager::new(
+                    temp_dir.path(),
+                    "test-prd",
+                ),
+                &assignments_manager,
+                Some(1),
+                Some("current-agent"),
+            )
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -1013,8 +1056,8 @@ mod tests {
     #[test]
     fn test_brief_includes_files_to_avoid() {
         // US-2.2: Brief includes "avoid these files" section
-        use crate::ralph_loop::assignments_manager::AssignmentsManager;
         use crate::models::AgentType;
+        use crate::ralph_loop::assignments_manager::AssignmentsManager;
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -1045,13 +1088,18 @@ mod tests {
             .unwrap();
 
         // Generate brief with full context for current-agent
-        builder.generate_brief_with_full_context(
-            &prd,
-            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
-            &assignments_manager,
-            Some(1),
-            Some("current-agent"),
-        ).unwrap();
+        builder
+            .generate_brief_with_full_context(
+                &prd,
+                &crate::ralph_loop::learnings_manager::LearningsManager::new(
+                    temp_dir.path(),
+                    "test-prd",
+                ),
+                &assignments_manager,
+                Some(1),
+                Some("current-agent"),
+            )
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -1087,8 +1135,8 @@ mod tests {
     #[test]
     fn test_brief_instructions_mention_avoid_files() {
         // US-2.2: Instructions mention avoiding files
-        use crate::ralph_loop::assignments_manager::AssignmentsManager;
         use crate::models::AgentType;
+        use crate::ralph_loop::assignments_manager::AssignmentsManager;
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -1101,13 +1149,18 @@ mod tests {
         let assignments_manager = AssignmentsManager::new(temp_dir.path(), "test-prd");
         assignments_manager.initialize("exec-123").unwrap();
 
-        builder.generate_brief_with_full_context(
-            &prd,
-            &crate::ralph_loop::learnings_manager::LearningsManager::new(temp_dir.path(), "test-prd"),
-            &assignments_manager,
-            Some(1),
-            Some("current-agent"),
-        ).unwrap();
+        builder
+            .generate_brief_with_full_context(
+                &prd,
+                &crate::ralph_loop::learnings_manager::LearningsManager::new(
+                    temp_dir.path(),
+                    "test-prd",
+                ),
+                &assignments_manager,
+                Some(1),
+                Some("current-agent"),
+            )
+            .unwrap();
 
         let brief = builder.read_brief().unwrap();
 
@@ -1187,7 +1240,7 @@ mod tests {
     #[test]
     fn test_brief_learnings_grouped_by_type() {
         // US-3.2: Learnings grouped by type for easy scanning
-        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+        use crate::ralph_loop::learnings_manager::{LearningEntry, LearningType, LearningsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -1197,11 +1250,31 @@ mod tests {
         let learnings_manager = LearningsManager::new(temp_dir.path(), "test-prd");
         learnings_manager.initialize().unwrap();
 
-        learnings_manager.add_learning(LearningEntry::with_type(1, LearningType::Gotcha, "Gotcha warning")).unwrap();
-        learnings_manager.add_learning(LearningEntry::with_type(2, LearningType::Pattern, "Pattern to follow")).unwrap();
-        learnings_manager.add_learning(LearningEntry::with_type(3, LearningType::Architecture, "Architecture note")).unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                1,
+                LearningType::Gotcha,
+                "Gotcha warning",
+            ))
+            .unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                2,
+                LearningType::Pattern,
+                "Pattern to follow",
+            ))
+            .unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                3,
+                LearningType::Architecture,
+                "Architecture note",
+            ))
+            .unwrap();
 
-        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+        builder
+            .generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4))
+            .unwrap();
         let brief = builder.read_brief().unwrap();
 
         // Check learnings section exists
@@ -1215,13 +1288,16 @@ mod tests {
         // Verify Gotcha comes first (most actionable)
         let gotcha_pos = brief.find("### Gotcha").unwrap();
         let pattern_pos = brief.find("### Pattern").unwrap();
-        assert!(gotcha_pos < pattern_pos, "Gotcha should appear before Pattern for easy scanning");
+        assert!(
+            gotcha_pos < pattern_pos,
+            "Gotcha should appear before Pattern for easy scanning"
+        );
     }
 
     #[test]
     fn test_brief_learnings_with_syntax_highlighted_code() {
         // US-3.2: Code patterns include syntax-highlighted examples
-        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+        use crate::ralph_loop::learnings_manager::{LearningEntry, LearningType, LearningsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -1235,17 +1311,22 @@ mod tests {
             .with_code("fn main() { let x = 5; }");
         learnings_manager.add_learning(entry).unwrap();
 
-        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(2)).unwrap();
+        builder
+            .generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(2))
+            .unwrap();
         let brief = builder.read_brief().unwrap();
 
         // Check that code block has language specifier for syntax highlighting
-        assert!(brief.contains("```rust"), "Code should have rust syntax highlighting");
+        assert!(
+            brief.contains("```rust"),
+            "Code should have rust syntax highlighting"
+        );
     }
 
     #[test]
     fn test_brief_learnings_prioritized_by_iteration() {
         // US-3.2: Most useful learnings prioritized (by iteration - most recent first)
-        use crate::ralph_loop::learnings_manager::{LearningsManager, LearningEntry, LearningType};
+        use crate::ralph_loop::learnings_manager::{LearningEntry, LearningType, LearningsManager};
 
         let temp_dir = setup_test_dir();
         let builder = BriefBuilder::new(temp_dir.path(), "test-prd");
@@ -1255,11 +1336,31 @@ mod tests {
         learnings_manager.initialize().unwrap();
 
         // Add learnings in reverse order (1, 3, 2) - they should be sorted to 3, 2, 1
-        learnings_manager.add_learning(LearningEntry::with_type(1, LearningType::Pattern, "Old learning iter 1")).unwrap();
-        learnings_manager.add_learning(LearningEntry::with_type(3, LearningType::Pattern, "Recent learning iter 3")).unwrap();
-        learnings_manager.add_learning(LearningEntry::with_type(2, LearningType::Pattern, "Middle learning iter 2")).unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                1,
+                LearningType::Pattern,
+                "Old learning iter 1",
+            ))
+            .unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                3,
+                LearningType::Pattern,
+                "Recent learning iter 3",
+            ))
+            .unwrap();
+        learnings_manager
+            .add_learning(LearningEntry::with_type(
+                2,
+                LearningType::Pattern,
+                "Middle learning iter 2",
+            ))
+            .unwrap();
 
-        builder.generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4)).unwrap();
+        builder
+            .generate_brief_with_learnings_manager(&prd, &learnings_manager, Some(4))
+            .unwrap();
         let brief = builder.read_brief().unwrap();
 
         // Most recent iteration should appear first within the type section
@@ -1267,8 +1368,14 @@ mod tests {
         let iter2_pos = brief.find("[Iter 2]").unwrap();
         let iter1_pos = brief.find("[Iter 1]").unwrap();
 
-        assert!(iter3_pos < iter2_pos, "Iteration 3 should appear before iteration 2");
-        assert!(iter2_pos < iter1_pos, "Iteration 2 should appear before iteration 1");
+        assert!(
+            iter3_pos < iter2_pos,
+            "Iteration 3 should appear before iteration 2"
+        );
+        assert!(
+            iter2_pos < iter1_pos,
+            "Iteration 2 should appear before iteration 1"
+        );
     }
 
     // =========================================================================
@@ -1301,7 +1408,10 @@ mod tests {
             .unwrap();
 
         // Check both files exist
-        assert!(builder.brief_path().exists(), "Current BRIEF.md should exist");
+        assert!(
+            builder.brief_path().exists(),
+            "Current BRIEF.md should exist"
+        );
         assert!(
             builder.brief_path_for_iteration(2).exists(),
             "BRIEF-2.md should exist"
@@ -1310,7 +1420,10 @@ mod tests {
         // Check contents are identical
         let current = std::fs::read_to_string(builder.brief_path()).unwrap();
         let historical = std::fs::read_to_string(builder.brief_path_for_iteration(2)).unwrap();
-        assert_eq!(current, historical, "Current and historical briefs should have same content");
+        assert_eq!(
+            current, historical,
+            "Current and historical briefs should have same content"
+        );
     }
 
     #[test]
@@ -1332,7 +1445,11 @@ mod tests {
 
         // Check iteration numbers
         let iterations: Vec<u32> = briefs.iter().map(|(iter, _)| iter).copied().collect();
-        assert_eq!(iterations, vec![0, 1, 2, 3], "Iterations should be sorted ascending");
+        assert_eq!(
+            iterations,
+            vec![0, 1, 2, 3],
+            "Iterations should be sorted ascending"
+        );
 
         // Check all content is non-empty
         for (_, content) in briefs {
@@ -1351,7 +1468,11 @@ mod tests {
         let builder = BriefBuilder::new(temp_dir.path(), "nonexistent-prd");
 
         let briefs = builder.list_historical_briefs().unwrap();
-        assert_eq!(briefs.len(), 0, "Should return empty list for non-existent PRD");
+        assert_eq!(
+            briefs.len(),
+            0,
+            "Should return empty list for non-existent PRD"
+        );
     }
 
     #[test]
@@ -1378,10 +1499,7 @@ mod tests {
         // List should include both
         let briefs = builder.list_historical_briefs().unwrap();
         let iterations: Vec<u32> = briefs.iter().map(|(iter, _)| iter).copied().collect();
-        assert!(
-            iterations.contains(&0),
-            "Should have iteration 0 (current)"
-        );
+        assert!(iterations.contains(&0), "Should have iteration 0 (current)");
         assert!(
             iterations.contains(&5),
             "Should have iteration 5 (historical)"

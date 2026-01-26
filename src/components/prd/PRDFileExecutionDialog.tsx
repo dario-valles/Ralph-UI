@@ -1,13 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
@@ -197,212 +190,28 @@ export function PRDFileExecutionDialog({
   const selectedTemplateInfo = templates.find((t) => t.name === selectedTemplate)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden !grid-rows-[auto_1fr_auto]">
-        <DialogHeader>
-          <DialogTitle className="pr-8">Execute PRD: {file?.title}</DialogTitle>
-          <DialogDescription>
-            Configure how the PRD will be executed using the Ralph Loop technique. Progress persists
-            in files with a fresh agent each iteration.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6 py-4 overflow-y-auto -mr-2 pr-2">
-          {/* Agent Type and Model */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="agent-type">Agent Type</Label>
-              <Select
-                id="agent-type"
-                value={config.agentType}
-                onChange={(e) => handleAgentTypeChange(e.target.value as AgentType)}
-              >
-                <option value="claude">Claude Code</option>
-                <option value="opencode">OpenCode</option>
-                <option value="cursor">Cursor</option>
-                <option value="codex">Codex CLI</option>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">Model</Label>
-              <div className="flex items-center gap-2">
-                <Select
-                  id="model"
-                  value={config.model || ''}
-                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                  disabled={displayModelsLoading}
-                  className="flex-1"
-                >
-                  {displayModelsLoading ? (
-                    <option>Loading models...</option>
-                  ) : displayModels.length === 0 ? (
-                    <option value="">No models available</option>
-                  ) : (
-                    displayModels.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))
-                  )}
-                </Select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={displayRefreshModels}
-                  disabled={displayModelsLoading}
-                  className="h-9 w-9 flex-shrink-0"
-                  title="Refresh models"
-                >
-                  <RefreshCw className={`h-4 w-4 ${displayModelsLoading ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Template Selection (US-014) */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <FileCode className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="template">Prompt Template</Label>
-            </div>
-            <Select
-              id="template"
-              value={selectedTemplate}
-              onChange={(e) => setSelectedTemplate(e.target.value)}
-              disabled={templatesLoading}
-              data-testid="template-select"
-            >
-              {templatesLoading ? (
-                <option>Loading templates...</option>
-              ) : templates.length === 0 ? (
-                <option value="">No templates available</option>
-              ) : (
-                templates.map((t) => (
-                  <option key={`${t.source}-${t.name}`} value={t.name}>
-                    {t.name} ({formatTemplateSource(t.source)})
-                  </option>
-                ))
-              )}
-            </Select>
-            {selectedTemplateInfo && (
-              <p className="text-xs text-muted-foreground">
-                {selectedTemplateInfo.description ||
-                  `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
-              </p>
-            )}
-          </div>
-
-          {/* Max Iterations and Max Cost */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="max-iterations">Max Iterations</Label>
-              <Select
-                id="max-iterations"
-                value={config.maxIterations.toString()}
-                onChange={(e) => setConfig({ ...config, maxIterations: parseInt(e.target.value) })}
-              >
-                <option value="10">10</option>
-                <option value="20">20</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Total iterations before the loop stops (safety limit)
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max-cost">Max Cost ($)</Label>
-              <Input
-                id="max-cost"
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="No limit"
-                value={maxCost}
-                onChange={(e) => setMaxCost(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">Stop when API costs exceed this limit</p>
-            </div>
-          </div>
-
-          {/* Worktree Isolation Option */}
-          <div className="rounded-md border border-dashed border-green-500/50 bg-green-500/5 p-4">
-            <label className="flex items-center gap-3">
-              <Checkbox
-                checked={useWorktree}
-                onCheckedChange={(checked) => setUseWorktree(checked as boolean)}
-              />
-              <div className="flex-1">
-                <span className="text-sm font-medium flex items-center gap-2">
-                  <GitBranch className="h-4 w-4" />
-                  Use Worktree Isolation
-                  <span className="text-xs text-muted-foreground font-normal">(Recommended)</span>
-                </span>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Work happens in an isolated git worktree, keeping the main branch clean. The
-                  worktree is preserved after completion for review.
-                </p>
-              </div>
-            </label>
-          </div>
-
-          {/* Quality Gates */}
-          <div className="space-y-3">
-            <Label>Quality Gates</Label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={config.runTests}
-                  onCheckedChange={(checked) =>
-                    setConfig({ ...config, runTests: checked as boolean })
-                  }
-                />
-                <span className="text-sm">Run tests before marking tasks complete</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={config.runLint}
-                  onCheckedChange={(checked) =>
-                    setConfig({ ...config, runLint: checked as boolean })
-                  }
-                />
-                <span className="text-sm">Run linter before marking tasks complete</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Summary */}
-          <div className="rounded-md bg-muted p-4">
-            <p className="text-sm font-medium">Summary:</p>
-            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-              <li>• Agent: {config.agentType}</li>
-              <li>• Model: {getModelName(displayModels, config.model || '')}</li>
-              <li>
-                • Template: {selectedTemplate || 'default'}
-                {selectedTemplateInfo
-                  ? ` (${formatTemplateSource(selectedTemplateInfo.source)})`
-                  : ''}
-              </li>
-              <li>• Max iterations: {config.maxIterations}</li>
-              <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
-              <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
-              <li>
-                • Quality gates:{' '}
-                {[config.runTests && 'tests', config.runLint && 'lint']
-                  .filter(Boolean)
-                  .join(', ') || 'none'}
-              </li>
-              <li className="text-green-600">• PRD file: {file?.filePath}</li>
-              <li className="text-green-600">• Each iteration spawns a fresh agent</li>
-            </ul>
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={executing}>
+    <ResponsiveModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Execute PRD: ${file?.title || ''}`}
+      description="Configure how the PRD will be executed using the Ralph Loop technique. Progress persists in files with a fresh agent each iteration."
+      size="2xl"
+      fullPageOnMobile={true}
+      footer={
+        <>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={executing}
+            className="min-h-11 sm:min-h-9"
+          >
             Cancel
           </Button>
-          <Button onClick={handleExecute} disabled={executing || !file}>
+          <Button
+            onClick={handleExecute}
+            disabled={executing || !file}
+            className="min-h-11 sm:min-h-9"
+          >
             {executing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -415,8 +224,207 @@ export function PRDFileExecutionDialog({
               </>
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* Agent Type and Model */}
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="agent-type">Agent Type</Label>
+            <Select
+              id="agent-type"
+              value={config.agentType}
+              onChange={(e) => handleAgentTypeChange(e.target.value as AgentType)}
+              className="min-h-11 sm:min-h-9 text-base sm:text-sm"
+            >
+              <option value="claude">Claude Code</option>
+              <option value="opencode">OpenCode</option>
+              <option value="cursor">Cursor</option>
+              <option value="codex">Codex CLI</option>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="model">Model</Label>
+            <div className="flex items-center gap-2">
+              <Select
+                id="model"
+                value={config.model || ''}
+                onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                disabled={displayModelsLoading}
+                className="flex-1 min-h-11 sm:min-h-9 text-base sm:text-sm"
+              >
+                {displayModelsLoading ? (
+                  <option>Loading models...</option>
+                ) : displayModels.length === 0 ? (
+                  <option value="">No models available</option>
+                ) : (
+                  displayModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))
+                )}
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={displayRefreshModels}
+                disabled={displayModelsLoading}
+                className="min-h-11 min-w-11 sm:h-9 sm:w-9 flex-shrink-0"
+                title="Refresh models"
+              >
+                <RefreshCw className={`h-4 w-4 ${displayModelsLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Template Selection (US-014) */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <FileCode className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="template">Prompt Template</Label>
+          </div>
+          <Select
+            id="template"
+            value={selectedTemplate}
+            onChange={(e) => setSelectedTemplate(e.target.value)}
+            disabled={templatesLoading}
+            data-testid="template-select"
+            className="min-h-11 sm:min-h-9 text-base sm:text-sm"
+          >
+            {templatesLoading ? (
+              <option>Loading templates...</option>
+            ) : templates.length === 0 ? (
+              <option value="">No templates available</option>
+            ) : (
+              templates.map((t) => (
+                <option key={`${t.source}-${t.name}`} value={t.name}>
+                  {t.name} ({formatTemplateSource(t.source)})
+                </option>
+              ))
+            )}
+          </Select>
+          {selectedTemplateInfo && (
+            <p className="text-xs text-muted-foreground">
+              {selectedTemplateInfo.description ||
+                `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
+            </p>
+          )}
+        </div>
+
+        {/* Max Iterations and Max Cost */}
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="max-iterations">Max Iterations</Label>
+            <Select
+              id="max-iterations"
+              value={config.maxIterations.toString()}
+              onChange={(e) => setConfig({ ...config, maxIterations: parseInt(e.target.value) })}
+              className="min-h-11 sm:min-h-9 text-base sm:text-sm"
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Total iterations before the loop stops (safety limit)
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="max-cost">Max Cost ($)</Label>
+            <Input
+              id="max-cost"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={0.5}
+              placeholder="No limit"
+              value={maxCost}
+              onChange={(e) => setMaxCost(e.target.value)}
+              className="min-h-11 sm:min-h-9 text-base sm:text-sm"
+            />
+            <p className="text-xs text-muted-foreground">Stop when API costs exceed this limit</p>
+          </div>
+        </div>
+
+        {/* Worktree Isolation Option */}
+        <div className="rounded-md border border-dashed border-green-500/50 bg-green-500/5 p-4">
+          <label className="flex items-start gap-3">
+            <Checkbox
+              checked={useWorktree}
+              onCheckedChange={(checked) => setUseWorktree(checked as boolean)}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <GitBranch className="h-4 w-4" />
+                Use Worktree Isolation
+                <span className="text-xs text-muted-foreground font-normal">(Recommended)</span>
+              </span>
+              <p className="text-xs text-muted-foreground mt-1">
+                Work happens in an isolated git worktree, keeping the main branch clean. The
+                worktree is preserved after completion for review.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        {/* Quality Gates */}
+        <div className="space-y-3">
+          <Label>Quality Gates</Label>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
+              <Checkbox
+                checked={config.runTests}
+                onCheckedChange={(checked) =>
+                  setConfig({ ...config, runTests: checked as boolean })
+                }
+              />
+              <span className="text-sm">Run tests before marking tasks complete</span>
+            </label>
+            <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
+              <Checkbox
+                checked={config.runLint}
+                onCheckedChange={(checked) =>
+                  setConfig({ ...config, runLint: checked as boolean })
+                }
+              />
+              <span className="text-sm">Run linter before marking tasks complete</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="rounded-md bg-muted p-4">
+          <p className="text-sm font-medium">Summary:</p>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            <li>• Agent: {config.agentType}</li>
+            <li>• Model: {getModelName(displayModels, config.model || '')}</li>
+            <li>
+              • Template: {selectedTemplate || 'default'}
+              {selectedTemplateInfo
+                ? ` (${formatTemplateSource(selectedTemplateInfo.source)})`
+                : ''}
+            </li>
+            <li>• Max iterations: {config.maxIterations}</li>
+            <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
+            <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
+            <li>
+              • Quality gates:{' '}
+              {[config.runTests && 'tests', config.runLint && 'lint']
+                .filter(Boolean)
+                .join(', ') || 'none'}
+            </li>
+            <li className="text-green-600 dark:text-green-400">• PRD file: {file?.filePath}</li>
+            <li className="text-green-600 dark:text-green-400">
+              • Each iteration spawns a fresh agent
+            </li>
+          </ul>
+        </div>
+      </div>
+    </ResponsiveModal>
   )
 }

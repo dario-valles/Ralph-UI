@@ -142,7 +142,8 @@ pub fn get_global_stats() -> Result<GlobalStats, String> {
         }
 
         // Use index for session-level checks (fast path)
-        let session_entries = session_storage::list_sessions_from_index(project_path).unwrap_or_default();
+        let session_entries =
+            session_storage::list_sessions_from_index(project_path).unwrap_or_default();
 
         // Check if project has any active sessions (from index - no task data needed)
         let project_has_active_session = session_entries.iter().any(|e| e.status == "active");
@@ -196,10 +197,10 @@ pub struct GlobalStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_storage::{agents as agent_storage, projects as project_storage, sessions as session_storage};
-    use crate::models::{
-        Agent, AgentStatus, AgentType, Session, SessionConfig, Task,
+    use crate::file_storage::{
+        agents as agent_storage, projects as project_storage, sessions as session_storage,
     };
+    use crate::models::{Agent, AgentStatus, AgentType, Session, SessionConfig, Task};
     use chrono::Utc;
     use tempfile::TempDir;
     use uuid::Uuid;
@@ -209,7 +210,12 @@ mod tests {
         temp_dir.path().to_string_lossy().to_string()
     }
 
-    fn create_test_session(id: &str, name: &str, project_path: &str, status: SessionStatus) -> Session {
+    fn create_test_session(
+        id: &str,
+        name: &str,
+        project_path: &str,
+        status: SessionStatus,
+    ) -> Session {
         Session {
             id: id.to_string(),
             name: name.to_string(),
@@ -325,7 +331,12 @@ mod tests {
         let path = as_path(&project_path);
 
         // Create session with tasks
-        let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
+        let mut session = create_test_session(
+            "session-1",
+            "Test Session",
+            &project_path,
+            SessionStatus::Active,
+        );
         session.tasks = vec![
             create_test_task("task-1", "Task 1", TaskStatus::InProgress),
             create_test_task("task-2", "Task 2", TaskStatus::InProgress),
@@ -352,8 +363,18 @@ mod tests {
         let path = as_path(&project_path);
 
         // Create sessions with different statuses
-        let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
-        let session2 = create_test_session("session-2", "Session 2", &project_path, SessionStatus::Paused);
+        let session1 = create_test_session(
+            "session-1",
+            "Session 1",
+            &project_path,
+            SessionStatus::Active,
+        );
+        let session2 = create_test_session(
+            "session-2",
+            "Session 2",
+            &project_path,
+            SessionStatus::Paused,
+        );
 
         session_storage::save_session(path, &session1).unwrap();
         session_storage::save_session(path, &session2).unwrap();
@@ -390,7 +411,12 @@ mod tests {
         let path = as_path(&project_path);
 
         // Create session with tasks
-        let mut session = create_test_session("session-1", "Test Session", &project_path, SessionStatus::Active);
+        let mut session = create_test_session(
+            "session-1",
+            "Test Session",
+            &project_path,
+            SessionStatus::Active,
+        );
         session.tasks = vec![
             create_test_task("task-1", "Completed Task", TaskStatus::Completed),
             create_test_task("task-2", "In Progress Task", TaskStatus::InProgress),
@@ -416,8 +442,18 @@ mod tests {
         let path = as_path(&project_path);
 
         // Create multiple sessions
-        let session1 = create_test_session("session-1", "Session 1", &project_path, SessionStatus::Active);
-        let session2 = create_test_session("session-2", "Session 2", &project_path, SessionStatus::Completed);
+        let session1 = create_test_session(
+            "session-1",
+            "Session 1",
+            &project_path,
+            SessionStatus::Active,
+        );
+        let session2 = create_test_session(
+            "session-2",
+            "Session 2",
+            &project_path,
+            SessionStatus::Completed,
+        );
         session_storage::save_session(path, &session1).unwrap();
         session_storage::save_session(path, &session2).unwrap();
 
@@ -466,7 +502,8 @@ mod tests {
         assert_eq!(active_agents.len(), 2);
 
         // Verify agents are from different sessions
-        let session_ids: std::collections::HashSet<_> = active_agents.iter().map(|a| &a.session_id).collect();
+        let session_ids: std::collections::HashSet<_> =
+            active_agents.iter().map(|a| &a.session_id).collect();
         assert!(session_ids.contains(&"session-1".to_string()));
         assert!(session_ids.contains(&"session-2".to_string()));
     }

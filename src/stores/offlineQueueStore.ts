@@ -38,6 +38,7 @@ interface OfflineQueueStore {
   removeAction: (id: string) => void
   clearQueue: () => void
   clearFailedActions: () => void
+  dismissFailedAction: (id: string) => void
   setSyncStatus: (status: SyncStatus, error?: string) => void
   markActionFailed: (action: QueuedAction, error: string) => void
   retryFailedAction: (id: string) => void
@@ -97,6 +98,12 @@ export const useOfflineQueueStore = create<OfflineQueueStore>()(
 
       clearFailedActions: () => {
         set({ failedActions: [] })
+      },
+
+      dismissFailedAction: (id: string) => {
+        set((state) => ({
+          failedActions: state.failedActions.filter((a) => a.id !== id),
+        }))
       },
 
       setSyncStatus: (status: SyncStatus, error?: string) => {

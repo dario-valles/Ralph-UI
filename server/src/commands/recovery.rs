@@ -41,10 +41,7 @@ pub struct RecoveryResult {
 }
 
 /// Check for stale sessions that need recovery
-
-pub async fn check_stale_sessions(
-    project_path: String,
-) -> Result<Vec<StaleLockInfo>, String> {
+pub async fn check_stale_sessions(project_path: String) -> Result<Vec<StaleLockInfo>, String> {
     let path = as_path(&project_path);
 
     find_stale_locks(path)
@@ -53,7 +50,6 @@ pub async fn check_stale_sessions(
 }
 
 /// Recover a single stale session
-
 pub async fn recover_stale_session(
     project_path: String,
     session_id: String,
@@ -81,7 +77,6 @@ pub async fn recover_stale_session(
 }
 
 /// Recover all stale sessions
-
 pub async fn recover_all_stale_sessions(
     project_path: String,
 ) -> Result<Vec<RecoveryResult>, String> {
@@ -118,7 +113,6 @@ pub async fn recover_all_stale_sessions(
 }
 
 /// Acquire lock for a session
-
 pub async fn acquire_session_lock(
     project_path: String,
     session_id: String,
@@ -127,8 +121,7 @@ pub async fn acquire_session_lock(
 
     // Create lock directory if needed
     let lock_dir = path.join(".ralph-ui");
-    std::fs::create_dir_all(&lock_dir)
-        .with_context("Failed to create lock directory")?;
+    std::fs::create_dir_all(&lock_dir).with_context("Failed to create lock directory")?;
 
     let lock_path = lock_dir.join(format!("session-{}.lock", session_id));
 
@@ -137,7 +130,7 @@ pub async fn acquire_session_lock(
         if let Ok(content) = std::fs::read_to_string(&lock_path) {
             if let Ok(info) = serde_json::from_str::<LockInfo>(&content) {
                 // Check if process is still running
-                use sysinfo::{System, Pid};
+                use sysinfo::{Pid, System};
                 let mut system = System::new();
                 system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
                 if system.process(Pid::from_u32(info.pid)).is_some() {
@@ -155,20 +148,15 @@ pub async fn acquire_session_lock(
         session_id: session_id.clone(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     };
-    let content = serde_json::to_string_pretty(&lock_info)
-        .with_context("Failed to serialize lock")?;
-    std::fs::write(&lock_path, content)
-        .with_context("Failed to write lock")?;
+    let content =
+        serde_json::to_string_pretty(&lock_info).with_context("Failed to serialize lock")?;
+    std::fs::write(&lock_path, content).with_context("Failed to write lock")?;
 
     Ok(true)
 }
 
 /// Release lock for a session
-
-pub async fn release_session_lock(
-    project_path: String,
-    session_id: String,
-) -> Result<(), String> {
+pub async fn release_session_lock(project_path: String, session_id: String) -> Result<(), String> {
     let path = as_path(&project_path);
     let lock = SessionLock::new(path, &session_id);
 
@@ -176,8 +164,7 @@ pub async fn release_session_lock(
     if let Ok(Some(info)) = lock.get_lock_info() {
         if info.pid == std::process::id() {
             // Force release by removing the file
-            remove_stale_lock(path, &session_id)
-                .with_context("Failed to release lock")?;
+            remove_stale_lock(path, &session_id).with_context("Failed to release lock")?;
         }
     }
 
@@ -185,7 +172,6 @@ pub async fn release_session_lock(
 }
 
 /// Get lock info for a session
-
 pub async fn get_session_lock_info(
     project_path: String,
     session_id: String,
@@ -206,11 +192,7 @@ pub async fn get_session_lock_info(
 }
 
 /// Refresh session lock (heartbeat)
-
-pub async fn refresh_session_lock(
-    project_path: String,
-    session_id: String,
-) -> Result<(), String> {
+pub async fn refresh_session_lock(project_path: String, session_id: String) -> Result<(), String> {
     let path = as_path(&project_path);
 
     // Create lock info and write directly
@@ -219,10 +201,8 @@ pub async fn refresh_session_lock(
 
     if lock_path.exists() {
         // Read current lock to verify ownership
-        let content = std::fs::read_to_string(&lock_path)
-            .with_context("Failed to read lock")?;
-        let info: LockInfo = serde_json::from_str(&content)
-            .with_context("Failed to parse lock")?;
+        let content = std::fs::read_to_string(&lock_path).with_context("Failed to read lock")?;
+        let info: LockInfo = serde_json::from_str(&content).with_context("Failed to parse lock")?;
 
         if info.pid == std::process::id() {
             // We own it, refresh timestamp
@@ -232,10 +212,9 @@ pub async fn refresh_session_lock(
                 session_id: session_id.clone(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             };
-            let new_content = serde_json::to_string_pretty(&new_info)
-                .with_context("Failed to serialize lock")?;
-            std::fs::write(&lock_path, new_content)
-                .with_context("Failed to write lock")?;
+            let new_content =
+                serde_json::to_string_pretty(&new_info).with_context("Failed to serialize lock")?;
+            std::fs::write(&lock_path, new_content).with_context("Failed to write lock")?;
         }
     }
 

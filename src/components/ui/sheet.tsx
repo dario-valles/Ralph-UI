@@ -58,7 +58,7 @@ const Sheet = ({ open, onOpenChange, children }: SheetProps) => {
 
   return (
     <SheetContext.Provider value={{ onClose: () => onOpenChange?.(false) }}>
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[var(--z-sheet)]">
         {/* Overlay */}
         <div
           className="fixed inset-0 bg-black/50 animate-in fade-in-0"
@@ -74,8 +74,8 @@ const Sheet = ({ open, onOpenChange, children }: SheetProps) => {
 const slideVariants: Record<SheetSide, string> = {
   left: 'inset-y-0 left-0 h-full w-3/4 max-w-sm animate-in slide-in-from-left',
   right: 'inset-y-0 right-0 h-full w-3/4 max-w-sm animate-in slide-in-from-right',
-  top: 'inset-x-0 top-0 w-full animate-in slide-in-from-top',
-  bottom: 'inset-x-0 bottom-0 w-full animate-in slide-in-from-bottom',
+  top: 'inset-x-0 top-0 w-full max-h-[85vh] animate-in slide-in-from-top',
+  bottom: 'inset-x-0 bottom-0 w-full max-h-[85vh] animate-in slide-in-from-bottom',
 }
 
 const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
@@ -88,16 +88,16 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
         ref={ref}
         role="dialog"
         aria-modal="true"
-        className={cn('fixed z-50 bg-background shadow-lg border', slideVariants[side], className)}
+        className={cn('fixed z-[var(--z-sheet)] bg-background shadow-lg border', slideVariants[side], className)}
         {...props}
       >
         {children}
         <button
           onClick={handleClose}
-          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 touch-target"
+          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-h-11 min-w-11 sm:h-8 sm:w-8 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
           aria-label="Close"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5 sm:h-4 sm:w-4" />
           <span className="sr-only">Close</span>
         </button>
       </div>

@@ -112,7 +112,7 @@ impl AgentStateFile {
             iteration_count: self.iteration_count,
             tokens: self.tokens,
             cost: self.cost,
-            logs: Vec::new(), // Loaded separately
+            logs: Vec::new(),      // Loaded separately
             subagents: Vec::new(), // Not stored in files
         }
     }
@@ -191,7 +191,11 @@ pub fn delete_agent_files(project_path: &Path, agent_id: &str) -> FileResult<()>
 }
 
 /// Append a log entry to an agent's log file
-pub fn append_agent_log(project_path: &Path, agent_id: &str, log_entry: &LogEntry) -> FileResult<()> {
+pub fn append_agent_log(
+    project_path: &Path,
+    agent_id: &str,
+    log_entry: &LogEntry,
+) -> FileResult<()> {
     let agents_dir = get_agents_dir(project_path);
     ensure_dir(&agents_dir)?;
 
@@ -207,8 +211,7 @@ pub fn append_agent_log(project_path: &Path, agent_id: &str, log_entry: &LogEntr
         .open(&logs_path)
         .map_err(|e| format!("Failed to open log file: {}", e))?;
 
-    writeln!(file, "{}", line)
-        .map_err(|e| format!("Failed to write log entry: {}", e))?;
+    writeln!(file, "{}", line).map_err(|e| format!("Failed to write log entry: {}", e))?;
 
     Ok(())
 }
@@ -221,8 +224,7 @@ pub fn read_agent_logs(project_path: &Path, agent_id: &str) -> FileResult<Vec<Lo
         return Ok(Vec::new());
     }
 
-    let file = File::open(&logs_path)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
+    let file = File::open(&logs_path).map_err(|e| format!("Failed to open log file: {}", e))?;
 
     let reader = BufReader::new(file);
     let mut logs = Vec::new();
@@ -252,8 +254,8 @@ pub fn list_agent_ids(project_path: &Path) -> FileResult<Vec<String>> {
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(&agents_dir)
-        .map_err(|e| format!("Failed to read agents directory: {}", e))?;
+    let entries =
+        fs::read_dir(&agents_dir).map_err(|e| format!("Failed to read agents directory: {}", e))?;
 
     let mut agent_ids = Vec::new();
 
@@ -298,7 +300,11 @@ pub fn list_agents_for_session(project_path: &Path, session_id: &str) -> FileRes
 }
 
 /// Update agent status
-pub fn update_agent_status(project_path: &Path, agent_id: &str, status: AgentStatus) -> FileResult<()> {
+pub fn update_agent_status(
+    project_path: &Path,
+    agent_id: &str,
+    status: AgentStatus,
+) -> FileResult<()> {
     let mut state = read_agent_state(project_path, agent_id)?;
     state.status = status;
     state.updated_at = Utc::now();
@@ -330,7 +336,11 @@ pub fn update_agent_metrics(
 }
 
 /// Update agent process ID
-pub fn update_agent_process_id(project_path: &Path, agent_id: &str, process_id: Option<u32>) -> FileResult<()> {
+pub fn update_agent_process_id(
+    project_path: &Path,
+    agent_id: &str,
+    process_id: Option<u32>,
+) -> FileResult<()> {
     let mut state = read_agent_state(project_path, agent_id)?;
     state.process_id = process_id;
     state.updated_at = Utc::now();

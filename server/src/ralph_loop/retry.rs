@@ -238,7 +238,12 @@ mod tests {
     #[tokio::test]
     async fn test_with_retry_success_first_attempt() {
         let config = RetryConfig::default();
-        let result = with_retry(|| async { Ok::<_, String>(42) }, &config, None::<fn(u32, &str, u64)>).await;
+        let result = with_retry(
+            || async { Ok::<_, String>(42) },
+            &config,
+            None::<fn(u32, &str, u64)>,
+        )
+        .await;
 
         assert_eq!(result.result.unwrap(), 42);
         assert_eq!(result.attempts, 1);

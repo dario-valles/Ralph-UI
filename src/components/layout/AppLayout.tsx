@@ -4,6 +4,7 @@ import { TitleBar } from './TitleBar'
 import { MobileSidebarDrawer } from './MobileSidebarDrawer'
 import { TerminalPanel } from '@/components/terminal'
 import { OfflineIndicator } from '@/components/shared/OfflineBanner'
+import { FailedActionsBanner } from '@/components/shared/PendingActionsIndicator'
 import { useTerminalShortcuts } from '@/hooks/useTerminalShortcuts'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 
@@ -30,7 +31,7 @@ export function AppLayout() {
         <Sidebar className="hidden md:flex" />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/10">
+          <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/10 touch-scroll">
             <Outlet />
           </main>
           <TerminalPanel />
@@ -39,6 +40,9 @@ export function AppLayout() {
 
       {/* Offline indicator - floating at bottom when offline */}
       <OfflineIndicator />
+
+      {/* Failed actions banner - shows when sync fails */}
+      <FailedActionsBanner />
     </div>
   )
 }

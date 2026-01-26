@@ -48,7 +48,8 @@ pub fn synthesize_research(
                     });
 
                     // Extract themes from each section
-                    let themes = extract_themes_from_content(*agent_type, &sections.last().unwrap().content);
+                    let themes =
+                        extract_themes_from_content(*agent_type, &sections.last().unwrap().content);
                     key_themes.extend(themes);
                 }
                 Err(e) => {
@@ -65,7 +66,12 @@ pub fn synthesize_research(
     let summary_content = generate_summary(&sections, &key_themes);
 
     // Write the summary file
-    write_planning_file(project_path, session_id, PlanningFile::Summary, &summary_content)?;
+    write_planning_file(
+        project_path,
+        session_id,
+        PlanningFile::Summary,
+        &summary_content,
+    )?;
 
     // Deduplicate themes
     key_themes.sort();
@@ -91,7 +97,8 @@ fn generate_summary(sections: &[ResearchSection], key_themes: &[String]) -> Stri
 
     // Header
     summary.push_str("# Research Summary\n\n");
-    summary.push_str("This document synthesizes the research findings from all research agents.\n\n");
+    summary
+        .push_str("This document synthesizes the research findings from all research agents.\n\n");
 
     // Key themes section
     if !key_themes.is_empty() {
@@ -126,7 +133,8 @@ fn generate_summary(sections: &[ResearchSection], key_themes: &[String]) -> Stri
 
     // Footer
     summary.push_str("## Next Steps\n\n");
-    summary.push_str("Based on this research, the next step is to enumerate detailed requirements.\n");
+    summary
+        .push_str("Based on this research, the next step is to enumerate detailed requirements.\n");
     summary.push_str("Use the scoping phase to prioritize features for v1 vs v2.\n");
 
     summary

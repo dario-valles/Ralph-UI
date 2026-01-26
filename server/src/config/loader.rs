@@ -2,7 +2,7 @@
 
 #![allow(dead_code)] // Config loader infrastructure
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,16 +31,32 @@ pub struct RalphConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionConfig {
     /// Maximum parallel agents
-    #[serde(rename = "maxParallel", alias = "max_parallel", default = "default_max_parallel")]
+    #[serde(
+        rename = "maxParallel",
+        alias = "max_parallel",
+        default = "default_max_parallel"
+    )]
     pub max_parallel: i32,
     /// Maximum iterations per agent
-    #[serde(rename = "maxIterations", alias = "max_iterations", default = "default_max_iterations")]
+    #[serde(
+        rename = "maxIterations",
+        alias = "max_iterations",
+        default = "default_max_iterations"
+    )]
     pub max_iterations: i32,
     /// Maximum retries for failed tasks
-    #[serde(rename = "maxRetries", alias = "max_retries", default = "default_max_retries")]
+    #[serde(
+        rename = "maxRetries",
+        alias = "max_retries",
+        default = "default_max_retries"
+    )]
     pub max_retries: i32,
     /// Agent type to use
-    #[serde(rename = "agentType", alias = "agent_type", default = "default_agent_type")]
+    #[serde(
+        rename = "agentType",
+        alias = "agent_type",
+        default = "default_agent_type"
+    )]
     pub agent_type: String,
     /// Scheduling strategy
     #[serde(default = "default_strategy")]
@@ -53,11 +69,21 @@ pub struct ExecutionConfig {
     pub model: Option<String>,
 }
 
-fn default_max_parallel() -> i32 { 3 }
-fn default_max_iterations() -> i32 { 10 }
-fn default_max_retries() -> i32 { 3 }
-fn default_agent_type() -> String { "claude".to_string() }
-fn default_strategy() -> String { "dependency_first".to_string() }
+fn default_max_parallel() -> i32 {
+    3
+}
+fn default_max_iterations() -> i32 {
+    10
+}
+fn default_max_retries() -> i32 {
+    3
+}
+fn default_agent_type() -> String {
+    "claude".to_string()
+}
+fn default_strategy() -> String {
+    "dependency_first".to_string()
+}
 
 impl Default for ExecutionConfig {
     fn default() -> Self {
@@ -77,18 +103,30 @@ impl Default for ExecutionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitConfig {
     /// Automatically create PRs
-    #[serde(rename = "autoCreatePrs", alias = "auto_create_prs", default = "default_true")]
+    #[serde(
+        rename = "autoCreatePrs",
+        alias = "auto_create_prs",
+        default = "default_true"
+    )]
     pub auto_create_prs: bool,
     /// Create draft PRs
     #[serde(rename = "draftPrs", alias = "draft_prs", default)]
     pub draft_prs: bool,
     /// Default branch name pattern
-    #[serde(rename = "branchPattern", alias = "branch_pattern", default = "default_branch_pattern")]
+    #[serde(
+        rename = "branchPattern",
+        alias = "branch_pattern",
+        default = "default_branch_pattern"
+    )]
     pub branch_pattern: String,
 }
 
-fn default_true() -> bool { true }
-fn default_branch_pattern() -> String { "task/{task_id}".to_string() }
+fn default_true() -> bool {
+    true
+}
+fn default_branch_pattern() -> String {
+    "task/{task_id}".to_string()
+}
 
 impl Default for GitConfig {
     fn default() -> Self {
@@ -144,10 +182,7 @@ pub struct TemplateConfig {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ErrorStrategyConfig {
     /// Retry with exponential backoff
-    Retry {
-        max_attempts: u32,
-        backoff_ms: u64,
-    },
+    Retry { max_attempts: u32, backoff_ms: u64 },
     /// Skip the failing task and continue
     Skip,
     /// Abort the entire execution
@@ -170,10 +205,18 @@ pub struct FallbackSettings {
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// Base backoff in milliseconds
-    #[serde(rename = "baseBackoffMs", alias = "base_backoff_ms", default = "default_backoff")]
+    #[serde(
+        rename = "baseBackoffMs",
+        alias = "base_backoff_ms",
+        default = "default_backoff"
+    )]
     pub base_backoff_ms: u64,
     /// Maximum backoff in milliseconds
-    #[serde(rename = "maxBackoffMs", alias = "max_backoff_ms", default = "default_max_backoff")]
+    #[serde(
+        rename = "maxBackoffMs",
+        alias = "max_backoff_ms",
+        default = "default_max_backoff"
+    )]
     pub max_backoff_ms: u64,
     /// Fallback model to use (e.g., "claude-sonnet-4-5")
     #[serde(rename = "fallbackModel", alias = "fallback_model", default)]
@@ -185,20 +228,37 @@ pub struct FallbackSettings {
     #[serde(rename = "fallbackChain", alias = "fallback_chain", default)]
     pub fallback_chain: Option<Vec<String>>,
     /// Whether to test if primary agent has recovered
-    #[serde(rename = "testPrimaryRecovery", alias = "test_primary_recovery", default)]
+    #[serde(
+        rename = "testPrimaryRecovery",
+        alias = "test_primary_recovery",
+        default
+    )]
     pub test_primary_recovery: Option<bool>,
     /// Test primary recovery every N iterations
-    #[serde(rename = "recoveryTestInterval", alias = "recovery_test_interval", default)]
+    #[serde(
+        rename = "recoveryTestInterval",
+        alias = "recovery_test_interval",
+        default
+    )]
     pub recovery_test_interval: Option<u32>,
     /// DEPRECATED: Use fallback_chain instead. Kept for backward compatibility.
     /// This field is read from old configs but not written to new ones.
-    #[serde(rename = "fallbackAgent", alias = "fallback_agent", default, skip_serializing)]
+    #[serde(
+        rename = "fallbackAgent",
+        alias = "fallback_agent",
+        default,
+        skip_serializing
+    )]
     #[deprecated(note = "Use fallback_chain instead")]
     pub fallback_agent: Option<String>,
 }
 
-fn default_backoff() -> u64 { 5000 }
-fn default_max_backoff() -> u64 { 300000 }
+fn default_backoff() -> u64 {
+    5000
+}
+fn default_max_backoff() -> u64 {
+    300000
+}
 
 impl Default for FallbackSettings {
     #[allow(deprecated)]
@@ -309,12 +369,18 @@ impl ConfigLoader {
 
     /// Check if global config exists
     pub fn global_config_exists(&self) -> bool {
-        self.global_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.global_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 
     /// Check if project config exists
     pub fn project_config_exists(&self) -> bool {
-        self.project_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.project_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 
     /// Get the global config path
@@ -350,8 +416,13 @@ impl ConfigLoader {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| anyhow!("Failed to create config directory '{}': {}", parent.display(), e))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    anyhow!(
+                        "Failed to create config directory '{}': {}",
+                        parent.display(),
+                        e
+                    )
+                })?;
             }
         }
 
@@ -492,7 +563,10 @@ max_backoff_ms = 300000
         assert_eq!(config.execution.agent_type, "claude");
         assert_eq!(config.git.branch_pattern, "feature/{task_id}");
         assert_eq!(config.validation.test_command, Some("npm test".to_string()));
-        assert_eq!(config.templates.default_template, Some("task_prompt".to_string()));
+        assert_eq!(
+            config.templates.default_template,
+            Some("task_prompt".to_string())
+        );
         assert!(config.fallback.enabled);
     }
 

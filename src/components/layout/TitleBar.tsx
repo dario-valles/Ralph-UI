@@ -38,7 +38,7 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="sticky top-0 z-50 flex items-center h-10 md:h-9 border-b bg-card select-none"
+      className="sticky top-0 z-[var(--z-header)] flex items-center h-12 md:h-10 border-b bg-card select-none"
     >
       {/* Left section - hamburger (mobile) or sidebar toggle (desktop) */}
       <div className="flex items-center pl-2 md:pl-[70px] pr-2">
@@ -48,7 +48,7 @@ export function TitleBar() {
         >
           <button
             onClick={handleMenuClick}
-            className="flex items-center justify-center w-9 h-9 md:w-6 md:h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring"
+            className="flex items-center justify-center min-h-11 min-w-11 md:min-h-0 md:h-8 md:w-8 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring"
             aria-label={
               isMobile ? 'Open menu' : sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
             }
@@ -78,21 +78,21 @@ export function TitleBar() {
           <button
             onClick={handleTerminalClick}
             className={cn(
-              'flex items-center justify-center w-9 h-9 md:w-6 md:h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring',
+              'flex items-center justify-center min-h-11 min-w-11 md:min-h-0 md:h-8 md:w-8 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring',
               panelMode !== 'closed' && 'text-primary'
             )}
             aria-label="Toggle terminal"
           >
-            <Terminal className="h-5 w-5 md:h-3.5 md:w-3.5" />
+            <Terminal className="h-5 w-5 md:h-4 md:w-4" />
           </button>
         </Tooltip>
         <Tooltip content="Settings" side="bottom">
           <button
             onClick={() => navigate('/settings')}
-            className="flex items-center justify-center w-9 h-9 md:w-6 md:h-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring"
+            className="flex items-center justify-center min-h-11 min-w-11 md:min-h-0 md:h-8 md:w-8 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-ring"
             aria-label="Settings"
           >
-            <Settings className="h-5 w-5 md:h-3.5 md:w-3.5" />
+            <Settings className="h-5 w-5 md:h-4 md:w-4" />
           </button>
         </Tooltip>
       </div>

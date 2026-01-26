@@ -79,7 +79,8 @@ impl ChatEventEmitter for BroadcastEmitter {
     }
 
     fn emit_tool_completed(&self, payload: ToolCallCompletedPayload) {
-        self.broadcaster.broadcast(EVENT_TOOL_CALL_COMPLETED, payload);
+        self.broadcaster
+            .broadcast(EVENT_TOOL_CALL_COMPLETED, payload);
     }
 }
 
@@ -134,11 +135,10 @@ pub fn build_agent_command(
         AgentType::Codex => {
             if let Some(sid) = external_session_id {
                 // Codex uses a different subcommand for resume
-                ("codex", vec![
-                    "resume".to_string(),
-                    sid.to_string(),
-                    prompt.to_string(),
-                ])
+                (
+                    "codex",
+                    vec!["resume".to_string(), sid.to_string(), prompt.to_string()],
+                )
             } else {
                 ("codex", vec!["--prompt".to_string(), prompt.to_string()])
             }
@@ -420,7 +420,8 @@ fn parse_session_id_from_output(agent_type: AgentType, output: &str) -> Option<S
             // Claude Code outputs session ID in format: "Session: <uuid>" or similar
             // It may also show in the format "Resuming session <uuid>"
             // Look for UUID patterns following "session" keyword
-            let re = Regex::new(r"(?i)(?:session[:\s]+|resuming\s+session\s+)([a-f0-9-]{36})").ok()?;
+            let re =
+                Regex::new(r"(?i)(?:session[:\s]+|resuming\s+session\s+)([a-f0-9-]{36})").ok()?;
             re.captures(output)
                 .and_then(|caps| caps.get(1))
                 .map(|m| m.as_str().to_string())
@@ -467,11 +468,7 @@ fn parse_session_id_from_output(agent_type: AgentType, output: &str) -> Option<S
 
 /// Generate a session title from the first user message and PRD type
 pub fn generate_session_title(first_message: &str, prd_type: Option<&str>) -> String {
-    let message_title = first_message
-        .lines()
-        .next()
-        .unwrap_or(first_message)
-        .trim();
+    let message_title = first_message.lines().next().unwrap_or(first_message).trim();
 
     // Truncate to 50 characters and add ellipsis if needed
     let truncated = if message_title.len() > 50 {
@@ -510,7 +507,8 @@ mod tests {
 
     #[test]
     fn test_build_agent_command_claude_with_resume() {
-        let (program, args) = build_agent_command(AgentType::Claude, "test prompt", Some("session-123"));
+        let (program, args) =
+            build_agent_command(AgentType::Claude, "test prompt", Some("session-123"));
         assert_eq!(program, "claude");
         assert_eq!(args[0], "-p");
         assert_eq!(args[1], "--dangerously-skip-permissions");
@@ -529,7 +527,8 @@ mod tests {
 
     #[test]
     fn test_build_agent_command_opencode_with_resume() {
-        let (program, args) = build_agent_command(AgentType::Opencode, "test prompt", Some("session-456"));
+        let (program, args) =
+            build_agent_command(AgentType::Opencode, "test prompt", Some("session-456"));
         assert_eq!(program, "opencode");
         assert_eq!(args[0], "run");
         assert_eq!(args[1], "--session");
@@ -548,7 +547,8 @@ mod tests {
 
     #[test]
     fn test_build_agent_command_droid_with_resume() {
-        let (program, args) = build_agent_command(AgentType::Droid, "test prompt", Some("droid-session"));
+        let (program, args) =
+            build_agent_command(AgentType::Droid, "test prompt", Some("droid-session"));
         assert_eq!(program, "droid");
         assert_eq!(args[0], "chat");
         assert_eq!(args[1], "--session-id");
@@ -559,7 +559,8 @@ mod tests {
 
     #[test]
     fn test_build_agent_command_cursor_with_resume() {
-        let (program, args) = build_agent_command(AgentType::Cursor, "test prompt", Some("chat-789"));
+        let (program, args) =
+            build_agent_command(AgentType::Cursor, "test prompt", Some("chat-789"));
         assert_eq!(program, "cursor-agent");
         assert_eq!(args[0], "--resume=chat-789");
         assert_eq!(args[1], "--prompt");
@@ -568,7 +569,8 @@ mod tests {
 
     #[test]
     fn test_build_agent_command_codex_with_resume() {
-        let (program, args) = build_agent_command(AgentType::Codex, "test prompt", Some("codex-session"));
+        let (program, args) =
+            build_agent_command(AgentType::Codex, "test prompt", Some("codex-session"));
         assert_eq!(program, "codex");
         assert_eq!(args[0], "resume");
         assert_eq!(args[1], "codex-session");
@@ -588,7 +590,10 @@ mod tests {
     fn test_parse_session_id_claude() {
         let output = "Starting new session\nSession: a1b2c3d4-e5f6-7890-abcd-ef1234567890\nHello!";
         let session_id = parse_session_id_from_output(AgentType::Claude, output);
-        assert_eq!(session_id, Some("a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_string()));
+        assert_eq!(
+            session_id,
+            Some("a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_string())
+        );
     }
 
     #[test]

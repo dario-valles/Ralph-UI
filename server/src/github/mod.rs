@@ -152,7 +152,10 @@ impl GitHubClient {
     }
 
     /// List pull requests
-    pub async fn list_pull_requests(&self, state: Option<String>) -> Result<Vec<PullRequest>, String> {
+    pub async fn list_pull_requests(
+        &self,
+        state: Option<String>,
+    ) -> Result<Vec<PullRequest>, String> {
         let client = reqwest::Client::new();
         let state_param = state.unwrap_or_else(|| "open".to_string());
         let url = format!(
@@ -280,7 +283,7 @@ impl GitHubClient {
 
         let issues = issues_data
             .iter()
-            .filter(|issue_data| !issue_data.get("pull_request").is_some()) // Filter out PRs
+            .filter(|issue_data| issue_data.get("pull_request").is_none()) // Filter out PRs
             .map(|issue_data| {
                 let labels = issue_data["labels"]
                     .as_array()

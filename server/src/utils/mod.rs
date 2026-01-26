@@ -77,7 +77,9 @@ pub fn templates_dir(project_path: &str) -> PathBuf {
 /// Get the .ralph-ui/config.yaml path for a project.
 #[inline]
 pub fn config_path(project_path: &str) -> PathBuf {
-    Path::new(project_path).join(".ralph-ui").join("config.yaml")
+    Path::new(project_path)
+        .join(".ralph-ui")
+        .join("config.yaml")
 }
 
 /// Convert a project path string to a PathBuf (owned).
@@ -261,10 +263,7 @@ mod tests {
     fn test_templates_dir() {
         let project_path = "/home/user/project";
         let dir = templates_dir(project_path);
-        assert_eq!(
-            dir,
-            PathBuf::from("/home/user/project/.ralph-ui/templates")
-        );
+        assert_eq!(dir, PathBuf::from("/home/user/project/.ralph-ui/templates"));
     }
 
     #[test]

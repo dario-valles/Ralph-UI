@@ -296,6 +296,61 @@ export interface PlanningSessionInfo {
 }
 
 /**
+ * Information about research in a session
+ */
+export interface ResearchSessionInfo {
+  sessionId: string
+  createdAt?: string
+  hasArchitecture: boolean
+  hasCodebase: boolean
+  hasBestPractices: boolean
+  hasRisks: boolean
+  hasSynthesis: boolean
+  /** Total size of research files in bytes */
+  totalSizeBytes: number
+}
+
+/**
+ * Options for cloning a GSD session
+ */
+export interface CloneSessionOptions {
+  /** Copy project context (PROJECT.md) */
+  copyContext: boolean
+  /** Copy research outputs */
+  copyResearch: boolean
+  /** Copy requirements document */
+  copyRequirements: boolean
+}
+
+/**
+ * A generated requirement from AI (with temporary ID and suggested scope)
+ */
+export interface GeneratedRequirement {
+  /** Temporary ID (e.g., GEN-01) before being accepted */
+  id: string
+  /** Category of the requirement */
+  category: string
+  /** Short title */
+  title: string
+  /** Detailed description */
+  description: string
+  /** Acceptance criteria */
+  acceptanceCriteria: string[]
+  /** AI-suggested scope (v1, v2, out_of_scope) */
+  suggestedScope: string
+}
+
+/**
+ * Result of AI requirement generation
+ */
+export interface GenerateRequirementsResult {
+  /** Generated requirements */
+  requirements: GeneratedRequirement[]
+  /** Number of requirements generated */
+  count: number
+}
+
+/**
  * Helper function to get phase info by phase key
  */
 export function getPhaseInfo(phase: GsdPhase): GsdPhaseInfo | undefined {

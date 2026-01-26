@@ -2,9 +2,12 @@
 
 pub mod ansi_stripper;
 pub mod config;
+pub mod format_parsers;
+pub mod log_collector;
 pub mod manager;
 pub mod model_cache;
 pub mod models;
+pub mod output_parser;
 pub mod path_resolver;
 // Agent Plugin Trait Definition
 pub mod plugin;
@@ -27,3 +30,9 @@ pub use registry::AgentRegistry;
 pub use model_cache::ModelCache;
 pub use models::ModelInfo;
 pub use trace_parser::{StreamingParser, SubagentEvent, SubagentEventType, SubagentTree};
+
+// Re-export output parser types
+pub use output_parser::{ParsedAgentOutput, ParsedToolCall, ParsedToolResult};
+
+// Re-export format parsers
+pub use format_parsers::{parse_agent_json_output, parse_agent_json_output_with_tools};

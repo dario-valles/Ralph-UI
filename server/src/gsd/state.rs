@@ -90,7 +90,9 @@ impl GsdPhase {
             GsdPhase::DeepQuestioning => {
                 "Open-ended exploration to understand what you want to build"
             }
-            GsdPhase::ProjectDocument => "Create PROJECT.md capturing vision, goals, and constraints",
+            GsdPhase::ProjectDocument => {
+                "Create PROJECT.md capturing vision, goals, and constraints"
+            }
             GsdPhase::Research => "Parallel agents explore technical approaches",
             GsdPhase::Requirements => "Enumerate all features with REQ-IDs",
             GsdPhase::Scoping => "Select v1/v2/out-of-scope features",

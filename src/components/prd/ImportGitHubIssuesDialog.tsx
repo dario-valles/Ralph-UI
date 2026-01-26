@@ -140,7 +140,7 @@ export function ImportGitHubIssuesDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Github className="h-5 w-5" />
@@ -163,6 +163,7 @@ export function ImportGitHubIssuesDialog({
                 <Input
                   id="token"
                   type="password"
+                  autoComplete="current-password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder="ghp_..."
@@ -172,11 +173,12 @@ export function ImportGitHubIssuesDialog({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="owner">Owner</Label>
                   <Input
                     id="owner"
+                    autoComplete="username"
                     value={owner}
                     onChange={(e) => setOwner(e.target.value)}
                     placeholder="username or org"

@@ -13,6 +13,7 @@ import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/backend-api'
 import { useRalphLoopNotifications } from './hooks/useRalphLoopNotifications'
+import { setupGlobalSyncListeners } from './hooks/useCrossDeviceSync'
 
 // Lazy-loaded routes for better code splitting
 const RalphLoopPage = lazy(() =>
@@ -36,9 +37,11 @@ function App() {
   const { isConnected, showDialog, handleConnected } = useServerConnection()
 
   useEffect(() => {
-    // Only load projects when connected
+    // Only load projects and setup listeners when connected
     if (isConnected) {
       loadProjects()
+      // Setup global cross-device sync listeners (tool calls, status changes)
+      setupGlobalSyncListeners()
     }
   }, [loadProjects, isConnected])
 

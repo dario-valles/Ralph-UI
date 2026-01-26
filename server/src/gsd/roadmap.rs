@@ -56,10 +56,7 @@ impl RoadmapDoc {
 
     /// Get total requirement count in roadmap
     pub fn total_requirements(&self) -> usize {
-        self.phases
-            .iter()
-            .map(|p| p.requirement_ids.len())
-            .sum()
+        self.phases.iter().map(|p| p.requirement_ids.len()).sum()
     }
 
     /// Export to markdown format
@@ -141,7 +138,12 @@ pub fn derive_roadmap(requirements: &RequirementsDoc) -> RoadmapDoc {
         let deps: HashSet<&str> = req
             .dependencies
             .iter()
-            .filter(|d| requirements.get(d).map(|r| r.scope == ScopeLevel::V1).unwrap_or(false))
+            .filter(|d| {
+                requirements
+                    .get(d)
+                    .map(|r| r.scope == ScopeLevel::V1)
+                    .unwrap_or(false)
+            })
             .map(|s| s.as_str())
             .collect();
         dep_graph.insert(&req.id, deps);
@@ -213,7 +215,7 @@ fn topological_phases<'a>(
         // If no progress, there's a cycle - just add remaining to last phase
         if phase.is_empty() && !remaining.is_empty() {
             log::warn!("Dependency cycle detected in requirements");
-            phase = remaining.drain(..).collect();
+            phase = std::mem::take(&mut remaining);
         }
 
         // Mark these as scheduled
@@ -223,11 +225,7 @@ fn topological_phases<'a>(
 
         if !phase.is_empty() {
             // Sort by priority within phase
-            phase.sort_by(|a, b| {
-                a.priority
-                    .unwrap_or(100)
-                    .cmp(&b.priority.unwrap_or(100))
-            });
+            phase.sort_by(|a, b| a.priority.unwrap_or(100).cmp(&b.priority.unwrap_or(100)));
             phases.push(phase);
         }
     }
@@ -343,13 +341,19 @@ mod tests {
         assert_eq!(roadmap.deferred.len(), 1); // One v2 requirement
 
         // First phase should have CORE-01 (no dependencies)
-        assert!(roadmap.phases[0].requirement_ids.contains(&"CORE-01".to_string()));
+        assert!(roadmap.phases[0]
+            .requirement_ids
+            .contains(&"CORE-01".to_string()));
 
         // Second phase should have CORE-02 (depends on CORE-01)
-        assert!(roadmap.phases[1].requirement_ids.contains(&"CORE-02".to_string()));
+        assert!(roadmap.phases[1]
+            .requirement_ids
+            .contains(&"CORE-02".to_string()));
 
         // Third phase should have UI-01 (depends on CORE-02)
-        assert!(roadmap.phases[2].requirement_ids.contains(&"UI-01".to_string()));
+        assert!(roadmap.phases[2]
+            .requirement_ids
+            .contains(&"UI-01".to_string()));
     }
 
     #[test]

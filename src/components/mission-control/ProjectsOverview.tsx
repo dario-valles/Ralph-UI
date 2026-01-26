@@ -16,7 +16,7 @@ interface ProjectsOverviewProps {
 
 function ProjectsSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {[1, 2, 3].map((i) => (
         <div key={i} className="rounded-lg border p-4 animate-pulse">
           <div className="flex items-center gap-2 mb-3">
@@ -113,9 +113,9 @@ export function ProjectsOverview({
             <div
               className={cn(
                 'grid gap-4',
-                sortedProjects.length === 1 && 'md:grid-cols-1 max-w-md',
-                sortedProjects.length === 2 && 'md:grid-cols-2',
-                sortedProjects.length >= 3 && 'md:grid-cols-2 lg:grid-cols-3'
+                sortedProjects.length === 1 && 'sm:grid-cols-1 max-w-md',
+                sortedProjects.length === 2 && 'sm:grid-cols-2',
+                sortedProjects.length >= 3 && 'sm:grid-cols-2 lg:grid-cols-3'
               )}
             >
               {sortedProjects.map((projectStatus) => (

@@ -82,7 +82,7 @@ export function QualityScoreCard({
                 size="icon"
                 onClick={onRefresh}
                 disabled={loading}
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
               </Button>
@@ -118,12 +118,12 @@ export function QualityScoreCard({
             <div className="flex-1 min-w-0">
               {/* Status Badge */}
               {assessment.readyForExport ? (
-                <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 text-[10px] px-1.5 py-0 gap-0.5">
+                <Badge variant="success" className="text-[10px] px-1.5 py-0 gap-0.5">
                   <CheckCircle className="h-2.5 w-2.5" />
                   Ready
                 </Badge>
               ) : (
-                <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 text-[10px] px-1.5 py-0 gap-0.5">
+                <Badge variant="warning" className="text-[10px] px-1.5 py-0 gap-0.5">
                   <AlertTriangle className="h-2.5 w-2.5" />
                   Needs detail
                 </Badge>
@@ -187,9 +187,9 @@ export function QualityScoreCard({
                   size="icon"
                   onClick={onRefresh}
                   disabled={loading}
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  className="min-h-11 min-w-11 sm:h-6 sm:w-6 sm:min-h-0 sm:min-w-0 text-muted-foreground hover:text-foreground"
                 >
-                  <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+                  <RefreshCw className={cn('h-4 w-4 sm:h-3 sm:w-3', loading && 'animate-spin')} />
                 </Button>
               )}
               {/* Expand button for suggestions */}
@@ -199,9 +199,9 @@ export function QualityScoreCard({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      className="min-h-11 min-w-11 sm:h-6 sm:w-6 sm:min-h-0 sm:min-w-0 text-muted-foreground hover:text-foreground"
                     >
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDown className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-64 p-3" side="left" align="start">
@@ -262,12 +262,12 @@ export function QualityScoreCard({
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">Quality</h3>
           {assessment.readyForExport ? (
-            <Badge className="bg-green-100 text-green-700 border-0 hover:bg-green-100 gap-1 text-[11px] px-1.5 py-0.5">
+            <Badge variant="success" className="gap-1 text-[11px] px-1.5 py-0.5">
               <CheckCircle className="h-3 w-3" />
               Ready
             </Badge>
           ) : (
-            <Badge className="bg-amber-100 text-amber-700 border-0 hover:bg-amber-100 gap-1 text-[11px] px-1.5 py-0.5">
+            <Badge variant="warning" className="gap-1 text-[11px] px-1.5 py-0.5">
               <AlertTriangle className="h-3 w-3" />
               Incomplete
             </Badge>
@@ -278,9 +278,9 @@ export function QualityScoreCard({
               size="icon"
               onClick={onRefresh}
               disabled={loading}
-              className="h-6 w-6 ml-auto text-muted-foreground hover:text-foreground"
+              className="min-h-11 min-w-11 sm:h-6 sm:w-6 sm:min-h-0 sm:min-w-0 ml-auto text-muted-foreground hover:text-foreground"
             >
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+              <RefreshCw className={cn('h-4 w-4 sm:h-3.5 sm:w-3.5', loading && 'animate-spin')} />
             </Button>
           )}
         </div>

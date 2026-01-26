@@ -22,8 +22,7 @@ use serde_yaml::Value;
 ///     estimated_tokens: 1000
 /// ```
 pub fn parse_yaml(content: &str) -> Result<PRDDocument> {
-    let value: Value = serde_yaml::from_str(content)
-        .context("Failed to parse YAML")?;
+    let value: Value = serde_yaml::from_str(content).context("Failed to parse YAML")?;
 
     // Require the document to be a mapping (object) with at least a title or tasks field
     // This prevents markdown content (which parses as comments/null) from being accepted
@@ -38,17 +37,20 @@ pub fn parse_yaml(content: &str) -> Result<PRDDocument> {
         anyhow::bail!("YAML document must have at least a 'title' or 'tasks' field");
     }
 
-    let title = value.get("title")
+    let title = value
+        .get("title")
         .or_else(|| value.get("name"))
         .and_then(|v| v.as_str())
         .unwrap_or("Untitled PRD")
         .to_string();
 
-    let description = value.get("description")
+    let description = value
+        .get("description")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let tasks = value.get("tasks")
+    let tasks = value
+        .get("tasks")
         .and_then(|v| v.as_sequence())
         .map(|seq| parse_tasks_sequence(seq))
         .unwrap_or_else(Vec::new);
@@ -61,35 +63,40 @@ pub fn parse_yaml(content: &str) -> Result<PRDDocument> {
 }
 
 fn parse_tasks_sequence(tasks: &[Value]) -> Vec<PRDTask> {
-    tasks.iter()
-        .filter_map(|task| parse_task(task))
-        .collect()
+    tasks.iter().filter_map(|task| parse_task(task)).collect()
 }
 
 fn parse_task(value: &Value) -> Option<PRDTask> {
-    let title = value.get("title")
+    let title = value
+        .get("title")
         .or_else(|| value.get("name"))
         .and_then(|v| v.as_str())?
         .to_string();
 
-    let raw_description = value.get("description")
+    let raw_description = value
+        .get("description")
         .or_else(|| value.get("desc"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
     // Handle empty descriptions by using title as fallback
     let description = if raw_description.trim().is_empty() {
-        log::warn!("[Parser] Task '{}' has no description, using title as prompt", title);
+        log::warn!(
+            "[Parser] Task '{}' has no description, using title as prompt",
+            title
+        );
         format!("Implement: {}", title)
     } else {
         raw_description.to_string()
     };
 
-    let priority = value.get("priority")
+    let priority = value
+        .get("priority")
         .and_then(|v| v.as_i64())
         .map(|n| n as i32);
 
-    let dependencies: Vec<String> = value.get("dependencies")
+    let dependencies: Vec<String> = value
+        .get("dependencies")
         .or_else(|| value.get("depends_on"))
         .and_then(|v| v.as_sequence())
         .map(|seq| {
@@ -99,7 +106,8 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         })
         .unwrap_or_default();
 
-    let tags: Vec<String> = value.get("tags")
+    let tags: Vec<String> = value
+        .get("tags")
         .or_else(|| value.get("labels"))
         .and_then(|v| v.as_sequence())
         .map(|seq| {
@@ -109,7 +117,8 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         })
         .unwrap_or_default();
 
-    let estimated_tokens = value.get("estimated_tokens")
+    let estimated_tokens = value
+        .get("estimated_tokens")
         .or_else(|| value.get("estimatedTokens"))
         .or_else(|| value.get("tokens"))
         .and_then(|v| v.as_i64())

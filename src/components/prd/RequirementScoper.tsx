@@ -23,7 +23,9 @@ import type {
   ScopeLevel,
   RequirementCategory,
 } from '@/types/planning'
+import type { GeneratedRequirement, GenerateRequirementsResult } from '@/types/gsd'
 import { ListChecks, ArrowRight, Filter, Plus, X, LayoutGrid, List } from 'lucide-react'
+import { AIRequirementGenerator } from './AIRequirementGenerator'
 
 interface RequirementScoperProps {
   /** Requirements document */
@@ -35,11 +37,22 @@ interface RequirementScoperProps {
     category: RequirementCategory,
     title: string,
     description: string
-  ) => Promise<Requirement>
+  ) => Promise<Requirement | null>
   /** Callback when ready to proceed */
   onProceed: () => void
   /** Whether the component is in loading state */
   isLoading?: boolean
+  /** Callback to generate requirements from prompt */
+  onGenerateRequirements?: (
+    prompt: string,
+    agentType?: string,
+    model?: string,
+    count?: number
+  ) => Promise<GenerateRequirementsResult>
+  /** Callback when generated requirements are accepted */
+  onAcceptGeneratedRequirements?: (requirements: GeneratedRequirement[]) => Promise<void>
+  /** Whether AI generation is in progress */
+  isGenerating?: boolean
 }
 
 /** Get category display name */
@@ -236,6 +249,9 @@ export function RequirementScoper({
   onAddRequirement,
   onProceed,
   isLoading = false,
+  onGenerateRequirements,
+  onAcceptGeneratedRequirements,
+  isGenerating = false,
 }: RequirementScoperProps) {
   // Local state for scope changes before saving
   const [localRequirements, setLocalRequirements] = useState<Record<string, Requirement>>(() => ({
@@ -391,6 +407,10 @@ export function RequirementScoper({
     setIsAddingReq(true)
     try {
       const newReq = await onAddRequirement(newReqCategory, newReqTitle, newReqDescription)
+      if (!newReq) {
+        // Failed to add requirement
+        return
+      }
       // Add to local state
       setLocalRequirements((prev) => ({
         ...prev,
@@ -447,6 +467,15 @@ export function RequirementScoper({
           <p className="text-2xl font-bold text-yellow-600">{stats.unscoped}</p>
         </Card>
       </div>
+
+      {/* AI Requirement Generator */}
+      {onGenerateRequirements && onAcceptGeneratedRequirements && (
+        <AIRequirementGenerator
+          onGenerate={onGenerateRequirements}
+          onAcceptRequirements={onAcceptGeneratedRequirements}
+          isGenerating={isGenerating}
+        />
+      )}
 
       {/* View mode tabs and filters */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'columns')}>

@@ -72,7 +72,7 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
         isRunning && 'border-green-500/50 bg-green-500/5'
       )}
     >
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">

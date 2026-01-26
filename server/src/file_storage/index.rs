@@ -161,7 +161,11 @@ where
 }
 
 /// Remove an entry from an index file
-pub fn remove_index_entry<T>(project_path: &Path, index_type: &str, entry_id: &str) -> FileResult<()>
+pub fn remove_index_entry<T>(
+    project_path: &Path,
+    index_type: &str,
+    entry_id: &str,
+) -> FileResult<()>
 where
     T: serde::de::DeserializeOwned + serde::Serialize + HasId,
 {
@@ -296,9 +300,12 @@ mod tests {
         .unwrap();
 
         // Update the entry
-        update_index_entry::<SessionIndexEntry, _>(temp_dir.path(), "sessions", "session-1", |_| {
-            Some(create_test_session_entry("session-1", "Updated Session 1"))
-        })
+        update_index_entry::<SessionIndexEntry, _>(
+            temp_dir.path(),
+            "sessions",
+            "session-1",
+            |_| Some(create_test_session_entry("session-1", "Updated Session 1")),
+        )
         .unwrap();
 
         let index: IndexFile<SessionIndexEntry> = read_index(temp_dir.path(), "sessions").unwrap();

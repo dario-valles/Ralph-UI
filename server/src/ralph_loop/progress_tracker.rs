@@ -55,8 +55,12 @@ impl ProgressTracker {
     pub fn initialize(&self) -> Result<(), String> {
         // Ensure progress directory exists
         let progress_dir = self.progress_dir();
-        std::fs::create_dir_all(&progress_dir)
-            .map_err(|e| format!("Failed to create progress directory {:?}: {}", progress_dir, e))?;
+        std::fs::create_dir_all(&progress_dir).map_err(|e| {
+            format!(
+                "Failed to create progress directory {:?}: {}",
+                progress_dir, e
+            )
+        })?;
 
         let path = self.progress_path();
 
@@ -73,7 +77,8 @@ impl ProgressTracker {
             chrono::Utc::now().to_rfc3339()
         );
 
-        std::fs::write(&path, header).map_err(|e| format!("Failed to write progress.txt: {}", e))?;
+        std::fs::write(&path, header)
+            .map_err(|e| format!("Failed to write progress.txt: {}", e))?;
 
         Ok(())
     }
@@ -116,7 +121,11 @@ impl ProgressTracker {
 
     /// Record the end of an iteration
     pub fn end_iteration(&self, iteration: u32, success: bool) -> Result<(), String> {
-        let status = if success { "completed successfully" } else { "failed" };
+        let status = if success {
+            "completed successfully"
+        } else {
+            "failed"
+        };
         let entry = ProgressEntry {
             iteration,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -149,7 +158,12 @@ impl ProgressTracker {
     }
 
     /// Record a story completion
-    pub fn add_story_completed(&self, iteration: u32, story_id: &str, story_title: &str) -> Result<(), String> {
+    pub fn add_story_completed(
+        &self,
+        iteration: u32,
+        story_id: &str,
+        story_title: &str,
+    ) -> Result<(), String> {
         let entry = ProgressEntry {
             iteration,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -238,8 +252,7 @@ impl ProgressTracker {
             return Ok(String::new());
         }
 
-        std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read progress.txt: {}", e))
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read progress.txt: {}", e))
     }
 
     /// Get entries for a specific iteration
@@ -283,11 +296,7 @@ impl ProgressTracker {
         let entries = self.read_entries()?;
 
         let total_entries = entries.len();
-        let total_iterations = entries
-            .iter()
-            .map(|e| e.iteration)
-            .max()
-            .unwrap_or(0);
+        let total_iterations = entries.iter().map(|e| e.iteration).max().unwrap_or(0);
 
         let learnings_count = entries
             .iter()
@@ -423,7 +432,9 @@ mod tests {
         tracker.start_iteration(1).unwrap();
         tracker.add_learning(1, "Learning").unwrap();
         tracker.add_error(1, "Error").unwrap();
-        tracker.add_story_completed(1, "story-1", "Test Story").unwrap();
+        tracker
+            .add_story_completed(1, "story-1", "Test Story")
+            .unwrap();
         tracker.end_iteration(1, true).unwrap();
 
         let summary = tracker.get_summary().unwrap();

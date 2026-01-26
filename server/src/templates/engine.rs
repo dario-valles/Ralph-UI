@@ -2,15 +2,15 @@
 
 #![allow(dead_code)] // Template engine infrastructure
 
-use crate::models::{Task, Session};
-use anyhow::{Result, anyhow};
+use crate::models::{Session, Task};
+use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
-use tera::{Tera, Context};
+use tera::{Context, Tera};
 
 /// Template context for rendering
 #[derive(Debug, Clone, Serialize)]
@@ -419,7 +419,9 @@ mod tests {
     #[test]
     fn test_renders_simple_template_with_variables() {
         let engine = TemplateEngine::new();
-        engine.add_template("simple", "Hello {{ task.title }}!").unwrap();
+        engine
+            .add_template("simple", "Hello {{ task.title }}!")
+            .unwrap();
 
         let task = create_test_task();
         let ctx = TemplateContext::from_task(&task);
@@ -431,7 +433,9 @@ mod tests {
     #[test]
     fn test_handles_missing_variables_gracefully() {
         let engine = TemplateEngine::new();
-        engine.add_template("missing", "Title: {{ task.title | default(value='N/A') }}").unwrap();
+        engine
+            .add_template("missing", "Title: {{ task.title | default(value='N/A') }}")
+            .unwrap();
 
         let ctx = TemplateContext::new(); // No task
 
@@ -461,8 +465,8 @@ mod tests {
 
     #[test]
     fn test_builds_context_from_session() {
+        use crate::models::{AgentType, SessionConfig, SessionStatus};
         use chrono::Utc;
-        use crate::models::{SessionConfig, SessionStatus, AgentType};
 
         let session = Session {
             id: "session-1".to_string(),
@@ -497,17 +501,22 @@ mod tests {
     #[test]
     fn test_includes_acceptance_criteria_in_context() {
         let engine = TemplateEngine::new();
-        engine.add_template("criteria", r#"
+        engine
+            .add_template(
+                "criteria",
+                r#"
 {% for criterion in acceptance_criteria %}
 - {{ criterion }}
 {% endfor %}
-"#.trim()).unwrap();
+"#
+                .trim(),
+            )
+            .unwrap();
 
-        let ctx = TemplateContext::new()
-            .with_acceptance_criteria(vec![
-                "Must be fast".to_string(),
-                "Must be secure".to_string(),
-            ]);
+        let ctx = TemplateContext::new().with_acceptance_criteria(vec![
+            "Must be fast".to_string(),
+            "Must be secure".to_string(),
+        ]);
 
         let result = engine.render("criteria", &ctx).unwrap();
         assert!(result.contains("Must be fast"));
@@ -520,7 +529,9 @@ mod tests {
         let task = create_test_task();
         let ctx = TemplateContext::from_task(&task);
 
-        let result = engine.render_string("Task: {{ task.title }}", &ctx).unwrap();
+        let result = engine
+            .render_string("Task: {{ task.title }}", &ctx)
+            .unwrap();
         assert_eq!(result, "Task: Implement feature X");
     }
 
@@ -531,7 +542,9 @@ mod tests {
             .with_custom("project_name", "Ralph")
             .with_custom("version", "1.0.0");
 
-        let result = engine.render_string("{{ project_name }} v{{ version }}", &ctx).unwrap();
+        let result = engine
+            .render_string("{{ project_name }} v{{ version }}", &ctx)
+            .unwrap();
         assert_eq!(result, "Ralph v1.0.0");
     }
 
@@ -693,7 +706,9 @@ mod tests {
         let ctx = TemplateContext::new()
             .with_recent_progress("- [Iter 1] Completed US-001\n- [Iter 2] Completed US-002");
 
-        let result = engine.render_string("Progress:\n{{ recent_progress }}", &ctx).unwrap();
+        let result = engine
+            .render_string("Progress:\n{{ recent_progress }}", &ctx)
+            .unwrap();
         assert!(result.contains("Completed US-001"));
         assert!(result.contains("Completed US-002"));
     }
@@ -701,10 +716,13 @@ mod tests {
     #[test]
     fn test_codebase_patterns_variable() {
         let engine = TemplateEngine::new();
-        let ctx = TemplateContext::new()
-            .with_codebase_patterns("## Patterns\n- Use Zustand for state management\n- Follow CLAUDE.md guidelines");
+        let ctx = TemplateContext::new().with_codebase_patterns(
+            "## Patterns\n- Use Zustand for state management\n- Follow CLAUDE.md guidelines",
+        );
 
-        let result = engine.render_string("Patterns:\n{{ codebase_patterns }}", &ctx).unwrap();
+        let result = engine
+            .render_string("Patterns:\n{{ codebase_patterns }}", &ctx)
+            .unwrap();
         assert!(result.contains("Zustand"));
         assert!(result.contains("CLAUDE.md"));
     }
@@ -712,10 +730,14 @@ mod tests {
     #[test]
     fn test_prd_counts_variables() {
         let engine = TemplateEngine::new();
-        let ctx = TemplateContext::new()
-            .with_prd_counts(5, 10);
+        let ctx = TemplateContext::new().with_prd_counts(5, 10);
 
-        let result = engine.render_string("Completed: {{ prd_completed_count }}/{{ prd_total_count }}", &ctx).unwrap();
+        let result = engine
+            .render_string(
+                "Completed: {{ prd_completed_count }}/{{ prd_total_count }}",
+                &ctx,
+            )
+            .unwrap();
         assert_eq!(result, "Completed: 5/10");
     }
 
@@ -725,7 +747,9 @@ mod tests {
         let ctx = TemplateContext::new()
             .with_selection_reason("Highest priority with satisfied dependencies");
 
-        let result = engine.render_string("Selected because: {{ selection_reason }}", &ctx).unwrap();
+        let result = engine
+            .render_string("Selected because: {{ selection_reason }}", &ctx)
+            .unwrap();
         assert!(result.contains("Highest priority with satisfied dependencies"));
     }
 
@@ -734,7 +758,9 @@ mod tests {
         let engine = TemplateEngine::new();
         let ctx = TemplateContext::new();
 
-        let result = engine.render_string("Date: {{ current_date }}", &ctx).unwrap();
+        let result = engine
+            .render_string("Date: {{ current_date }}", &ctx)
+            .unwrap();
         // Should be in YYYY-MM-DD format
         assert!(result.starts_with("Date: "));
         assert!(result.contains("-"));

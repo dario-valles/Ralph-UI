@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,7 +17,6 @@ import {
   ArrowLeft,
   FolderOpen,
   ChevronDown,
-  Workflow,
   MessageSquareText,
   Check,
   Sparkles,
@@ -36,7 +34,7 @@ import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 
-type WorkflowMode = 'guided' | 'gsd' | 'github'
+type WorkflowMode = 'guided' | 'github'
 
 interface WorkflowOption {
   id: WorkflowMode
@@ -50,20 +48,13 @@ interface WorkflowOption {
 const WORKFLOW_OPTIONS: WorkflowOption[] = [
   {
     id: 'guided',
-    label: 'Guided Interview',
-    description: 'AI asks structured questions to build your PRD step by step',
+    label: 'AI-Guided PRD',
+    description: 'AI helps you build a comprehensive PRD through conversation',
     icon: <MessageSquareText className="h-6 w-6" />,
-    features: ['Type-specific questions', 'Iterative refinement', 'Quick for small tasks'],
-  },
-  {
-    id: 'gsd',
-    label: 'GSD Workflow',
-    description: 'Full spec-driven workflow for comprehensive project planning',
-    icon: <Workflow className="h-6 w-6" />,
-    badge: 'Recommended for new projects',
+    badge: 'Recommended',
     features: [
-      'Deep questioning phase',
-      'Research agents',
+      'Type-specific questions',
+      'Parallel research agents',
       'Requirements scoping',
       'Roadmap generation',
     ],
@@ -139,7 +130,6 @@ interface PRDTypeSelectorProps {
     prdType: PRDTypeValue,
     guidedMode: boolean,
     projectPath?: string,
-    gsdMode?: boolean,
     title?: string
   ) => void
   loading?: boolean
@@ -148,8 +138,7 @@ interface PRDTypeSelectorProps {
 }
 
 // Helper to get default title for PRD type
-function getDefaultTitle(prdType: PRDTypeValue, gsdMode: boolean): string {
-  if (gsdMode) return 'GSD Workflow'
+function getDefaultTitle(prdType: PRDTypeValue): string {
   const typeLabels: Record<PRDTypeValue, string> = {
     new_feature: 'New Feature PRD',
     bug_fix: 'Bug Fix PRD',
@@ -175,7 +164,6 @@ export function PRDTypeSelector({
   const [showGitHubImport, setShowGitHubImport] = useState(false)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
-  const [pendingGsdMode, setPendingGsdMode] = useState(false)
 
   // Derive project name from path
   const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
@@ -197,25 +185,17 @@ export function PRDTypeSelector({
   }
 
   const handleContinue = () => {
-    if (selectedMode === 'gsd') {
-      // GSD mode - show naming dialog
-      setPendingGsdMode(true)
-      setSessionTitle(getDefaultTitle('new_feature', true))
-      setShowNameDialog(true)
-    } else if (selectedMode === 'guided' && selectedType) {
+    if (selectedMode === 'guided' && selectedType) {
       // Guided mode - show naming dialog
-      setPendingGsdMode(false)
-      setSessionTitle(getDefaultTitle(selectedType, false))
+      setSessionTitle(getDefaultTitle(selectedType))
       setShowNameDialog(true)
     }
   }
 
   const handleConfirmName = () => {
     const title = sessionTitle.trim() || undefined
-    if (pendingGsdMode) {
-      onSelect('new_feature', false, projectPath || undefined, true, title)
-    } else if (selectedType) {
-      onSelect(selectedType, true, projectPath || undefined, false, title)
+    if (selectedType) {
+      onSelect(selectedType, true, projectPath || undefined, title)
     }
     setShowNameDialog(false)
   }
@@ -225,7 +205,7 @@ export function PRDTypeSelector({
     setSessionTitle('')
   }
 
-  const canContinue = selectedMode === 'gsd' || (selectedMode === 'guided' && selectedType)
+  const canContinue = selectedMode === 'guided' && selectedType
 
   // Step 1: Workflow Mode Selection
   if (step === 'mode') {
@@ -267,9 +247,9 @@ export function PRDTypeSelector({
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-base">{option.label}</span>
                       {option.badge && (
-                        <Badge variant="secondary" className="text-xs">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                           {option.badge}
-                        </Badge>
+                        </span>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">{option.description}</p>
@@ -328,39 +308,20 @@ export function PRDTypeSelector({
             )}
           </div>
 
-          {/* Continue Button (only for GSD mode, guided goes to next step automatically) */}
-          {selectedMode === 'gsd' && (
-            <div className="flex justify-end">
-              <Button onClick={handleContinue} disabled={loading} className="gap-2">
-                {loading ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Starting...
-                  </>
-                ) : (
-                  <>
-                    Continue
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
+          {/* GitHub Import Dialog */}
+          <ImportGitHubIssuesDialog
+            open={showGitHubImport}
+            onOpenChange={setShowGitHubImport}
+            projectPath={projectPath}
+            onSuccess={(result) => {
+              setShowGitHubImport(false)
+              // Navigate to the imported PRD if any issues were imported
+              if (result.importedCount > 0) {
+                onSelect('general', false, projectPath || undefined)
+              }
+            }}
+          />
         </CardContent>
-
-        {/* GitHub Import Dialog */}
-        <ImportGitHubIssuesDialog
-          open={showGitHubImport}
-          onOpenChange={setShowGitHubImport}
-          projectPath={projectPath}
-          onSuccess={(result) => {
-            setShowGitHubImport(false)
-            // Navigate to the imported PRD if any issues were imported
-            if (result.importedCount > 0) {
-              onSelect('general', false, projectPath || undefined, false)
-            }
-          }}
-        />
       </Card>
     )
   }
@@ -426,7 +387,7 @@ export function PRDTypeSelector({
 
         {/* Name Session Dialog */}
         <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Pencil className="h-5 w-5" />

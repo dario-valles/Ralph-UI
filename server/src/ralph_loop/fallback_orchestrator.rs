@@ -78,7 +78,12 @@ impl FallbackOrchestrator {
     pub fn get_agent_for_iteration(&mut self) -> AgentType {
         if !self.config.enabled || self.config.fallback_chain.is_empty() {
             // Fallback disabled - return primary or Claude as default
-            return self.config.fallback_chain.first().copied().unwrap_or(AgentType::Claude);
+            return self
+                .config
+                .fallback_chain
+                .first()
+                .copied()
+                .unwrap_or(AgentType::Claude);
         }
 
         self.total_iterations += 1;
@@ -248,7 +253,11 @@ impl FallbackOrchestrator {
 
     /// Get the next fallback agent after the given one
     fn get_next_fallback_agent(&self, current: AgentType) -> Option<AgentType> {
-        let current_index = self.config.fallback_chain.iter().position(|a| *a == current)?;
+        let current_index = self
+            .config
+            .fallback_chain
+            .iter()
+            .position(|a| *a == current)?;
 
         // Try each subsequent agent
         for i in (current_index + 1)..self.config.fallback_chain.len() {
@@ -280,14 +289,17 @@ impl FallbackOrchestrator {
 
     /// Get current agent type being used
     pub fn current_agent(&self) -> AgentType {
-        self.config.fallback_chain.get(self.current_agent_index)
+        self.config
+            .fallback_chain
+            .get(self.current_agent_index)
             .copied()
             .unwrap_or(AgentType::Claude)
     }
 
     /// Check if a specific agent is rate-limited
     pub fn is_agent_rate_limited(&self, agent: AgentType) -> bool {
-        self.agent_states.get(&agent)
+        self.agent_states
+            .get(&agent)
             .map(|s| s.is_rate_limited)
             .unwrap_or(false)
     }
@@ -309,7 +321,7 @@ impl FallbackOrchestrator {
         let mut total_failed = 0;
         let mut agents_rate_limited = 0;
 
-        for (_, state) in &self.agent_states {
+        for state in self.agent_states.values() {
             total_successful += state.successful_iterations;
             total_failed += state.failed_iterations;
             if state.is_rate_limited {

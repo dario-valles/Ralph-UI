@@ -375,10 +375,7 @@ mod tests {
         // Coverage is about scoping, not roadmap coverage - both reqs are scoped so coverage is 100%
         // The V1_NOT_IN_ROADMAP issue causes it to fail
         assert!(!result.issues.is_empty());
-        assert!(result
-            .issues
-            .iter()
-            .any(|i| i.code == "V1_NOT_IN_ROADMAP"));
+        assert!(result.issues.iter().any(|i| i.code == "V1_NOT_IN_ROADMAP"));
     }
 
     #[test]
@@ -513,7 +510,7 @@ mod tests {
         let config = GsdConfig::default();
 
         assert_eq!(config.max_parallel_research, 4);
-        assert_eq!(config.research_timeout_secs, 300);
+        assert_eq!(config.research_timeout_secs, 600);
         assert!(!config.auto_advance);
         assert_eq!(config.min_context_items, 3);
         assert!(config.include_codebase_analysis);
@@ -525,10 +522,7 @@ mod tests {
             ResearchAgentType::Architecture.output_filename(),
             "architecture.md"
         );
-        assert_eq!(
-            ResearchAgentType::Codebase.output_filename(),
-            "codebase.md"
-        );
+        assert_eq!(ResearchAgentType::Codebase.output_filename(), "codebase.md");
         assert_eq!(
             ResearchAgentType::BestPractices.output_filename(),
             "best_practices.md"

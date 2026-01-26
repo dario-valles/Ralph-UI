@@ -1,9 +1,8 @@
 //! Push notification Backend commands
 
 use crate::push::{
-    get_push_subscription_settings, get_push_subscriptions, remove_push_subscription,
-    save_push_subscription, update_push_subscription_settings,
-    get_vapid_public_key as get_vapid_key,
+    get_push_subscription_settings, get_push_subscriptions, get_vapid_public_key as get_vapid_key,
+    remove_push_subscription, save_push_subscription, update_push_subscription_settings,
     PushNotificationSettings, PushNotifier, PushSubscription, PushSubscriptionKeys,
 };
 use serde::{Deserialize, Serialize};
@@ -127,7 +126,9 @@ pub async fn unsubscribe_push(
 }
 
 /// Get push notification settings for a subscription
-pub async fn get_push_settings(subscription_id: String) -> Result<PushNotificationSettings, String> {
+pub async fn get_push_settings(
+    subscription_id: String,
+) -> Result<PushNotificationSettings, String> {
     get_push_subscription_settings(&subscription_id)?
         .ok_or_else(|| format!("Subscription {} not found", subscription_id))
 }
@@ -145,7 +146,8 @@ pub async fn update_push_settings(
     input: UpdatePushSettingsInput,
     push_state: &PushNotificationState,
 ) -> Result<PushNotificationSettings, String> {
-    let updated = update_push_subscription_settings(&input.subscription_id, input.settings.clone())?;
+    let updated =
+        update_push_subscription_settings(&input.subscription_id, input.settings.clone())?;
 
     if !updated {
         return Err(format!("Subscription {} not found", input.subscription_id));

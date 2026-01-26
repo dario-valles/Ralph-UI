@@ -175,16 +175,16 @@ function LearningCard({
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit}>
-            <Pencil className="h-3 w-3" />
+          <Button variant="ghost" size="sm" className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0" onClick={onEdit}>
+            <Pencil className="h-4 w-4 sm:h-3 sm:w-3" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+            className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0 text-destructive hover:text-destructive"
             onClick={onDelete}
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className="h-4 w-4 sm:h-3 sm:w-3" />
           </Button>
         </div>
       </div>
@@ -630,7 +630,7 @@ export function LearningsPanel({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete Learning</DialogTitle>
             <DialogDescription>

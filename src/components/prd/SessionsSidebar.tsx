@@ -21,6 +21,7 @@ interface SessionsSidebarProps {
   onCreateSession: () => void
   onSelectSession: (session: ChatSession) => void
   onDeleteSession: (sessionId: string) => void
+  onCloneSession?: (session: ChatSession) => void
   qualityAssessment: QualityAssessment | null
   loading: boolean
   onRefreshQuality: () => void
@@ -41,6 +42,7 @@ export function SessionsSidebar({
   onCreateSession,
   onSelectSession,
   onDeleteSession,
+  onCloneSession,
   qualityAssessment,
   loading,
   onRefreshQuality,
@@ -68,9 +70,9 @@ export function SessionsSidebar({
                 size="sm"
                 onClick={onCreateSession}
                 aria-label="New session"
-                className="h-7 w-7 p-0"
+                className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
               </Button>
             )}
             <Button
@@ -78,12 +80,12 @@ export function SessionsSidebar({
               size="sm"
               onClick={() => onCollapsedChange(!collapsed)}
               aria-label={collapsed ? 'Expand sessions' : 'Collapse sessions'}
-              className="h-7 w-7 p-0"
+              className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
             >
               {collapsed ? (
-                <PanelLeftOpen className="h-4 w-4" />
+                <PanelLeftOpen className="h-5 w-5 sm:h-4 sm:w-4" />
               ) : (
-                <PanelLeftClose className="h-4 w-4" />
+                <PanelLeftClose className="h-5 w-5 sm:h-4 sm:w-4" />
               )}
             </Button>
           </div>
@@ -98,9 +100,9 @@ export function SessionsSidebar({
               size="sm"
               onClick={onCreateSession}
               aria-label="New session"
-              className="h-8 w-8 p-0"
+              className="min-h-11 min-w-11 sm:h-8 sm:w-8 sm:min-h-0 sm:min-w-0 p-0"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
           </Tooltip>
           {sessions.slice(0, 5).map((session) => (
@@ -109,9 +111,9 @@ export function SessionsSidebar({
                 variant={currentSession?.id === session.id ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => onSelectSession(session)}
-                className="h-8 w-8 p-0"
+                className="min-h-11 min-w-11 sm:h-8 sm:w-8 sm:min-h-0 sm:min-w-0 p-0"
               >
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="h-5 w-5 sm:h-4 sm:w-4" />
               </Button>
             </Tooltip>
           ))}
@@ -147,6 +149,7 @@ export function SessionsSidebar({
                     isProcessing={processingSessionId === session.id}
                     onSelect={() => onSelectSession(session)}
                     onDelete={() => onDeleteSession(session.id)}
+                    onClone={onCloneSession ? () => onCloneSession(session) : undefined}
                   />
                 ))}
                 {hasMore && (

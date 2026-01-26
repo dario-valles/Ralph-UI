@@ -194,19 +194,35 @@ impl ConfigMerger {
         }
     }
 
-    fn merge_validation(&self, base: &ValidationConfig, over: &ValidationConfig) -> ValidationConfig {
+    fn merge_validation(
+        &self,
+        base: &ValidationConfig,
+        over: &ValidationConfig,
+    ) -> ValidationConfig {
         ValidationConfig {
             run_tests: over.run_tests,
             run_lint: over.run_lint,
-            test_command: over.test_command.clone().or_else(|| base.test_command.clone()),
-            lint_command: over.lint_command.clone().or_else(|| base.lint_command.clone()),
+            test_command: over
+                .test_command
+                .clone()
+                .or_else(|| base.test_command.clone()),
+            lint_command: over
+                .lint_command
+                .clone()
+                .or_else(|| base.lint_command.clone()),
         }
     }
 
     fn merge_templates(&self, base: &TemplateConfig, over: &TemplateConfig) -> TemplateConfig {
         TemplateConfig {
-            default_template: over.default_template.clone().or_else(|| base.default_template.clone()),
-            templates_dir: over.templates_dir.clone().or_else(|| base.templates_dir.clone()),
+            default_template: over
+                .default_template
+                .clone()
+                .or_else(|| base.default_template.clone()),
+            templates_dir: over
+                .templates_dir
+                .clone()
+                .or_else(|| base.templates_dir.clone()),
         }
     }
 
@@ -216,13 +232,25 @@ impl ConfigMerger {
             enabled: over.enabled,
             base_backoff_ms: over.base_backoff_ms,
             max_backoff_ms: over.max_backoff_ms,
-            fallback_model: over.fallback_model.clone().or_else(|| base.fallback_model.clone()),
-            error_strategy: over.error_strategy.clone().or_else(|| base.error_strategy.clone()),
-            fallback_chain: over.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
+            fallback_model: over
+                .fallback_model
+                .clone()
+                .or_else(|| base.fallback_model.clone()),
+            error_strategy: over
+                .error_strategy
+                .clone()
+                .or_else(|| base.error_strategy.clone()),
+            fallback_chain: over
+                .fallback_chain
+                .clone()
+                .or_else(|| base.fallback_chain.clone()),
             test_primary_recovery: over.test_primary_recovery.or(base.test_primary_recovery),
             recovery_test_interval: over.recovery_test_interval.or(base.recovery_test_interval),
             // Deprecated field: prefer fallback_chain, but preserve for backward compat
-            fallback_agent: over.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
+            fallback_agent: over
+                .fallback_agent
+                .clone()
+                .or_else(|| base.fallback_agent.clone()),
         }
     }
 
@@ -237,8 +265,14 @@ impl ConfigMerger {
             max_parallel: partial.max_parallel.unwrap_or(base.max_parallel),
             max_iterations: partial.max_iterations.unwrap_or(base.max_iterations),
             max_retries: partial.max_retries.unwrap_or(base.max_retries),
-            agent_type: partial.agent_type.clone().unwrap_or_else(|| base.agent_type.clone()),
-            strategy: partial.strategy.clone().unwrap_or_else(|| base.strategy.clone()),
+            agent_type: partial
+                .agent_type
+                .clone()
+                .unwrap_or_else(|| base.agent_type.clone()),
+            strategy: partial
+                .strategy
+                .clone()
+                .unwrap_or_else(|| base.strategy.clone()),
             dry_run: partial.dry_run.unwrap_or(base.dry_run),
             model: partial.model.clone().or_else(|| base.model.clone()),
         }
@@ -248,7 +282,10 @@ impl ConfigMerger {
         GitConfig {
             auto_create_prs: partial.auto_create_prs.unwrap_or(base.auto_create_prs),
             draft_prs: partial.draft_prs.unwrap_or(base.draft_prs),
-            branch_pattern: partial.branch_pattern.clone().unwrap_or_else(|| base.branch_pattern.clone()),
+            branch_pattern: partial
+                .branch_pattern
+                .clone()
+                .unwrap_or_else(|| base.branch_pattern.clone()),
         }
     }
 
@@ -260,8 +297,14 @@ impl ConfigMerger {
         ValidationConfig {
             run_tests: partial.run_tests.unwrap_or(base.run_tests),
             run_lint: partial.run_lint.unwrap_or(base.run_lint),
-            test_command: partial.test_command.clone().or_else(|| base.test_command.clone()),
-            lint_command: partial.lint_command.clone().or_else(|| base.lint_command.clone()),
+            test_command: partial
+                .test_command
+                .clone()
+                .or_else(|| base.test_command.clone()),
+            lint_command: partial
+                .lint_command
+                .clone()
+                .or_else(|| base.lint_command.clone()),
         }
     }
 
@@ -271,8 +314,14 @@ impl ConfigMerger {
         partial: &PartialTemplateConfig,
     ) -> TemplateConfig {
         TemplateConfig {
-            default_template: partial.default_template.clone().or_else(|| base.default_template.clone()),
-            templates_dir: partial.templates_dir.clone().or_else(|| base.templates_dir.clone()),
+            default_template: partial
+                .default_template
+                .clone()
+                .or_else(|| base.default_template.clone()),
+            templates_dir: partial
+                .templates_dir
+                .clone()
+                .or_else(|| base.templates_dir.clone()),
         }
     }
 
@@ -286,13 +335,27 @@ impl ConfigMerger {
             enabled: partial.enabled.unwrap_or(base.enabled),
             base_backoff_ms: partial.base_backoff_ms.unwrap_or(base.base_backoff_ms),
             max_backoff_ms: partial.max_backoff_ms.unwrap_or(base.max_backoff_ms),
-            fallback_model: partial.fallback_model.clone().or_else(|| base.fallback_model.clone()),
-            error_strategy: partial.error_strategy.clone().or_else(|| base.error_strategy.clone()),
-            fallback_chain: partial.fallback_chain.clone().or_else(|| base.fallback_chain.clone()),
+            fallback_model: partial
+                .fallback_model
+                .clone()
+                .or_else(|| base.fallback_model.clone()),
+            error_strategy: partial
+                .error_strategy
+                .clone()
+                .or_else(|| base.error_strategy.clone()),
+            fallback_chain: partial
+                .fallback_chain
+                .clone()
+                .or_else(|| base.fallback_chain.clone()),
             test_primary_recovery: partial.test_primary_recovery.or(base.test_primary_recovery),
-            recovery_test_interval: partial.recovery_test_interval.or(base.recovery_test_interval),
+            recovery_test_interval: partial
+                .recovery_test_interval
+                .or(base.recovery_test_interval),
             // Deprecated field: prefer fallback_chain, but preserve for backward compat
-            fallback_agent: partial.fallback_agent.clone().or_else(|| base.fallback_agent.clone()),
+            fallback_agent: partial
+                .fallback_agent
+                .clone()
+                .or_else(|| base.fallback_agent.clone()),
         }
     }
 }
@@ -448,7 +511,10 @@ mod tests {
 
         // test_command from global is preserved (project didn't override it)
         // lint_command from project wins
-        assert_eq!(result.validation.lint_command, Some("npm run lint".to_string()));
+        assert_eq!(
+            result.validation.lint_command,
+            Some("npm run lint".to_string())
+        );
     }
 
     #[test]

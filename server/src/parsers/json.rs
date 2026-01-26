@@ -24,19 +24,21 @@ use serde_json::Value;
 /// }
 /// ```
 pub fn parse_json(content: &str) -> Result<PRDDocument> {
-    let value: Value = serde_json::from_str(content)
-        .context("Failed to parse JSON")?;
+    let value: Value = serde_json::from_str(content).context("Failed to parse JSON")?;
 
-    let title = value.get("title")
+    let title = value
+        .get("title")
         .and_then(|v| v.as_str())
         .unwrap_or("Untitled PRD")
         .to_string();
 
-    let description = value.get("description")
+    let description = value
+        .get("description")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let tasks = value.get("tasks")
+    let tasks = value
+        .get("tasks")
         .and_then(|v| v.as_array())
         .map(|arr| parse_tasks_array(arr))
         .unwrap_or_else(Vec::new);
@@ -49,30 +51,34 @@ pub fn parse_json(content: &str) -> Result<PRDDocument> {
 }
 
 fn parse_tasks_array(tasks: &[Value]) -> Vec<PRDTask> {
-    tasks.iter()
-        .filter_map(|task| parse_task(task))
-        .collect()
+    tasks.iter().filter_map(|task| parse_task(task)).collect()
 }
 
 fn parse_task(value: &Value) -> Option<PRDTask> {
     let title = value.get("title")?.as_str()?.to_string();
-    let raw_description = value.get("description")
+    let raw_description = value
+        .get("description")
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
     // Handle empty descriptions by using title as fallback
     let description = if raw_description.trim().is_empty() {
-        log::warn!("[Parser] Task '{}' has no description, using title as prompt", title);
+        log::warn!(
+            "[Parser] Task '{}' has no description, using title as prompt",
+            title
+        );
         format!("Implement: {}", title)
     } else {
         raw_description.to_string()
     };
 
-    let priority = value.get("priority")
+    let priority = value
+        .get("priority")
         .and_then(|v| v.as_i64())
         .map(|n| n as i32);
 
-    let dependencies: Vec<String> = value.get("dependencies")
+    let dependencies: Vec<String> = value
+        .get("dependencies")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
@@ -81,7 +87,8 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         })
         .unwrap_or_default();
 
-    let tags: Vec<String> = value.get("tags")
+    let tags: Vec<String> = value
+        .get("tags")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
@@ -90,7 +97,8 @@ fn parse_task(value: &Value) -> Option<PRDTask> {
         })
         .unwrap_or_default();
 
-    let estimated_tokens = value.get("estimated_tokens")
+    let estimated_tokens = value
+        .get("estimated_tokens")
         .or_else(|| value.get("estimatedTokens"))
         .and_then(|v| v.as_i64())
         .map(|n| n as i32);

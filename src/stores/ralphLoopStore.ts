@@ -8,7 +8,7 @@ import type {
   RalphPrdStatus,
   RalphProgressSummary,
   RalphFiles,
-  RalphConfig,
+  RalphYamlConfig,
   RalphLoopState,
   RalphLoopMetrics,
   InitRalphPrdRequest,
@@ -27,7 +27,7 @@ interface RalphLoopStore extends AsyncState {
   progressSummary: RalphProgressSummary | null
   prompt: string
   ralphFiles: RalphFiles | null
-  config: RalphConfig | null
+  config: RalphYamlConfig | null
   commits: CommitInfo[]
 
   // Execution state

@@ -18,7 +18,6 @@ pub struct DirectoryEntry {
 
 /// List directory contents for remote folder browsing
 /// Only returns directories (not files) for project selection
-
 pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, String> {
     // Default to home directory if no path provided
     let dir_path = match path {
@@ -35,8 +34,8 @@ pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, Strin
     }
 
     // Read directory entries
-    let entries = std::fs::read_dir(&dir_path)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries =
+        std::fs::read_dir(&dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     let mut results: Vec<DirectoryEntry> = entries
         .filter_map(|entry| {
@@ -61,19 +60,16 @@ pub fn list_directory(path: Option<String>) -> Result<Vec<DirectoryEntry>, Strin
         .collect();
 
     // Sort: non-hidden first, then alphabetically
-    results.sort_by(|a, b| {
-        match (a.is_hidden, b.is_hidden) {
-            (true, false) => std::cmp::Ordering::Greater,
-            (false, true) => std::cmp::Ordering::Less,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        }
+    results.sort_by(|a, b| match (a.is_hidden, b.is_hidden) {
+        (true, false) => std::cmp::Ordering::Greater,
+        (false, true) => std::cmp::Ordering::Less,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
     Ok(results)
 }
 
 /// Get the home directory path
-
 pub fn get_home_directory() -> Result<String, String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -82,11 +78,7 @@ pub fn get_home_directory() -> Result<String, String> {
 
 /// Register (or get existing) project from a folder path
 /// Also imports any sessions from the project's .ralph-ui/sessions/ directory
-
-pub fn register_project(
-    path: String,
-    name: Option<String>,
-) -> Result<ApiProject, String> {
+pub fn register_project(path: String, name: Option<String>) -> Result<ApiProject, String> {
     let entry = file_projects::register_project(&path, name.as_deref())?;
 
     // Import any sessions from the project's .ralph-ui/sessions/ directory
@@ -106,86 +98,58 @@ pub fn register_project(
 }
 
 /// Get a project by ID
-
-pub fn get_project(
-    project_id: String,
-) -> Result<ApiProject, String> {
+pub fn get_project(project_id: String) -> Result<ApiProject, String> {
     file_projects::get_project(&project_id)?
         .map(|e| e.to_api_project())
         .ok_or_else(|| format!("Project not found: {}", project_id))
 }
 
 /// Get a project by path
-
-pub fn get_project_by_path(
-    path: String,
-) -> Result<ApiProject, String> {
+pub fn get_project_by_path(path: String) -> Result<ApiProject, String> {
     file_projects::get_project_by_path(&path)?
         .map(|e| e.to_api_project())
         .ok_or_else(|| format!("Project not found for path: {}", path))
 }
 
 /// Get all projects
-
 pub fn get_all_projects() -> Result<Vec<ApiProject>, String> {
     let entries = file_projects::get_all_projects()?;
     Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Get recent projects (limited)
-
-pub fn get_recent_projects(
-    limit: Option<i32>,
-) -> Result<Vec<ApiProject>, String> {
+pub fn get_recent_projects(limit: Option<i32>) -> Result<Vec<ApiProject>, String> {
     let entries = file_projects::get_recent_projects(limit.unwrap_or(5) as usize)?;
     Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Get favorite projects
-
 pub fn get_favorite_projects() -> Result<Vec<ApiProject>, String> {
     let entries = file_projects::get_favorite_projects()?;
     Ok(entries.into_iter().map(|e| e.to_api_project()).collect())
 }
 
 /// Update project name
-
-pub fn update_project_name(
-    project_id: String,
-    name: String,
-) -> Result<(), String> {
+pub fn update_project_name(project_id: String, name: String) -> Result<(), String> {
     file_projects::update_project_name(&project_id, &name)
 }
 
 /// Toggle project favorite status
-
-pub fn toggle_project_favorite(
-    project_id: String,
-) -> Result<bool, String> {
+pub fn toggle_project_favorite(project_id: String) -> Result<bool, String> {
     file_projects::toggle_project_favorite(&project_id)
 }
 
 /// Set project favorite status explicitly
-
-pub fn set_project_favorite(
-    project_id: String,
-    is_favorite: bool,
-) -> Result<(), String> {
+pub fn set_project_favorite(project_id: String, is_favorite: bool) -> Result<(), String> {
     file_projects::set_project_favorite(&project_id, is_favorite)
 }
 
 /// Touch project (update last_used_at)
-
-pub fn touch_project(
-    project_id: String,
-) -> Result<(), String> {
+pub fn touch_project(project_id: String) -> Result<(), String> {
     file_projects::touch_project(&project_id)
 }
 
 /// Delete a project
-
-pub fn delete_project(
-    project_id: String,
-) -> Result<(), String> {
+pub fn delete_project(project_id: String) -> Result<(), String> {
     file_projects::delete_project(&project_id)
 }

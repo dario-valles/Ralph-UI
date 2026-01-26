@@ -1,5 +1,19 @@
 import * as React from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
+
+const cardHeaderVariants = cva('flex flex-col space-y-1.5', {
+  variants: {
+    size: {
+      default: 'p-6',
+      compact: 'py-2 px-3',
+      tight: 'py-1.5 px-3',
+    },
+  },
+  defaultVariants: {
+    size: 'default',
+  },
+})
 
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -12,9 +26,13 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
 )
 Card.displayName = 'Card'
 
-const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
+export interface CardHeaderProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof cardHeaderVariants> {}
+
+const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
+  ({ className, size, ...props }, ref) => (
+    <div ref={ref} className={cn(cardHeaderVariants({ size }), className)} {...props} />
   )
 )
 CardHeader.displayName = 'CardHeader'

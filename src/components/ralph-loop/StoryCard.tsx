@@ -34,11 +34,11 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
       <div
         onClick={handleCardClick}
         className={cn(
-          'p-2 rounded-lg border cursor-pointer transition-colors hover:border-primary/50',
-          story.passes && 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-900',
+          'p-2 sm:p-3 rounded-lg border cursor-pointer transition-colors hover:border-primary/50',
+          story.passes && 'bg-green-500/5 border-green-500/30 dark:bg-green-500/10',
           !story.passes &&
             isNext &&
-            'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-900',
+            'bg-blue-500/5 border-blue-500/30 dark:bg-blue-500/10',
           !story.passes && !isNext && 'bg-card border-border'
         )}
       >
@@ -62,7 +62,7 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[10px] text-muted-foreground">{story.id}</span>
                 {isNext && !story.passes && (
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
                     Next
                   </Badge>
                 )}
@@ -78,7 +78,7 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               {story.tags && story.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {story.tags.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
+                    <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0 h-5">
                       {tag}
                     </Badge>
                   ))}
@@ -88,11 +88,11 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {story.effort && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
                 {story.effort}
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] px-1 py-0">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
               P{story.priority}
             </Badge>
           </div>
@@ -107,7 +107,7 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-muted-foreground">{story.id}</span>
                 {story.passes && (
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  <Badge variant="success">
                     Completed
                   </Badge>
                 )}

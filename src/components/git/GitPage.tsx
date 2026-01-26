@@ -7,7 +7,7 @@ import { WorktreeManager } from './WorktreeManager'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, GitBranch } from 'lucide-react'
 
 export const GitPage: React.FC = () => {
   const [repoPath, setRepoPath] = useState('')
@@ -175,8 +175,9 @@ export const GitPage: React.FC = () => {
       )}
 
       {!activeRepoPath && (
-        <div className="text-center py-16 text-muted-foreground">
-          <p className="text-lg">Enter a repository path above to get started</p>
+        <div className="flex flex-col items-center justify-center py-12 md:py-16 text-center">
+          <GitBranch className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground mb-3" />
+          <p className="text-base md:text-lg text-muted-foreground">Enter a repository path above to get started</p>
         </div>
       )}
     </div>

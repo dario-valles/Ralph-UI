@@ -70,7 +70,10 @@ pub fn validate_prd_item(item: &StructuredPRDItem) -> Result<(), StructuredOutpu
     if let Some(priority) = item.priority {
         if !(1..=5).contains(&priority) {
             return Err(StructuredOutputError {
-                message: format!("Item '{}' has invalid priority {} (must be 1-5)", item.id, priority),
+                message: format!(
+                    "Item '{}' has invalid priority {} (must be 1-5)",
+                    item.id, priority
+                ),
                 item_index: None,
             });
         }
@@ -398,20 +401,18 @@ That's the epic.
             tags: None,
         });
 
-        let items = vec![
-            StructuredPRDItem {
-                item_type: PRDItemType::Epic,
-                id: "EP-1".to_string(), // Same ID - should update
-                parent_id: None,
-                title: "New Title".to_string(),
-                description: "Updated".to_string(),
-                acceptance_criteria: None,
-                priority: Some(1),
-                dependencies: None,
-                estimated_effort: None,
-                tags: None,
-            },
-        ];
+        let items = vec![StructuredPRDItem {
+            item_type: PRDItemType::Epic,
+            id: "EP-1".to_string(), // Same ID - should update
+            parent_id: None,
+            title: "New Title".to_string(),
+            description: "Updated".to_string(),
+            acceptance_criteria: None,
+            priority: Some(1),
+            dependencies: None,
+            estimated_effort: None,
+            tags: None,
+        }];
 
         merge_items(&mut structure, items);
 

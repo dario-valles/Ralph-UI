@@ -164,7 +164,7 @@ impl Default for ShutdownHandler {
 /// This sets up handlers for SIGINT (Ctrl+C), SIGTERM, and SIGHUP
 #[cfg(unix)]
 pub fn register_signal_handlers(state: ShutdownState) -> Result<()> {
-    use signal_hook::consts::{SIGINT, SIGTERM, SIGHUP};
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
     use signal_hook::iterator::Signals;
     use std::thread;
 

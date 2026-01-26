@@ -118,6 +118,7 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
               <Input
                 id="server-url"
                 type="url"
+                autoComplete="url"
                 placeholder="http://localhost:3420"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
@@ -134,6 +135,7 @@ export function ServerConnectionDialog({ onConnected }: ServerConnectionDialogPr
               <Input
                 id="auth-token"
                 type="password"
+                autoComplete="current-password"
                 placeholder="Enter the token from server output"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}

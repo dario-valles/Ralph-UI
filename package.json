@@ -38,6 +38,7 @@
     "server:dev": "cd server && cargo run -- --port 3421",
     "server:dev:token": "cd server && RALPH_SERVER_TOKEN=secure-token cargo run -- --port 3421",
     "server:kill": "pkill -f 'ralph-ui' || true; lsof -ti:3421 | xargs kill -9 2>/dev/null || true",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
@@ -48,7 +49,12 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
     "cargo:test": "cd server && cargo test",
-    "cargo:build": "cd server && cargo build --release"
+    "cargo:build": "cd server && cargo build --release",
+    "release:build": "bun run build && bun run cargo:build",
+    "release:local": "bun run release:build && mkdir -p ~/.ralph-ui/bin && cp server/target/release/ralph-ui ~/.ralph-ui/bin/ && echo 'local-dev' > ~/.ralph-ui/version.txt && echo '✓ Installed to ~/.ralph-ui/bin/ralph-ui'",
+    "release:test": "bun run release:local && node bin/ralph-ui.js --skip-update",
+    "release:pack": "bun run release:build && npm pack",
+    "release:npx": "bun run release:local && node bin/ralph-ui.js --skip-update"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
@@ -77,6 +83,7 @@
     "react-router-dom": "^7.12.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0",
+    "vaul": "^1.1.2",
     "workbox-cacheable-response": "^7.4.0",
     "workbox-expiration": "^7.4.0",
     "workbox-routing": "^7.4.0",

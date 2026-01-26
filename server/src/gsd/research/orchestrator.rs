@@ -10,6 +10,7 @@ use crate::gsd::planning_storage::write_research_file;
 use crate::gsd::state::{AgentResearchStatus, ResearchStatus};
 use crate::models::AgentType;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -17,6 +18,78 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
+
+/// Extract clean research markdown from Claude Code stream-json output.
+///
+/// Claude Code outputs newline-delimited JSON (stream-json format). The actual
+/// research content is in the final "result" message's "result" field. This
+/// function extracts that clean markdown instead of saving raw JSON stream data.
+///
+/// Stream-json format example:
+/// ```json
+/// {"type":"system","subtype":"init","cwd":"/path","session_id":"..."}
+/// {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+/// {"type":"result","subtype":"success","result":"# Research\n\n...actual content..."}
+/// ```
+fn extract_research_from_stream(raw_output: &str) -> Result<String, String> {
+    // Search from the end since the "result" message is typically last
+    for line in raw_output.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Ok(json) = serde_json::from_str::<Value>(line) {
+            // Look for {"type":"result","subtype":"success","result":"..."}
+            if json.get("type").and_then(|t| t.as_str()) == Some("result") {
+                if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
+                    if !result.trim().is_empty() {
+                        return Ok(result.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: collect text from assistant messages
+    let mut content = String::new();
+    for line in raw_output.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Ok(json) = serde_json::from_str::<Value>(line) {
+            if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                if let Some(msg) = json.get("message") {
+                    if let Some(content_arr) = msg.get("content").and_then(|c| c.as_array()) {
+                        for item in content_arr {
+                            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                    content.push_str(text);
+                                    content.push('\n');
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if content.trim().is_empty() {
+        // If we couldn't extract any structured content, check if the raw output
+        // is already clean markdown (not JSON)
+        let first_char = raw_output.trim().chars().next();
+        if first_char != Some('{') && first_char != Some('[') {
+            // Doesn't look like JSON, might already be clean content
+            return Ok(raw_output.to_string());
+        }
+        Err("Could not extract research content from agent output".to_string())
+    } else {
+        Ok(content.trim().to_string())
+    }
+}
 
 /// Event payload for research output streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,7 +197,10 @@ impl ResearchOrchestrator {
                 chunk: chunk.to_string(),
                 is_complete,
             };
-            app_handle.broadcast("gsd:research_output", serde_json::to_value(&event).unwrap_or_default());
+            app_handle.broadcast(
+                "gsd:research_output",
+                serde_json::to_value(&event).unwrap_or_default(),
+            );
         }
     }
 
@@ -137,7 +213,10 @@ impl ResearchOrchestrator {
                 status: status.to_string(),
                 error,
             };
-            app_handle.broadcast("gsd:research_status", serde_json::to_value(&event).unwrap_or_default());
+            app_handle.broadcast(
+                "gsd:research_status",
+                serde_json::to_value(&event).unwrap_or_default(),
+            );
         }
     }
 
@@ -347,7 +426,27 @@ impl ResearchOrchestrator {
                 }
                 Err(format!("{:?} returned empty output", agent_type))
             } else {
-                Ok(output.clone())
+                // Extract clean research content from stream-json output
+                let raw_output = output.clone();
+                match extract_research_from_stream(&raw_output) {
+                    Ok(clean_content) => {
+                        log::info!(
+                            "[ResearchOrchestrator] Extracted clean research content ({} bytes from {} bytes raw)",
+                            clean_content.len(),
+                            raw_output.len()
+                        );
+                        Ok(clean_content)
+                    }
+                    Err(e) => {
+                        // Log warning but return raw output as fallback
+                        log::warn!(
+                            "[ResearchOrchestrator] Failed to extract clean research: {}, using raw output ({} bytes)",
+                            e,
+                            raw_output.len()
+                        );
+                        Ok(raw_output)
+                    }
+                }
             }
         } else {
             let code = status.code().unwrap_or(-1);
@@ -410,6 +509,27 @@ pub async fn run_research_agents_with_handle(
     context: &str,
     app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
+    // Run all research types
+    run_research_agents_selective(
+        config,
+        project_path,
+        session_id,
+        context,
+        app_handle,
+        None, // None means run all
+    )
+    .await
+}
+
+/// Run specific research agents in parallel (or all if research_types is None)
+pub async fn run_research_agents_selective(
+    config: &GsdConfig,
+    project_path: &str,
+    session_id: &str,
+    context: &str,
+    app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
+    research_types: Option<Vec<String>>,
+) -> (ResearchStatus, Vec<ResearchResult>) {
     let orchestrator = if let Some(handle) = app_handle {
         ResearchOrchestrator::with_app_handle(
             config.clone(),
@@ -427,37 +547,201 @@ pub async fn run_research_agents_with_handle(
 
     let timeout_duration = Duration::from_secs(config.research_timeout_secs);
     let cli_agent = config.research_agent_type.clone();
+    let timeout_secs = config.research_timeout_secs;
 
-    // Run all four research agents in parallel
+    // Determine which research types to run
+    let should_run = |research_type: &str| -> bool {
+        match &research_types {
+            None => true, // Run all if no specific types provided
+            Some(types) => types
+                .iter()
+                .any(|t| t.to_lowercase() == research_type.to_lowercase()),
+        }
+    };
+
+    // Load existing status to preserve completed results
+    let existing_status =
+        crate::gsd::planning_storage::load_workflow_state(Path::new(project_path), session_id)
+            .map(|state| state.research_status)
+            .ok();
+
+    // Run only the requested research agents in parallel
+    let arch_future = async {
+        if should_run("architecture") {
+            Some(
+                timeout(
+                    timeout_duration,
+                    orchestrator.run_single_agent(ResearchAgentType::Architecture, context),
+                )
+                .await,
+            )
+        } else {
+            None
+        }
+    };
+
+    let codebase_future = async {
+        if should_run("codebase") {
+            Some(
+                timeout(
+                    timeout_duration,
+                    orchestrator.run_single_agent(ResearchAgentType::Codebase, context),
+                )
+                .await,
+            )
+        } else {
+            None
+        }
+    };
+
+    let best_practices_future = async {
+        if should_run("bestpractices") || should_run("best_practices") {
+            Some(
+                timeout(
+                    timeout_duration,
+                    orchestrator.run_single_agent(ResearchAgentType::BestPractices, context),
+                )
+                .await,
+            )
+        } else {
+            None
+        }
+    };
+
+    let risks_future = async {
+        if should_run("risks") {
+            Some(
+                timeout(
+                    timeout_duration,
+                    orchestrator.run_single_agent(ResearchAgentType::Risks, context),
+                )
+                .await,
+            )
+        } else {
+            None
+        }
+    };
+
     let (arch_result, codebase_result, best_practices_result, risks_result) = tokio::join!(
-        timeout(
-            timeout_duration,
-            orchestrator.run_single_agent(ResearchAgentType::Architecture, context)
-        ),
-        timeout(
-            timeout_duration,
-            orchestrator.run_single_agent(ResearchAgentType::Codebase, context)
-        ),
-        timeout(
-            timeout_duration,
-            orchestrator.run_single_agent(ResearchAgentType::BestPractices, context)
-        ),
-        timeout(
-            timeout_duration,
-            orchestrator.run_single_agent(ResearchAgentType::Risks, context)
-        ),
+        arch_future,
+        codebase_future,
+        best_practices_future,
+        risks_future
     );
 
-    // Convert timeout results to ResearchResults
-    let timeout_secs = config.research_timeout_secs;
-    let arch = arch_result
-        .unwrap_or_else(|_| ResearchResult::timeout("architecture", timeout_secs, &cli_agent));
-    let codebase = codebase_result
-        .unwrap_or_else(|_| ResearchResult::timeout("codebase", timeout_secs, &cli_agent));
-    let best_practices = best_practices_result
-        .unwrap_or_else(|_| ResearchResult::timeout("best_practices", timeout_secs, &cli_agent));
-    let risks = risks_result
-        .unwrap_or_else(|_| ResearchResult::timeout("risks", timeout_secs, &cli_agent));
+    // Convert results, preserving existing state for non-run agents
+    let arch = match arch_result {
+        Some(Ok(r)) => r,
+        Some(Err(_)) => ResearchResult::timeout("architecture", timeout_secs, &cli_agent),
+        None => {
+            // Preserve existing state if we didn't run this agent
+            if let Some(ref existing) = existing_status {
+                ResearchResult {
+                    research_type: "architecture".to_string(),
+                    success: existing.architecture.complete,
+                    content: None,
+                    error: existing.architecture.error.clone(),
+                    output_path: existing.architecture.output_path.clone(),
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            } else {
+                ResearchResult {
+                    research_type: "architecture".to_string(),
+                    success: false,
+                    content: None,
+                    error: None,
+                    output_path: None,
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            }
+        }
+    };
+
+    let codebase = match codebase_result {
+        Some(Ok(r)) => r,
+        Some(Err(_)) => ResearchResult::timeout("codebase", timeout_secs, &cli_agent),
+        None => {
+            if let Some(ref existing) = existing_status {
+                ResearchResult {
+                    research_type: "codebase".to_string(),
+                    success: existing.codebase.complete,
+                    content: None,
+                    error: existing.codebase.error.clone(),
+                    output_path: existing.codebase.output_path.clone(),
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            } else {
+                ResearchResult {
+                    research_type: "codebase".to_string(),
+                    success: false,
+                    content: None,
+                    error: None,
+                    output_path: None,
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            }
+        }
+    };
+
+    let best_practices = match best_practices_result {
+        Some(Ok(r)) => r,
+        Some(Err(_)) => ResearchResult::timeout("best_practices", timeout_secs, &cli_agent),
+        None => {
+            if let Some(ref existing) = existing_status {
+                ResearchResult {
+                    research_type: "best_practices".to_string(),
+                    success: existing.best_practices.complete,
+                    content: None,
+                    error: existing.best_practices.error.clone(),
+                    output_path: existing.best_practices.output_path.clone(),
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            } else {
+                ResearchResult {
+                    research_type: "best_practices".to_string(),
+                    success: false,
+                    content: None,
+                    error: None,
+                    output_path: None,
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            }
+        }
+    };
+
+    let risks = match risks_result {
+        Some(Ok(r)) => r,
+        Some(Err(_)) => ResearchResult::timeout("risks", timeout_secs, &cli_agent),
+        None => {
+            if let Some(ref existing) = existing_status {
+                ResearchResult {
+                    research_type: "risks".to_string(),
+                    success: existing.risks.complete,
+                    content: None,
+                    error: existing.risks.error.clone(),
+                    output_path: existing.risks.output_path.clone(),
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            } else {
+                ResearchResult {
+                    research_type: "risks".to_string(),
+                    success: false,
+                    content: None,
+                    error: None,
+                    output_path: None,
+                    duration_secs: 0.0,
+                    cli_agent: cli_agent.clone(),
+                }
+            }
+        }
+    };
 
     // Build the status
     let status = ResearchStatus {
@@ -542,5 +826,69 @@ mod tests {
         let agents = get_available_agents();
         // At least one agent might be available (or none in CI)
         let _ = agents;
+    }
+
+    #[test]
+    fn test_extract_research_from_stream_result_message() {
+        // Test extracting from a proper result message
+        // Using escaped JSON string that the actual stream would produce
+        let raw_output = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Working on it...\"}]}}\n\
+{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"# Architecture Research\\n\\n## Executive Summary\\n\\nThis is the clean research content.\"}";
+
+        let result = extract_research_from_stream(raw_output);
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert!(content.starts_with("# Architecture Research"));
+        assert!(content.contains("Executive Summary"));
+        assert!(!content.contains(r#""type":"system""#));
+    }
+
+    #[test]
+    fn test_extract_research_from_stream_fallback_to_assistant() {
+        // Test fallback when there's no result message but there are assistant messages
+        let raw_output = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"# Research Output\\n\\nHere is my analysis.\"}]}}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"## More Details\\n\\nAdditional findings.\"}]}}";
+
+        let result = extract_research_from_stream(raw_output);
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert!(content.contains("# Research Output"));
+        assert!(content.contains("## More Details"));
+    }
+
+    #[test]
+    fn test_extract_research_from_stream_plain_markdown() {
+        // Test passthrough when content is already clean markdown (not JSON)
+        let raw_output = "# Clean Markdown\n\nThis is already clean content.";
+
+        let result = extract_research_from_stream(raw_output);
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert_eq!(content, raw_output);
+    }
+
+    #[test]
+    fn test_extract_research_from_stream_empty_result() {
+        // Test that empty result fields don't match
+        let raw_output = "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"\"}\n\
+{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Actual content here\"}]}}";
+
+        let result = extract_research_from_stream(raw_output);
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert!(content.contains("Actual content here"));
+    }
+
+    #[test]
+    fn test_extract_research_from_stream_no_content() {
+        // Test error case when no content can be extracted
+        let raw_output = "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/path\"}\n\
+{\"type\":\"user\",\"message\":\"some user input\"}";
+
+        let result = extract_research_from_stream(raw_output);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Could not extract"));
     }
 }

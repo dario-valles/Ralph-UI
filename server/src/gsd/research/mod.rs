@@ -12,8 +12,9 @@ pub mod synthesizer;
 
 // Re-export main types
 pub use orchestrator::{
-    get_available_agents, run_research_agents, run_research_agents_with_handle,
-    ResearchOrchestrator, ResearchOutputEvent, ResearchResult, ResearchStatusEvent,
+    get_available_agents, run_research_agents, run_research_agents_selective,
+    run_research_agents_with_handle, ResearchOrchestrator, ResearchOutputEvent, ResearchResult,
+    ResearchStatusEvent,
 };
 pub use prompts::ResearchPrompts;
 pub use synthesizer::{synthesize_research, ResearchSynthesis};

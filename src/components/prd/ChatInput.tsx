@@ -3,28 +3,26 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Send, Paperclip, Image as ImageIcon, X, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ChatAttachment } from '@/types'
+import type { ChatAttachment, PastedTextBlock } from '@/types'
 import { ATTACHMENT_LIMITS } from '@/types'
-import {
-  useClipboardPaste,
-  extractImagesFromDataTransfer,
-  type PasteResult,
-} from '@/hooks/useClipboardPaste'
-import { fileToAttachment, validateAttachments } from '@/lib/chat-utils'
+import { useClipboardPaste, extractImagesFromDataTransfer } from '@/hooks/useClipboardPaste'
+import { fileToAttachment, validateAttachments, combinePasteBlocksWithText } from '@/lib/chat-utils'
 import { AttachmentPreview } from './AttachmentPreview'
-import { PastePreviewDialog } from './PastePreviewDialog'
+import { PastedTextPreviewList } from './PastedTextPreview'
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: ChatAttachment[]) => void
   disabled: boolean
   placeholder?: string
+  /** Optional left-side action buttons (e.g., phase buttons) */
+  leftActions?: React.ReactNode
 }
 
-export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatInputProps) {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
-  const [pastePreview, setPastePreview] = useState<PasteResult | null>(null)
+  const [pasteBlocks, setPasteBlocks] = useState<PastedTextBlock[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
 
@@ -52,8 +50,9 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   }, [error])
 
   const handleSend = useCallback(() => {
-    const trimmedValue = value.trim()
-    if (!trimmedValue && attachments.length === 0) return
+    // Combine paste blocks with typed text
+    const combinedMessage = combinePasteBlocksWithText(pasteBlocks, value)
+    if (!combinedMessage && attachments.length === 0) return
 
     // Validate attachments before sending
     const validationError = validateAttachments(attachments)
@@ -62,10 +61,11 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       return
     }
 
-    onSend(trimmedValue, attachments.length > 0 ? attachments : undefined)
+    onSend(combinedMessage, attachments.length > 0 ? attachments : undefined)
     setValue('')
+    setPasteBlocks([])
     setAttachments([])
-  }, [value, attachments, onSend])
+  }, [value, pasteBlocks, attachments, onSend])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter to send, Shift+Enter for newline
@@ -91,14 +91,32 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     setAttachments((prev) => prev.filter((a) => a.id !== id))
   }, [])
 
+  // Add paste block
+  const addPasteBlock = useCallback((block: PastedTextBlock) => {
+    setPasteBlocks((prev) => [...prev, block])
+  }, [])
+
+  // Remove paste block and renumber remaining blocks
+  const removePasteBlock = useCallback((id: string) => {
+    setPasteBlocks((prev) => {
+      const filtered = prev.filter((b) => b.id !== id)
+      // Renumber remaining blocks sequentially
+      return filtered.map((block, index) => ({
+        ...block,
+        pasteNumber: index + 1,
+      }))
+    })
+  }, [])
+
   // Handle clipboard paste
   const { handlePaste } = useClipboardPaste({
     disabled,
+    currentPasteCount: pasteBlocks.length,
     onTextPaste: () => {
       // Let default paste happen for short text
     },
-    onMultilinePaste: (result) => {
-      setPastePreview(result)
+    onMultilinePaste: (block) => {
+      addPasteBlock(block)
     },
     onImagePaste: (attachment) => {
       addAttachment(attachment)
@@ -107,12 +125,6 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       setError(err)
     },
   })
-
-  // Handle paste preview dialog confirmation
-  const handlePasteConfirm = useCallback((text: string) => {
-    setValue((prev) => prev + text)
-    setPastePreview(null)
-  }, [])
 
   // Handle file input change
   const handleFileSelect = useCallback(
@@ -176,7 +188,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
     [disabled, addAttachment]
   )
 
-  const canSend = !disabled && (value.trim() !== '' || attachments.length > 0)
+  const canSend = !disabled && (value.trim() !== '' || attachments.length > 0 || pasteBlocks.length > 0)
 
   return (
     <div className="space-y-2">
@@ -194,6 +206,9 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
           </Button>
         </div>
       )}
+
+      {/* Pasted text preview chips */}
+      <PastedTextPreviewList blocks={pasteBlocks} onRemove={removePasteBlock} disabled={disabled} />
 
       {/* Attachment preview chips */}
       <AttachmentPreview
@@ -244,22 +259,28 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
         {/* Input row */}
         <div className="flex items-end gap-1 p-1.5">
-          {/* Attachment button */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'h-9 w-9 rounded-xl flex-shrink-0',
-              'text-muted-foreground hover:text-foreground',
-              'hover:bg-muted/80 transition-colors'
-            )}
-            disabled={disabled || attachments.length >= ATTACHMENT_LIMITS.MAX_COUNT}
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Add attachment"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
+          {/* Left actions group (phase buttons + attachment) */}
+          <div className="flex items-center flex-shrink-0">
+            {/* Phase action buttons (inline) */}
+            {leftActions}
+
+            {/* Attachment button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-9 w-9 rounded-xl flex-shrink-0',
+                'text-muted-foreground hover:text-foreground',
+                'hover:bg-muted/80 transition-colors'
+              )}
+              disabled={disabled || attachments.length >= ATTACHMENT_LIMITS.MAX_COUNT}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Add attachment"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+          </div>
 
           {/* Textarea */}
           <Textarea
@@ -311,16 +332,6 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         <span>Enter to send &middot; Shift+Enter for new line</span>
       </div>
 
-      {/* Paste preview dialog */}
-      <PastePreviewDialog
-        open={pastePreview !== null}
-        onOpenChange={(open) => !open && setPastePreview(null)}
-        content={pastePreview?.text || ''}
-        isCode={pastePreview?.isCode}
-        detectedLanguage={pastePreview?.detectedLanguage}
-        onConfirm={handlePasteConfirm}
-        onCancel={() => setPastePreview(null)}
-      />
     </div>
   )
 }

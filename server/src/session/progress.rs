@@ -3,7 +3,7 @@
 
 #![allow(dead_code)] // Progress tracking infrastructure
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
@@ -130,8 +130,8 @@ impl ProgressTracker {
             return Ok(Vec::new());
         }
 
-        let file = fs::File::open(&path)
-            .map_err(|e| anyhow!("Failed to open progress file: {}", e))?;
+        let file =
+            fs::File::open(&path).map_err(|e| anyhow!("Failed to open progress file: {}", e))?;
 
         let reader = BufReader::new(file);
         let mut entries = Vec::new();
@@ -190,7 +190,11 @@ impl ProgressTracker {
     }
 
     /// Get the last status for a specific task
-    pub fn get_task_last_status(&self, session_id: &str, task_id: &str) -> Result<Option<ProgressEntry>> {
+    pub fn get_task_last_status(
+        &self,
+        session_id: &str,
+        task_id: &str,
+    ) -> Result<Option<ProgressEntry>> {
         let entries = self.read_progress(session_id)?;
         Ok(entries.into_iter().filter(|e| e.task_id == task_id).last())
     }
@@ -227,7 +231,12 @@ impl ProgressTracker {
 
         Ok(task_status
             .into_iter()
-            .filter(|(_, status)| matches!(*status, ProgressStatus::Started | ProgressStatus::InProgress))
+            .filter(|(_, status)| {
+                matches!(
+                    *status,
+                    ProgressStatus::Started | ProgressStatus::InProgress
+                )
+            })
             .map(|(task_id, _)| task_id)
             .collect())
     }
@@ -241,8 +250,7 @@ impl ProgressTracker {
     pub fn delete_progress(&self, session_id: &str) -> Result<()> {
         let path = self.get_progress_file(session_id);
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| anyhow!("Failed to delete progress file: {}", e))?;
+            fs::remove_file(&path).map_err(|e| anyhow!("Failed to delete progress file: {}", e))?;
         }
         Ok(())
     }
@@ -251,8 +259,7 @@ impl ProgressTracker {
     pub fn clear_progress(&self, session_id: &str) -> Result<()> {
         let path = self.get_progress_file(session_id);
         if path.exists() {
-            fs::write(&path, "")
-                .map_err(|e| anyhow!("Failed to clear progress file: {}", e))?;
+            fs::write(&path, "").map_err(|e| anyhow!("Failed to clear progress file: {}", e))?;
         }
         Ok(())
     }
@@ -288,9 +295,20 @@ mod tests {
     fn test_append_progress_appends_entries() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
-        tracker.append_progress("session-1", "task-1", ProgressStatus::InProgress, None).unwrap();
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Completed, Some("Done")).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::InProgress, None)
+            .unwrap();
+        tracker
+            .append_progress(
+                "session-1",
+                "task-1",
+                ProgressStatus::Completed,
+                Some("Done"),
+            )
+            .unwrap();
 
         let entries = tracker.read_progress("session-1").unwrap();
         assert_eq!(entries.len(), 3);
@@ -300,8 +318,12 @@ mod tests {
     fn test_read_progress_returns_entries() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
-        tracker.append_progress("session-1", "task-2", ProgressStatus::Started, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-2", ProgressStatus::Started, None)
+            .unwrap();
 
         let entries = tracker.read_progress("session-1").unwrap();
         assert_eq!(entries.len(), 2);
@@ -331,9 +353,15 @@ mod tests {
     fn test_get_task_last_status() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
-        tracker.append_progress("session-1", "task-1", ProgressStatus::InProgress, None).unwrap();
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Completed, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::InProgress, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Completed, None)
+            .unwrap();
 
         let last = tracker.get_task_last_status("session-1", "task-1").unwrap();
         assert!(last.is_some());
@@ -344,9 +372,15 @@ mod tests {
     fn test_get_completed_tasks() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Completed, None).unwrap();
-        tracker.append_progress("session-1", "task-2", ProgressStatus::Failed, None).unwrap();
-        tracker.append_progress("session-1", "task-3", ProgressStatus::Completed, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Completed, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-2", ProgressStatus::Failed, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-3", ProgressStatus::Completed, None)
+            .unwrap();
 
         let completed = tracker.get_completed_tasks("session-1").unwrap();
         assert_eq!(completed.len(), 2);
@@ -358,9 +392,15 @@ mod tests {
     fn test_get_in_progress_tasks() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
-        tracker.append_progress("session-1", "task-2", ProgressStatus::InProgress, None).unwrap();
-        tracker.append_progress("session-1", "task-3", ProgressStatus::Completed, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-2", ProgressStatus::InProgress, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-3", ProgressStatus::Completed, None)
+            .unwrap();
 
         let in_progress = tracker.get_in_progress_tasks("session-1").unwrap();
         assert_eq!(in_progress.len(), 2);
@@ -370,7 +410,9 @@ mod tests {
     fn test_delete_progress() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
         assert!(tracker.progress_file_exists("session-1"));
 
         tracker.delete_progress("session-1").unwrap();
@@ -381,8 +423,12 @@ mod tests {
     fn test_clear_progress() {
         let (tracker, _temp) = create_test_tracker();
 
-        tracker.append_progress("session-1", "task-1", ProgressStatus::Started, None).unwrap();
-        tracker.append_progress("session-1", "task-2", ProgressStatus::Started, None).unwrap();
+        tracker
+            .append_progress("session-1", "task-1", ProgressStatus::Started, None)
+            .unwrap();
+        tracker
+            .append_progress("session-1", "task-2", ProgressStatus::Started, None)
+            .unwrap();
 
         tracker.clear_progress("session-1").unwrap();
 
@@ -400,9 +446,18 @@ mod tests {
 
     #[test]
     fn test_progress_status_from_str() {
-        assert_eq!("started".parse::<ProgressStatus>().unwrap(), ProgressStatus::Started);
-        assert_eq!("completed".parse::<ProgressStatus>().unwrap(), ProgressStatus::Completed);
-        assert_eq!("FAILED".parse::<ProgressStatus>().unwrap(), ProgressStatus::Failed);
+        assert_eq!(
+            "started".parse::<ProgressStatus>().unwrap(),
+            ProgressStatus::Started
+        );
+        assert_eq!(
+            "completed".parse::<ProgressStatus>().unwrap(),
+            ProgressStatus::Completed
+        );
+        assert_eq!(
+            "FAILED".parse::<ProgressStatus>().unwrap(),
+            ProgressStatus::Failed
+        );
     }
 
     #[test]

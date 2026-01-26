@@ -231,7 +231,11 @@ fn default_priority() -> u32 {
 
 impl RalphStory {
     /// Create a new story with required fields
-    pub fn new(id: impl Into<String>, title: impl Into<String>, acceptance: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        acceptance: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -269,7 +273,11 @@ impl RalphStory {
 
 impl RalphSubtask {
     /// Create a new subtask
-    pub fn new(id: impl Into<String>, title: impl Into<String>, description: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -478,7 +486,11 @@ pub struct RalphPrd {
     /// When present, these settings are used for PRD execution.
     /// When absent, settings are loaded from global RalphConfig.
     /// Config precedence: PRD stored > global config > defaults
-    #[serde(default, skip_serializing_if = "Option::is_none", rename = "executionConfig")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "executionConfig"
+    )]
     pub execution_config: Option<PrdExecutionConfig>,
 
     /// Execution history (embedded, replaces database tables)
@@ -621,11 +633,7 @@ pub struct CompetitiveAttempt {
 
 impl CompetitiveAttempt {
     /// Create a new competitive attempt
-    pub fn new(
-        attempt_number: u32,
-        agent_type: AgentType,
-        model: Option<String>,
-    ) -> Self {
+    pub fn new(attempt_number: u32, agent_type: AgentType, model: Option<String>) -> Self {
         Self {
             id: format!("attempt-{}-{}", attempt_number, Uuid::new_v4()),
             attempt_number,
@@ -841,17 +849,25 @@ impl PrdExecution {
 
     /// Get the selected attempt, if any
     pub fn get_selected_attempt(&self) -> Option<&CompetitiveAttempt> {
-        self.selected_attempt_id.as_ref().and_then(|id| {
-            self.competitive_attempts.iter().find(|a| a.id == *id)
-        })
+        self.selected_attempt_id
+            .as_ref()
+            .and_then(|id| self.competitive_attempts.iter().find(|a| a.id == *id))
     }
 
     /// Select a winning attempt by ID
-    pub fn select_competitive_attempt(&mut self, attempt_id: impl Into<String>, reason: impl Into<String>) -> Result<(), String> {
+    pub fn select_competitive_attempt(
+        &mut self,
+        attempt_id: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Result<(), String> {
         let attempt_id = attempt_id.into();
 
         // Find and mark the selected attempt
-        if let Some(attempt) = self.competitive_attempts.iter_mut().find(|a| a.id == attempt_id) {
+        if let Some(attempt) = self
+            .competitive_attempts
+            .iter_mut()
+            .find(|a| a.id == attempt_id)
+        {
             attempt.mark_selected(reason);
             self.selected_attempt_id = Some(attempt_id);
             Ok(())
@@ -862,13 +878,12 @@ impl PrdExecution {
 
     /// Get all completed attempts (sorted by completion time)
     pub fn get_completed_attempts(&self) -> Vec<&CompetitiveAttempt> {
-        let mut attempts: Vec<_> = self.competitive_attempts
+        let mut attempts: Vec<_> = self
+            .competitive_attempts
             .iter()
             .filter(|a| a.completed_at.is_some())
             .collect();
-        attempts.sort_by(|a, b| {
-            a.completed_at.cmp(&b.completed_at)
-        });
+        attempts.sort_by(|a, b| a.completed_at.cmp(&b.completed_at));
         attempts
     }
 
@@ -1030,9 +1045,9 @@ impl RalphPrd {
             }
             AssignmentStrategy::MinimalConflict => {
                 // MinimalConflict strategy: return story with lowest file overlap
-                available
-                    .into_iter()
-                    .min_by_key(|story| self.score_story_by_conflict(&story.id, estimated_files_map))
+                available.into_iter().min_by_key(|story| {
+                    self.score_story_by_conflict(&story.id, estimated_files_map)
+                })
             }
         }
     }
@@ -1045,7 +1060,11 @@ impl RalphPrd {
     /// # Arguments
     /// * `story_id` - The story ID to score
     /// * `estimated_files_map` - Map of story_id -> Vec<estimated_files>
-    fn score_story_by_conflict(&self, story_id: &str, estimated_files_map: &HashMap<String, Vec<String>>) -> usize {
+    fn score_story_by_conflict(
+        &self,
+        story_id: &str,
+        estimated_files_map: &HashMap<String, Vec<String>>,
+    ) -> usize {
         let story_files = match estimated_files_map.get(story_id) {
             Some(files) => files,
             None => return 0, // No estimated files = no conflict
@@ -1071,7 +1090,11 @@ impl RalphPrd {
     // =========================================================================
 
     /// Start a new execution
-    pub fn start_execution(&mut self, execution_id: impl Into<String>, agent_type: AgentType) -> &mut PrdExecution {
+    pub fn start_execution(
+        &mut self,
+        execution_id: impl Into<String>,
+        agent_type: AgentType,
+    ) -> &mut PrdExecution {
         let exec = PrdExecution::new(execution_id, agent_type);
         self.executions.push(exec);
 
@@ -1537,7 +1560,10 @@ mod tests {
     fn test_error_strategy_default() {
         let strategy = ErrorStrategy::default();
         match strategy {
-            ErrorStrategy::Retry { max_attempts, backoff_ms } => {
+            ErrorStrategy::Retry {
+                max_attempts,
+                backoff_ms,
+            } => {
                 assert_eq!(max_attempts, 3);
                 assert_eq!(backoff_ms, 5000);
             }
@@ -1547,7 +1573,10 @@ mod tests {
 
     #[test]
     fn test_error_strategy_serialization() {
-        let retry = ErrorStrategy::Retry { max_attempts: 5, backoff_ms: 10000 };
+        let retry = ErrorStrategy::Retry {
+            max_attempts: 5,
+            backoff_ms: 10000,
+        };
         let json = serde_json::to_string(&retry).unwrap();
         assert!(json.contains("retry"));
         assert!(json.contains("5"));
@@ -1566,7 +1595,13 @@ mod tests {
     fn test_error_strategy_deserialization() {
         let json = r#"{"type":"retry","max_attempts":3,"backoff_ms":5000}"#;
         let strategy: ErrorStrategy = serde_json::from_str(json).unwrap();
-        assert_eq!(strategy, ErrorStrategy::Retry { max_attempts: 3, backoff_ms: 5000 });
+        assert_eq!(
+            strategy,
+            ErrorStrategy::Retry {
+                max_attempts: 3,
+                backoff_ms: 5000
+            }
+        );
 
         let json = r#"{"type":"skip"}"#;
         let strategy: ErrorStrategy = serde_json::from_str(json).unwrap();
@@ -1591,11 +1626,26 @@ mod tests {
 
     #[test]
     fn test_iteration_outcome_from_str() {
-        assert_eq!("success".parse::<IterationOutcome>().unwrap(), IterationOutcome::Success);
-        assert_eq!("failed".parse::<IterationOutcome>().unwrap(), IterationOutcome::Failed);
-        assert_eq!("skipped".parse::<IterationOutcome>().unwrap(), IterationOutcome::Skipped);
-        assert_eq!("interrupted".parse::<IterationOutcome>().unwrap(), IterationOutcome::Interrupted);
-        assert_eq!("SUCCESS".parse::<IterationOutcome>().unwrap(), IterationOutcome::Success);
+        assert_eq!(
+            "success".parse::<IterationOutcome>().unwrap(),
+            IterationOutcome::Success
+        );
+        assert_eq!(
+            "failed".parse::<IterationOutcome>().unwrap(),
+            IterationOutcome::Failed
+        );
+        assert_eq!(
+            "skipped".parse::<IterationOutcome>().unwrap(),
+            IterationOutcome::Skipped
+        );
+        assert_eq!(
+            "interrupted".parse::<IterationOutcome>().unwrap(),
+            IterationOutcome::Interrupted
+        );
+        assert_eq!(
+            "SUCCESS".parse::<IterationOutcome>().unwrap(),
+            IterationOutcome::Success
+        );
         assert!("invalid".parse::<IterationOutcome>().is_err());
     }
 
@@ -1846,7 +1896,10 @@ mod tests {
         assert_eq!(exec.id, "exec-1");
 
         assert_eq!(prd.executions.len(), 1);
-        assert_eq!(prd.metadata.as_ref().unwrap().last_execution_id, Some("exec-1".to_string()));
+        assert_eq!(
+            prd.metadata.as_ref().unwrap().last_execution_id,
+            Some("exec-1".to_string())
+        );
     }
 
     #[test]
@@ -2036,7 +2089,9 @@ mod tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("max_iterations must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .contains("max_iterations must be greater than 0"));
     }
 
     #[test]
@@ -2449,7 +2504,10 @@ mod tests {
         );
         estimated_files.insert(
             "US-3".to_string(),
-            vec!["config.json".to_string(), "server/src/models.rs".to_string()],
+            vec![
+                "config.json".to_string(),
+                "server/src/models.rs".to_string(),
+            ],
         );
 
         // US-1 (candidate story) has these files:
@@ -2531,10 +2589,7 @@ mod tests {
             "US-1".to_string(),
             vec!["src/components/Button.tsx".to_string()],
         );
-        estimated_files.insert(
-            "US-2".to_string(),
-            vec!["server/src/auth.rs".to_string()],
-        );
+        estimated_files.insert("US-2".to_string(), vec!["server/src/auth.rs".to_string()]);
 
         // Score should be 0 (no overlap)
         let score = prd.score_story_by_conflict("US-1", &estimated_files);

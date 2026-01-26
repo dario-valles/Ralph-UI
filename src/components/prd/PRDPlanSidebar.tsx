@@ -29,7 +29,7 @@ interface PRDPlanSidebarProps {
 // Reusable markdown renderer component
 function MarkdownContent({ content, className }: { content: string; className?: string }) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+    <div className={cn('prose prose-xs sm:prose-sm dark:prose-invert max-w-none', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -150,38 +150,38 @@ export function PRDPlanSidebar({
         variant="ghost"
         size="sm"
         onClick={() => setShowRaw(!showRaw)}
-        className="h-7 w-7 p-0"
+        className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
         title={showRaw ? 'Show rendered markdown' : 'Show raw markdown'}
       >
-        {showRaw ? <FileText className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
+        {showRaw ? <FileText className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> : <Code className="h-4 w-4 sm:h-3.5 sm:w-3.5" />}
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setAutoScroll(!autoScroll)}
-        className="h-7 w-7 p-0"
+        className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
         title={autoScroll ? 'Disable auto-scroll' : 'Enable auto-scroll'}
       >
-        {autoScroll ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        {autoScroll ? <Eye className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> : <EyeOff className="h-4 w-4 sm:h-3.5 sm:w-3.5" />}
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setIsExpanded(true)}
-        className="h-7 w-7 p-0"
+        className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
         title="Expand to full view"
       >
-        <Maximize2 className="h-3.5 w-3.5" />
+        <Maximize2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
       </Button>
       {onRefresh && (
         <Button
           variant="ghost"
           size="sm"
           onClick={onRefresh}
-          className="h-7 w-7 p-0"
+          className="min-h-11 min-w-11 sm:h-7 sm:w-7 sm:min-h-0 sm:min-w-0 p-0"
           title="Refresh content"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </Button>
       )}
     </div>
@@ -271,7 +271,7 @@ export function PRDPlanSidebar({
 
       {/* Expanded View Dialog */}
       <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogContent size="4xl" className="h-[80vh] flex flex-col">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center gap-2">
