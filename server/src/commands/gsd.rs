@@ -990,3 +990,511 @@ fn extract_key_themes(content: &str) -> Vec<String> {
     themes.truncate(10);
     themes
 }
+
+/// A generated requirement from AI (with temporary ID and suggested scope)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedRequirement {
+    /// Temporary ID (e.g., GEN-01) before being accepted
+    pub id: String,
+    /// Category of the requirement
+    pub category: String,
+    /// Short title
+    pub title: String,
+    /// Detailed description
+    pub description: String,
+    /// Acceptance criteria
+    pub acceptance_criteria: Vec<String>,
+    /// AI-suggested scope (v1, v2, out_of_scope)
+    pub suggested_scope: String,
+}
+
+/// Result of AI requirement generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateRequirementsResult {
+    /// Generated requirements
+    pub requirements: Vec<GeneratedRequirement>,
+    /// Number of requirements generated
+    pub count: usize,
+}
+
+/// Maximum output size from agent (1MB)
+const MAX_OUTPUT_SIZE: usize = 1024 * 1024;
+
+/// Agent execution timeout in seconds (5 minutes)
+const AGENT_TIMEOUT_SECS: u64 = 300;
+
+/// Sanitize user input to prevent Tera template injection
+fn sanitize_tera_input(input: &str) -> String {
+    input
+        .replace("{{", "{ {")
+        .replace("}}", "} }")
+        .replace("{%", "{ %")
+        .replace("%}", "% }")
+        .replace("{#", "{ #")
+        .replace("#}", "# }")
+}
+
+/// Load existing requirement titles for deduplication
+fn load_existing_requirement_titles(
+    path: &std::path::Path,
+    session_id: &str,
+) -> Vec<serde_json::Value> {
+    read_planning_file(path, session_id, PlanningFile::Requirements)
+        .ok()
+        .and_then(|content| serde_json::from_str::<RequirementsDoc>(&content).ok())
+        .map(|doc| {
+            doc.requirements
+                .values()
+                .map(|r| serde_json::json!({ "id": r.id, "title": r.title }))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Broadcast a status event for requirement generation
+fn broadcast_status(
+    app_handle: &std::sync::Arc<crate::server::EventBroadcaster>,
+    session_id: &str,
+    status: &str,
+    extra: Option<serde_json::Value>,
+) {
+    let mut payload = serde_json::json!({
+        "sessionId": session_id,
+        "status": status
+    });
+    if let Some(extra_obj) = extra {
+        if let Some(map) = payload.as_object_mut() {
+            if let Some(extra_map) = extra_obj.as_object() {
+                for (k, v) in extra_map {
+                    map.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
+    app_handle.broadcast("gsd:requirement_generation_status", payload);
+}
+
+/// Generate requirements from a natural language prompt using AI
+///
+/// Takes a user description and generates structured requirements
+/// using the configured AI agent.
+pub async fn generate_requirements_from_prompt(
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
+    project_path: String,
+    session_id: String,
+    prompt: String,
+    count: Option<u32>,
+    agent_type: Option<String>,
+) -> Result<GenerateRequirementsResult, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    let path = as_path(&project_path);
+    let target_count = count.unwrap_or(7).clamp(3, 15);
+
+    // Sanitize user prompt to prevent template injection
+    let sanitized_prompt = sanitize_tera_input(&prompt);
+
+    // Build template context
+    let template_content = get_builtin_template("requirement_generation")
+        .ok_or("Requirement generation template not found")?;
+
+    let mut context = Context::new();
+    context.insert("user_prompt", &sanitized_prompt);
+    context.insert("count", &target_count);
+    context.insert(
+        "project_context",
+        &read_planning_file(path, &session_id, PlanningFile::Project).unwrap_or_default(),
+    );
+    context.insert(
+        "existing_requirements",
+        &load_existing_requirement_titles(path, &session_id),
+    );
+
+    let rendered_prompt = Tera::one_off(template_content, &context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    // Resolve agent
+    let agent: AgentType = agent_type
+        .unwrap_or_else(|| "claude".to_string())
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        return Err(format!(
+            "{agent:?} CLI not found. Please ensure it is installed and in PATH."
+        ));
+    }
+
+    log::info!(
+        "[GenerateRequirements] Running {agent:?} to generate {target_count} requirements"
+    );
+    broadcast_status(&app_handle, &session_id, "running", None);
+
+    // Spawn the agent
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("req-gen-{}", uuid::Uuid::new_v4()),
+        worktree_path: project_path.clone(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    // Read output with size limit and timeout
+    let mut output = vec![0u8; MAX_OUTPUT_SIZE];
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(AGENT_TIMEOUT_SECS),
+        stdout.read(&mut output),
+    )
+    .await;
+
+    let bytes_read = match read_result {
+        Ok(Ok(n)) => n,
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            broadcast_status(
+                &app_handle,
+                &session_id,
+                "error",
+                Some(serde_json::json!({ "error": format!("Read error: {e}") })),
+            );
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            broadcast_status(
+                &app_handle,
+                &session_id,
+                "error",
+                Some(serde_json::json!({ "error": "Generation timed out" })),
+            );
+            return Err("Requirement generation timed out after 5 minutes".to_string());
+        }
+    };
+
+    output.truncate(bytes_read);
+    let output_str = String::from_utf8_lossy(&output);
+
+    // Wait for process with timeout
+    let wait_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        child.wait(),
+    )
+    .await;
+
+    if wait_result.is_err() {
+        let _ = child.kill().await;
+    }
+
+    // Parse requirements from output
+    let requirements = parse_generated_requirements(&output_str)?;
+
+    log::info!(
+        "[GenerateRequirements] Generated {} requirements",
+        requirements.len()
+    );
+    broadcast_status(
+        &app_handle,
+        &session_id,
+        "complete",
+        Some(serde_json::json!({ "count": requirements.len() })),
+    );
+
+    Ok(GenerateRequirementsResult {
+        count: requirements.len(),
+        requirements,
+    })
+}
+
+/// Parse a single requirement JSON object into a GeneratedRequirement
+fn parse_requirement_item(
+    item: &serde_json::Value,
+    idx: usize,
+) -> Result<GeneratedRequirement, String> {
+    let title = item
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("Requirement {idx} missing title"))?
+        .to_string();
+
+    let acceptance_criteria = item
+        .get("acceptanceCriteria")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    Ok(GeneratedRequirement {
+        id: format!("GEN-{:02}", idx + 1),
+        category: item
+            .get("category")
+            .and_then(|v| v.as_str())
+            .unwrap_or("other")
+            .to_string(),
+        title,
+        description: item
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        acceptance_criteria,
+        suggested_scope: item
+            .get("suggestedScope")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unscoped")
+            .to_string(),
+    })
+}
+
+/// Parse generated requirements from AI agent output
+fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement>, String> {
+    let json_str =
+        extract_json_array(output).ok_or("Could not find JSON array in agent output")?;
+
+    let parsed: Vec<serde_json::Value> =
+        serde_json::from_str(&json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+
+    let requirements: Result<Vec<_>, _> = parsed
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| parse_requirement_item(item, idx))
+        .collect();
+
+    let requirements = requirements?;
+
+    if requirements.is_empty() {
+        return Err("No valid requirements found in output".to_string());
+    }
+
+    Ok(requirements)
+}
+
+/// Try to extract JSON array from Claude Code stream-json format
+fn try_extract_from_stream_json(text: &str) -> Option<String> {
+    for line in text.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let json: serde_json::Value = serde_json::from_str(line).ok()?;
+        if json.get("type").and_then(|t| t.as_str()) != Some("result") {
+            continue;
+        }
+
+        let result = json.get("result").and_then(|r| r.as_str())?;
+        return find_json_array_bounds(result);
+    }
+    None
+}
+
+/// Find and extract a JSON array from text by tracking bracket depth
+fn find_json_array_bounds(text: &str) -> Option<String> {
+    let mut bracket_depth = 0;
+    let mut in_string = false;
+    let mut escape_next = false;
+    let mut start_idx = None;
+
+    for (idx, ch) in text.char_indices() {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_string => escape_next = true,
+            '"' => in_string = !in_string,
+            '[' if !in_string => {
+                if bracket_depth == 0 {
+                    start_idx = Some(idx);
+                }
+                bracket_depth += 1;
+            }
+            ']' if !in_string => {
+                bracket_depth -= 1;
+                if bracket_depth == 0 {
+                    let start = start_idx?;
+                    return Some(text[start..=idx].to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Extract a JSON array from text that might contain other content
+fn extract_json_array(text: &str) -> Option<String> {
+    // First try stream-json format (from Claude Code)
+    try_extract_from_stream_json(text).or_else(|| find_json_array_bounds(text))
+}
+
+/// Parse category string to RequirementCategory enum
+fn parse_category(category: &str) -> crate::gsd::config::RequirementCategory {
+    use crate::gsd::config::RequirementCategory;
+    match category.to_lowercase().as_str() {
+        "core" => RequirementCategory::Core,
+        "ui" => RequirementCategory::Ui,
+        "data" => RequirementCategory::Data,
+        "integration" => RequirementCategory::Integration,
+        "security" => RequirementCategory::Security,
+        "performance" => RequirementCategory::Performance,
+        "testing" => RequirementCategory::Testing,
+        "documentation" => RequirementCategory::Documentation,
+        _ => RequirementCategory::Other,
+    }
+}
+
+/// Parse scope string to ScopeLevel enum
+fn parse_scope(scope: &str) -> crate::gsd::config::ScopeLevel {
+    use crate::gsd::config::ScopeLevel;
+    match scope.to_lowercase().as_str() {
+        "v1" => ScopeLevel::V1,
+        "v2" => ScopeLevel::V2,
+        "out_of_scope" => ScopeLevel::OutOfScope,
+        _ => ScopeLevel::Unscoped,
+    }
+}
+
+/// File lock guard for atomic file operations
+struct FileLockGuard {
+    lock_path: std::path::PathBuf,
+}
+
+impl FileLockGuard {
+    /// Acquire a file lock with retry logic
+    fn acquire(base_path: &std::path::Path, name: &str) -> Result<Self, String> {
+        let lock_path = base_path.join(format!(".{}.lock", name));
+
+        // Retry up to 10 times with 100ms delay
+        for attempt in 0..10 {
+            // Try to create lock file exclusively
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&lock_path)
+            {
+                Ok(mut file) => {
+                    // Write PID and timestamp for debugging
+                    use std::io::Write;
+                    let _ = writeln!(file, "{}:{}", std::process::id(), chrono::Utc::now().to_rfc3339());
+                    return Ok(Self { lock_path });
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // Check if lock is stale (older than 30 seconds)
+                    if let Ok(metadata) = std::fs::metadata(&lock_path) {
+                        if let Ok(modified) = metadata.modified() {
+                            let age = std::time::SystemTime::now()
+                                .duration_since(modified)
+                                .unwrap_or_default();
+                            if age > std::time::Duration::from_secs(30) {
+                                // Stale lock, remove it
+                                let _ = std::fs::remove_file(&lock_path);
+                                continue;
+                            }
+                        }
+                    }
+                    // Lock is held, wait and retry
+                    if attempt < 9 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to acquire lock: {e}"));
+                }
+            }
+        }
+
+        Err("Failed to acquire lock after 10 attempts".to_string())
+    }
+}
+
+impl Drop for FileLockGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.lock_path);
+    }
+}
+
+/// Add multiple generated requirements to the requirements document
+///
+/// Converts GeneratedRequirement structs (with temporary IDs) into
+/// proper Requirement structs with category-based IDs.
+///
+/// Uses file locking to prevent race conditions during concurrent updates.
+pub async fn add_generated_requirements(
+    project_path: String,
+    session_id: String,
+    generated: Vec<GeneratedRequirement>,
+) -> Result<Vec<Requirement>, String> {
+    let path = as_path(&project_path);
+
+    // Get planning directory for lock file
+    let planning_dir = crate::gsd::planning_storage::get_planning_dir(path, &session_id);
+
+    // Acquire lock before read-modify-write
+    let _lock = FileLockGuard::acquire(&planning_dir, "requirements")?;
+
+    let mut doc = read_planning_file(path, &session_id, PlanningFile::Requirements)
+        .ok()
+        .and_then(|content| serde_json::from_str::<RequirementsDoc>(&content).ok())
+        .unwrap_or_else(RequirementsDoc::new);
+
+    let added: Vec<Requirement> = generated
+        .into_iter()
+        .map(|gen_req| {
+            let category = parse_category(&gen_req.category);
+            let id = doc.next_id(&category);
+            let mut req = Requirement::new(id, category, gen_req.title, gen_req.description);
+            req.scope = parse_scope(&gen_req.suggested_scope);
+            req.acceptance_criteria = gen_req.acceptance_criteria;
+            doc.add(req.clone());
+            req
+        })
+        .collect();
+
+    // Save both JSON and markdown versions
+    write_planning_file(
+        path,
+        &session_id,
+        PlanningFile::Requirements,
+        &doc.serialize_to_json("requirements")?,
+    )?;
+    write_planning_file(
+        path,
+        &session_id,
+        PlanningFile::RequirementsMd,
+        &doc.to_markdown(),
+    )?;
+
+    log::info!(
+        "Added {} generated requirements to session {session_id}",
+        added.len()
+    );
+
+    Ok(added)
+}

@@ -12,6 +12,8 @@ import type {
   ResearchSessionInfo,
   CloneSessionOptions,
   RequirementsValidationResult,
+  GeneratedRequirement,
+  GenerateRequirementsResult,
 } from '@/types/gsd'
 import type {
   RequirementsDoc,
@@ -259,6 +261,36 @@ export const gsdApi = {
       projectPath,
       sourceSessionId,
       options,
+    })
+  },
+
+  /** Generate requirements from a natural language prompt using AI */
+  generateRequirementsFromPrompt: async (
+    projectPath: string,
+    sessionId: string,
+    prompt: string,
+    count?: number,
+    agentType?: string
+  ): Promise<GenerateRequirementsResult> => {
+    return await invoke('generate_requirements_from_prompt', {
+      projectPath,
+      sessionId,
+      prompt,
+      count,
+      agentType,
+    })
+  },
+
+  /** Add multiple generated requirements to the requirements document */
+  addGeneratedRequirements: async (
+    projectPath: string,
+    sessionId: string,
+    requirements: GeneratedRequirement[]
+  ): Promise<Requirement[]> => {
+    return await invoke('add_generated_requirements', {
+      projectPath,
+      sessionId,
+      requirements,
     })
   },
 }

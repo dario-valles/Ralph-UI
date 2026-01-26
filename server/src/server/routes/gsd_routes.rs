@@ -8,7 +8,8 @@
 //! scope_requirements, validate_requirements, add_requirement, save_requirements,
 //! load_requirements, create_roadmap, load_roadmap, verify_gsd_plans,
 //! get_verification_history, clear_verification_history, export_gsd_to_ralph,
-//! save_planning_file, read_gsd_planning_file
+//! save_planning_file, read_gsd_planning_file, generate_requirements_from_prompt,
+//! add_generated_requirements
 
 use crate::commands;
 use crate::gsd::requirements::{RequirementsDoc, ScopeSelection};
@@ -310,6 +311,34 @@ pub async fn route_gsd_command(
             )
         }
 
+        "generate_requirements_from_prompt" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let prompt: String = get_arg(&args, "prompt")?;
+            let count: Option<u32> = get_opt_arg(&args, "count")?;
+            let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
+            let result = commands::gsd::generate_requirements_from_prompt(
+                state.broadcaster.clone(),
+                project_path,
+                session_id,
+                prompt,
+                count,
+                agent_type,
+            )
+            .await?;
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
+        "add_generated_requirements" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let generated: Vec<commands::gsd::GeneratedRequirement> = get_arg(&args, "requirements")?;
+            route_async!(
+                cmd,
+                commands::gsd::add_generated_requirements(project_path, session_id, generated)
+            )
+        }
+
         _ => Err(format!("Unknown GSD command: {}", cmd)),
     }
 }
@@ -347,5 +376,7 @@ pub fn is_gsd_command(cmd: &str) -> bool {
             | "list_project_research"
             | "copy_research_to_session"
             | "clone_gsd_session"
+            | "generate_requirements_from_prompt"
+            | "add_generated_requirements"
     )
 }

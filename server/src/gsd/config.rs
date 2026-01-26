@@ -40,7 +40,7 @@ impl Default for GsdConfig {
             research_agent_type: "claude".to_string(),
             research_model: None,
             max_parallel_research: 4,
-            research_timeout_secs: 300, // 5 minutes
+            research_timeout_secs: 600, // 10 minutes
             auto_advance: false,
             min_context_items: 3,
             include_codebase_analysis: true,
@@ -77,6 +77,8 @@ pub struct GsdCustomPrompts {
     pub best_practices: Option<String>,
     /// Custom prompt for risks research
     pub risks: Option<String>,
+    /// Custom prompt for AI requirement generation from user description
+    pub requirement_generation: Option<String>,
 }
 
 /// Research agent type for parallel research
