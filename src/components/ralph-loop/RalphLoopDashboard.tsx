@@ -5,7 +5,6 @@ import { useRalphLoopDashboard } from './hooks/useRalphLoopDashboard'
 import { RalphLoopHeader } from './RalphLoopHeader'
 import { DashboardTabs } from './DashboardTabs'
 import { ExecutionDialogs } from './ExecutionDialogs'
-import { LearningAnalyticsCard } from './LearningAnalyticsCard'
 
 export interface RalphLoopDashboardProps {
   projectPath: string
@@ -150,9 +149,6 @@ export function RalphLoopDashboard({
         onOpenTerminal={handleOpenTerminal}
         onOpenInEditor={handleOpenInEditor}
       />
-
-      {/* Learning Analytics */}
-      <LearningAnalyticsCard projectPath={projectPath} prdName={prdName} />
 
       {/* Tabs for Stories, Progress, Terminal, etc. */}
       <DashboardTabs

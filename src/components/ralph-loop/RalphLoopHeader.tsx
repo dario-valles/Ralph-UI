@@ -151,6 +151,8 @@ export function RalphLoopHeader({
   onOpenTerminal,
   onOpenInEditor,
 }: RalphLoopHeaderProps): React.JSX.Element {
+  const isCompleted = prdStatus?.allPass ?? false
+
   return (
     <Card className="flex-shrink-0 max-h-[50vh] overflow-y-auto">
       <CardHeader className="py-2 sm:py-3 px-3 sm:px-4">
@@ -198,13 +200,15 @@ export function RalphLoopHeader({
               variant="outline"
               size="sm"
               className="w-full justify-between h-8 sm:h-9 text-xs sm:text-sm"
+              disabled={isCompleted}
             >
               <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
                 <span className="truncate">Loop Configuration</span>
                 <span className="text-muted-foreground text-[10px] sm:text-xs hidden sm:inline">
-                  (max {effectiveMaxIterations} iterations
-                  {effectiveMaxCost ? `, $${effectiveMaxCost} limit` : ''})
+                  {isCompleted
+                    ? '(locked)'
+                    : `(max ${effectiveMaxIterations} iterations${effectiveMaxCost ? `, $${effectiveMaxCost} limit` : ''})`}
                 </span>
               </span>
               <ChevronDown
@@ -224,6 +228,7 @@ export function RalphLoopHeader({
                   max={1000}
                   placeholder="50"
                   value={effectiveMaxIterations}
+                  disabled={isCompleted}
                   onChange={(e) =>
                     setConfigOverrides((prev) => ({ ...prev, maxIterations: e.target.value }))
                   }
@@ -242,6 +247,7 @@ export function RalphLoopHeader({
                   step={0.5}
                   placeholder="No limit"
                   value={effectiveMaxCost}
+                  disabled={isCompleted}
                   onChange={(e) =>
                     setConfigOverrides((prev) => ({ ...prev, maxCost: e.target.value }))
                   }
@@ -255,6 +261,7 @@ export function RalphLoopHeader({
                 <Select
                   id="agent"
                   value={effectiveAgent}
+                  disabled={isCompleted}
                   onChange={(e) => {
                     setConfigOverrides((prev) => ({
                       ...prev,
@@ -277,7 +284,7 @@ export function RalphLoopHeader({
                     variant="ghost"
                     size="sm"
                     onClick={refreshModels}
-                    disabled={modelsLoading}
+                    disabled={modelsLoading || isCompleted}
                     className="h-6 w-6 p-0"
                   >
                     <RefreshCw className={`h-3 w-3 ${modelsLoading ? 'animate-spin' : ''}`} />
@@ -289,6 +296,7 @@ export function RalphLoopHeader({
                   onChange={(value) => setConfigOverrides((prev) => ({ ...prev, model: value }))}
                   models={availableModels}
                   loading={modelsLoading}
+                  disabled={isCompleted}
                   loadingText="Loading models..."
                 />
                 <p className="text-xs text-muted-foreground">Model to use for the agent</p>
@@ -321,6 +329,7 @@ export function RalphLoopHeader({
                 <label className="flex items-center gap-2">
                   <Checkbox
                     checked={effectiveRunTests}
+                    disabled={isCompleted}
                     onCheckedChange={(checked) =>
                       setConfigOverrides((prev) => ({ ...prev, runTests: checked as boolean }))
                     }
@@ -330,6 +339,7 @@ export function RalphLoopHeader({
                 <label className="flex items-center gap-2">
                   <Checkbox
                     checked={effectiveRunLint}
+                    disabled={isCompleted}
                     onCheckedChange={(checked) =>
                       setConfigOverrides((prev) => ({ ...prev, runLint: checked as boolean }))
                     }
@@ -340,7 +350,7 @@ export function RalphLoopHeader({
             </div>
 
             <div className="flex justify-end mt-4">
-              <Button variant="secondary" size="sm" onClick={onSaveConfig}>
+              <Button variant="secondary" size="sm" onClick={onSaveConfig} disabled={isCompleted}>
                 Save Configuration
               </Button>
             </div>
@@ -407,6 +417,19 @@ export function RalphLoopHeader({
             onOpenInEditor={onOpenInEditor}
             onOpenTerminal={onOpenTerminal}
           />
+        )}
+
+        {/* Completion info when working on main (no worktree) */}
+        {isCompleted && !effectiveWorktreePath && (
+          <div className="flex items-center gap-2 mt-2 sm:mt-3 p-2 sm:p-3 rounded-md bg-muted/50 border border-border/50">
+            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-medium">All stories complete!</span>
+              <span className="text-muted-foreground ml-1">
+                Changes are already on the main branch.
+              </span>
+            </div>
+          </div>
         )}
 
         {/* Metrics */}
