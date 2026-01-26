@@ -543,7 +543,7 @@ fn calculate_clarity_score(extracted: &ExtractedPRDContent, messages: &[ChatMess
 
     // Bonus for having numbered or bulleted tasks
     let task_count = extracted.tasks.len();
-    if task_count >= 3 && task_count <= 15 {
+    if (3..=15).contains(&task_count) {
         score = score.saturating_add(15);
     } else if task_count > 15 {
         score = score.saturating_add(10); // Slightly penalize too many tasks

@@ -321,7 +321,7 @@ impl FallbackOrchestrator {
         let mut total_failed = 0;
         let mut agents_rate_limited = 0;
 
-        for (_, state) in &self.agent_states {
+        for state in self.agent_states.values() {
             total_successful += state.successful_iterations;
             total_failed += state.failed_iterations;
             if state.is_rate_limited {

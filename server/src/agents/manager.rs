@@ -193,9 +193,7 @@ impl AgentManager {
         if let Some(parser) = parsers.get_mut(agent_id) {
             let events = parser.parse_output(text);
             if !events.is_empty() {
-                let tree = trees
-                    .entry(agent_id.to_string())
-                    .or_insert_with(SubagentTree::new);
+                let tree = trees.entry(agent_id.to_string()).or_default();
                 for event in &events {
                     tree.add_event(event.clone());
                 }
@@ -312,9 +310,7 @@ impl AgentManager {
             if let Some(parser) = parsers.get_mut(agent_id) {
                 let events = parser.parse_output(&clean_text);
                 if !events.is_empty() {
-                    let tree = trees
-                        .entry(agent_id.to_string())
-                        .or_insert_with(SubagentTree::new);
+                    let tree = trees.entry(agent_id.to_string()).or_default();
 
                     for event in events {
                         tree.add_event(event.clone());
@@ -356,7 +352,7 @@ impl AgentManager {
             {
                 let mut logs = lock_mutex_recover(&self.log_collector.agent_logs);
                 logs.entry(agent_id.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(log_entry.clone());
             }
 
@@ -707,7 +703,7 @@ impl AgentManager {
                                         if !events.is_empty() {
                                             let tree = trees_guard
                                                 .entry(agent_id_clone.clone())
-                                                .or_insert_with(SubagentTree::new);
+                                                .or_default();
 
                                             for event in events {
                                                 tree.add_event(event.clone());
@@ -731,7 +727,7 @@ impl AgentManager {
                             {
                                 let mut logs = lock_mutex_recover(&agent_logs);
                                 logs.entry(agent_id_clone.clone())
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(log_entry.clone());
                             }
 
@@ -827,7 +823,7 @@ impl AgentManager {
                             {
                                 let mut logs = lock_mutex_recover(&agent_logs);
                                 logs.entry(agent_id_clone.clone())
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(log_entry.clone());
                             }
 
@@ -935,7 +931,7 @@ impl AgentManager {
                                     {
                                         let mut logs = lock_mutex_recover(&agent_logs);
                                         logs.entry(agent_id_clone.clone())
-                                            .or_insert_with(Vec::new)
+                                            .or_default()
                                             .push(log_entry.clone());
                                     }
                                     if let Some(tx) = &log_tx {
@@ -1443,15 +1439,13 @@ impl AgentManager {
                 let reader = BufReader::new(stderr);
                 let mut _stderr_buffer = String::new();
 
-                for line in reader.lines() {
-                    if let Ok(line) = line {
-                        _stderr_buffer.push_str(&line);
-                        _stderr_buffer.push('\n');
+                for line in reader.lines().map_while(Result::ok) {
+                    _stderr_buffer.push_str(&line);
+                    _stderr_buffer.push('\n');
 
-                        if let Some(info) = self.rate_limit_detector.detect_in_stderr(&line) {
-                            rate_limit_info = Some(info.clone());
-                            self.log_collector.emit_rate_limit(agent_id, info);
-                        }
+                    if let Some(info) = self.rate_limit_detector.detect_in_stderr(&line) {
+                        rate_limit_info = Some(info.clone());
+                        self.log_collector.emit_rate_limit(agent_id, info);
                     }
                 }
             }

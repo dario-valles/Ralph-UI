@@ -33,7 +33,6 @@ impl<T: Serialize> SerializeExt<T> for T {
 }
 
 /// Start a new GSD workflow session
-
 pub async fn start_gsd_session(
     project_path: String,
     chat_session_id: String,
@@ -54,7 +53,6 @@ pub async fn start_gsd_session(
 }
 
 /// Get the current GSD workflow state for a session
-
 pub async fn get_gsd_state(
     project_path: String,
     session_id: String,
@@ -68,7 +66,6 @@ pub async fn get_gsd_state(
 }
 
 /// Update the GSD workflow phase
-
 pub async fn update_gsd_phase(
     project_path: String,
     session_id: String,
@@ -86,7 +83,6 @@ pub async fn update_gsd_phase(
 }
 
 /// Update questioning context
-
 pub async fn update_questioning_context(
     project_path: String,
     session_id: String,
@@ -104,7 +100,6 @@ pub async fn update_questioning_context(
 }
 
 /// Generate PROJECT.md from questioning context
-
 pub async fn generate_project_document(
     project_path: String,
     session_id: String,
@@ -138,7 +133,6 @@ pub async fn generate_project_document(
 }
 
 /// Start parallel research agents with streaming output
-
 pub async fn start_research(
     app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
     project_path: String,
@@ -186,7 +180,6 @@ pub async fn start_research(
 }
 
 /// Get research results for a session
-
 pub async fn get_research_results(
     project_path: String,
     session_id: String,
@@ -233,7 +226,6 @@ pub async fn get_research_results(
 }
 
 /// Synthesize research into SUMMARY.md
-
 pub async fn synthesize_research_cmd(
     project_path: String,
     session_id: String,
@@ -243,7 +235,6 @@ pub async fn synthesize_research_cmd(
 }
 
 /// Generate requirements from research output
-
 pub async fn generate_requirements_from_research(
     project_path: String,
     session_id: String,
@@ -288,7 +279,6 @@ pub async fn generate_requirements_from_research(
 }
 
 /// Apply scope selections to requirements
-
 pub async fn scope_requirements(
     project_path: String,
     session_id: String,
@@ -321,7 +311,6 @@ pub async fn scope_requirements(
 }
 
 /// Validate requirements quality
-
 pub async fn validate_requirements(
     project_path: String,
     session_id: String,
@@ -359,7 +348,6 @@ pub struct RequirementsValidationResult {
 }
 
 /// Save requirements document
-
 pub async fn save_requirements(
     project_path: String,
     session_id: String,
@@ -378,7 +366,6 @@ pub async fn save_requirements(
 }
 
 /// Load requirements document
-
 pub async fn load_requirements(
     project_path: String,
     session_id: String,
@@ -396,7 +383,6 @@ pub async fn load_requirements(
 }
 
 /// Create roadmap from requirements
-
 pub async fn create_roadmap(
     project_path: String,
     session_id: String,
@@ -423,7 +409,6 @@ pub async fn create_roadmap(
 }
 
 /// Load roadmap document
-
 pub async fn load_roadmap(
     project_path: String,
     session_id: String,
@@ -444,7 +429,6 @@ pub async fn load_roadmap(
 }
 
 /// Verify plans for completeness (with iteration tracking)
-
 pub async fn verify_gsd_plans(
     project_path: String,
     session_id: String,
@@ -520,7 +504,6 @@ pub struct VerificationIterationResult {
 }
 
 /// Get verification history for a session
-
 pub async fn get_verification_history(
     project_path: String,
     session_id: String,
@@ -541,7 +524,6 @@ pub async fn get_verification_history(
 }
 
 /// Clear verification history (for starting fresh)
-
 pub async fn clear_verification_history(
     project_path: String,
     session_id: String,
@@ -555,7 +537,6 @@ pub async fn clear_verification_history(
 }
 
 /// Export GSD plans to Ralph PRD format
-
 pub async fn export_gsd_to_ralph(
     project_path: String,
     session_id: String,
@@ -678,7 +659,6 @@ pub async fn export_gsd_to_ralph(
 }
 
 /// Save a planning file (generic)
-
 pub async fn save_planning_file(
     project_path: String,
     session_id: String,
@@ -702,7 +682,6 @@ pub async fn save_planning_file(
 }
 
 /// Read a planning file (generic)
-
 pub async fn read_gsd_planning_file(
     project_path: String,
     session_id: String,
@@ -727,14 +706,12 @@ pub async fn read_gsd_planning_file(
 }
 
 /// List all planning sessions for a project
-
 pub async fn list_gsd_sessions(project_path: String) -> Result<Vec<PlanningSessionInfo>, String> {
     let path = as_path(&project_path);
     list_planning_sessions(path)
 }
 
 /// Delete a planning session
-
 pub async fn delete_gsd_session(project_path: String, session_id: String) -> Result<(), String> {
     let path = as_path(&project_path);
     delete_planning_session(path, &session_id)
@@ -744,7 +721,6 @@ pub async fn delete_gsd_session(project_path: String, session_id: String) -> Res
 ///
 /// Returns sessions that have at least one research file (architecture, codebase, best_practices, or risks).
 /// Used for the "reuse previous research" feature.
-
 pub async fn list_project_research(
     project_path: String,
 ) -> Result<Vec<crate::gsd::planning_storage::ResearchSessionInfo>, String> {
@@ -759,7 +735,6 @@ pub async fn list_project_research(
 /// Otherwise copies all available research files.
 ///
 /// Does NOT copy SUMMARY.md - synthesis should be regenerated for the new context.
-
 pub async fn copy_research_to_session(
     project_path: String,
     source_session_id: String,
@@ -798,7 +773,6 @@ fn default_true() -> bool {
 ///
 /// Creates a new session by copying data from an existing session.
 /// Useful for iterating on similar features without starting from scratch.
-
 pub async fn clone_gsd_session(
     project_path: String,
     source_session_id: String,
@@ -888,7 +862,6 @@ pub async fn clone_gsd_session(
 }
 
 /// Add a custom requirement to the requirements document
-
 pub async fn add_requirement(
     project_path: String,
     session_id: String,
@@ -910,7 +883,7 @@ pub async fn add_requirement(
         "performance" => RequirementCategory::Performance,
         "testing" => RequirementCategory::Testing,
         "documentation" => RequirementCategory::Documentation,
-        "other" | _ => RequirementCategory::Other,
+        _ => RequirementCategory::Other,
     };
 
     // Load existing requirements (or create new doc)
@@ -950,7 +923,6 @@ pub async fn add_requirement(
 /// Get list of available CLI agents for GSD research
 ///
 /// Returns only agents that are installed and available on the system.
-
 pub fn get_available_research_agents() -> Vec<AgentType> {
     get_available_agents()
 }
@@ -959,7 +931,6 @@ pub fn get_available_research_agents() -> Vec<AgentType> {
 ///
 /// Used to restore synthesis state when reopening a chat session.
 /// Returns None if no synthesis exists yet.
-
 pub async fn load_synthesis(
     project_path: String,
     session_id: String,

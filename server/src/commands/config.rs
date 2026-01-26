@@ -84,13 +84,11 @@ pub struct ConfigPaths {
 }
 
 /// Get current configuration
-
 pub async fn get_config(config_state: &ConfigState) -> Result<RalphConfig, String> {
     config_state.get_config()
 }
 
 /// Set project path and reload configuration
-
 pub async fn set_config_project_path(
     project_path: Option<String>,
     config_state: &ConfigState,
@@ -101,7 +99,6 @@ pub async fn set_config_project_path(
 }
 
 /// Get configuration file paths
-
 pub async fn get_config_paths_cmd(config_state: &ConfigState) -> Result<ConfigPaths, String> {
     let project_path = config_state
         .project_path
@@ -119,7 +116,6 @@ pub async fn get_config_paths_cmd(config_state: &ConfigState) -> Result<ConfigPa
 }
 
 /// Update execution configuration
-
 pub async fn update_execution_config(
     max_parallel: Option<i32>,
     max_iterations: Option<i32>,
@@ -163,7 +159,6 @@ pub async fn update_execution_config(
 }
 
 /// Update git configuration
-
 pub async fn update_git_config(
     auto_create_prs: Option<bool>,
     draft_prs: Option<bool>,
@@ -189,7 +184,6 @@ pub async fn update_git_config(
 }
 
 /// Update validation configuration
-
 pub async fn update_validation_config(
     run_tests: Option<bool>,
     run_lint: Option<bool>,
@@ -219,7 +213,6 @@ pub async fn update_validation_config(
 }
 
 /// Update fallback configuration
-
 pub async fn update_fallback_config(
     enabled: Option<bool>,
     base_backoff_ms: Option<u64>,
@@ -265,7 +258,6 @@ pub async fn update_fallback_config(
 }
 
 /// Reload configuration from files
-
 pub async fn reload_config(config_state: &ConfigState) -> Result<RalphConfig, String> {
     let project_path = config_state
         .project_path
@@ -286,7 +278,6 @@ pub async fn reload_config(config_state: &ConfigState) -> Result<RalphConfig, St
 
 /// Save configuration to global config file
 /// Settings from the Settings page are app-level defaults, so always save to global config
-
 pub async fn save_config(config_state: &ConfigState) -> Result<(), String> {
     log::info!("[save_config] Starting save to global config...");
 

@@ -45,7 +45,6 @@ pub fn build_subagent_summary(tree: &SubagentTree) -> SubagentTreeSummary {
 }
 
 /// Initialize trace parser for an agent
-
 pub async fn init_trace_parser(
     agent_id: String,
     agent_manager: &AgentManagerState,
@@ -56,7 +55,6 @@ pub async fn init_trace_parser(
 }
 
 /// Parse agent output for subagent events
-
 pub async fn parse_agent_output(
     agent_id: String,
     output: String,
@@ -67,7 +65,6 @@ pub async fn parse_agent_output(
 }
 
 /// Get subagent tree for an agent
-
 pub async fn get_subagent_tree(
     agent_id: String,
     agent_manager: &AgentManagerState,
@@ -87,7 +84,6 @@ pub async fn get_subagent_summary(
 }
 
 /// Get all events for a specific subagent
-
 pub async fn get_subagent_events(
     agent_id: String,
     subagent_id: String,
@@ -107,7 +103,6 @@ pub async fn get_subagent_events(
 }
 
 /// Clear trace data for an agent
-
 pub async fn clear_trace_data(
     agent_id: String,
     agent_manager: &AgentManagerState,
@@ -118,7 +113,6 @@ pub async fn clear_trace_data(
 }
 
 /// Check if a subagent is active
-
 pub async fn is_subagent_active(
     agent_id: String,
     subagent_id: String,

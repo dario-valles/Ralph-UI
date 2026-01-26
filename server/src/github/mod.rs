@@ -283,7 +283,7 @@ impl GitHubClient {
 
         let issues = issues_data
             .iter()
-            .filter(|issue_data| !issue_data.get("pull_request").is_some()) // Filter out PRs
+            .filter(|issue_data| issue_data.get("pull_request").is_none()) // Filter out PRs
             .map(|issue_data| {
                 let labels = issue_data["labels"]
                     .as_array()

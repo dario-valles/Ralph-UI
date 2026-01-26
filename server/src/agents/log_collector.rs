@@ -165,7 +165,7 @@ impl LogCollector {
         {
             let mut logs = lock_mutex_recover(&self.agent_logs);
             logs.entry(agent_id.to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(log_entry.clone());
         }
 

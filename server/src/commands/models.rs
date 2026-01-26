@@ -28,7 +28,6 @@ impl Default for ModelCacheState {
 ///
 /// Returns models from cache if available, otherwise discovers them from CLI.
 /// Falls back to default models if CLI discovery fails.
-
 pub async fn get_available_models(
     agent_type: AgentType,
     model_cache: &ModelCacheState,
@@ -40,7 +39,6 @@ pub async fn get_available_models(
 /// Refresh model cache for a specific agent type or all if None
 ///
 /// Invalidates the cache, forcing a fresh discovery on next request.
-
 pub async fn refresh_models(
     agent_type: Option<AgentType>,
     model_cache: &ModelCacheState,

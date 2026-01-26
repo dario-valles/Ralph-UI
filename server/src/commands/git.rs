@@ -244,7 +244,6 @@ pub fn git_check_merge_conflicts(
 
 /// Get detailed conflict information for files in a merge conflict state.
 /// Call this after git_merge_branch returns with conflicts.
-
 pub fn git_get_conflict_details(
     repo_path: String,
     state: &GitState,
@@ -254,7 +253,6 @@ pub fn git_get_conflict_details(
 
 /// Apply resolved content to a conflicted file and stage it.
 /// Use this after AI has resolved the conflict.
-
 pub fn git_resolve_conflict(
     repo_path: String,
     path: String,
@@ -268,7 +266,6 @@ pub fn git_resolve_conflict(
 
 /// Complete a merge after all conflicts have been resolved.
 /// Creates the merge commit.
-
 pub fn git_complete_merge(
     repo_path: String,
     message: String,
@@ -282,7 +279,6 @@ pub fn git_complete_merge(
 }
 
 /// Push a branch to the remote repository
-
 pub fn git_push_branch(
     repo_path: String,
     branch_name: String,
@@ -301,7 +297,6 @@ pub fn git_push_branch(
 /// 3. Applies the resolved content and stages the files
 ///
 /// After this succeeds, call git_complete_merge to create the merge commit.
-
 pub async fn git_resolve_conflicts_with_ai(
     repo_path: String,
     agent_type: Option<String>,

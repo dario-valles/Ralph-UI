@@ -33,7 +33,6 @@ pub struct RenderRequest {
 }
 
 /// List all available templates
-
 pub async fn list_templates(project_path: Option<String>) -> Result<Vec<TemplateInfo>, String> {
     let resolver = if let Some(path) = project_path {
         TemplateResolver::new().with_project_path(std::path::Path::new(&path))
@@ -62,13 +61,11 @@ pub async fn list_templates(project_path: Option<String>) -> Result<Vec<Template
 }
 
 /// Get builtin template names
-
 pub async fn list_builtin_templates() -> Result<Vec<String>, String> {
     Ok(get_builtin_templates().keys().cloned().collect())
 }
 
 /// Render a template with context
-
 pub async fn render_template(request: RenderRequest) -> Result<String, String> {
     let engine = TemplateEngine::new();
 
@@ -132,7 +129,6 @@ pub async fn render_template(request: RenderRequest) -> Result<String, String> {
 }
 
 /// Get template content by name
-
 pub async fn get_template_content(
     name: String,
     project_path: Option<String>,
@@ -155,7 +151,6 @@ pub async fn get_template_content(
 /// - If project_path is provided, saves to {project_path}/.ralph-ui/templates/{name}.tera
 /// - Otherwise saves to ~/.ralph-ui/templates/{name}.tera
 /// - Cannot save to builtin templates (read-only)
-
 pub async fn save_template(
     name: String,
     content: String,
@@ -329,7 +324,6 @@ fn get_available_variables() -> Vec<String> {
 /// - The rendered output (if successful)
 /// - Syntax errors with line numbers (if failed)
 /// - List of variables used/unused for highlighting
-
 pub async fn preview_template(
     content: String,
     project_path: Option<String>,
@@ -444,7 +438,6 @@ fn extract_error_line(error_msg: &str) -> Option<usize> {
 /// - If project_path is provided, deletes from {project_path}/.ralph-ui/templates/{name}.tera
 /// - Otherwise deletes from ~/.ralph-ui/templates/{name}.tera
 /// - Cannot delete builtin templates (read-only)
-
 pub async fn delete_template(
     name: String,
     scope: String,

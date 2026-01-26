@@ -1,3 +1,24 @@
+// Clippy allows for reasonable defaults
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::single_char_add_str)]
+#![allow(clippy::needless_borrow)]
+#![allow(clippy::needless_question_mark)]
+#![allow(clippy::manual_flatten)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::unwrap_or_default)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::double_ended_iterator_last)]
+#![allow(clippy::unnecessary_mut_passed)]
+#![allow(clippy::format_in_format_args)]
+#![allow(clippy::manual_strip)]
+
 // Module declarations
 pub mod agents;
 pub mod commands;

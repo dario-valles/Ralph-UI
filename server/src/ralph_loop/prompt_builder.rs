@@ -86,8 +86,7 @@ impl PromptBuilder {
 
         let completion_promise = config
             .completion_promise
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or("<promise>COMPLETE</promise>");
 
         // Extract project name from path

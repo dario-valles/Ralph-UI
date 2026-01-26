@@ -215,7 +215,7 @@ fn topological_phases<'a>(
         // If no progress, there's a cycle - just add remaining to last phase
         if phase.is_empty() && !remaining.is_empty() {
             log::warn!("Dependency cycle detected in requirements");
-            phase = remaining.drain(..).collect();
+            phase = std::mem::take(&mut remaining);
         }
 
         // Mark these as scheduled

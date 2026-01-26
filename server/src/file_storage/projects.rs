@@ -59,7 +59,7 @@ impl ProjectEntry {
 
         let id = format!(
             "proj_{}",
-            Uuid::new_v4().to_string().replace("-", "")[..12].to_string()
+            &Uuid::new_v4().to_string().replace("-", "")[..12]
         );
 
         let now = Utc::now();
