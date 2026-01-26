@@ -188,6 +188,8 @@ export type {
   ResearchSynthesis,
   GsdConfig,
   PlanningSessionInfo,
+  ResearchSessionInfo,
+  CloneSessionOptions,
 } from './gsd'
 
 export {

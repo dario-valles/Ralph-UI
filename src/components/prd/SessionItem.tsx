@@ -1,6 +1,12 @@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { MessageSquare, Trash2, Loader2 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MessageSquare, Trash2, Loader2, MoreHorizontal, Copy } from 'lucide-react'
 import type { ChatSession } from '@/types'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/date-utils'
@@ -11,6 +17,7 @@ interface SessionItemProps {
   isProcessing?: boolean
   onSelect: () => void
   onDelete: () => void
+  onClone?: () => void
 }
 
 export function SessionItem({
@@ -19,6 +26,7 @@ export function SessionItem({
   isProcessing,
   onSelect,
   onDelete,
+  onClone,
 }: SessionItemProps) {
   return (
     <div
@@ -49,18 +57,42 @@ export function SessionItem({
               {session.messageCount}
             </Badge>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-            aria-label="Delete session"
-            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Session actions"
+                className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-32">
+              {onClone && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onClone()
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-2" />
+                  Clone
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete()
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {session.updatedAt && (

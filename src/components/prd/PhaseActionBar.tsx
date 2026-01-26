@@ -12,9 +12,9 @@
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { Search, FileText, Target, Calendar, Loader2, Check } from 'lucide-react'
+import { Search, FileText, Target, Calendar, Download, Loader2, Check } from 'lucide-react'
 
-export type PhaseAction = 'research' | 'requirements' | 'scope' | 'roadmap'
+export type PhaseAction = 'research' | 'requirements' | 'scope' | 'roadmap' | 'export'
 
 export interface PhaseState {
   /** Whether research has been started */
@@ -122,6 +122,17 @@ const ACTION_BUTTONS: ActionButtonConfig[] = [
     isComplete: (state) => state.roadmapGenerated,
     isVisible: (state) => state.scopingComplete, // Visible after scoping complete
   },
+  {
+    action: 'export',
+    icon: Download,
+    label: 'Export',
+    compactLabel: 'Export',
+    tooltip: 'Export to Ralph PRD format for execution',
+    isEnabled: (state) => state.roadmapGenerated,
+    isHighlighted: (state) => state.roadmapGenerated,
+    isComplete: () => false, // Export can be done multiple times
+    isVisible: (state) => state.roadmapGenerated, // Visible after roadmap generated
+  },
 ]
 
 export function PhaseActionBar({
@@ -201,22 +212,30 @@ export function InlinePhaseButtons({
         const isComplete = config.isComplete(phaseState)
         const isRunning = phaseState.runningAction === config.action
 
+        // Allow clicking running action to view progress, disable others while running
+        const isDisabled = disabled || !isEnabled || (phaseState.isRunning && !isRunning)
+
         return (
-          <Tooltip key={config.action} content={config.tooltip} side="top">
+          <Tooltip
+            key={config.action}
+            content={isRunning ? 'Click to view progress' : config.tooltip}
+            side="top"
+          >
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={() => onAction(config.action)}
-              disabled={disabled || !isEnabled || phaseState.isRunning}
+              disabled={isDisabled}
               className={cn(
                 'h-9 w-9 rounded-xl flex-shrink-0 relative transition-all',
                 'text-muted-foreground hover:text-foreground',
                 'hover:bg-muted/80',
-                !isEnabled && 'opacity-40',
-                isComplete && 'text-emerald-600 dark:text-emerald-400'
+                !isEnabled && !isRunning && 'opacity-40',
+                isComplete && 'text-emerald-600 dark:text-emerald-400',
+                isRunning && 'text-blue-500 dark:text-blue-400'
               )}
-              aria-label={config.label}
+              aria-label={isRunning ? `${config.label} - Click to view progress` : config.label}
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

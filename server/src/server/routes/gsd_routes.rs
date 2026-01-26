@@ -279,6 +279,37 @@ pub async fn route_gsd_command(
             )
         }
 
+        "list_project_research" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::gsd::list_project_research(project_path))
+        }
+
+        "copy_research_to_session" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let source_session_id: String = get_arg(&args, "sourceSessionId")?;
+            let target_session_id: String = get_arg(&args, "targetSessionId")?;
+            let research_types: Option<Vec<String>> = get_opt_arg(&args, "researchTypes")?;
+            route_async!(
+                cmd,
+                commands::gsd::copy_research_to_session(
+                    project_path,
+                    source_session_id,
+                    target_session_id,
+                    research_types
+                )
+            )
+        }
+
+        "clone_gsd_session" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let source_session_id: String = get_arg(&args, "sourceSessionId")?;
+            let options: commands::gsd::CloneSessionOptions = get_arg(&args, "options")?;
+            route_async!(
+                cmd,
+                commands::gsd::clone_gsd_session(project_path, source_session_id, options)
+            )
+        }
+
         _ => Err(format!("Unknown GSD command: {}", cmd)),
     }
 }
@@ -313,5 +344,8 @@ pub fn is_gsd_command(cmd: &str) -> bool {
             | "export_gsd_to_ralph"
             | "save_planning_file"
             | "read_gsd_planning_file"
+            | "list_project_research"
+            | "copy_research_to_session"
+            | "clone_gsd_session"
     )
 }

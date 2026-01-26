@@ -9,6 +9,8 @@ import type {
   ResearchResult,
   ResearchSynthesis,
   PlanningSessionInfo,
+  ResearchSessionInfo,
+  CloneSessionOptions,
   RequirementsValidationResult,
 } from '@/types/gsd'
 import type {
@@ -225,5 +227,38 @@ export const gsdApi = {
   /** Get list of available CLI agents for research */
   getAvailableAgents: async (): Promise<AgentType[]> => {
     return await invoke('get_available_research_agents')
+  },
+
+  /** List all sessions with research results for a project */
+  listProjectResearch: async (projectPath: string): Promise<ResearchSessionInfo[]> => {
+    return await invoke('list_project_research', { projectPath })
+  },
+
+  /** Copy research files from one session to another */
+  copyResearchToSession: async (
+    projectPath: string,
+    sourceSessionId: string,
+    targetSessionId: string,
+    researchTypes?: string[]
+  ): Promise<number> => {
+    return await invoke('copy_research_to_session', {
+      projectPath,
+      sourceSessionId,
+      targetSessionId,
+      researchTypes,
+    })
+  },
+
+  /** Clone a GSD session with specified options */
+  cloneSession: async (
+    projectPath: string,
+    sourceSessionId: string,
+    options: CloneSessionOptions
+  ): Promise<GsdWorkflowState> => {
+    return await invoke('clone_gsd_session', {
+      projectPath,
+      sourceSessionId,
+      options,
+    })
   },
 }

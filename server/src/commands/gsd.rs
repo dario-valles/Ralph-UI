@@ -719,6 +719,144 @@ pub async fn delete_gsd_session(project_path: String, session_id: String) -> Res
     delete_planning_session(path, &session_id)
 }
 
+/// List all sessions with research results for a project
+///
+/// Returns sessions that have at least one research file (architecture, codebase, best_practices, or risks).
+/// Used for the "reuse previous research" feature.
+
+pub async fn list_project_research(
+    project_path: String,
+) -> Result<Vec<crate::gsd::planning_storage::ResearchSessionInfo>, String> {
+    let path = as_path(&project_path);
+    crate::gsd::planning_storage::list_project_research(path)
+}
+
+/// Copy research files from one session to another
+///
+/// Copies research output files from a source session to a target session.
+/// If research_types is provided, only copies those specific research types.
+/// Otherwise copies all available research files.
+///
+/// Does NOT copy SUMMARY.md - synthesis should be regenerated for the new context.
+
+pub async fn copy_research_to_session(
+    project_path: String,
+    source_session_id: String,
+    target_session_id: String,
+    research_types: Option<Vec<String>>,
+) -> Result<u32, String> {
+    let path = as_path(&project_path);
+    crate::gsd::planning_storage::copy_research_to_session(
+        path,
+        &source_session_id,
+        &target_session_id,
+        research_types,
+    )
+}
+
+/// Options for cloning a GSD session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneSessionOptions {
+    /// Copy project context (PROJECT.md)
+    #[serde(default = "default_true")]
+    pub copy_context: bool,
+    /// Copy research outputs
+    #[serde(default)]
+    pub copy_research: bool,
+    /// Copy requirements document
+    #[serde(default)]
+    pub copy_requirements: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Clone a GSD session with specified options
+///
+/// Creates a new session by copying data from an existing session.
+/// Useful for iterating on similar features without starting from scratch.
+
+pub async fn clone_gsd_session(
+    project_path: String,
+    source_session_id: String,
+    options: CloneSessionOptions,
+) -> Result<GsdWorkflowState, String> {
+    let path = as_path(&project_path);
+
+    // Generate new session ID
+    let new_session_id = uuid::Uuid::new_v4().to_string();
+
+    // Initialize new planning directory
+    init_planning_session(path, &new_session_id)?;
+
+    // Load source state
+    let source_state = load_workflow_state(path, &source_session_id)?;
+
+    // Copy project context if requested
+    if options.copy_context {
+        if let Ok(content) = read_planning_file(path, &source_session_id, PlanningFile::Project) {
+            write_planning_file(path, &new_session_id, PlanningFile::Project, &content)?;
+        }
+    }
+
+    // Copy research if requested
+    if options.copy_research {
+        crate::gsd::planning_storage::copy_research_to_session(
+            path,
+            &source_session_id,
+            &new_session_id,
+            None, // Copy all research types
+        )?;
+    }
+
+    // Copy requirements if requested
+    if options.copy_requirements {
+        if let Ok(content) = read_planning_file(path, &source_session_id, PlanningFile::Requirements) {
+            write_planning_file(path, &new_session_id, PlanningFile::Requirements, &content)?;
+        }
+        if let Ok(content) = read_planning_file(path, &source_session_id, PlanningFile::RequirementsMd) {
+            write_planning_file(path, &new_session_id, PlanningFile::RequirementsMd, &content)?;
+        }
+    }
+
+    // Create new state based on source, but with new timestamps
+    let mut new_state = GsdWorkflowState::new(new_session_id.clone());
+
+    // Copy questioning context if we copied the project file
+    if options.copy_context {
+        new_state.questioning_context = source_state.questioning_context.clone();
+    }
+
+    // Update research status if we copied research
+    if options.copy_research {
+        new_state.research_status = source_state.research_status.clone();
+        // Set phase to research if we have research
+        if new_state.research_status.architecture.complete
+            || new_state.research_status.codebase.complete
+            || new_state.research_status.best_practices.complete
+            || new_state.research_status.risks.complete
+        {
+            new_state.current_phase = GsdPhase::Research;
+        }
+    }
+
+    // Save the new state
+    save_workflow_state(path, &new_session_id, &new_state)?;
+
+    log::info!(
+        "Cloned GSD session {} -> {} (context: {}, research: {}, requirements: {})",
+        source_session_id,
+        new_session_id,
+        options.copy_context,
+        options.copy_research,
+        options.copy_requirements
+    );
+
+    Ok(new_state)
+}
+
 /// Add a custom requirement to the requirements document
 
 pub async fn add_requirement(

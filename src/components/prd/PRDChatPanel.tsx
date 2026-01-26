@@ -21,15 +21,17 @@ import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
 import { ResearchProgressModal } from './ResearchProgressModal'
 import { RequirementsScopeSheet } from './RequirementsScopeSheet'
+import { GsdExportDialog } from './GsdExportDialog'
+import { CloneSessionDialog } from './CloneSessionDialog'
 import { ChatHeader } from './ChatHeader'
 import { ChatArea } from './ChatArea'
 import { ChatInputArea } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
-import type { ResearchSynthesis, ResearchResult } from '@/types/gsd'
+import type { ResearchSynthesis, ResearchResult, GsdWorkflowState } from '@/types/gsd'
 import type { PhaseAction, PhaseState } from './PhaseActionBar'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment } from '@/types'
+import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ChatSession } from '@/types'
 import { cn } from '@/lib/utils'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
@@ -89,6 +91,9 @@ export function PRDChatPanel() {
   // Hybrid GSD modal states
   const [showResearchModal, setShowResearchModal] = useState(false)
   const [showScopeSheet, setShowScopeSheet] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showCloneDialog, setShowCloneDialog] = useState(false)
+  const [sessionToClone, setSessionToClone] = useState<ChatSession | null>(null)
   const [runningPhaseAction, setRunningPhaseAction] = useState<PhaseAction | null>(null)
 
   const {
@@ -422,6 +427,9 @@ export function PRDChatPanel() {
           await generateRoadmap()
           toast.success('Roadmap Generated', 'Execution roadmap has been created from scoped requirements.')
           break
+        case 'export':
+          setShowExportDialog(true)
+          break
       }
     } catch (err) {
       console.error(`Failed to execute phase action ${action}:`, err)
@@ -456,6 +464,46 @@ export function PRDChatPanel() {
   const handleScopeComplete = () => {
     setShowScopeSheet(false)
     toast.success('Scoping Complete', 'Requirements have been categorized. Click Roadmap to generate execution plan.')
+  }
+
+  const handleExportComplete = (prdName: string, result: { storyCount: number }) => {
+    setShowExportDialog(false)
+
+    // Add success message to chat
+    if (currentSession) {
+      const exportMessage = {
+        id: `export-${crypto.randomUUID()}`,
+        sessionId: currentSession.id,
+        role: 'assistant' as const,
+        content: `## PRD Exported Successfully!\n\nYour PRD **${prdName}** has been created at \`.ralph-ui/prds/${prdName}.json\`.\n\n**Summary:**\n- ${result.storyCount} stories created from your requirements\n- Ready for execution with the Ralph Wiggum Loop\n\nYou can now execute this PRD from the PRD list or start a new planning session.`,
+        createdAt: new Date().toISOString(),
+        metadata: { type: 'export-success' },
+      }
+      usePRDChatStore.setState((state) => ({
+        messages: [...state.messages, exportMessage],
+      }))
+    }
+  }
+
+  const handleCloneSession = (session: ChatSession) => {
+    setSessionToClone(session)
+    setShowCloneDialog(true)
+  }
+
+  const handleCloneComplete = async (newState: GsdWorkflowState) => {
+    setShowCloneDialog(false)
+    setSessionToClone(null)
+
+    // Reload sessions to show the new one
+    if (activeProject?.path) {
+      await loadSessions(activeProject.path)
+
+      // Select the newly created session
+      const newSession = sessions.find(s => s.id === newState.sessionId)
+      if (newSession) {
+        setCurrentSession(newSession)
+      }
+    }
   }
 
   const handlePlanToggle = () => {
@@ -511,6 +559,7 @@ export function PRDChatPanel() {
         onCreateSession={openTypeSelector}
         onSelectSession={setCurrentSession}
         onDeleteSession={openDeleteConfirm}
+        onCloneSession={handleCloneSession}
         qualityAssessment={qualityAssessment}
         loading={loading}
         onRefreshQuality={assessQuality}
@@ -669,8 +718,30 @@ export function PRDChatPanel() {
             onComplete={handleScopeComplete}
             isLoading={loading}
           />
+
+          <GsdExportDialog
+            open={showExportDialog}
+            onOpenChange={setShowExportDialog}
+            sessionId={currentSession.id}
+            projectPath={currentSession.projectPath}
+            onExportComplete={handleExportComplete}
+          />
         </>
       )}
+
+      {/* Clone Session Dialog - outside currentSession check since it clones any session */}
+      <CloneSessionDialog
+        open={showCloneDialog}
+        onOpenChange={setShowCloneDialog}
+        session={sessionToClone ? {
+          sessionId: sessionToClone.id,
+          phase: undefined,
+          isComplete: false,
+          updatedAt: sessionToClone.updatedAt,
+        } : null}
+        projectPath={activeProject?.path ?? ''}
+        onCloneComplete={handleCloneComplete}
+      />
     </div>
   )
 }

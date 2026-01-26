@@ -21,6 +21,7 @@ interface SessionsSidebarProps {
   onCreateSession: () => void
   onSelectSession: (session: ChatSession) => void
   onDeleteSession: (sessionId: string) => void
+  onCloneSession?: (session: ChatSession) => void
   qualityAssessment: QualityAssessment | null
   loading: boolean
   onRefreshQuality: () => void
@@ -41,6 +42,7 @@ export function SessionsSidebar({
   onCreateSession,
   onSelectSession,
   onDeleteSession,
+  onCloneSession,
   qualityAssessment,
   loading,
   onRefreshQuality,
@@ -147,6 +149,7 @@ export function SessionsSidebar({
                     isProcessing={processingSessionId === session.id}
                     onSelect={() => onSelectSession(session)}
                     onDelete={() => onDeleteSession(session.id)}
+                    onClone={onCloneSession ? () => onCloneSession(session) : undefined}
                   />
                 ))}
                 {hasMore && (

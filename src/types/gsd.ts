@@ -296,6 +296,33 @@ export interface PlanningSessionInfo {
 }
 
 /**
+ * Information about research in a session
+ */
+export interface ResearchSessionInfo {
+  sessionId: string
+  createdAt?: string
+  hasArchitecture: boolean
+  hasCodebase: boolean
+  hasBestPractices: boolean
+  hasRisks: boolean
+  hasSynthesis: boolean
+  /** Total size of research files in bytes */
+  totalSizeBytes: number
+}
+
+/**
+ * Options for cloning a GSD session
+ */
+export interface CloneSessionOptions {
+  /** Copy project context (PROJECT.md) */
+  copyContext: boolean
+  /** Copy research outputs */
+  copyResearch: boolean
+  /** Copy requirements document */
+  copyRequirements: boolean
+}
+
+/**
  * Helper function to get phase info by phase key
  */
 export function getPhaseInfo(phase: GsdPhase): GsdPhaseInfo | undefined {

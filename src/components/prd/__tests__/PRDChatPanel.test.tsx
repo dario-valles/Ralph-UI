@@ -610,9 +610,10 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      // Click on Actions dropdown to open the menu
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      await user.click(actionsButton)
+      // Click on Actions dropdown (the one with exact "Actions" text, not "Session actions")
+      const actionsButtons = screen.getAllByRole('button', { name: /^actions$/i })
+      const chatHeaderActionsButton = actionsButtons.find(btn => btn.textContent?.toLowerCase() === 'actions')
+      await user.click(chatHeaderActionsButton!)
 
       // Check quality option should be visible in the dropdown
       const qualityOption = await screen.findByRole('menuitem', { name: /check quality/i })
@@ -628,9 +629,10 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      // Click on Actions dropdown
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      await user.click(actionsButton)
+      // Click on Actions dropdown (the one with exact "Actions" text, not "Session actions")
+      const actionsButtons = screen.getAllByRole('button', { name: /^actions$/i })
+      const chatHeaderActionsButton = actionsButtons.find(btn => btn.textContent?.toLowerCase() === 'actions')
+      await user.click(chatHeaderActionsButton!)
 
       // Should show disabled message
       expect(screen.getByText(/Send a message first/i)).toBeInTheDocument()
@@ -640,9 +642,10 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      // Click on Actions dropdown
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      await user.click(actionsButton)
+      // Click on Actions dropdown (the one with exact "Actions" text, not "Session actions")
+      const actionsButtons = screen.getAllByRole('button', { name: /^actions$/i })
+      const chatHeaderActionsButton = actionsButtons.find(btn => btn.textContent?.toLowerCase() === 'actions')
+      await user.click(chatHeaderActionsButton!)
 
       // Click on Check Quality option
       const qualityOption = await screen.findByRole('menuitem', { name: /check quality/i })
@@ -661,8 +664,10 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      expect(actionsButton).toBeDisabled()
+      // Get all Actions buttons and find the one in the chat header (not session actions)
+      const actionsButtons = screen.getAllByRole('button', { name: /^actions$/i })
+      const chatHeaderActionsButton = actionsButtons.find(btn => btn.textContent?.toLowerCase() === 'actions')
+      expect(chatHeaderActionsButton).toBeDisabled()
     })
   })
 
@@ -733,11 +738,12 @@ describe('PRDChatPanel', () => {
       expect(mockLoadHistory).toHaveBeenCalled()
     })
 
-    it('shows delete button for each session', () => {
+    it('shows session actions menu for each session', () => {
       renderWithRouter(<PRDChatPanel />)
 
-      const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
-      expect(deleteButtons).toHaveLength(2)
+      // Each session now has an actions menu button instead of direct delete
+      const menuButtons = screen.getAllByRole('button', { name: /session actions/i })
+      expect(menuButtons).toHaveLength(2)
     })
 
     it('calls openDeleteConfirm when delete button is clicked', async () => {
@@ -750,9 +756,13 @@ describe('PRDChatPanel', () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
-      // Click the delete button in the session list
-      const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
-      await user.click(deleteButtons[0])
+      // Click the session actions menu button (now a dropdown trigger)
+      const menuButtons = screen.getAllByRole('button', { name: /session actions/i })
+      await user.click(menuButtons[0])
+
+      // Click delete from dropdown menu
+      const deleteMenuItem = await screen.findByRole('menuitem', { name: /delete/i })
+      await user.click(deleteMenuItem)
 
       // Verify openDeleteConfirm was called with the session id
       expect(mockOpenDeleteConfirm).toHaveBeenCalledWith('session-1')
