@@ -20,7 +20,8 @@ import {
   Play,
 } from 'lucide-react'
 import { ModelSelector } from '@/components/shared/ModelSelector'
-import type { ChatSession, QualityAssessment, AgentType } from '@/types'
+import type { ChatSession, QualityAssessment } from '@/types'
+import { formatAgentName, type AgentType } from '@/types/agent'
 import type { ModelInfo } from '@/lib/model-api'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +32,8 @@ interface ChatHeaderProps {
   sessions: ChatSession[]
   /** Current agent type */
   agentType: AgentType
+  /** Available agent types */
+  availableAgents: AgentType[]
   /** Currently selected model ID */
   selectedModel: string
   /** Default model ID for the agent */
@@ -79,6 +82,7 @@ export function ChatHeader({
   currentSession,
   sessions,
   agentType,
+  availableAgents,
   selectedModel,
   defaultModelId,
   models,
@@ -169,6 +173,7 @@ export function ChatHeader({
           {/* Combined settings & actions dropdown */}
           <MobileActionsDropdown
             agentType={agentType}
+            availableAgents={availableAgents}
             selectedModel={selectedModel}
             defaultModelId={defaultModelId}
             models={models}
@@ -206,9 +211,11 @@ export function ChatHeader({
                 disabled={streaming}
                 className="w-20 text-xs h-7 bg-background/80 backdrop-blur-sm border-0 rounded-lg font-medium shadow-sm"
               >
-                <option value="claude">Claude</option>
-                <option value="opencode">OpenCode</option>
-                <option value="cursor">Cursor</option>
+                {availableAgents.map((agent) => (
+                  <option key={agent} value={agent}>
+                    {formatAgentName(agent)}
+                  </option>
+                ))}
               </Select>
               <div className="w-px h-5 bg-gradient-to-b from-transparent via-border to-transparent" />
               <ModelSelector
@@ -272,6 +279,7 @@ export function ChatHeader({
 
 interface MobileActionsDropdownProps {
   agentType: AgentType
+  availableAgents: AgentType[]
   selectedModel: string
   defaultModelId: string
   models: ModelInfo[]
@@ -289,6 +297,7 @@ interface MobileActionsDropdownProps {
 
 function MobileActionsDropdown({
   agentType,
+  availableAgents,
   selectedModel,
   defaultModelId,
   models,
@@ -336,9 +345,11 @@ function MobileActionsDropdown({
                 disabled={streaming}
                 className="flex-1 text-xs h-8 bg-background/80 backdrop-blur-sm border-border/40 rounded-lg font-medium shadow-sm"
               >
-                <option value="claude">Claude Code</option>
-                <option value="opencode">OpenCode</option>
-                <option value="cursor">Cursor</option>
+                {availableAgents.map((agent) => (
+                  <option key={agent} value={agent}>
+                    {formatAgentName(agent)}
+                  </option>
+                ))}
               </Select>
             </div>
             {/* Model selector */}

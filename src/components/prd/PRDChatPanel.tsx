@@ -125,6 +125,7 @@ export function PRDChatPanel() {
     isResearchRunning,
     isSynthesizing,
     isGeneratingRequirements,
+    availableResearchAgents,
     loadAvailableAgents,
     checkResearchStatus,
     loadSynthesis,
@@ -468,7 +469,12 @@ export function PRDChatPanel() {
   }
 
   // AI-powered bulk requirement generation
-  const handleGenerateRequirementsFromPrompt = async (prompt: string, count?: number) => {
+  const handleGenerateRequirementsFromPrompt = async (
+    prompt: string,
+    agentType?: string,
+    model?: string,
+    count?: number
+  ) => {
     if (!currentSession || !activeProject?.path) {
       throw new Error('No active session')
     }
@@ -478,7 +484,9 @@ export function PRDChatPanel() {
         activeProject.path,
         currentSession.id,
         prompt,
-        count
+        count,
+        agentType,
+        model
       )
       return result
     } finally {
@@ -606,6 +614,7 @@ export function PRDChatPanel() {
           currentSession={currentSession}
           sessions={sessions}
           agentType={agentType}
+          availableAgents={availableResearchAgents.length > 0 ? availableResearchAgents : ['claude']}
           selectedModel={selectedModel}
           defaultModelId={defaultModelId}
           models={models}

@@ -1087,6 +1087,7 @@ pub async fn generate_requirements_from_prompt(
     prompt: String,
     count: Option<u32>,
     agent_type: Option<String>,
+    model: Option<String>,
 ) -> Result<GenerateRequirementsResult, String> {
     use crate::agents::providers::get_provider;
     use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
@@ -1147,7 +1148,7 @@ pub async fn generate_requirements_from_prompt(
         branch: "main".to_string(),
         max_iterations: 0,
         prompt: Some(rendered_prompt),
-        model: None,
+        model,
         spawn_mode: AgentSpawnMode::Piped,
         plugin_config: None,
     };

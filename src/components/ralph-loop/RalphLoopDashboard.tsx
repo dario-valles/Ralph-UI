@@ -67,6 +67,7 @@ export function RalphLoopDashboard({
     effectiveModel,
     effectiveRunTests,
     effectiveRunLint,
+    availableAgents,
     availableModels,
     modelsLoading,
     refreshModels,
@@ -134,6 +135,7 @@ export function RalphLoopDashboard({
         effectiveModel={effectiveModel}
         effectiveRunTests={effectiveRunTests}
         effectiveRunLint={effectiveRunLint}
+        availableAgents={availableAgents}
         availableModels={availableModels}
         modelsLoading={modelsLoading}
         refreshModels={refreshModels}

@@ -4,6 +4,7 @@ import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
 import { toast } from '@/stores/toastStore'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { useAvailableAgents } from '@/hooks/useAvailableAgents'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { ralphLoopApi } from '@/lib/backend-api'
@@ -61,6 +62,9 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
   const [configOpen, setConfigOpen] = useState(false)
   const [regeneratingStories, setRegeneratingStories] = useState(false)
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
+
+  // Available agents - use shared hook
+  const { agents: availableAgents } = useAvailableAgents()
 
   // Worktree action states
   const [diffDialogOpen, setDiffDialogOpen] = useState(false)
@@ -591,6 +595,7 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
     effectiveModel,
     effectiveRunTests,
     effectiveRunLint,
+    availableAgents,
     availableModels,
     modelsLoading,
     refreshModels,

@@ -20,7 +20,8 @@ import {
   GitBranch,
   Pause,
 } from 'lucide-react'
-import type { RalphPrd, RalphPrdStatus, RalphLoopMetrics, AgentType } from '@/types'
+import type { RalphPrd, RalphPrdStatus, RalphLoopMetrics } from '@/types'
+import { formatAgentName, type AgentType } from '@/types/agent'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { getDefaultModel } from '@/lib/fallback-models'
 import type { ConfigOverrides } from './hooks/useRalphLoopDashboard'
@@ -51,6 +52,7 @@ export interface RalphLoopHeaderProps {
   effectiveModel: string
   effectiveRunTests: boolean
   effectiveRunLint: boolean
+  availableAgents: AgentType[]
   availableModels: ModelInfo[]
   modelsLoading: boolean
   refreshModels: () => void
@@ -107,6 +109,7 @@ export function RalphLoopHeader({
   effectiveModel,
   effectiveRunTests,
   effectiveRunLint,
+  availableAgents,
   availableModels,
   modelsLoading,
   refreshModels,
@@ -230,10 +233,11 @@ export function RalphLoopHeader({
                     }))
                   }}
                 >
-                  <option value="claude">Claude Code</option>
-                  <option value="opencode">OpenCode</option>
-                  <option value="cursor">Cursor Agent</option>
-                  <option value="codex">Codex CLI</option>
+                  {availableAgents.map((agent) => (
+                    <option key={agent} value={agent}>
+                      {formatAgentName(agent)}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div className="space-y-2">

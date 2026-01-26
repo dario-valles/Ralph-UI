@@ -43,7 +43,12 @@ interface RequirementScoperProps {
   /** Whether the component is in loading state */
   isLoading?: boolean
   /** Callback to generate requirements from prompt */
-  onGenerateRequirements?: (prompt: string, count?: number) => Promise<GenerateRequirementsResult>
+  onGenerateRequirements?: (
+    prompt: string,
+    agentType?: string,
+    model?: string,
+    count?: number
+  ) => Promise<GenerateRequirementsResult>
   /** Callback when generated requirements are accepted */
   onAcceptGeneratedRequirements?: (requirements: GeneratedRequirement[]) => Promise<void>
   /** Whether AI generation is in progress */

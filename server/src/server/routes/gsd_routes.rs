@@ -317,6 +317,7 @@ pub async fn route_gsd_command(
             let prompt: String = get_arg(&args, "prompt")?;
             let count: Option<u32> = get_opt_arg(&args, "count")?;
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
+            let model: Option<String> = get_opt_arg(&args, "model")?;
             let result = commands::gsd::generate_requirements_from_prompt(
                 state.broadcaster.clone(),
                 project_path,
@@ -324,6 +325,7 @@ pub async fn route_gsd_command(
                 prompt,
                 count,
                 agent_type,
+                model,
             )
             .await?;
             serde_json::to_value(result).map_err(|e| e.to_string())

@@ -13,9 +13,16 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, Sparkles, ChevronDown, ChevronUp, Wand2 } from 'lucide-react'
 import type { GeneratedRequirement, GenerateRequirementsResult } from '@/types/gsd'
 import { GeneratedRequirementPreview } from './GeneratedRequirementPreview'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 
 interface AIRequirementGeneratorProps {
-  onGenerate: (prompt: string, count?: number) => Promise<GenerateRequirementsResult>
+  onGenerate: (
+    prompt: string,
+    agentType?: string,
+    model?: string,
+    count?: number
+  ) => Promise<GenerateRequirementsResult>
   onAcceptRequirements: (requirements: GeneratedRequirement[]) => Promise<void>
   isGenerating?: boolean
 }
@@ -37,6 +44,18 @@ export function AIRequirementGenerator({
   const [error, setError] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
 
+  // Agent and model selection
+  const {
+    agentType,
+    setAgentType,
+    modelId,
+    setModelId,
+    models,
+    modelsLoading,
+    availableAgents,
+    agentsLoading,
+  } = useAgentModelSelector()
+
   const resetState = useCallback(() => {
     setGeneratedRequirements(null)
     setError(null)
@@ -48,13 +67,13 @@ export function AIRequirementGenerator({
 
     setError(null)
     try {
-      const result = await onGenerate(prompt)
+      const result = await onGenerate(prompt, agentType, modelId || undefined)
       setGeneratedRequirements(result.requirements)
     } catch (e) {
       setError(getErrorMessage(e))
       setGeneratedRequirements(null)
     }
-  }, [prompt, onGenerate])
+  }, [prompt, onGenerate, agentType, modelId])
 
   const handleRegenerate = useCallback(async () => {
     setGeneratedRequirements(null)
@@ -129,6 +148,20 @@ export function AIRequirementGenerator({
             />
           ) : (
             <>
+              {/* Agent and Model configuration */}
+              <AgentModelSelector
+                agentType={agentType}
+                onAgentChange={setAgentType}
+                modelId={modelId}
+                onModelChange={setModelId}
+                models={models}
+                modelsLoading={modelsLoading}
+                availableAgents={availableAgents}
+                agentsLoading={agentsLoading}
+                disabled={isGenerating}
+                variant="default"
+              />
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Describe what you need:</label>
                 <Textarea

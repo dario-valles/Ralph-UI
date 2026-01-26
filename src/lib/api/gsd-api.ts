@@ -270,7 +270,8 @@ export const gsdApi = {
     sessionId: string,
     prompt: string,
     count?: number,
-    agentType?: string
+    agentType?: string,
+    model?: string
   ): Promise<GenerateRequirementsResult> => {
     return await invoke('generate_requirements_from_prompt', {
       projectPath,
@@ -278,6 +279,7 @@ export const gsdApi = {
       prompt,
       count,
       agentType,
+      model,
     })
   },
 

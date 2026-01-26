@@ -2,6 +2,21 @@
 
 export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex' | 'qwen' | 'droid'
 
+/** Agent display names for UI */
+const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
+  claude: 'Claude',
+  opencode: 'OpenCode',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  qwen: 'Qwen',
+  droid: 'Droid',
+}
+
+/** Format agent type for display in UI */
+export function formatAgentName(agent: AgentType): string {
+  return AGENT_DISPLAY_NAMES[agent] || agent.charAt(0).toUpperCase() + agent.slice(1)
+}
+
 export type AgentStatus =
   | 'idle'
   | 'thinking'

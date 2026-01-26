@@ -188,7 +188,7 @@ describe('PRDChatPanel', () => {
     requirementsDoc: null,
     roadmapDoc: null,
     selectedResearchAgent: null,
-    availableResearchAgents: ['claude'],
+    availableResearchAgents: ['claude', 'opencode', 'cursor'],
     phaseState: {
       researchStarted: false,
       researchComplete: false,

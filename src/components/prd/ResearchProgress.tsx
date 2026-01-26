@@ -11,16 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { NativeSelect } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ModelSelector } from '@/components/shared/ModelSelector'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import { ResearchSummary } from './gsd/ResearchSummary'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import { subscribeEvent } from '@/lib/events-client'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
-import type { AgentType } from '@/types'
 import {
   Search,
   Loader2,
@@ -29,7 +27,6 @@ import {
   FileText,
   ArrowRight,
   RefreshCw,
-  Bot,
   ChevronDown,
   Terminal,
   Lightbulb,
@@ -605,48 +602,17 @@ export function ResearchProgress({
 
         {/* Agent and Model selectors - only show before research starts */}
         {!hasStarted && (
-          <div className="flex flex-col gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Configuration</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label htmlFor="research-agent-selector" className="text-sm text-muted-foreground">Agent:</label>
-                <NativeSelect
-                  id="research-agent-selector"
-                  aria-label="Research Agent"
-                  value={selectedResearchAgent || 'claude'}
-                  onChange={(e) => setSelectedResearchAgent(e.target.value as AgentType)}
-                  disabled={isLoading || isRunning}
-                  className="w-28"
-                >
-                  {availableResearchAgents.length > 0 ? (
-                    availableResearchAgents.map((agent) => (
-                      <option key={agent} value={agent}>
-                        {agent.charAt(0).toUpperCase() + agent.slice(1)}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="claude">Claude</option>
-                  )}
-                </NativeSelect>
-              </div>
-              <div className="flex items-center gap-2">
-                <label htmlFor="research-model-selector" className="text-sm text-muted-foreground">Model:</label>
-                <ModelSelector
-                  id="research-model-selector"
-                  ariaLabel="Research Model"
-                  value={selectedModel}
-                  onChange={setUserSelectedModel}
-                  models={models}
-                  loading={modelsLoading}
-                  disabled={isLoading || isRunning}
-                  className="w-40"
-                />
-              </div>
-            </div>
-          </div>
+          <AgentModelSelector
+            agentType={selectedResearchAgent || 'claude'}
+            onAgentChange={(agent) => setSelectedResearchAgent(agent)}
+            modelId={selectedModel}
+            onModelChange={setUserSelectedModel}
+            models={models}
+            modelsLoading={modelsLoading}
+            availableAgents={availableResearchAgents.length > 0 ? availableResearchAgents : ['claude']}
+            disabled={isLoading || isRunning}
+            variant="default"
+          />
         )}
 
         {/* Action buttons */}
