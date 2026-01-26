@@ -124,18 +124,20 @@ export function useTerminalTouchScroll(
     container.addEventListener('touchcancel', handleTouchEnd, listenerOptions)
 
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchmove', handleTouchMove)
-      container.removeEventListener('touchend', handleTouchEnd)
-      container.removeEventListener('touchcancel', handleTouchEnd)
+      // Pass same options for consistency (only capture matters for removal, but best practice)
+      container.removeEventListener('touchstart', handleTouchStart, listenerOptions)
+      container.removeEventListener('touchmove', handleTouchMove, listenerOptions)
+      container.removeEventListener('touchend', handleTouchEnd, listenerOptions)
+      container.removeEventListener('touchcancel', handleTouchEnd, listenerOptions)
     }
   }, [containerRef, terminalRef, enabled, handleTouchStart, handleTouchMove, handleTouchEnd])
 }
 
 /**
- * Detect if the device is mobile/touch-based
+ * Detect if the device has touch capability (for terminal gestures)
+ * Different from viewport-based useIsMobile in useMediaQuery.ts
  */
-export function useIsMobile(): boolean {
+export function useIsTouchDevice(): boolean {
   if (typeof window === 'undefined') return false
 
   // Check for touch capability and mobile user agent

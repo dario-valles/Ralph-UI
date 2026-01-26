@@ -21,7 +21,7 @@ import {
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useGestureStore } from '@/stores/gestureStore'
 import { useConnectionStore } from '@/stores/connectionStore'
-import { useTerminalTouchScroll, useIsMobile } from '@/hooks/useTerminalTouchScroll'
+import { useTerminalTouchScroll, useIsTouchDevice } from '@/hooks/useTerminalTouchScroll'
 import { Loader2, RefreshCw, WifiOff } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 
@@ -55,10 +55,10 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
   const [ptyAvailable] = useState(() => isPtyAvailable())
 
   // Mobile two-finger scroll support
-  const isMobile = useIsMobile()
+  const isTouchDevice = useIsTouchDevice()
   useTerminalTouchScroll(containerRef, {
     terminalRef,
-    enabled: isMobile && settings.enableTwoFingerScroll,
+    enabled: isTouchDevice && settings.enableTwoFingerScroll,
     scrollSensitivity: settings.twoFingerScrollSensitivity,
   })
 
@@ -441,7 +441,6 @@ export function TerminalInstance({ terminalId, cwd, isActive }: TerminalInstance
       <div
         ref={containerRef}
         className="w-full h-full bg-[#1a1a1a]"
-        style={{ touchAction: 'pan-y pinch-zoom' }}
       />
 
       {/* Reconnection overlay */}
