@@ -1,9 +1,10 @@
 // PRD Chat messaging operations - send messages, get history, build prompts
 
 use crate::file_storage::{attachments, chat_ops};
-use std::path::Path;
+use crate::gsd::planning_storage::{read_planning_file, PlanningFile};
 use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
+use std::path::Path;
 use crate::parsers::structured_output;
 use crate::utils::as_path;
 use uuid::Uuid;
@@ -15,6 +16,25 @@ use super::parse_agent_type;
 // ============================================================================
 // Message Commands
 // ============================================================================
+
+/// Planning documents available for context injection.
+/// These persist across session resumption when conversation history is omitted.
+struct PlanningContext {
+    summary: Option<String>,
+    requirements: Option<String>,
+    roadmap: Option<String>,
+}
+
+/// Load all available planning documents for a GSD session.
+/// Returns documents that exist, with None for missing ones.
+fn load_planning_context(project_path: &Path, session_id: &str) -> PlanningContext {
+    PlanningContext {
+        summary: read_planning_file(project_path, session_id, PlanningFile::Summary).ok(),
+        requirements: read_planning_file(project_path, session_id, PlanningFile::RequirementsMd)
+            .ok(),
+        roadmap: read_planning_file(project_path, session_id, PlanningFile::Roadmap).ok(),
+    }
+}
 
 /// Extracts all attachment file paths from chat history.
 /// Used to include historical image attachments in the prompt even when
@@ -112,24 +132,33 @@ pub async fn send_prd_chat_message(
         .chain(historical_attachment_paths)
         .collect();
 
+    // Load planning documents for GSD sessions.
+    // These persist across session resumption when conversation history is omitted,
+    // ensuring the agent always has access to research, requirements, and roadmap.
+    let planning_context = if get_gsd_phase(&session).is_some() {
+        Some(load_planning_context(project_path_obj, &session.id))
+    } else {
+        None
+    };
+
     // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
     // When resuming an external session, history is omitted (agent maintains its own context)
     let prompt = match get_gsd_phase(&session) {
-        Some(GsdPhase::DeepQuestioning) => {
-            build_deep_questioning_prompt(
-                &session,
-                &history,
-                &request.content,
-                &all_attachment_paths,
-                has_external_session,
-            )
-        }
+        Some(GsdPhase::DeepQuestioning) => build_deep_questioning_prompt(
+            &session,
+            &history,
+            &request.content,
+            &all_attachment_paths,
+            has_external_session,
+            planning_context.as_ref(),
+        ),
         _ => build_prd_chat_prompt(
             &session,
             &history,
             &request.content,
             &all_attachment_paths,
             has_external_session,
+            planning_context.as_ref(),
         ),
     };
 
@@ -288,12 +317,13 @@ fn get_questioning_context(session: &ChatSession) -> Option<QuestioningContext> 
 }
 
 /// Build prompt for Deep Questioning phase - focuses on discovery, not PRD creation
-pub fn build_deep_questioning_prompt(
+fn build_deep_questioning_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
     current_message: &str,
     attachment_paths: &[String],
     has_external_session: bool,
+    planning_context: Option<&PlanningContext>,
 ) -> String {
     let mut prompt = String::new();
 
@@ -393,8 +423,33 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
         prompt.push_str("=== End Attached Images ===\n\n");
     }
 
+    // Include planning documents if available (persists across session resumption)
+    inject_planning_context(&mut prompt, planning_context);
+
     prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
     prompt
+}
+
+/// Inject planning documents into a prompt if available.
+/// These documents persist across session resumption when conversation history is omitted.
+fn inject_planning_context(prompt: &mut String, ctx: Option<&PlanningContext>) {
+    let Some(ctx) = ctx else { return };
+
+    if let Some(summary) = &ctx.summary {
+        prompt.push_str("\n=== Research Summary ===\n");
+        prompt.push_str(summary);
+        prompt.push_str("\n=== End Research Summary ===\n\n");
+    }
+    if let Some(reqs) = &ctx.requirements {
+        prompt.push_str("\n=== Requirements ===\n");
+        prompt.push_str(reqs);
+        prompt.push_str("\n=== End Requirements ===\n\n");
+    }
+    if let Some(roadmap) = &ctx.roadmap {
+        prompt.push_str("\n=== Roadmap ===\n");
+        prompt.push_str(roadmap);
+        prompt.push_str("\n=== End Roadmap ===\n\n");
+    }
 }
 
 /// Build the prompt for PRD chat
@@ -402,12 +457,13 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
 /// When `has_external_session` is true, conversation history is omitted because
 /// the CLI agent maintains its own context through native session resumption.
 /// This significantly reduces token usage for multi-turn conversations.
-pub fn build_prd_chat_prompt(
+fn build_prd_chat_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
     current_message: &str,
     attachment_paths: &[String],
     has_external_session: bool,
+    planning_context: Option<&PlanningContext>,
 ) -> String {
     let mut prompt = String::new();
 
@@ -530,6 +586,9 @@ pub fn build_prd_chat_prompt(
         prompt.push_str("=== End Attached Images ===\n\n");
     }
 
+    // Include planning documents if available (persists across session resumption)
+    inject_planning_context(&mut prompt, planning_context);
+
     // Current user message
     prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
 
@@ -623,7 +682,7 @@ mod tests {
 
         let history: Vec<ChatMessage> = vec![];
         let prompt =
-            build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[], false);
+            build_prd_chat_prompt(&session, &history, "Create a PRD for a todo app", &[], false, None);
 
         assert!(prompt.contains("expert product manager"));
         assert!(prompt.contains("Create a PRD for a todo app"));
@@ -655,7 +714,7 @@ mod tests {
         ];
 
         let prompt =
-            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], false);
+            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], false, None);
 
         assert!(prompt.contains("Project path: /my/project"));
         assert!(prompt.contains("Conversation History"));
@@ -690,7 +749,7 @@ mod tests {
 
         // When has_external_session is true, history should be omitted (token savings)
         let prompt =
-            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], true);
+            build_prd_chat_prompt(&session, &history, "Add a due date feature", &[], true, None);
 
         assert!(prompt.contains("Project path: /my/project"));
         // History should NOT be included when resuming external session
@@ -712,6 +771,7 @@ mod tests {
             "Create epics for an auth system",
             &[],
             false,
+            None,
         );
 
         // Should include structured output instructions
@@ -730,11 +790,70 @@ mod tests {
         let session = make_test_session("test"); // structured_mode: false
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false);
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false, None);
 
         // Should NOT include structured output instructions
         assert!(!prompt.contains("STRUCTURED OUTPUT MODE"));
         assert!(!prompt.contains("JSON code block"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_with_planning_context() {
+        let session = make_test_session("test");
+
+        let planning_context = Some(PlanningContext {
+            summary: Some("# Research Summary\nThis is the research synthesis.".to_string()),
+            requirements: Some("# Requirements\n- Req 1\n- Req 2".to_string()),
+            roadmap: Some("# Roadmap\nPhase 1: MVP".to_string()),
+        });
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "What are the requirements?",
+            &[],
+            true, // Simulating session resumption
+            planning_context.as_ref(),
+        );
+
+        // Planning context should be included even when history is omitted
+        assert!(prompt.contains("=== Research Summary ==="));
+        assert!(prompt.contains("This is the research synthesis."));
+        assert!(prompt.contains("=== Requirements ==="));
+        assert!(prompt.contains("- Req 1"));
+        assert!(prompt.contains("=== Roadmap ==="));
+        assert!(prompt.contains("Phase 1: MVP"));
+        // History should not be included
+        assert!(!prompt.contains("Conversation History"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_with_partial_planning_context() {
+        let session = make_test_session("test");
+
+        // Only summary available
+        let planning_context = Some(PlanningContext {
+            summary: Some("# Research Summary\nOnly summary exists.".to_string()),
+            requirements: None,
+            roadmap: None,
+        });
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "What do we know so far?",
+            &[],
+            false,
+            planning_context.as_ref(),
+        );
+
+        // Only summary should be included
+        assert!(prompt.contains("=== Research Summary ==="));
+        assert!(prompt.contains("Only summary exists."));
+        assert!(!prompt.contains("=== Requirements ==="));
+        assert!(!prompt.contains("=== Roadmap ==="));
     }
 
     #[test]
