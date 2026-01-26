@@ -31,7 +31,7 @@ export function AppLayout() {
         <Sidebar className="hidden md:flex" />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/10">
+          <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/10 touch-scroll">
             <Outlet />
           </main>
           <TerminalPanel />

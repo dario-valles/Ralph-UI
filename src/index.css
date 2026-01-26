@@ -396,12 +396,36 @@ a:focus-visible,
   background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* Hide scrollbars on mobile for cleaner look */
-@media (max-width: 640px) {
+/* Touch devices: larger, more visible scrollbars for finger interaction */
+@media (pointer: coarse) {
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 12px;
+    height: 12px;
   }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.6);
+  }
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+/* Touch-optimized scrolling */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Utility to hide scrollbar while keeping scroll functionality */
