@@ -24,6 +24,7 @@ import type { RalphPrd, RalphPrdStatus, RalphLoopMetrics } from '@/types'
 import { formatAgentName, type AgentType } from '@/types/agent'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { getDefaultModel } from '@/lib/fallback-models'
+import { formatTokens } from '@/lib/api'
 import type { ConfigOverrides } from './hooks/useRalphLoopDashboard'
 import type { ModelInfo } from '@/lib/model-api'
 import { WorktreeActions } from './WorktreeActions'
@@ -82,13 +83,6 @@ function getShortStateLabel(label: string): string {
   return base
 }
 
-// Helper to format token counts
-function formatTokens(tokens: number): string {
-  if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(0)}K`
-  return String(tokens)
-}
-
 // Compact stat pill for mobile
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
@@ -99,23 +93,20 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-const StateIcon = ({ type, isRunning }: { type: string; isRunning: boolean }) => {
-  switch (type) {
-    case 'running':
-      return <Loader2 className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${isRunning ? 'animate-spin' : ''}`} />
-    case 'retrying':
-      return <RefreshCw className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-    case 'paused':
-      return <Pause className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-    case 'completed':
-      return <CheckCircle2 className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-    case 'failed':
-      return <XCircle className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-    case 'cancelled':
-      return <StopCircle className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-    default:
-      return <Circle className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" />
-  }
+// State type to icon mapping
+const STATE_ICONS: Record<string, typeof Circle> = {
+  running: Loader2,
+  retrying: RefreshCw,
+  paused: Pause,
+  completed: CheckCircle2,
+  failed: XCircle,
+  cancelled: StopCircle,
+}
+
+function StateIcon({ type, isRunning }: { type: string; isRunning: boolean }): React.JSX.Element {
+  const Icon = STATE_ICONS[type] ?? Circle
+  const spinClass = type === 'running' && isRunning ? 'animate-spin' : ''
+  return <Icon className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${spinClass}`} />
 }
 
 export function RalphLoopHeader({

@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -23,6 +24,19 @@ import { IterationHistoryView } from './IterationHistoryView'
 import { AssignmentsPanel } from './AssignmentsPanel'
 import { LearningsPanel } from './LearningsPanel'
 import { BriefViewer } from './BriefViewer'
+
+// Tab trigger styling - consistent across all tabs for mobile-first responsive design
+const TAB_TRIGGER_CLASSES =
+  'rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center'
+
+// Tab configuration for data-driven rendering
+interface TabConfig {
+  value: string
+  icon: LucideIcon
+  label?: string
+  getCount?: (props: DashboardTabsProps) => number | string
+  showMobileCount?: boolean
+}
 
 export interface DashboardTabsProps {
   // Data
@@ -59,29 +73,58 @@ export interface DashboardTabsProps {
   prdName: string
 }
 
-export function DashboardTabs({
-  prd,
-  prdStatus,
-  progress,
-  progressSummary,
-  commits,
-  iterationHistory,
-  currentAgentId,
-  activeExecutionId,
-  isRunning,
-  regeneratingStories,
-  activeTab,
-  setActiveTab,
-  isTreeVisible,
-  panelHeight,
-  containerRef,
-  onToggleTreeView,
-  onResizeStart,
-  onToggleStory,
-  onRegenerateClick,
-  projectPath,
-  prdName,
-}: DashboardTabsProps): React.JSX.Element {
+// Tab configuration - defines all dashboard tabs in a data-driven way
+const TABS: TabConfig[] = [
+  {
+    value: 'stories',
+    icon: CheckCircle2,
+    getCount: (props) => `${props.prdStatus?.passed ?? 0}/${props.prdStatus?.total ?? 0}`,
+    showMobileCount: true,
+  },
+  {
+    value: 'progress',
+    icon: BookOpen,
+    label: 'Progress',
+    getCount: (props) => props.progressSummary?.learningsCount ?? 0,
+  },
+  { value: 'terminal', icon: Terminal, label: 'Terminal' },
+  { value: 'commits', icon: GitCommit, label: 'Git' },
+  {
+    value: 'history',
+    icon: Clock,
+    label: 'History',
+    getCount: (props) => props.iterationHistory?.length ?? 0,
+    showMobileCount: true,
+  },
+  { value: 'agents', icon: Users, label: 'Agents' },
+  { value: 'learnings', icon: Lightbulb, label: 'Learnings' },
+  { value: 'brief', icon: FileText, label: 'Brief' },
+]
+
+export function DashboardTabs(props: DashboardTabsProps): React.JSX.Element {
+  const {
+    prd,
+    prdStatus,
+    progress,
+    commits,
+    iterationHistory,
+    currentAgentId,
+    activeExecutionId,
+    isRunning,
+    regeneratingStories,
+    activeTab,
+    setActiveTab,
+    isTreeVisible,
+    panelHeight,
+    containerRef,
+    onToggleTreeView,
+    onResizeStart,
+    onToggleStory,
+    onRegenerateClick,
+    projectPath,
+    prdName,
+  } = props
+
   return (
     <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
       <Tabs
@@ -93,102 +136,29 @@ export function DashboardTabs({
           {/* Horizontally scrollable tabs on mobile */}
           <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
             <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent inline-flex w-max">
-              {/* Stories - Primary tab */}
-              <TabsTrigger
-                value="stories"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title={`Stories (${prdStatus?.passed ?? 0}/${prdStatus?.total ?? 0})`}
-              >
-                <CheckCircle2 className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">
-                  ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
-                </span>
-                {/* Mobile badge indicator */}
-                {(prdStatus?.total ?? 0) > 0 && (
-                  <span className="sm:hidden ml-0.5 text-[9px] font-medium">
-                    {prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0}
-                  </span>
-                )}
-              </TabsTrigger>
+              {TABS.map((tab) => {
+                const Icon = tab.icon
+                const count = tab.getCount?.(props)
+                const displayCount = count !== undefined ? `(${count})` : ''
+                const title = tab.label ? `${tab.label} ${displayCount}`.trim() : displayCount
 
-              {/* Progress */}
-              <TabsTrigger
-                value="progress"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title={`Progress (${progressSummary?.learningsCount ?? 0})`}
-              >
-                <BookOpen className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">
-                  Progress ({progressSummary?.learningsCount ?? 0})
-                </span>
-              </TabsTrigger>
-
-              {/* Terminal */}
-              <TabsTrigger
-                value="terminal"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title="Terminal"
-              >
-                <Terminal className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Terminal</span>
-              </TabsTrigger>
-
-              {/* Git */}
-              <TabsTrigger
-                value="commits"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title="Git Commits"
-              >
-                <GitCommit className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Git</span>
-              </TabsTrigger>
-
-              {/* History */}
-              <TabsTrigger
-                value="history"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title={`History (${iterationHistory?.length ?? 0})`}
-              >
-                <Clock className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">
-                  History ({iterationHistory?.length ?? 0})
-                </span>
-                {(iterationHistory?.length ?? 0) > 0 && (
-                  <span className="sm:hidden ml-0.5 text-[9px] font-medium">
-                    {iterationHistory?.length ?? 0}
-                  </span>
-                )}
-              </TabsTrigger>
-
-              {/* Agents */}
-              <TabsTrigger
-                value="agents"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title="Agents"
-              >
-                <Users className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Agents</span>
-              </TabsTrigger>
-
-              {/* Learnings */}
-              <TabsTrigger
-                value="learnings"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title="Learnings"
-              >
-                <Lightbulb className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Learnings</span>
-              </TabsTrigger>
-
-              {/* Brief */}
-              <TabsTrigger
-                value="brief"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
-                title="Brief"
-              >
-                <FileText className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Brief</span>
-              </TabsTrigger>
+                return (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className={TAB_TRIGGER_CLASSES}
+                    title={title || tab.value}
+                  >
+                    <Icon className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                    <span className="hidden sm:inline">
+                      {tab.label ? `${tab.label} ${displayCount}`.trim() : displayCount}
+                    </span>
+                    {tab.showMobileCount && count && (
+                      <span className="sm:hidden ml-0.5 text-[9px] font-medium">{count}</span>
+                    )}
+                  </TabsTrigger>
+                )
+              })}
             </TabsList>
           </div>
           <Button
