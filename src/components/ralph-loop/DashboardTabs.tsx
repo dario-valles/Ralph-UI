@@ -11,6 +11,7 @@ import {
   FileText,
   Loader2,
   Sparkles,
+  Lightbulb,
 } from 'lucide-react'
 import type { RalphPrd, RalphPrdStatus, RalphProgressSummary, RalphStory, IterationRecord } from '@/types'
 import type { CommitInfo } from '@/lib/git-api'
@@ -92,67 +93,101 @@ export function DashboardTabs({
           {/* Horizontally scrollable tabs on mobile */}
           <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
             <TabsList className="justify-start rounded-none h-auto p-0 border-b-0 bg-transparent inline-flex w-max">
+              {/* Stories - Primary tab */}
               <TabsTrigger
                 value="stories"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title={`Stories (${prdStatus?.passed ?? 0}/${prdStatus?.total ?? 0})`}
               >
-                <CheckCircle2 className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden xs:inline">Stories </span>({prdStatus?.passed ?? 0}/
-                {prdStatus?.total ?? 0})
+                <CheckCircle2 className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">
+                  ({prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0})
+                </span>
+                {/* Mobile badge indicator */}
+                {(prdStatus?.total ?? 0) > 0 && (
+                  <span className="sm:hidden ml-0.5 text-[9px] font-medium">
+                    {prdStatus?.passed ?? 0}/{prdStatus?.total ?? 0}
+                  </span>
+                )}
               </TabsTrigger>
+
+              {/* Progress */}
               <TabsTrigger
                 value="progress"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title={`Progress (${progressSummary?.learningsCount ?? 0})`}
               >
-                <BookOpen className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden xs:inline">Progress </span>(
-                {progressSummary?.learningsCount ?? 0})
+                <BookOpen className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">
+                  Progress ({progressSummary?.learningsCount ?? 0})
+                </span>
               </TabsTrigger>
+
+              {/* Terminal */}
               <TabsTrigger
                 value="terminal"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title="Terminal"
               >
-                <Terminal className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                Terminal
+                <Terminal className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Terminal</span>
               </TabsTrigger>
+
+              {/* Git */}
               <TabsTrigger
                 value="commits"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title="Git Commits"
               >
-                <GitCommit className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Commits</span>
-                <span className="sm:hidden">Git</span>
+                <GitCommit className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Git</span>
               </TabsTrigger>
+
+              {/* History */}
               <TabsTrigger
                 value="history"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title={`History (${iterationHistory?.length ?? 0})`}
               >
-                <Clock className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <Clock className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
                 <span className="hidden sm:inline">
                   History ({iterationHistory?.length ?? 0})
                 </span>
-                <span className="sm:hidden">{iterationHistory?.length ?? 0}</span>
+                {(iterationHistory?.length ?? 0) > 0 && (
+                  <span className="sm:hidden ml-0.5 text-[9px] font-medium">
+                    {iterationHistory?.length ?? 0}
+                  </span>
+                )}
               </TabsTrigger>
+
+              {/* Agents */}
               <TabsTrigger
                 value="agents"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title="Agents"
               >
-                <Users className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                Agents
+                <Users className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Agents</span>
               </TabsTrigger>
+
+              {/* Learnings */}
               <TabsTrigger
                 value="learnings"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title="Learnings"
               >
-                <BookOpen className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                Learnings
+                <Lightbulb className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Learnings</span>
               </TabsTrigger>
+
+              {/* Brief */}
               <TabsTrigger
                 value="brief"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1 sm:py-1.5 px-1.5 sm:px-2 whitespace-nowrap"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] sm:text-xs py-1.5 sm:py-2 px-2 sm:px-3 whitespace-nowrap min-w-[44px] min-h-[44px] flex items-center justify-center"
+                title="Brief"
               >
-                <FileText className="mr-1 sm:mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                Brief
+                <FileText className="h-4 w-4 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Brief</span>
               </TabsTrigger>
             </TabsList>
           </div>

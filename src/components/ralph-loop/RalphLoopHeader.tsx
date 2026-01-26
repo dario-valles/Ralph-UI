@@ -72,6 +72,33 @@ export interface RalphLoopHeaderProps {
   onOpenInEditor: () => void
 }
 
+// Helper to get abbreviated state label for mobile
+function getShortStateLabel(label: string): string {
+  // "Running (Iteration 5)" -> "Running"
+  // "Completed (underspec)" -> "Done"
+  // "Failed (test)" -> "Failed"
+  const base = label.split('(')[0].trim()
+  if (base === 'Completed') return 'Done'
+  return base
+}
+
+// Helper to format token counts
+function formatTokens(tokens: number): string {
+  if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(0)}K`
+  return String(tokens)
+}
+
+// Compact stat pill for mobile
+function StatPill({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50 border border-border/50 whitespace-nowrap flex-shrink-0">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold">{value}</span>
+    </div>
+  )
+}
+
 const StateIcon = ({ type, isRunning }: { type: string; isRunning: boolean }) => {
   switch (type) {
     case 'running':
@@ -136,9 +163,12 @@ export function RalphLoopHeader({
               <Badge
                 variant={stateDisplay.color as 'default' | 'secondary' | 'destructive' | 'outline'}
                 className="text-[10px] sm:text-xs flex-shrink-0"
+                title={stateDisplay.label}
               >
                 <StateIcon type={stateDisplay.type} isRunning={isRunning} />
-                <span className="truncate max-w-[100px] sm:max-w-none">{stateDisplay.label}</span>
+                {/* Short label on mobile, full on sm+ */}
+                <span className="sm:hidden">{getShortStateLabel(stateDisplay.label)}</span>
+                <span className="hidden sm:inline">{stateDisplay.label}</span>
               </Badge>
             </div>
             <CardDescription className="text-[10px] sm:text-xs mt-0.5">
@@ -343,7 +373,12 @@ export function RalphLoopHeader({
                 <Play className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               )}
               <span className="truncate">
-                {prdStatus?.allPass ? 'All Pass' : 'Start Ralph Loop'}
+                {prdStatus?.allPass ? 'All Pass' : (
+                  <>
+                    <span className="sm:hidden">Start Loop</span>
+                    <span className="hidden sm:inline">Start Ralph Loop</span>
+                  </>
+                )}
               </span>
             </Button>
           )}
@@ -376,34 +411,40 @@ export function RalphLoopHeader({
 
         {/* Metrics */}
         {executionMetrics && (
-          <div className="grid grid-cols-4 gap-1 sm:gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
-            <div className="text-center">
-              <div className="text-sm sm:text-lg font-semibold">
-                {executionMetrics.totalIterations ?? 0}
-              </div>
-              <div className="text-[8px] sm:text-[10px] text-muted-foreground">Iterations</div>
+          <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
+            {/* Mobile: Horizontal scrollable compact pills */}
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide sm:hidden pb-1">
+              <StatPill label="Iter" value={executionMetrics.totalIterations ?? 0} />
+              <StatPill label="Done" value={executionMetrics.storiesCompleted ?? 0} />
+              <StatPill label="Tokens" value={formatTokens(executionMetrics.totalTokens ?? 0)} />
+              <StatPill label="Cost" value={`$${(executionMetrics.totalCost ?? 0).toFixed(2)}`} />
             </div>
-            <div className="text-center">
-              <div className="text-sm sm:text-lg font-semibold">
-                {executionMetrics.storiesCompleted ?? 0}
+            {/* Desktop: Original grid */}
+            <div className="hidden sm:grid grid-cols-4 gap-2">
+              <div className="text-center">
+                <div className="text-lg font-semibold">
+                  {executionMetrics.totalIterations ?? 0}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Iterations</div>
               </div>
-              <div className="text-[8px] sm:text-[10px] text-muted-foreground">Done</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm sm:text-lg font-semibold">
-                {executionMetrics.totalTokens >= 1000000
-                  ? `${(executionMetrics.totalTokens / 1000000).toFixed(1)}M`
-                  : executionMetrics.totalTokens >= 1000
-                    ? `${(executionMetrics.totalTokens / 1000).toFixed(0)}K`
-                    : (executionMetrics.totalTokens ?? 0)}
+              <div className="text-center">
+                <div className="text-lg font-semibold">
+                  {executionMetrics.storiesCompleted ?? 0}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Done</div>
               </div>
-              <div className="text-[8px] sm:text-[10px] text-muted-foreground">Tokens</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm sm:text-lg font-semibold">
-                ${(executionMetrics.totalCost ?? 0).toFixed(2)}
+              <div className="text-center">
+                <div className="text-lg font-semibold">
+                  {formatTokens(executionMetrics.totalTokens ?? 0)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Tokens</div>
               </div>
-              <div className="text-[8px] sm:text-[10px] text-muted-foreground">Cost</div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">
+                  ${(executionMetrics.totalCost ?? 0).toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Cost</div>
+              </div>
             </div>
           </div>
         )}

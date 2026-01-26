@@ -24,11 +24,15 @@ export function TerminalPanel({
 }: TerminalPanelProps): React.JSX.Element {
   if (!currentAgentId || !activeExecutionId) {
     return (
-      <div className="h-full min-h-[200px] bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <Terminal className="h-12 w-12 text-zinc-600 mx-auto mb-2" />
-          <p className="text-zinc-500">No active agent</p>
-          <p className="text-sm text-zinc-600">Start the Ralph Loop to see terminal output</p>
+      <div className="h-full min-h-[80px] sm:min-h-[120px] bg-zinc-950 flex items-center justify-center px-4">
+        <div className="flex items-center gap-3 text-zinc-500">
+          <Terminal className="h-5 w-5 sm:h-6 sm:w-6 text-zinc-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium">No active agent</p>
+            <p className="text-xs text-zinc-600 hidden sm:block">
+              Start the Ralph Loop to see terminal output
+            </p>
+          </div>
         </div>
       </div>
     )
