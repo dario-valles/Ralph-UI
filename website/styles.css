@@ -246,6 +246,35 @@ body {
   max-width: 440px;
 }
 
+/* Hero Stats */
+.hero-stats {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 /* Command Block */
 .command-block {
   background: var(--bg-card);
@@ -744,6 +773,90 @@ body {
   letter-spacing: 0.05em;
 }
 
+/* Agents Section */
+.agents {
+  padding: 4rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .agents {
+    padding: 6rem 2rem;
+  }
+}
+
+.agents .section-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .agents-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .agents-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+  }
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: all 0.3s var(--ease-out);
+  text-align: center;
+}
+
+.agent-card:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.agent-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.agent-card:hover .agent-icon {
+  opacity: 1;
+}
+
+.agent-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-vendor {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
 /* Features Section */
 .features {
   padding: 6rem 1.5rem;
@@ -843,6 +956,41 @@ body {
   font-size: 0.9rem;
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+/* Featured Feature Cards */
+.feature-card.featured {
+  position: relative;
+  border-color: var(--accent-border);
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(34, 197, 94, 0.05) 100%);
+}
+
+.feature-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+}
+
+/* Responsive Features Grid for 12 items */
+@media (min-width: 1024px) {
+  .features-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .features-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 /* Quick Start Section */
