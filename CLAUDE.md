@@ -323,6 +323,7 @@ PRD Chat uses native CLI session resumption to avoid resending full conversation
 | Qwen Code | `--continue` | [Qwen Code Docs](https://github.com/QwenLM/Qwen-Agent) |
 | OpenCode | `--session <session-id>` | [OpenCode Docs](https://github.com/opencode-ai/opencode) |
 | Droid | `--session-id <session-id>` | [Factory Droid CLI](https://docs.factory.ai/reference/cli-reference) |
+| Gemini | `--resume <session-id>` | [Gemini Docs](https://geminicli.com/docs/) |
 
 **Key files:**
 - `server/src/commands/prd_chat/agent_executor.rs` - `build_agent_command()` with resume flags
