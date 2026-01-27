@@ -56,6 +56,9 @@ pub struct AgentSpawnConfig {
     /// Environment variables to inject when spawning the agent
     /// Used for alternative API providers (z.ai, MiniMax)
     pub env_vars: Option<HashMap<String, String>>,
+    /// Disable all tools for this agent spawn (for pure text generation tasks)
+    /// When true, the agent will run with `--tools ""` to prevent tool usage
+    pub disable_tools: bool,
 }
 
 /// Agent lifecycle manager
@@ -1554,6 +1557,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);
@@ -1577,6 +1581,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);
@@ -1600,6 +1605,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);
@@ -1623,6 +1629,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);
@@ -1646,6 +1653,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);
@@ -1669,6 +1677,7 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         let result = manager.build_command(&config);

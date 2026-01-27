@@ -338,6 +338,7 @@ openai/gpt-4o
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         // This test depends on environment, so we just check if it fails or returns command

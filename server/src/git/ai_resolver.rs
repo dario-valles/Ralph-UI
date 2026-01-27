@@ -223,6 +223,7 @@ Output ONLY the final resolved file content, with no conflict markers, no explan
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: self.config.env_vars.clone(),
+            disable_tools: false,
         };
 
         // Build the command using the provider

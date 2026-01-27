@@ -126,14 +126,32 @@ impl AgentPlugin for ClaudeProvider {
 
         // Add max turns (iterations) - only if greater than 0
         // max_iterations of 0 or negative means no limit (don't pass flag)
-        if config.max_iterations > 0 {
-            cmd.arg("--max-turns")
-                .arg(config.max_iterations.to_string());
+        // When disable_tools is true, we force max_turns=1 to get a single response
+        let max_turns = if config.disable_tools && config.max_iterations == 0 {
+            1 // Force single turn for pure text generation
+        } else {
+            config.max_iterations
+        };
+
+        if max_turns > 0 {
+            cmd.arg("--max-turns").arg(max_turns.to_string());
         }
 
         // Add model if specified
         if let Some(model) = &config.model {
             cmd.arg("--model").arg(model);
+        }
+
+        // Disable all built-in tools for pure text generation tasks (e.g., JSON generation)
+        // This prevents the model from using file operations and focuses on text output
+        // Note: MCP tools may still be available but --max-turns 1 limits their usage
+        if config.disable_tools {
+            // Use --tools="" as a single argument to ensure the empty string is passed correctly
+            cmd.arg("--tools=");
+            log::info!(
+                "[ClaudeProvider] Tools disabled for task {}",
+                config.task_id
+            );
         }
 
         // Add the prompt as the LAST positional argument
@@ -280,10 +298,59 @@ mod tests {
             spawn_mode: AgentSpawnMode::Piped,
             plugin_config: None,
             env_vars: None,
+            disable_tools: false,
         };
 
         // This test depends on environment, so we just check if it fails or returns command
         // if claude is not installed it returns Err, otherwise Ok
         let _ = provider.build_command(&config);
+    }
+
+    #[test]
+    fn test_build_command_with_disabled_tools() {
+        let provider = ClaudeProvider::new();
+        let config = AgentSpawnConfig {
+            agent_type: AgentType::Claude,
+            task_id: "test-task".to_string(),
+            worktree_path: "/tmp".to_string(),
+            branch: "main".to_string(),
+            max_iterations: 0,
+            prompt: Some("Generate JSON".to_string()),
+            model: None,
+            spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
+            env_vars: None,
+            disable_tools: true,
+        };
+
+        // This test verifies the command is built (or fails if Claude not installed)
+        // When disable_tools is true and max_iterations is 0, we expect:
+        // 1. --max-turns 1 to force single turn
+        // 2. --tools= to disable built-in tools
+        if let Ok(cmd) = provider.build_command(&config) {
+            let args: Vec<_> = cmd.get_args().collect();
+
+            // Check that --max-turns is set to 1
+            let max_turns_idx = args.iter().position(|a| *a == "--max-turns");
+            assert!(
+                max_turns_idx.is_some(),
+                "Expected --max-turns flag when disable_tools is true with max_iterations=0"
+            );
+            if let Some(idx) = max_turns_idx {
+                assert!(idx + 1 < args.len(), "Expected value after --max-turns");
+                assert_eq!(
+                    args[idx + 1],
+                    "1",
+                    "Expected --max-turns 1 for disable_tools"
+                );
+            }
+
+            // Check that --tools= flag is present
+            let has_tools_empty = args.iter().any(|a| *a == "--tools=");
+            assert!(
+                has_tools_empty,
+                "Expected --tools= flag when disable_tools is true"
+            );
+        }
     }
 }

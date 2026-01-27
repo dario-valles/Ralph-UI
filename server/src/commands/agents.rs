@@ -470,6 +470,7 @@ pub fn get_agent_command_line(
         spawn_mode: AgentSpawnMode::Pty,
         plugin_config,
         env_vars: None,
+        disable_tools: false,
     };
 
     let manager = agent_manager

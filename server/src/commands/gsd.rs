@@ -1022,9 +1022,6 @@ pub struct GenerateRequirementsResult {
     pub count: usize,
 }
 
-/// Maximum output size from agent (1MB)
-const MAX_OUTPUT_SIZE: usize = 1024 * 1024;
-
 /// Agent execution timeout in seconds (5 minutes)
 const AGENT_TIMEOUT_SECS: u64 = 300;
 
@@ -1142,7 +1139,7 @@ pub async fn generate_requirements_from_prompt(
     log::info!("[GenerateRequirements] Running {agent:?} to generate {target_count} requirements");
     broadcast_status(&app_handle, &session_id, "running", None);
 
-    // Spawn the agent
+    // Spawn the agent with tools disabled (pure text generation task)
     let spawn_config = AgentSpawnConfig {
         agent_type: agent.clone(),
         task_id: format!("req-gen-{}", uuid::Uuid::new_v4()),
@@ -1154,6 +1151,7 @@ pub async fn generate_requirements_from_prompt(
         spawn_mode: AgentSpawnMode::Piped,
         plugin_config: None,
         env_vars,
+        disable_tools: true, // No tools needed for JSON generation
     };
 
     let std_cmd = provider
@@ -1170,15 +1168,15 @@ pub async fn generate_requirements_from_prompt(
     let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
 
     // Read output with size limit and timeout
-    let mut output = vec![0u8; MAX_OUTPUT_SIZE];
+    let mut output = Vec::new(); // Dynamic buffer
     let read_result = tokio::time::timeout(
         tokio::time::Duration::from_secs(AGENT_TIMEOUT_SECS),
-        stdout.read(&mut output),
+        stdout.read_to_end(&mut output), // Read UNTIL EOF
     )
     .await;
 
-    let bytes_read = match read_result {
-        Ok(Ok(n)) => n,
+    match read_result {
+        Ok(Ok(_)) => {} // Success
         Ok(Err(e)) => {
             let _ = child.kill().await;
             broadcast_status(
@@ -1201,7 +1199,6 @@ pub async fn generate_requirements_from_prompt(
         }
     };
 
-    output.truncate(bytes_read);
     let output_str = String::from_utf8_lossy(&output);
 
     // Log raw AI output for debugging
@@ -1303,9 +1300,81 @@ fn parse_requirement_item(
     })
 }
 
+/// Extract content from stream-json output (similar to research/orchestrator.rs)
+fn extract_content_from_stream(raw_output: &str) -> Result<String, String> {
+    use serde_json::Value;
+
+    // Search from the end for the "result" message
+    for line in raw_output.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Ok(json) = serde_json::from_str::<Value>(line) {
+            // Look for {"type":"result","subtype":"success","result":"..."}
+            if json.get("type").and_then(|t| t.as_str()) == Some("result") {
+                if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
+                    if !result.trim().is_empty() {
+                        return Ok(result.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: collect text from assistant messages
+    let mut content = String::new();
+    for line in raw_output.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Ok(json) = serde_json::from_str::<Value>(line) {
+            if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                if let Some(msg) = json.get("message") {
+                    if let Some(content_arr) = msg.get("content").and_then(|c| c.as_array()) {
+                        for item in content_arr {
+                            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                    content.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if content.trim().is_empty() {
+        // If we couldn't extract any structured content, check if the raw output
+        // is already clean content (not JSON stream)
+        let first_char = raw_output.trim().chars().next();
+        if first_char.is_some() && first_char != Some('{') {
+            // Doesn't look like JSON stream, might already be clean content
+            return Ok(raw_output.to_string());
+        }
+
+        // One final check: try to find the JSON array directly in the raw output
+        // This handles cases where extract_json_array might find it even if stream parsing failed
+        if let Some(json) = extract_json_array(raw_output) {
+            return Ok(json);
+        }
+
+        Err("Could not extract content from agent output".to_string())
+    } else {
+        Ok(content.trim().to_string())
+    }
+}
+
 /// Parse generated requirements from AI agent output
 fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement>, String> {
-    let json_str = extract_json_array(output).ok_or_else(|| {
+    // First try to extract content from stream-json format
+    let clean_output = extract_content_from_stream(output).unwrap_or_else(|_| output.to_string());
+
+    let json_str = extract_json_array(&clean_output).ok_or_else(|| {
         // Check if there's a single object instead of array
         let trimmed = output.trim();
         if trimmed.starts_with('{') && !trimmed.starts_with('[') {
@@ -1340,27 +1409,45 @@ fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement
     );
 
     // Detect if AI returned tool names instead of requirement objects
-    if !parsed.is_empty()
-        && parsed.iter().all(|v| v.is_string())
-        && parsed.iter().all(|v| {
+    // This can happen when Claude Code outputs its tool inventory instead of following the prompt
+    if !parsed.is_empty() && parsed.iter().all(|v| v.is_string()) {
+        let known_tool_patterns: &[&str] = &[
+            "Task",
+            "TaskOutput",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Read",
+            "Edit",
+            "Write",
+            "WebFetch",
+            "WebSearch",
+            "TodoWrite",
+            "TodoRead",
+            "Skill",
+            "AskUserQuestion",
+            "TaskStop",
+            "NotebookEdit",
+            "ExitPlanMode",
+            "EnterPlanMode",
+        ];
+
+        let is_tool_list = parsed.iter().all(|v| {
             v.as_str()
                 .map(|s| {
-                    s == "Task"
-                        || s == "TaskOutput"
-                        || s == "Bash"
-                        || s == "Glob"
-                        || s == "Grep"
-                        || s == "Read"
-                        || s == "Edit"
-                        || s == "Write"
-                        || s.starts_with("mcp__")
+                    known_tool_patterns.contains(&s)
+                        || s.starts_with("mcp__")      // Standard MCP prefix
+                        || s.starts_with("mcp_")       // Alternative MCP prefix (e.g., mcp_dart__)
+                        || s.ends_with("_tool") // Common tool suffix
                 })
                 .unwrap_or(false)
-        })
-    {
-        return Err(
-            "The AI returned a list of tool names instead of requirement objects. This indicates the AI misunderstood the task. Please try again or use a different AI provider/model.".to_string()
-        );
+        });
+
+        if is_tool_list {
+            return Err(
+                "The AI returned a list of tool names instead of requirement objects. This indicates the AI misunderstood the task. Please try again or use a different AI provider/model.".to_string()
+            );
+        }
     }
 
     let mut requirements = Vec::new();
@@ -1632,6 +1719,34 @@ pub async fn add_generated_requirements(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_extract_content_from_stream() {
+        let raw = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"[{\"title\":\"Test\"}]"}]}}
+{"type":"result","subtype":"success","result":"[{\"title\":\"Test\"}]"}"#;
+
+        // Should prefer the "result" message
+        let content = extract_content_from_stream(raw).unwrap();
+        assert_eq!(content, "[{\"title\":\"Test\"}]");
+    }
+
+    #[test]
+    fn test_extract_content_from_stream_fallback() {
+        let raw = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"[{\"title\":\"Fallback\"}]"}]}}"#;
+
+        // Should fallback to assistant message
+        let content = extract_content_from_stream(raw).unwrap();
+        assert_eq!(content, "[{\"title\":\"Fallback\"}]");
+    }
+
+    #[test]
+    fn test_extract_content_from_raw_text() {
+        let raw = r#"[{"title":"Raw"}]"#;
+
+        // Should handle raw text
+        let content = extract_content_from_stream(raw).unwrap();
+        assert_eq!(content, r#"[{"title":"Raw"}]"#);
+    }
 
     #[test]
     fn test_parse_requirement_item_with_empty_object() {

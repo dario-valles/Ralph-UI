@@ -945,6 +945,7 @@ impl RalphLoopOrchestrator {
                 spawn_mode: AgentSpawnMode::Pty,
                 plugin_config: None,
                 env_vars: self.config.env_vars.clone(),
+                disable_tools: false,
             };
             log::debug!(
                 "[RalphLoop] Spawn config: worktree={}, branch={:?}, model={:?}",
