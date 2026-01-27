@@ -32,6 +32,11 @@ pub async fn route_agent_command(
     state: &ServerAppState,
 ) -> Result<Value, String> {
     match cmd {
+        "get_all_agents_status" => {
+            let result = commands::agents::get_all_agents_status();
+            serde_json::to_value(result).map_err(|e| e.to_string())
+        }
+
         "create_agent" => {
             let agent: Agent = get_arg(&args, "agent")?;
             let project_path: String = get_arg(&args, "projectPath")?;
@@ -202,7 +207,8 @@ pub async fn route_agent_command(
 pub fn is_agent_command(cmd: &str) -> bool {
     matches!(
         cmd,
-        "create_agent"
+        "get_all_agents_status"
+            | "create_agent"
             | "get_agent"
             | "get_agents_for_session"
             | "get_agents_for_task"

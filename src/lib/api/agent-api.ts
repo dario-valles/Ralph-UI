@@ -1,11 +1,24 @@
 // Frontend API for agent management
 
-import type { Agent, AgentStatus, LogEntry } from '@/types'
+import type { Agent, AgentStatus, AgentStatusInfo, LogEntry } from '@/types'
 import { invoke } from '../invoke'
 
 // Re-export types for backwards compatibility
-export type { Agent, AgentStatus, LogEntry }
+export type { Agent, AgentStatus, AgentStatusInfo, LogEntry }
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
+
+// ============================================================================
+// Agent Detection / Status (for onboarding and settings)
+// ============================================================================
+
+/**
+ * Get status information for all supported AI agents.
+ * Returns availability, display name, CLI command, and installation hints.
+ * Used in onboarding and settings to help users configure their agents.
+ */
+export async function getAllAgentsStatus(): Promise<AgentStatusInfo[]> {
+  return invoke<AgentStatusInfo[]>('get_all_agents_status')
+}
 
 // Agent CRUD operations
 

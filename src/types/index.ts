@@ -30,7 +30,7 @@ export type {
 // Agent Types
 // ============================================================================
 
-export type { AgentType, AgentStatus, LogEntry, Agent } from './agent'
+export type { AgentType, AgentStatus, LogEntry, Agent, AgentStatusInfo } from './agent'
 export {
   formatAgentName,
   parseAgentWithProvider,

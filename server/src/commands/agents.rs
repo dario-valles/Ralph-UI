@@ -1,7 +1,7 @@
 // Agent management commands
 // Uses file-based storage in .ralph-ui/agents/
 
-use crate::agents::{AgentManager, AgentSpawnConfig, AgentSpawnMode};
+use crate::agents::{providers, AgentManager, AgentSpawnConfig, AgentSpawnMode};
 use crate::file_storage::agents as agent_storage;
 use crate::models::{Agent, AgentStatus, AgentType, LogEntry};
 use crate::utils::as_path;
@@ -9,6 +9,85 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use sysinfo::{Pid, System};
+
+// ============================================================================
+// Agent Status/Detection Commands - for onboarding and settings
+// ============================================================================
+
+/// Status information for an AI agent CLI tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatusInfo {
+    /// The agent type identifier
+    pub agent_type: AgentType,
+    /// Whether the agent CLI is available on the system
+    pub available: bool,
+    /// Human-readable display name
+    pub display_name: String,
+    /// The CLI command name (e.g., "claude", "cursor-agent")
+    pub cli_command: String,
+    /// Installation hint/command for users who don't have it
+    pub install_hint: String,
+}
+
+/// Get display name for an agent type
+fn get_agent_display_name(agent_type: AgentType) -> &'static str {
+    match agent_type {
+        AgentType::Claude => "Claude Code",
+        AgentType::Opencode => "OpenCode",
+        AgentType::Cursor => "Cursor Agent",
+        AgentType::Codex => "Codex CLI",
+        AgentType::Qwen => "Qwen Code",
+        AgentType::Droid => "Droid",
+        AgentType::Gemini => "Gemini CLI",
+    }
+}
+
+/// Get CLI command name for an agent type
+fn get_agent_cli_command(agent_type: AgentType) -> &'static str {
+    match agent_type {
+        AgentType::Claude => "claude",
+        AgentType::Opencode => "opencode",
+        AgentType::Cursor => "cursor-agent",
+        AgentType::Codex => "codex",
+        AgentType::Qwen => "qwen",
+        AgentType::Droid => "droid",
+        AgentType::Gemini => "gemini",
+    }
+}
+
+/// Get installation hint for an agent type
+fn get_agent_install_hint(agent_type: AgentType) -> &'static str {
+    match agent_type {
+        AgentType::Claude => "npm install -g @anthropic-ai/claude-code",
+        AgentType::Opencode => "See https://github.com/opencode-ai/opencode",
+        AgentType::Cursor => "Install Cursor IDE from https://cursor.com",
+        AgentType::Codex => "npm install -g @openai/codex",
+        AgentType::Qwen => "pip install qwen-agent",
+        AgentType::Droid => "npm install -g @factory-ai/droid",
+        AgentType::Gemini => "npm install -g @anthropic-ai/gemini-cli",
+    }
+}
+
+/// Get status information for all supported AI agents
+/// Uses the providers to check which agents are available on the system
+pub fn get_all_agents_status() -> Vec<AgentStatusInfo> {
+    AgentType::all()
+        .iter()
+        .map(|&agent_type| {
+            let provider = providers::get_provider(&agent_type);
+            let available = provider.is_available();
+
+            AgentStatusInfo {
+                agent_type,
+                available,
+                display_name: get_agent_display_name(agent_type).to_string(),
+                cli_command: get_agent_cli_command(agent_type).to_string(),
+                install_hint: get_agent_install_hint(agent_type).to_string(),
+            }
+        })
+        .collect()
+}
 
 /// Create a new agent
 pub fn create_agent(agent: Agent, project_path: String) -> Result<(), String> {

@@ -9,6 +9,7 @@ import { ToastContainer } from './components/ui/toast'
 import { ServerUpdateBanner } from './components/ServerUpdateBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ServerConnectionDialog } from './components/ServerConnectionDialog'
+import { AgentSetupDialog } from './components/onboarding/AgentSetupDialog'
 import { useServerConnection } from './hooks/useServerConnection'
 import { useProjectStore } from './stores/projectStore'
 import { ralphLoopApi } from './lib/backend-api'
@@ -34,7 +35,8 @@ function GlobalNotificationListener(): null {
 function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects)
   const projects = useProjectStore((state) => state.projects)
-  const { isConnected, showDialog, handleConnected } = useServerConnection()
+  const { isConnected, showDialog, showAgentSetup, handleConnected, handleAgentSetupComplete } =
+    useServerConnection()
 
   useEffect(() => {
     // Only load projects and setup listeners when connected
@@ -85,6 +87,9 @@ function App() {
     <ErrorBoundary>
       {/* Show connection dialog in browser mode when not connected */}
       {showDialog && <ServerConnectionDialog onConnected={handleConnected} />}
+
+      {/* Show agent setup dialog after connection for first-time users */}
+      <AgentSetupDialog open={showAgentSetup} onComplete={handleAgentSetupComplete} />
 
       <BrowserRouter>
         <GlobalNotificationListener />

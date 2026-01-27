@@ -92,3 +92,17 @@ export interface Agent {
   logs: LogEntry[]
   subagents: Agent[] // Nested agent calls
 }
+
+/** Status information for an AI agent CLI tool */
+export interface AgentStatusInfo {
+  /** The agent type identifier */
+  agentType: AgentType
+  /** Whether the agent CLI is available on the system */
+  available: boolean
+  /** Human-readable display name */
+  displayName: string
+  /** The CLI command name (e.g., "claude", "cursor-agent") */
+  cliCommand: string
+  /** Installation hint/command for users who don't have it */
+  installHint: string
+}

@@ -11,6 +11,7 @@ import { NotificationSettings } from './NotificationSettings'
 import { TemplateSettings } from './TemplateSettings'
 import { UISettings } from './UISettings'
 import { ApiProviderSettings } from './ApiProviderSettings'
+import { AgentsTab } from './AgentsTab'
 
 export function SettingsPage() {
   const {
@@ -141,6 +142,9 @@ export function SettingsPage() {
           <TabsTrigger value="execution" className="text-xs sm:text-sm">
             Execution
           </TabsTrigger>
+          <TabsTrigger value="agents" className="text-xs sm:text-sm">
+            Agents
+          </TabsTrigger>
           <TabsTrigger value="git" className="text-xs sm:text-sm">
             Git
           </TabsTrigger>
@@ -167,6 +171,11 @@ export function SettingsPage() {
         {/* Execution Settings */}
         <TabsContent value="execution" className="space-y-4">
           <ExecutionSettings config={config} updateExecutionConfig={updateExecutionConfig} />
+        </TabsContent>
+
+        {/* Agents Settings */}
+        <TabsContent value="agents" className="space-y-4">
+          <AgentsTab />
         </TabsContent>
 
         {/* Git Settings */}
