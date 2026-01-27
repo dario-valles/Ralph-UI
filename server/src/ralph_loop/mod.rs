@@ -1030,49 +1030,72 @@ impl RalphLoopOrchestrator {
             );
 
             // Step 2: Wait on the process WITHOUT holding the manager lock
-            // Use configurable timeout (0 = no timeout, wait indefinitely)
+            // Use polling-based wait that checks cancellation flag periodically
             let timeout_secs = self.config.agent_timeout_secs;
 
             let exit_code = match child_process {
                 Some(mut child) => {
-                    if timeout_secs == 0 {
-                        // No timeout - wait indefinitely
-                        log::debug!("[RalphLoop] Waiting for agent process (no timeout)...");
-                        match child.wait() {
-                            Ok(status) => status.code().unwrap_or(-1),
-                            Err(e) => {
-                                let manager = lock_mutex_recover(&agent_manager_arc);
-                                manager.unregister_pty(&agent_id);
-                                self.current_agent_id = None;
-                                return Err(format!("Failed to wait for agent: {}", e));
-                            }
-                        }
+                    log::debug!(
+                        "[RalphLoop] Waiting for agent process (timeout: {}s, 0=indefinite)...",
+                        timeout_secs
+                    );
+
+                    // Poll-based wait with cancellation checking
+                    let poll_interval = std::time::Duration::from_millis(250);
+                    let start = std::time::Instant::now();
+                    let timeout = if timeout_secs > 0 {
+                        Some(std::time::Duration::from_secs(timeout_secs))
                     } else {
-                        log::debug!(
-                            "[RalphLoop] Waiting for agent process (timeout: {}s)...",
-                            timeout_secs
-                        );
+                        None // No timeout
+                    };
 
-                        // Use polling-based wait with timeout
-                        match AgentManager::wait_with_timeout(&mut child, timeout_secs) {
-                            Ok(Some(code)) => code,
+                    loop {
+                        // Check for cancellation first
+                        if *lock_mutex_recover(&self.cancelled) {
+                            log::info!(
+                                "[RalphLoop] Cancellation detected during agent wait, killing process"
+                            );
+                            let _ = child.kill();
+                            let _ = child.wait(); // Clean up zombie
+
+                            // Clean up agent PTY
+                            let manager = lock_mutex_recover(&agent_manager_arc);
+                            manager.unregister_pty(&agent_id);
+                            self.current_agent_id = None;
+
+                            // Return a special marker - the outer loop will handle the cancelled state
+                            // We use -999 as a sentinel value for "cancelled"
+                            break -999;
+                        }
+
+                        // Check if process has exited
+                        match child.try_wait() {
+                            Ok(Some(status)) => {
+                                break status.code().unwrap_or(-1);
+                            }
                             Ok(None) => {
-                                // Timeout - kill the process
-                                log::warn!(
-                                    "[RalphLoop] Agent timed out after {}s, killing process",
-                                    timeout_secs
-                                );
-                                let _ = child.kill();
-                                let _ = child.wait(); // Clean up zombie
+                                // Process still running, check timeout
+                                if let Some(t) = timeout {
+                                    if start.elapsed() >= t {
+                                        log::warn!(
+                                            "[RalphLoop] Agent timed out after {}s, killing process",
+                                            timeout_secs
+                                        );
+                                        let _ = child.kill();
+                                        let _ = child.wait(); // Clean up zombie
 
-                                // Clean up agent PTY
-                                let manager = lock_mutex_recover(&agent_manager_arc);
-                                manager.unregister_pty(&agent_id);
-                                self.current_agent_id = None;
-                                return Err(format!(
-                                    "Agent timed out after {} seconds",
-                                    timeout_secs
-                                ));
+                                        // Clean up agent PTY
+                                        let manager = lock_mutex_recover(&agent_manager_arc);
+                                        manager.unregister_pty(&agent_id);
+                                        self.current_agent_id = None;
+                                        return Err(format!(
+                                            "Agent timed out after {} seconds",
+                                            timeout_secs
+                                        ));
+                                    }
+                                }
+                                // Sleep briefly before next poll
+                                std::thread::sleep(poll_interval);
                             }
                             Err(e) => {
                                 // Clean up agent PTY before returning error
@@ -1092,6 +1115,22 @@ impl RalphLoopOrchestrator {
                     return Err(format!("Agent process not found: {}", agent_id));
                 }
             };
+
+            // Check if we were cancelled (sentinel value -999)
+            if exit_code == -999 {
+                // Return early - the main loop will detect the cancelled flag
+                // and transition to Cancelled state
+                return Ok(IterationResult {
+                    exit_code: -1,
+                    token_metrics: TokenMetrics::default(),
+                    story_id: None,
+                    story_completed: false,
+                    completion_detected: false,
+                    retry_attempts: attempt,
+                    was_retried: attempt > 1,
+                    rate_limit_detected: false,
+                });
+            }
 
             // Step 3: Emit the exit log (quick lock/unlock)
             {
