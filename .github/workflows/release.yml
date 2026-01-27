@@ -21,9 +21,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS
+          # macOS (both build on ARM64 runner, x86_64 cross-compiles)
           - target: x86_64-apple-darwin
-            os: macos-15-large
+            os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
           # Linux
