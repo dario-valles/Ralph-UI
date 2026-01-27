@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// Version of the projects registry format
-const PROJECTS_FILE_VERSION: u32 = 1;
+const PROJECTS_FILE_VERSION: u32 = 2;
 
 /// Global projects registry file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +22,9 @@ pub struct ProjectsRegistry {
     pub updated_at: DateTime<Utc>,
     /// Registered projects
     pub projects: Vec<ProjectEntry>,
+    /// User-defined folders for organizing projects
+    #[serde(default)]
+    pub folders: Vec<ProjectFolderEntry>,
 }
 
 impl Default for ProjectsRegistry {
@@ -30,6 +33,7 @@ impl Default for ProjectsRegistry {
             version: PROJECTS_FILE_VERSION,
             updated_at: Utc::now(),
             projects: Vec::new(),
+            folders: Vec::new(),
         }
     }
 }
@@ -49,6 +53,21 @@ pub struct ProjectEntry {
     /// Whether this project is marked as favorite
     pub is_favorite: bool,
     /// When the project was first registered
+    pub created_at: DateTime<Utc>,
+    /// Optional folder ID for organization
+    #[serde(default)]
+    pub folder_id: Option<String>,
+}
+
+/// A folder entry for organizing projects
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFolderEntry {
+    /// Unique folder ID
+    pub id: String,
+    /// Display name for the folder
+    pub name: String,
+    /// When the folder was created
     pub created_at: DateTime<Utc>,
 }
 
@@ -71,6 +90,7 @@ impl ProjectEntry {
             last_used_at: now,
             is_favorite: false,
             created_at: now,
+            folder_id: None,
         }
     }
 
@@ -82,6 +102,34 @@ impl ProjectEntry {
             name: self.name.clone(),
             last_used_at: self.last_used_at.to_rfc3339(),
             is_favorite: self.is_favorite,
+            created_at: self.created_at.to_rfc3339(),
+            folder_id: self.folder_id.clone(),
+        }
+    }
+}
+
+impl ProjectFolderEntry {
+    /// Create a new folder entry
+    pub fn new(name: &str) -> Self {
+        let id = format!(
+            "folder_{}",
+            &Uuid::new_v4().to_string().replace("-", "")[..12]
+        );
+
+        let now = Utc::now();
+
+        Self {
+            id,
+            name: name.to_string(),
+            created_at: now,
+        }
+    }
+
+    /// Convert to API-compatible format
+    pub fn to_api_folder(&self) -> ApiFolder {
+        ApiFolder {
+            id: self.id.clone(),
+            name: self.name.clone(),
             created_at: self.created_at.to_rfc3339(),
         }
     }
@@ -96,6 +144,16 @@ pub struct ApiProject {
     pub name: String,
     pub last_used_at: String,
     pub is_favorite: bool,
+    pub created_at: String,
+    pub folder_id: Option<String>,
+}
+
+/// API-compatible Folder format (matches frontend expectations)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiFolder {
+    pub id: String,
+    pub name: String,
     pub created_at: String,
 }
 
@@ -122,7 +180,12 @@ fn read_projects_registry_from(base_dir: &Path) -> FileResult<ProjectsRegistry> 
         return Ok(ProjectsRegistry::default());
     }
 
-    read_json(&file_path)
+    let mut registry: ProjectsRegistry = read_json(&file_path)?;
+
+    // Run migrations if needed
+    migrate_registry(&mut registry, base_dir)?;
+
+    Ok(registry)
 }
 
 /// Write the global projects registry
@@ -337,6 +400,131 @@ fn delete_project_in(base_dir: &Path, project_id: &str) -> FileResult<()> {
     Ok(())
 }
 
+// ============================================================================
+// Folder Management
+// ============================================================================
+
+/// Create a new folder
+pub fn create_folder(name: &str) -> FileResult<ProjectFolderEntry> {
+    create_folder_in(&get_global_ralph_ui_dir(), name)
+}
+
+/// Create a new folder in a specific directory (for testing)
+fn create_folder_in(base_dir: &Path, name: &str) -> FileResult<ProjectFolderEntry> {
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+
+    let mut registry = read_projects_registry_from(base_dir)?;
+
+    // Check for duplicate folder names
+    if registry
+        .folders
+        .iter()
+        .any(|f| f.name.eq_ignore_ascii_case(trimmed_name))
+    {
+        return Err(format!(
+            "Folder with name '{}' already exists",
+            trimmed_name
+        ));
+    }
+
+    let folder = ProjectFolderEntry::new(trimmed_name);
+    let result = folder.clone();
+
+    registry.folders.push(folder);
+    registry.updated_at = Utc::now();
+    write_projects_registry_to(base_dir, &registry)?;
+
+    Ok(result)
+}
+
+/// Get all folders
+pub fn get_all_folders() -> FileResult<Vec<ProjectFolderEntry>> {
+    get_all_folders_in(&get_global_ralph_ui_dir())
+}
+
+/// Get all folders from a specific directory
+fn get_all_folders_in(base_dir: &Path) -> FileResult<Vec<ProjectFolderEntry>> {
+    let registry = read_projects_registry_from(base_dir)?;
+    Ok(registry.folders)
+}
+
+/// Assign a project to a folder (or unassign by passing None)
+pub fn assign_project_to_folder(project_id: &str, folder_id: Option<&str>) -> FileResult<()> {
+    assign_project_to_folder_in(&get_global_ralph_ui_dir(), project_id, folder_id)
+}
+
+/// Assign a project to a folder in a specific directory (for testing)
+fn assign_project_to_folder_in(
+    base_dir: &Path,
+    project_id: &str,
+    folder_id: Option<&str>,
+) -> FileResult<()> {
+    let mut registry = read_projects_registry_from(base_dir)?;
+
+    // If folder_id is Some, verify the folder exists
+    if let Some(fid) = folder_id {
+        if !registry.folders.iter().any(|f| f.id == fid) {
+            return Err(format!("Folder not found: {}", fid));
+        }
+    }
+
+    if let Some(project) = registry.projects.iter_mut().find(|p| p.id == project_id) {
+        project.folder_id = folder_id.map(|s| s.to_string());
+        registry.updated_at = Utc::now();
+        write_projects_registry_to(base_dir, &registry)?;
+        Ok(())
+    } else {
+        Err(format!("Project not found: {}", project_id))
+    }
+}
+
+// ============================================================================
+// Migration
+// ============================================================================
+
+/// Migrate registry to latest version
+fn migrate_registry(registry: &mut ProjectsRegistry, base_dir: &Path) -> FileResult<()> {
+    match registry.version {
+        1 => {
+            // Migrate v1 to v2: Add folders field
+            log::info!("Migrating projects registry from v1 to v2...");
+            migrate_v1_to_v2(registry)?;
+            registry.version = 2;
+            registry.updated_at = Utc::now();
+
+            // Write updated registry
+            write_projects_registry_to(base_dir, registry)?;
+            log::info!("Projects registry migration to v2 complete");
+            Ok(())
+        }
+        2 => Ok(()), // Already at latest version
+        _ => {
+            log::warn!("Unknown projects registry version: {}", registry.version);
+            Ok(())
+        }
+    }
+}
+
+/// Migration from v1 to v2: Add folders field
+fn migrate_v1_to_v2(registry: &mut ProjectsRegistry) -> FileResult<()> {
+    // Ensure folders field exists (it should due to serde default)
+    if registry.folders.is_empty() {
+        registry.folders = Vec::new();
+    }
+
+    // Ensure all projects have folder_id field (it should due to serde default)
+    for project in &mut registry.projects {
+        if project.folder_id.is_none() {
+            project.folder_id = None;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,5 +678,145 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(touched.last_used_at > original_time);
+    }
+
+    // ============================================================================
+    // Folder Tests
+    // ============================================================================
+
+    #[test]
+    fn test_create_folder() {
+        let temp_dir = TempDir::new().unwrap();
+        let folder = create_folder_in(temp_dir.path(), "Work Projects").unwrap();
+
+        assert!(!folder.id.is_empty());
+        assert_eq!(folder.name, "Work Projects");
+        assert!(!folder.created_at.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_create_folder_empty_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = create_folder_in(temp_dir.path(), "");
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Folder name cannot be empty");
+    }
+
+    #[test]
+    fn test_create_folder_whitespace_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = create_folder_in(temp_dir.path(), "   ");
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Folder name cannot be empty");
+    }
+
+    #[test]
+    fn test_folder_name_unique() {
+        let temp_dir = TempDir::new().unwrap();
+        create_folder_in(temp_dir.path(), "Work Projects").unwrap();
+
+        // Try to create with same name (case-insensitive)
+        let result = create_folder_in(temp_dir.path(), "work projects");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn test_get_all_folders() {
+        let temp_dir = TempDir::new().unwrap();
+        create_folder_in(temp_dir.path(), "Work").unwrap();
+        create_folder_in(temp_dir.path(), "Personal").unwrap();
+
+        let folders = get_all_folders_in(temp_dir.path()).unwrap();
+        assert_eq!(folders.len(), 2);
+    }
+
+    #[test]
+    fn test_assign_project_to_folder() {
+        let temp_dir = TempDir::new().unwrap();
+        let project = register_project_in(temp_dir.path(), "/test/my-project", None).unwrap();
+        let folder = create_folder_in(temp_dir.path(), "Work").unwrap();
+
+        // Assign project to folder
+        assign_project_to_folder_in(temp_dir.path(), &project.id, Some(&folder.id)).unwrap();
+
+        // Verify assignment
+        let updated = get_project_in(temp_dir.path(), &project.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.folder_id, Some(folder.id.clone()));
+    }
+
+    #[test]
+    fn test_assign_project_to_invalid_folder() {
+        let temp_dir = TempDir::new().unwrap();
+        let project = register_project_in(temp_dir.path(), "/test/my-project", None).unwrap();
+
+        // Try to assign to non-existent folder
+        let result =
+            assign_project_to_folder_in(temp_dir.path(), &project.id, Some("invalid_folder_id"));
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Folder not found"));
+    }
+
+    #[test]
+    fn test_unassign_project_from_folder() {
+        let temp_dir = TempDir::new().unwrap();
+        let project = register_project_in(temp_dir.path(), "/test/my-project", None).unwrap();
+        let folder = create_folder_in(temp_dir.path(), "Work").unwrap();
+
+        // Assign project to folder
+        assign_project_to_folder_in(temp_dir.path(), &project.id, Some(&folder.id)).unwrap();
+
+        // Unassign
+        assign_project_to_folder_in(temp_dir.path(), &project.id, None).unwrap();
+
+        // Verify unassignment
+        let updated = get_project_in(temp_dir.path(), &project.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.folder_id, None);
+    }
+
+    #[test]
+    fn test_migration_v1_to_v2() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a v1 registry manually
+        let v1_registry_json = r#"{
+            "version": 1,
+            "updatedAt": "2024-01-01T00:00:00Z",
+            "projects": [
+                {
+                    "id": "proj_123",
+                    "path": "/test/project",
+                    "name": "Test Project",
+                    "lastUsedAt": "2024-01-01T00:00:00Z",
+                    "isFavorite": false,
+                    "createdAt": "2024-01-01T00:00:00Z"
+                }
+            ]
+        }"#;
+
+        let file_path = get_projects_file_path_in(temp_dir.path());
+        std::fs::write(&file_path, v1_registry_json).unwrap();
+
+        // Read the registry (should trigger migration)
+        let registry = read_projects_registry_from(temp_dir.path()).unwrap();
+
+        // Verify migration
+        assert_eq!(registry.version, 2);
+        assert_eq!(registry.projects.len(), 1);
+        assert_eq!(registry.projects[0].folder_id, None);
+        assert_eq!(registry.folders.len(), 0);
+
+        // Verify file was updated
+        let updated_content = std::fs::read_to_string(&file_path).unwrap();
+        let updated: serde_json::Value = serde_json::from_str(&updated_content).unwrap();
+        assert_eq!(updated["version"], 2);
     }
 }

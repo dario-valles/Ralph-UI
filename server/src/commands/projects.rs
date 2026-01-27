@@ -2,7 +2,7 @@
 //
 // Uses file-based storage in ~/.ralph-ui/projects.json (global registry)
 
-use crate::file_storage::projects::{self as file_projects, ApiProject};
+use crate::file_storage::projects::{self as file_projects, ApiFolder, ApiProject};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -97,6 +97,34 @@ pub fn register_project(path: String, name: Option<String>) -> Result<ApiProject
     Ok(entry.to_api_project())
 }
 
+/// Register a project and assign it to a folder
+pub async fn register_project_with_folder(
+    path: String,
+    name: Option<String>,
+    folder_id: Option<String>,
+) -> Result<ApiProject, String> {
+    let entry = file_projects::register_project(&path, name.as_deref())?;
+
+    // Assign to folder if specified
+    if let Some(fid) = &folder_id {
+        file_projects::assign_project_to_folder(&entry.id, Some(fid))?;
+    }
+
+    // Import any sessions from the project's .ralph-ui/sessions/ directory
+    let project_path = Path::new(&path);
+    if project_path.exists() {
+        if let Err(e) = crate::file_storage::init_ralph_ui_dir(project_path) {
+            log::warn!("Failed to initialize .ralph-ui directory: {}", e);
+        }
+    }
+
+    // Get the updated project (now with folder_id if assigned)
+    let updated = file_projects::get_project(&entry.id)?
+        .ok_or_else(|| format!("Project disappeared after registration: {}", entry.id))?;
+
+    Ok(updated.to_api_project())
+}
+
 /// Get a project by ID
 pub fn get_project(project_id: String) -> Result<ApiProject, String> {
     file_projects::get_project(&project_id)?
@@ -152,4 +180,24 @@ pub fn touch_project(project_id: String) -> Result<(), String> {
 /// Delete a project
 pub fn delete_project(project_id: String) -> Result<(), String> {
     file_projects::delete_project(&project_id)
+}
+
+/// Create a new folder
+pub fn create_folder(name: String) -> Result<ApiFolder, String> {
+    let folder = file_projects::create_folder(&name)?;
+    Ok(folder.to_api_folder())
+}
+
+/// Get all folders
+pub fn get_all_folders() -> Result<Vec<ApiFolder>, String> {
+    let folders = file_projects::get_all_folders()?;
+    Ok(folders.into_iter().map(|f| f.to_api_folder()).collect())
+}
+
+/// Assign a project to a folder (or unassign by passing null)
+pub fn assign_project_to_folder(
+    project_id: String,
+    folder_id: Option<String>,
+) -> Result<(), String> {
+    file_projects::assign_project_to_folder(&project_id, folder_id.as_deref())
 }

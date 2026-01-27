@@ -152,7 +152,11 @@ pub async fn route_config_command(
         "register_project" => {
             let path: String = get_arg(&args, "path")?;
             let name: Option<String> = get_opt_arg(&args, "name")?;
-            route_sync!(commands::projects::register_project(path, name))
+            let folder_id: Option<String> = get_opt_arg(&args, "folderId")?;
+            route_async!(
+                cmd,
+                commands::projects::register_project_with_folder(path, name, folder_id)
+            )
         }
 
         "get_project" => {
@@ -211,6 +215,23 @@ pub async fn route_config_command(
 
         "get_home_directory" => {
             route_sync!(commands::projects::get_home_directory())
+        }
+
+        "create_folder" => {
+            let name: String = get_arg(&args, "name")?;
+            route_sync!(commands::projects::create_folder(name))
+        }
+
+        "get_all_folders" => {
+            route_sync!(commands::projects::get_all_folders())
+        }
+
+        "assign_project_to_folder" => {
+            let project_id: String = get_arg(&args, "projectId")?;
+            let folder_id: Option<String> = get_opt_arg(&args, "folderId")?;
+            route_unit!(commands::projects::assign_project_to_folder(
+                project_id, folder_id
+            ))
         }
 
         // Mission Control Commands
@@ -589,6 +610,9 @@ pub fn is_config_command(cmd: &str) -> bool {
             | "delete_project"
             | "list_directory"
             | "get_home_directory"
+            | "create_folder"
+            | "get_all_folders"
+            | "assign_project_to_folder"
             // Mission control
             | "get_activity_feed"
             | "get_global_stats"
