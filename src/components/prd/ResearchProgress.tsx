@@ -122,6 +122,12 @@ function getAgentIcon(agentName: string): ReactNode {
   }
 }
 
+/**
+ * Displays the status of a single research agent with streaming output
+ *
+ * Shows the agent's current state (running, complete, failed), allows viewing
+ * results, and displays real-time streaming output in a collapsible terminal.
+ */
 function AgentStatusCard({
   displayName,
   agentName,
@@ -322,6 +328,13 @@ function ResearchExplanation() {
   )
 }
 
+/**
+ * Research Progress component for GSD workflow
+ *
+ * Orchestrates parallel research agents that analyze architecture, codebase,
+ * best practices, and risks. Displays real-time progress and streaming output,
+ * allows selective re-runs, and handles synthesis of results.
+ */
 export function ResearchProgress({
   status,
   results,
@@ -538,6 +551,7 @@ export function ResearchProgress({
   // Show summary when explicitly toggled or synthesis exists
   const shouldShowSummary = showSummary || Boolean(synthesis)
 
+  /** Find the research result for a specific agent by name */
   function getResultForAgent(name: string): ResearchResult | undefined {
     return results.find((r) => r.researchType === name.toLowerCase())
   }

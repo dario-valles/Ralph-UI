@@ -27,10 +27,18 @@ interface AIRequirementGeneratorProps {
   isGenerating?: boolean
 }
 
+/** Extract error message from unknown error type */
 function getErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'An unexpected error occurred'
 }
 
+/**
+ * AI-powered requirement generator component
+ *
+ * Provides a collapsible panel where users can describe requirements in natural
+ * language. Uses the selected AI agent to generate structured requirements that
+ * can be previewed, regenerated, and accepted into the requirement list.
+ */
 export function AIRequirementGenerator({
   onGenerate,
   onAcceptRequirements,
