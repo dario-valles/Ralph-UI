@@ -146,7 +146,11 @@ See [QUICK_START.md](./QUICK_START.md) for detailed setup instructions.
 
 ## What is the Ralph Wiggum Loop?
 
-The Ralph Wiggum Loop (named after the beloved Simpsons character) is an autonomous AI development technique where:
+> **Trademark Notice:** "Ralph Wiggum" is a trademark of 20th Century Fox.
+> This project uses the term nominally to describe the AI development technique
+> coined by Geoffrey Huntley. We are not affiliated with or endorsed by Fox.
+
+The Ralph Wiggum Loop is an autonomous AI development technique where:
 
 1. **Infinite Iteration:** AI agents run in loops until all tasks are complete
 2. **Filesystem Memory:** Progress persists in files and git history, not LLM context
