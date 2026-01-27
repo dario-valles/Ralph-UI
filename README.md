@@ -142,10 +142,68 @@ Originally coined by Geoffrey Huntley, this technique represents a paradigm shif
 
 ## Supported AI Agents
 
-- **Claude Code** (Anthropic's official CLI) - Fully integrated
-- **OpenCode** (Open source alternative) - Fully integrated
-- **Cursor Agent** - Integrated
-- **Codex CLI** (OpenAI) - Integrated
+Ralph UI supports 7 production-ready AI coding agents with full session management and token optimization:
+
+- **Claude Code** (Anthropic's official CLI) - Fully integrated with session resumption
+- **OpenCode** (Open source alternative) - Fully integrated with resume support
+- **Cursor Agent** - Integrated with session resume capability
+- **Codex CLI** (OpenAI) - Integrated with session resume support
+- **Qwen Code** (Alibaba) - Integrated with Claude-compatible API
+- **Droid** (Factory AI) - Integrated with CLI session management
+- **gemini-cli** (Google) - Integrated with Gemini models
+
+### Alternative API Providers for Claude
+
+For Claude Code, Ralph UI supports alternative API providers that offer Claude-compatible endpoints:
+
+- **Anthropic (Direct)** - Default provider using official Anthropic API
+- **Z.AI** - Claude-compatible API with alternative pricing
+- **MiniMax** - Claude-compatible API service
+- **MiniMax (China)** - China-specific endpoint for MiniMax service
+
+**Provider Configuration:**
+- Configure providers in Settings → API Providers
+- Add API tokens for each provider you want to use
+- Test connections directly from the UI
+- Set a default provider for all Claude operations
+
+**Usage:**
+- When selecting agents, choose "Claude (Z.AI)" or "Claude (MiniMax)" from the dropdown
+- The agent/model selector displays available providers once configured
+- All Claude features work identically across providers
+- Environment variables are automatically set when spawning agents
+
+**Benefits:**
+- Access Claude models through alternative providers
+- Potential cost savings depending on provider pricing
+- Geographic optimization (e.g., MiniMax China for Asia-Pacific users)
+- Easy provider switching without code changes
+
+### Session Resumption for Token Savings
+
+Ralph UI uses native CLI session resumption to avoid re-sending full conversation history on each message, providing **67-90% token savings** depending on conversation length.
+
+**How it works:**
+1. **First message:** Full prompt sent, agent's session ID captured from output
+2. **Subsequent messages:** Session ID passed via resume flag, history omitted from prompt
+3. **The CLI agent** maintains its own context, so history isn't needed
+
+**Supported agents with resume flags:**
+- Claude Code (`--resume <session-id>`)
+- Cursor Agent (`--resume=<chat-id>`)
+- Codex CLI (`codex resume <session-id>`)
+- Qwen Code (`--continue`)
+- OpenCode (`--session <session-id>`)
+- Droid (`--session-id <session-id>`)
+- gemini-cli (check documentation for resume support)
+
+**Token savings by conversation length:**
+
+| Messages | Without Resume | With Resume | Savings |
+|----------|----------------|-------------|---------|
+| 5        | 15 exchanges   | 5 exchanges | 67%     |
+| 10       | 55 exchanges   | 10 exchanges| 82%     |
+| 20       | 210 exchanges  | 20 exchanges| 90%     |
 
 ---
 

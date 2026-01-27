@@ -28,6 +28,8 @@
       </a>
       <div class="nav-links">
         <a href="#showcase">Screenshots</a>
+        <a href="#agents">Agents</a>
+        <a href="#providers">Providers</a>
         <a href="#features">Features</a>
         <a href="#quickstart">Quick Start</a>
         <a href="https://github.com/dario-valles/Ralph-UI" target="_blank" rel="noopener" class="nav-github">
@@ -60,7 +62,7 @@
 
       <div class="hero-stats">
         <div class="stat">
-          <span class="stat-value">6</span>
+          <span class="stat-value">7</span>
           <span class="stat-label">AI Agents</span>
         </div>
         <div class="stat">
@@ -337,6 +339,95 @@
         <span class="agent-name">Droid</span>
         <span class="agent-vendor">Factory AI</span>
       </div>
+      <div class="agent-card">
+        <div class="agent-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <span class="agent-name">gemini-cli</span>
+        <span class="agent-vendor">Google</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Providers Section -->
+  <section class="providers" id="providers">
+    <div class="section-header">
+      <span class="section-tag">// PROVIDERS</span>
+      <h2 class="section-title">Claude Code<br><span class="accent">Flexible Providers</span></h2>
+      <p class="section-subtitle">Use alternative API providers for Claude models. Configure tokens, test connections, switch providers instantly.</p>
+    </div>
+
+    <div class="providers-grid">
+      <div class="provider-card featured">
+        <div class="provider-badge">Default</div>
+        <div class="provider-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h3 class="provider-name">Anthropic</h3>
+        <span class="provider-type">Official API</span>
+        <p class="provider-desc">Direct integration with Anthropic's Claude API. Full model access with official support.</p>
+      </div>
+
+      <div class="provider-card">
+        <div class="provider-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <h3 class="provider-name">Z.AI</h3>
+        <span class="provider-type">Claude-Compatible</span>
+        <p class="provider-desc">Alternative Claude-compatible API with competitive pricing. Same models, different provider.</p>
+      </div>
+
+      <div class="provider-card">
+        <div class="provider-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+        </div>
+        <h3 class="provider-name">MiniMax</h3>
+        <span class="provider-type">Claude-Compatible</span>
+        <p class="provider-desc">Global Claude-compatible endpoint. Configure once, use across all sessions.</p>
+      </div>
+
+      <div class="provider-card">
+        <div class="provider-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+        </div>
+        <h3 class="provider-name">MiniMax China</h3>
+        <span class="provider-type">Regional Endpoint</span>
+        <p class="provider-desc">China-specific endpoint for optimized latency in Asia-Pacific region.</p>
+      </div>
+    </div>
+
+    <div class="providers-features">
+      <div class="providers-feature">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>One-click connection testing</span>
+      </div>
+      <div class="providers-feature">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>Set default provider in settings</span>
+      </div>
+      <div class="providers-feature">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>Seamless switching between providers</span>
+      </div>
     </div>
   </section>
 
@@ -368,7 +459,7 @@
           </svg>
         </div>
         <h3 class="feature-title">Token Optimization</h3>
-        <p class="feature-desc">Session resumption avoids re-sending history. Save 67-90% on tokens for long conversations across all supported agents.</p>
+        <p class="feature-desc">Session resumption avoids re-sending history. Save 67-90% on tokens for long conversations. Works with Claude, Cursor, Codex, Qwen, OpenCode, Droid, and gemini-cli.</p>
       </div>
 
       <div class="feature-card">
