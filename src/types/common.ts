@@ -11,6 +11,14 @@ export interface Project {
   lastUsedAt: string
   isFavorite: boolean
   createdAt: string
+  folderId?: string | null
+}
+
+export interface ProjectFolder {
+  id: string
+  name: string
+  createdAt: string
+  projectCount?: number  // Computed, not stored
 }
 
 // ============================================================================

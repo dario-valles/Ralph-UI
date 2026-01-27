@@ -6,19 +6,22 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { projectApi } from '@/lib/backend-api'
 import { asyncAction, errorToString, type AsyncState } from '@/lib/store-utils'
-import type { Project } from '@/types'
-export type { Project }
+import type { Project, ProjectFolder } from '@/types'
+export type { Project, ProjectFolder }
 
 interface ProjectState extends AsyncState {
   projects: Project[]
+  folders: ProjectFolder[]
   activeProjectId: string | null
 }
 
 interface ProjectActions {
   // Load all projects from backend
   loadProjects: () => Promise<void>
+  // Load all folders from backend
+  loadFolders: () => Promise<void>
   // Get or create a project from a folder path
-  registerProject: (path: string, name?: string) => Promise<Project>
+  registerProject: (path: string, name?: string, folderId?: string | null) => Promise<Project>
   // Set active project by ID
   setActiveProject: (projectId: string | null) => void
   // Set active project by path (convenience method)
@@ -29,6 +32,10 @@ interface ProjectActions {
   updateProjectName: (projectId: string, name: string) => Promise<void>
   // Delete a project (just removes from list, doesn't delete sessions)
   deleteProject: (projectId: string) => Promise<void>
+  // Create a new folder
+  createFolder: (name: string) => Promise<ProjectFolder>
+  // Assign a project to a folder (or unassign with null)
+  assignProjectToFolder: (projectId: string, folderId: string | null) => Promise<void>
   // Get recent projects (from current state, sorted by lastUsedAt)
   getRecentProjects: (limit?: number) => Project[]
   // Get favorite projects (from current state)
@@ -50,6 +57,7 @@ export const useProjectStore = create<ProjectStore>()(
     (set, get) => ({
       // Initial state
       projects: [],
+      folders: [],
       activeProjectId: null,
       loading: false,
       error: null,
@@ -62,10 +70,24 @@ export const useProjectStore = create<ProjectStore>()(
         })
       },
 
+      // Load all folders from backend
+      loadFolders: async () => {
+        await asyncAction(set, async () => {
+          const folders = await projectApi.getAllFolders()
+          // Compute project counts for each folder
+          const { projects } = get()
+          const foldersWithCounts = folders.map((folder) => ({
+            ...folder,
+            projectCount: projects.filter((p) => p.folderId === folder.id).length,
+          }))
+          return { folders: foldersWithCounts }
+        })
+      },
+
       // Register (or get) a project from a folder path
-      registerProject: async (path: string, name?: string): Promise<Project> => {
+      registerProject: async (path: string, name?: string, folderId?: string | null): Promise<Project> => {
         try {
-          const project = await projectApi.register(path, name)
+          const project = await projectApi.register(path, name, folderId)
           // Update local state
           set((state) => {
             const existing = state.projects.find((p) => p.id === project.id)
@@ -141,6 +163,37 @@ export const useProjectStore = create<ProjectStore>()(
           }))
         } catch (error) {
           set({ error: errorToString(error) })
+        }
+      },
+
+      // Create a new folder
+      createFolder: async (name: string): Promise<ProjectFolder> => {
+        try {
+          const folder = await projectApi.createFolder(name)
+          // Update local state
+          set((state) => ({
+            folders: [...state.folders, { ...folder, projectCount: 0 }],
+          }))
+          return folder
+        } catch (error) {
+          set({ error: errorToString(error) })
+          throw error
+        }
+      },
+
+      // Assign project to folder
+      assignProjectToFolder: async (projectId: string, folderId: string | null) => {
+        try {
+          await projectApi.assignToFolder(projectId, folderId)
+          // Update local state
+          set((state) => ({
+            projects: state.projects.map((p) =>
+              p.id === projectId ? { ...p, folderId: folderId ?? undefined } : p
+            ),
+          }))
+        } catch (error) {
+          set({ error: errorToString(error) })
+          throw error
         }
       },
 

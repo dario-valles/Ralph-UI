@@ -15,6 +15,8 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react'
+import { FolderPicker } from './FolderPicker'
+import type { ProjectFolder } from '@/types'
 
 interface DirectoryEntry {
   name: string
@@ -24,18 +26,29 @@ interface DirectoryEntry {
 }
 
 interface RemoteFolderBrowserProps {
-  onSelect: (path: string) => void
+  onSelect: (path: string, folderId?: string | null) => void
   onCancel: () => void
   initialPath?: string
+  folders?: ProjectFolder[]
+  onCreateFolder?: (name: string) => Promise<ProjectFolder>
+  showFolderSelector?: boolean
 }
 
-export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteFolderBrowserProps) {
+export function RemoteFolderBrowser({
+  onSelect,
+  onCancel,
+  initialPath,
+  folders = [],
+  onCreateFolder,
+  showFolderSelector = false,
+}: RemoteFolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState(initialPath || '')
   const [entries, setEntries] = useState<DirectoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   const [pathInput, setPathInput] = useState('')
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
 
   // Load directory contents
   const loadDirectory = async (path?: string) => {
@@ -86,6 +99,15 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
   const handlePathSubmit = () => {
     if (pathInput.trim()) {
       loadDirectory(pathInput.trim())
+    }
+  }
+
+  // Handle select button click
+  const handleSelect = () => {
+    if (showFolderSelector) {
+      onSelect(currentPath, selectedFolderId)
+    } else {
+      onSelect(currentPath)
     }
   }
 
@@ -194,11 +216,22 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
       </div>
 
       {/* Footer with current selection and actions */}
-      <div className="p-3 border-t space-y-2">
+      <div className="p-3 border-t space-y-3">
         <div className="flex items-center gap-2 text-sm">
           <FolderOpen className="h-4 w-4 text-primary shrink-0" />
           <span className="truncate flex-1 text-muted-foreground">{currentPath}</span>
         </div>
+
+        {/* Folder selector (shown when enabled) */}
+        {showFolderSelector && onCreateFolder && (
+          <FolderPicker
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onSelect={setSelectedFolderId}
+            onCreateFolder={onCreateFolder}
+          />
+        )}
+
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
             <X className="h-4 w-4 mr-1" />
@@ -207,7 +240,7 @@ export function RemoteFolderBrowser({ onSelect, onCancel, initialPath }: RemoteF
           <Button
             variant="default"
             size="sm"
-            onClick={() => onSelect(currentPath)}
+            onClick={handleSelect}
             disabled={!currentPath}
             className="flex-1 sm:flex-none"
           >
