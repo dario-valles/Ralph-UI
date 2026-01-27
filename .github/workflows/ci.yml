@@ -46,6 +46,11 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server -> target
+
       - name: Check formatting
         run: cargo fmt --manifest-path server/Cargo.toml -- --check
 
@@ -72,6 +77,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server -> target
 
       - name: Install dependencies
         run: bun install
