@@ -2,6 +2,23 @@
 
 **A modern application for orchestrating autonomous AI coding agents using the Ralph Wiggum Loop technique. Access via browser from any device on your network.**
 
+---
+
+## 🚨 Phase 1 Status: Bug Fixes & Polish
+
+**We are currently focusing on stability and polish.** While Ralph UI is production-ready and stable, we are prioritizing:
+
+- ✅ Bug reports and fixes
+- ✅ Polish improvements (UX, performance, error handling)
+- ✅ Documentation enhancements
+- ✅ Test coverage
+
+**⏸️ Feature requests:** We're collecting ideas for Phase 2! Please use the `feature-request` issue template - we'll review after Phase 1 completion.
+
+**🤝 Contribute:** See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on bug fixes and polish PRs.
+
+---
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-19+-61DAFB.svg)](https://reactjs.org/)
