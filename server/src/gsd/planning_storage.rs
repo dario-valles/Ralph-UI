@@ -24,6 +24,8 @@ pub enum PlanningFile {
     Scoped,
     /// ROADMAP.md - Phased execution plan
     Roadmap,
+    /// roadmap.json - Structured roadmap data
+    RoadmapJson,
     /// VERIFICATION.md - Gap analysis results
     Verification,
     /// state.json - Workflow state
@@ -42,6 +44,7 @@ impl PlanningFile {
             PlanningFile::RequirementsMd => "REQUIREMENTS.md".to_string(),
             PlanningFile::Scoped => "SCOPED.md".to_string(),
             PlanningFile::Roadmap => "ROADMAP.md".to_string(),
+            PlanningFile::RoadmapJson => "roadmap.json".to_string(),
             PlanningFile::Verification => "VERIFICATION.md".to_string(),
             PlanningFile::State => "state.json".to_string(),
             PlanningFile::Research(name) => format!("research/{}", name),

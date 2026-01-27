@@ -401,7 +401,7 @@ pub async fn create_roadmap(
 
     // Save roadmap
     let roadmap_json = roadmap.serialize_to_json("roadmap")?;
-    write_planning_file(path, &session_id, PlanningFile::Roadmap, &roadmap_json)?;
+    write_planning_file(path, &session_id, PlanningFile::RoadmapJson, &roadmap_json)?;
 
     // Also save markdown version
     let roadmap_md = roadmap.to_markdown();
@@ -418,15 +418,22 @@ pub async fn load_roadmap(
     let path = as_path(&project_path);
 
     // Try to load JSON first
-    match read_planning_file(path, &session_id, PlanningFile::Roadmap) {
+    match read_planning_file(path, &session_id, PlanningFile::RoadmapJson) {
         Ok(content) => {
             if let Ok(doc) = serde_json::from_str::<RoadmapDoc>(&content) {
                 return Ok(Some(doc));
             }
-            // If it's not JSON, it might be markdown only - return None
+            // If JSON fails, it might be corrupt or we might need to fallback?
+            // For now, just return None if JSON is invalid
             Ok(None)
         }
-        Err(_) => Ok(None),
+        Err(_) => {
+            // Fallback for backward compatibility (if user has only ROADMAP.md but it happens to contain JSON?)
+            // Or maybe previous version wrote JSON to ROADMAP.md?
+            // Actually previous version overwrote JSON with Markdown in ROADMAP.md, so reading it as JSON will fail.
+            // So we can't really recover data from ROADMAP.md if it's markdown.
+            Ok(None)
+        }
     }
 }
 
@@ -445,7 +452,7 @@ pub async fn verify_gsd_plans(
         .map_err(|e| format!("Failed to parse requirements: {}", e))?;
 
     // Load roadmap (or create empty one if not exists)
-    let roadmap = match read_planning_file(path, &session_id, PlanningFile::Roadmap) {
+    let roadmap = match read_planning_file(path, &session_id, PlanningFile::RoadmapJson) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| RoadmapDoc::new("v1")),
         Err(_) => RoadmapDoc::new("v1"),
     };
@@ -554,10 +561,24 @@ pub async fn export_gsd_to_ralph(
     let requirements: RequirementsDoc = serde_json::from_str(&req_content)
         .map_err(|e| format!("Failed to parse requirements: {}", e))?;
 
-    // Load roadmap
-    let roadmap_content = read_planning_file(path, &session_id, PlanningFile::Roadmap)?;
-    let roadmap: RoadmapDoc = serde_json::from_str(&roadmap_content)
-        .map_err(|e| format!("Failed to parse roadmap: {}", e))?;
+    // Load roadmap (with auto-healing for backward compatibility)
+    let roadmap = match read_planning_file(path, &session_id, PlanningFile::RoadmapJson) {
+        Ok(content) => serde_json::from_str::<RoadmapDoc>(&content)
+            .map_err(|e| format!("Failed to parse roadmap: {}", e))?,
+        Err(_) => {
+            // Roadmap JSON missing (or old version). Try to regenerate it from requirements.
+            log::info!("Roadmap JSON missing during export. Regenerating from requirements...");
+            let roadmap = derive_roadmap(&requirements);
+
+            // Save it for future use (repairing the state)
+            // We ignore errors here as we can proceed with the in-memory roadmap
+            if let Ok(json) = roadmap.serialize_to_json("roadmap") {
+                let _ = write_planning_file(path, &session_id, PlanningFile::RoadmapJson, &json);
+            }
+
+            roadmap
+        }
+    };
 
     // Load project doc for title/description
     let (title, description) = match read_planning_file(path, &session_id, PlanningFile::Project) {
