@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Pre-commit hook for Ralph-UI
-# Runs formatting and lint checks before allowing commits
+# Runs formatting, lint, and clippy checks before allowing commits
 
 # Check if any Rust files are staged
 if git diff --cached --name-only | grep -q '\.rs$'; then
@@ -12,6 +12,26 @@ if git diff --cached --name-only | grep -q '\.rs$'; then
         echo "Run 'cargo fmt --manifest-path server/Cargo.toml' to fix."
         exit 1
     fi
+
+    echo "Running Clippy..."
+    # Create dist folder if needed for rust-embed
+    if [ ! -d "dist" ]; then
+        mkdir -p dist
+        echo '<!DOCTYPE html><html><body></body></html>' > dist/index.html
+        CREATED_DIST=1
+    fi
+
+    if ! cargo clippy --manifest-path server/Cargo.toml -- -D warnings; then
+        echo ""
+        echo "ERROR: Clippy check failed."
+        echo "Fix the warnings above before committing."
+        # Clean up temp dist if we created it
+        [ "$CREATED_DIST" = "1" ] && rm -rf dist
+        exit 1
+    fi
+
+    # Clean up temp dist if we created it
+    [ "$CREATED_DIST" = "1" ] && rm -rf dist
 fi
 
 # Check if any frontend files are staged

@@ -49,6 +49,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --manifest-path server/Cargo.toml -- --check
 
+      - name: Create dist folder for rust-embed
+        run: mkdir -p dist && echo '<!DOCTYPE html><html><body></body></html>' > dist/index.html
+
       - name: Clippy
         run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
 

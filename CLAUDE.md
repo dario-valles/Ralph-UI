@@ -416,7 +416,7 @@ cargo clippy -- -D warnings    # Rust lints (strict, no warnings)
 cargo test                     # Backend tests
 ```
 
-**Pre-commit hooks:** Run `./scripts/install-hooks.sh` to install git hooks that automatically check `cargo fmt` and `bun run lint` before each commit. This prevents CI failures from formatting issues.
+**Pre-commit hooks:** Run `./scripts/install-hooks.sh` to install git hooks that automatically check `cargo fmt`, `cargo clippy`, and `bun run lint` before each commit. This prevents CI failures from formatting and lint issues.
 
 **Clippy Configuration:** Crate-level clippy allows are defined in `server/src/lib.rs` with explanatory comments. Only add new allows if fixing the warning would significantly reduce readability or require major refactoring.
 
