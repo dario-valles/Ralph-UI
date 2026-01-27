@@ -659,8 +659,15 @@ pub async fn export_gsd_to_ralph(
     // Save to .ralph-ui/prds/{prd_name}.json
     let prds_dir = crate::file_storage::get_ralph_ui_dir(path).join("prds");
     crate::file_storage::ensure_dir(&prds_dir)?;
+
+    // Save JSON
     let prd_path = prds_dir.join(format!("{}.json", prd_name));
-    std::fs::write(&prd_path, prd_json).map_err(|e| format!("Failed to write PRD file: {}", e))?;
+    crate::file_storage::atomic_write(&prd_path, &prd_json)?;
+
+    // Save Markdown (required for file watcher and human reading)
+    let prd_md = ralph_prd_to_markdown(&result.prd);
+    let prd_path_md = prds_dir.join(format!("{}.md", prd_name));
+    crate::file_storage::atomic_write(&prd_path_md, &prd_md)?;
 
     // Mark workflow as complete
     if let Ok(mut state) = load_workflow_state(path, &session_id) {
@@ -672,13 +679,63 @@ pub async fn export_gsd_to_ralph(
     }
 
     log::info!(
-        "Exported GSD session {} to Ralph PRD: {} (with execution config: {})",
+        "Exported GSD session {} to Ralph PRD: {}.{{json,md}} (with execution config: {})",
         session_id,
         prd_name,
         execution_config.is_some()
     );
 
     Ok(result)
+}
+
+/// Convert Ralph PRD to Markdown format
+fn ralph_prd_to_markdown(prd: &crate::ralph_loop::RalphPrd) -> String {
+    let mut md = String::new();
+
+    md.push_str(&format!("# {}\n\n", prd.title));
+
+    if let Some(desc) = &prd.description {
+        md.push_str(desc);
+        md.push_str("\n\n");
+    }
+
+    md.push_str(&format!("**Branch**: `{}`\n\n", prd.branch));
+
+    md.push_str("## Stories\n\n");
+
+    for story in &prd.stories {
+        md.push_str(&format!("### {} - {}\n\n", story.id, story.title));
+
+        if let Some(desc) = &story.description {
+            md.push_str(desc);
+            md.push_str("\n\n");
+        }
+
+        md.push_str("**Acceptance Criteria:**\n");
+        // Split acceptance criteria by lines if it's a block, or just print it
+        for line in story.acceptance.lines() {
+            let line = line.trim();
+            if !line.is_empty() {
+                if line.starts_with('-') || line.starts_with('*') {
+                    md.push_str(&format!("{}\n", line));
+                } else {
+                    md.push_str(&format!("- {}\n", line));
+                }
+            }
+        }
+        md.push('\n');
+
+        md.push_str(&format!("**Priority**: {}\n", story.priority));
+        if !story.dependencies.is_empty() {
+            md.push_str(&format!(
+                "**Dependencies**: {}\n",
+                story.dependencies.join(", ")
+            ));
+        }
+        md.push_str("---\n\n");
+    }
+
+    md
 }
 
 /// Save a planning file (generic)

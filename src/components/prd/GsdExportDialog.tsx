@@ -22,6 +22,7 @@ interface GsdExportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   sessionId: string
+  sessionTitle: string
   projectPath: string
   /** Called when export completes successfully */
   onExportComplete: (prdName: string, result: ConversionResult) => void
@@ -31,6 +32,7 @@ export function GsdExportDialog({
   open,
   onOpenChange,
   sessionId,
+  sessionTitle,
   projectPath,
   onExportComplete,
 }: GsdExportDialogProps) {
@@ -44,11 +46,18 @@ export function GsdExportDialog({
   // Generate default PRD name from session ID
   useEffect(() => {
     if (open && !prdName) {
-      // Create a readable default name based on timestamp
-      const timestamp = new Date().toISOString().slice(0, 10)
-      setPrdName(`gsd-prd-${timestamp}`)
+      // Create default name matching backend convention: {sanitized-title}-{short-id}
+      const sanitized = sessionTitle
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphen
+        .replace(/^-+|-+$/g, '') // Trim leading/trailing hyphens
+        .slice(0, 50) // Limit length
+
+      const shortId = sessionId.slice(0, 8)
+      setPrdName(`${sanitized}-${shortId}`)
     }
-  }, [open, prdName])
+  }, [open, prdName, sessionId, sessionTitle])
 
   // Load branches when dialog opens
   const loadBranches = useCallback(async () => {
@@ -125,7 +134,10 @@ export function GsdExportDialog({
       onOpenChange(false)
     } catch (err) {
       console.error('[GsdExportDialog] Export failed:', err)
-      toast.error('Export Failed', err instanceof Error ? err.message : 'An unexpected error occurred')
+      toast.error(
+        'Export Failed',
+        err instanceof Error ? err.message : 'An unexpected error occurred'
+      )
     } finally {
       setIsExporting(false)
     }

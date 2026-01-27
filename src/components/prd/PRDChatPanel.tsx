@@ -889,8 +889,9 @@ export function PRDChatPanel() {
           <GsdExportDialog
             open={showExportDialog}
             onOpenChange={setShowExportDialog}
-            sessionId={currentSession.id}
-            projectPath={currentSession.projectPath}
+            sessionId={currentSession?.id || ''}
+            sessionTitle={currentSession?.title || 'untitled-prd'}
+            projectPath={activeProject?.path || ''}
             onExportComplete={handleExportComplete}
           />
         </>
