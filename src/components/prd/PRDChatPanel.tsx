@@ -55,6 +55,7 @@ export function PRDChatPanel() {
 
   const prevSessionIdRef = useRef<string | null>(null)
   const prevAgentTypeRef = useRef<string>('')
+  const prevProjectPathRef = useRef<string | undefined>(undefined)
 
   // Consolidated UI state
   const {
@@ -191,10 +192,20 @@ export function PRDChatPanel() {
   // Track the previous processing session
   const prevProcessingSessionIdRef = useRef<string | null>(null)
 
-  // Load sessions on mount
+  // Load sessions on mount and when project changes
   useEffect(() => {
     const init = async () => {
       setInitialLoadComplete(false)
+
+      // Reset currentSession when project changes (not on initial load)
+      if (
+        prevProjectPathRef.current !== undefined &&
+        prevProjectPathRef.current !== activeProject?.path
+      ) {
+        setCurrentSession(null)
+      }
+      prevProjectPathRef.current = activeProject?.path
+
       if (activeProject?.path) {
         await loadSessions(activeProject.path)
         setInitialLoadComplete(true)
@@ -206,7 +217,7 @@ export function PRDChatPanel() {
       }
     }
     init()
-  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path, setInitialLoadComplete])
+  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path, setInitialLoadComplete, setCurrentSession])
 
   useEffect(() => {
     prevProcessingSessionIdRef.current = processingSessionId
