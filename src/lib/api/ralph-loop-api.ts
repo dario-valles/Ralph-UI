@@ -158,6 +158,7 @@ export const ralphLoopApi = {
     branch: string
     agentType?: string
     model?: string
+    providerId?: string // Alternative API provider (e.g., "zai", "minimax")
     maxIterations?: number
     maxCost?: number
     runTests?: boolean

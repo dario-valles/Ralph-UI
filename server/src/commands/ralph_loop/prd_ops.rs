@@ -47,6 +47,9 @@ pub struct ConvertPrdFileToRalphRequest {
     pub agent_type: Option<String>,
     /// Model to use (e.g., "claude-sonnet-4-5")
     pub model: Option<String>,
+    /// Provider ID for alternative API providers (e.g., "zai", "minimax")
+    /// Only applicable when agent_type is "claude"
+    pub provider_id: Option<String>,
     /// Maximum iterations (default: 50)
     pub max_iterations: Option<u32>,
     /// Maximum cost limit in dollars
@@ -356,6 +359,7 @@ pub fn convert_prd_file_to_ralph(
     let execution_config = PrdExecutionConfig {
         agent_type: request.agent_type.clone(),
         model: request.model.clone(),
+        provider_id: request.provider_id.clone(),
         max_iterations: request.max_iterations,
         max_cost: request.max_cost,
         run_tests: request.run_tests,

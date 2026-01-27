@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, RefreshCw, Repeat, GitBranch, FileCode } from 'lucide-react'
+import { Loader2, Repeat, GitBranch, FileCode } from 'lucide-react'
 import { ralphLoopApi, templateApi } from '@/lib/backend-api'
-import type { AgentType, PRDFile, TemplateInfo } from '@/types'
-import { useAvailableModels } from '@/hooks/useAvailableModels'
-import { usePRDExecutionConfig } from '@/hooks/usePRDExecutionConfig'
+import type { PRDFile, TemplateInfo } from '@/types'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import { getModelName } from '@/lib/model-api'
 import { Input } from '@/components/ui/input'
 
@@ -77,30 +77,28 @@ export function PRDFileExecutionDialog({
   const [executing, setExecuting] = useState(false)
   const [useWorktree, setUseWorktree] = useState(true)
   const [maxCost, setMaxCost] = useState<string>('')
+  const [maxIterations, setMaxIterations] = useState(50)
+  const [runTests, setRunTests] = useState(true)
+  const [runLint, setRunLint] = useState(true)
 
   // Template selection state (US-014)
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
 
-  // Load available models dynamically
-  const [initialAgentType] = useState<AgentType>('claude')
+  // Use the combined agent/model selector hook (supports provider variants)
   const {
+    agentType,
+    providerId,
+    modelId,
+    setModelId,
     models,
-    loading: modelsLoading,
-    refresh: refreshModels,
-    defaultModelId,
-  } = useAvailableModels(initialAgentType)
-
-  // Use the config hook
-  const { config, setConfig, handleAgentTypeChange } = usePRDExecutionConfig(open, defaultModelId)
-
-  // Update models when agent type changes
-  const {
-    models: currentModels,
-    loading: currentModelsLoading,
-    refresh: currentRefreshModels,
-  } = useAvailableModels(config.agentType)
+    modelsLoading,
+    agentOptions,
+    agentsLoading,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
+  } = useAgentModelSelector({ initialAgent: 'claude' })
 
   // Load templates when dialog opens (US-014)
   const loadTemplates = useCallback(async () => {
@@ -157,12 +155,13 @@ export function PRDFileExecutionDialog({
         projectPath: file.projectPath,
         prdName,
         branch,
-        agentType: config.agentType,
-        model: config.model,
-        maxIterations: config.maxIterations,
+        agentType: agentType,
+        model: modelId,
+        providerId: providerId, // Pass provider for Claude variants (e.g., Z.AI)
+        maxIterations: maxIterations,
         maxCost: maxCost ? parseFloat(maxCost) : undefined,
-        runTests: config.runTests,
-        runLint: config.runLint,
+        runTests: runTests,
+        runLint: runLint,
         useWorktree,
         templateName: selectedTemplate || undefined,
       })
@@ -181,13 +180,11 @@ export function PRDFileExecutionDialog({
     }
   }
 
-  // Use current models if available, otherwise fall back to initial
-  const displayModels = currentModels.length > 0 ? currentModels : models
-  const displayModelsLoading = currentModelsLoading || modelsLoading
-  const displayRefreshModels = currentModels.length > 0 ? currentRefreshModels : refreshModels
-
   // Get selected template info for display
   const selectedTemplateInfo = templates.find((t) => t.name === selectedTemplate)
+
+  // Get the display name for the current agent option (for summary)
+  const currentAgentLabel = agentOptions.find((o) => o.value === currentAgentOptionValue)?.label || agentType
 
   return (
     <ResponsiveModal
@@ -228,57 +225,19 @@ export function PRDFileExecutionDialog({
       }
     >
       <div className="space-y-6">
-        {/* Agent Type and Model */}
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="agent-type">Agent Type</Label>
-            <Select
-              id="agent-type"
-              value={config.agentType}
-              onChange={(e) => handleAgentTypeChange(e.target.value as AgentType)}
-              className="min-h-11 sm:min-h-9 text-base sm:text-sm"
-            >
-              <option value="claude">Claude Code</option>
-              <option value="opencode">OpenCode</option>
-              <option value="cursor">Cursor</option>
-              <option value="codex">Codex CLI</option>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="model">Model</Label>
-            <div className="flex items-center gap-2">
-              <Select
-                id="model"
-                value={config.model || ''}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                disabled={displayModelsLoading}
-                className="flex-1 min-h-11 sm:min-h-9 text-base sm:text-sm"
-              >
-                {displayModelsLoading ? (
-                  <option>Loading models...</option>
-                ) : displayModels.length === 0 ? (
-                  <option value="">No models available</option>
-                ) : (
-                  displayModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))
-                )}
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={displayRefreshModels}
-                disabled={displayModelsLoading}
-                className="min-h-11 min-w-11 sm:h-9 sm:w-9 flex-shrink-0"
-                title="Refresh models"
-              >
-                <RefreshCw className={`h-4 w-4 ${displayModelsLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Agent Type and Model - with provider variants support */}
+        <AgentModelSelector
+          agentType={agentType}
+          modelId={modelId}
+          onModelChange={setModelId}
+          models={models}
+          modelsLoading={modelsLoading}
+          agentOptions={agentOptions}
+          currentAgentOptionValue={currentAgentOptionValue}
+          onAgentOptionChange={handleAgentOptionChange}
+          agentsLoading={agentsLoading}
+          variant="default"
+        />
 
         {/* Template Selection (US-014) */}
         <div className="space-y-2">
@@ -320,8 +279,8 @@ export function PRDFileExecutionDialog({
             <Label htmlFor="max-iterations">Max Iterations</Label>
             <Select
               id="max-iterations"
-              value={config.maxIterations.toString()}
-              onChange={(e) => setConfig({ ...config, maxIterations: parseInt(e.target.value) })}
+              value={maxIterations.toString()}
+              onChange={(e) => setMaxIterations(parseInt(e.target.value))}
               className="min-h-11 sm:min-h-9 text-base sm:text-sm"
             >
               <option value="10">10</option>
@@ -378,19 +337,15 @@ export function PRDFileExecutionDialog({
           <div className="space-y-3">
             <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
               <Checkbox
-                checked={config.runTests}
-                onCheckedChange={(checked) =>
-                  setConfig({ ...config, runTests: checked as boolean })
-                }
+                checked={runTests}
+                onCheckedChange={(checked) => setRunTests(checked as boolean)}
               />
               <span className="text-sm">Run tests before marking tasks complete</span>
             </label>
             <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
               <Checkbox
-                checked={config.runLint}
-                onCheckedChange={(checked) =>
-                  setConfig({ ...config, runLint: checked as boolean })
-                }
+                checked={runLint}
+                onCheckedChange={(checked) => setRunLint(checked as boolean)}
               />
               <span className="text-sm">Run linter before marking tasks complete</span>
             </label>
@@ -401,22 +356,20 @@ export function PRDFileExecutionDialog({
         <div className="rounded-md bg-muted p-4">
           <p className="text-sm font-medium">Summary:</p>
           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-            <li>• Agent: {config.agentType}</li>
-            <li>• Model: {getModelName(displayModels, config.model || '')}</li>
+            <li>• Agent: {currentAgentLabel}</li>
+            <li>• Model: {getModelName(models, modelId)}</li>
             <li>
               • Template: {selectedTemplate || 'default'}
               {selectedTemplateInfo
                 ? ` (${formatTemplateSource(selectedTemplateInfo.source)})`
                 : ''}
             </li>
-            <li>• Max iterations: {config.maxIterations}</li>
+            <li>• Max iterations: {maxIterations}</li>
             <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
             <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
             <li>
               • Quality gates:{' '}
-              {[config.runTests && 'tests', config.runLint && 'lint']
-                .filter(Boolean)
-                .join(', ') || 'none'}
+              {[runTests && 'tests', runLint && 'lint'].filter(Boolean).join(', ') || 'none'}
             </li>
             <li className="text-green-600 dark:text-green-400">• PRD file: {file?.filePath}</li>
             <li className="text-green-600 dark:text-green-400">

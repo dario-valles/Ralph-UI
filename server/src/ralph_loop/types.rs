@@ -313,6 +313,11 @@ pub struct PrdExecutionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 
+    /// Provider ID for alternative API providers (e.g., "zai", "minimax")
+    /// Only applicable when agent_type is "claude"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+
     /// Maximum iterations per execution
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<u32>,
@@ -383,6 +388,7 @@ impl Default for PrdExecutionConfig {
         Self {
             agent_type: None,
             model: None,
+            provider_id: None,
             max_iterations: None,
             max_cost: None,
             run_tests: None,
@@ -2111,6 +2117,7 @@ mod tests {
         prd.execution_config = Some(PrdExecutionConfig {
             agent_type: Some("claude".to_string()),
             model: Some("claude-sonnet-4-5".to_string()),
+            provider_id: Some("zai".to_string()),
             max_iterations: Some(100),
             max_cost: Some(25.0),
             run_tests: Some(true),
