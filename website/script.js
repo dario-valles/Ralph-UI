@@ -15,6 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Intersection observer for scroll animations
   initScrollAnimations();
+
+  // Demo video controls
+  initVideoControls();
 });
 
 /**
@@ -164,3 +167,90 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+/**
+ * Initialize demo video controls
+ */
+function initVideoControls() {
+  const video = document.querySelector('.demo-video');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+  if (!video) return;
+
+  // Play/Pause
+  if (playPauseBtn) {
+    const playIcon = playPauseBtn.querySelector('.play-icon');
+    const pauseIcon = playPauseBtn.querySelector('.pause-icon');
+
+    playPauseBtn.addEventListener('click', () => {
+      if (video.paused) {
+        video.play();
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = 'block';
+      } else {
+        video.pause();
+        playIcon.style.display = 'block';
+        pauseIcon.style.display = 'none';
+      }
+    });
+
+    // Update button state when video plays/pauses
+    video.addEventListener('play', () => {
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = 'block';
+    });
+
+    video.addEventListener('pause', () => {
+      playIcon.style.display = 'block';
+      pauseIcon.style.display = 'none';
+    });
+  }
+
+  // Mute/Unmute
+  if (muteBtn) {
+    const volumeIcon = muteBtn.querySelector('.volume-icon');
+    const muteIcon = muteBtn.querySelector('.mute-icon');
+
+    muteBtn.addEventListener('click', () => {
+      video.muted = !video.muted;
+      if (video.muted) {
+        volumeIcon.style.display = 'none';
+        muteIcon.style.display = 'block';
+      } else {
+        volumeIcon.style.display = 'block';
+        muteIcon.style.display = 'none';
+      }
+    });
+  }
+
+  // Fullscreen
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (video.requestFullscreen) {
+        video.requestFullscreen();
+      } else if (video.webkitRequestFullscreen) {
+        video.webkitRequestFullscreen();
+      } else if (video.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+      }
+    });
+  }
+
+  // Click on video to play/pause
+  video.addEventListener('click', () => {
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  });
+
+  // Ensure video plays on load
+  video.play().catch((error) => {
+    console.log('Autoplay prevented:', error);
+    // Video will require user interaction to play
+  });
+}
+

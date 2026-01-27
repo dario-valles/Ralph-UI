@@ -27,9 +27,9 @@
         <span class="logo-text">Ralph UI</span>
       </a>
       <div class="nav-links">
+        <a href="#demo">Demo</a>
         <a href="#showcase">Screenshots</a>
         <a href="#agents">Agents</a>
-        <a href="#providers">Providers</a>
         <a href="#features">Features</a>
         <a href="#quickstart">Quick Start</a>
         <a href="https://github.com/dario-valles/Ralph-UI" target="_blank" rel="noopener" class="nav-github">
@@ -130,6 +130,76 @@
       <div class="mobile-frame">
         <div class="mobile-notch"></div>
         <img src="assets/mobile-prd-chat.png" alt="Ralph UI Mobile Chat" class="screenshot-mobile" loading="eager">
+      </div>
+    </div>
+  </section>
+
+  <!-- Demo Video Section -->
+  <section class="demo-section" id="demo">
+    <div class="demo-container">
+      <div class="demo-header">
+        <span class="demo-tag">// WATCH IT WORK</span>
+        <h2 class="demo-title">See Ralph UI<br><span class="accent">In Action</span></h2>
+        <p class="demo-subtitle">60 seconds of autonomous AI development. From chat to PRD to agent execution.</p>
+      </div>
+
+      <div class="video-wrapper">
+        <div class="video-frame">
+          <div class="video-border"></div>
+          <div class="video-glow"></div>
+          <video
+            class="demo-video"
+            autoplay
+            muted
+            loop
+            playsinline
+            poster="assets/desktop-prd-chat.png"
+            preload="metadata">
+            <source src="assets/demo_video.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+
+          <div class="video-overlay">
+            <div class="video-controls">
+              <button class="video-control-btn" id="playPauseBtn" aria-label="Play/Pause">
+                <svg class="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg class="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
+              <button class="video-control-btn" id="muteBtn" aria-label="Mute/Unmute">
+                <svg class="volume-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <svg class="mute-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                  <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4.73L12 21.27 13.73 19.27 9 14.54V9H4.27z"/>
+                </svg>
+              </button>
+              <button class="video-control-btn" id="fullscreenBtn" aria-label="Fullscreen">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="video-caption">
+          <div class="caption-item">
+            <span class="caption-number">01</span>
+            <span class="caption-text">Chat transforms into structured PRD</span>
+          </div>
+          <div class="caption-item">
+            <span class="caption-number">02</span>
+            <span class="caption-text">Agents spawn and work autonomously</span>
+          </div>
+          <div class="caption-item">
+            <span class="caption-number">03</span>
+            <span class="caption-text">Monitor progress from anywhere</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
