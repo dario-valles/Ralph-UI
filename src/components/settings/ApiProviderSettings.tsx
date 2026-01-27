@@ -143,15 +143,16 @@ export function ApiProviderSettings() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{provider.name}</h3>
-                      {provider.isActive && (
+                      {/* Show "Ready" for all providers that can be used */}
+                      {(provider.hasToken || provider.id === 'anthropic') && (
                         <Badge variant="success" className="text-xs">
-                          Active
+                          Ready
                         </Badge>
                       )}
-                      {/* Show "Configured" for non-active providers with tokens, or Anthropic (always available) */}
-                      {!provider.isActive && (provider.hasToken || provider.id === 'anthropic') && (
+                      {/* Show "Default" indicator for the globally active provider */}
+                      {provider.isActive && (
                         <Badge variant="outline" className="text-xs">
-                          Configured
+                          Default
                         </Badge>
                       )}
                     </div>
@@ -160,17 +161,17 @@ export function ApiProviderSettings() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {!provider.isActive && (
+                  {!provider.isActive && (provider.hasToken || provider.id === 'anthropic') && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleSetActive(provider.id)}
-                      disabled={saving === provider.id || !provider.hasToken && provider.id !== 'anthropic'}
+                      disabled={saving === provider.id}
                     >
                       {saving === provider.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Set Active'
+                        'Set Default'
                       )}
                     </Button>
                   )}
