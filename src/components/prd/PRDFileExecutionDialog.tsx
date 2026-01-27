@@ -46,19 +46,6 @@ function setLastUsedTemplate(projectPath: string, templateName: string): void {
   }
 }
 
-/** Format template source for display */
-function formatTemplateSource(source: TemplateInfo['source']): string {
-  switch (source) {
-    case 'project':
-      return 'project'
-    case 'global':
-      return 'global'
-    case 'builtin':
-      return 'builtin'
-    default:
-      return source
-  }
-}
 
 interface PRDFileExecutionDialogProps {
   file: PRDFile | null
@@ -186,6 +173,9 @@ export function PRDFileExecutionDialog({
   // Get the display name for the current agent option (for summary)
   const currentAgentLabel = agentOptions.find((o) => o.value === currentAgentOptionValue)?.label || agentType
 
+  // Derive quality gates label from state
+  const qualityGatesLabel = [runTests && 'tests', runLint && 'lint'].filter(Boolean).join(', ') || 'none'
+
   return (
     <ResponsiveModal
       open={open}
@@ -260,7 +250,7 @@ export function PRDFileExecutionDialog({
             ) : (
               templates.map((t) => (
                 <option key={`${t.source}-${t.name}`} value={t.name}>
-                  {t.name} ({formatTemplateSource(t.source)})
+                  {t.name} ({t.source})
                 </option>
               ))
             )}
@@ -268,7 +258,7 @@ export function PRDFileExecutionDialog({
           {selectedTemplateInfo && (
             <p className="text-xs text-muted-foreground">
               {selectedTemplateInfo.description ||
-                `Template from ${formatTemplateSource(selectedTemplateInfo.source)} scope`}
+                `Template from ${selectedTemplateInfo.source} scope`}
             </p>
           )}
         </div>
@@ -335,20 +325,15 @@ export function PRDFileExecutionDialog({
         <div className="space-y-3">
           <Label>Quality Gates</Label>
           <div className="space-y-3">
-            <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
-              <Checkbox
-                checked={runTests}
-                onCheckedChange={(checked) => setRunTests(checked as boolean)}
-              />
-              <span className="text-sm">Run tests before marking tasks complete</span>
-            </label>
-            <label className="flex items-center gap-3 min-h-11 sm:min-h-auto">
-              <Checkbox
-                checked={runLint}
-                onCheckedChange={(checked) => setRunLint(checked as boolean)}
-              />
-              <span className="text-sm">Run linter before marking tasks complete</span>
-            </label>
+            {[
+              { key: 'tests', checked: runTests, onChange: setRunTests, label: 'Run tests before marking tasks complete' },
+              { key: 'lint', checked: runLint, onChange: setRunLint, label: 'Run linter before marking tasks complete' },
+            ].map(({ key, checked, onChange, label }) => (
+              <label key={key} className="flex items-center gap-3 min-h-11 sm:min-h-auto">
+                <Checkbox checked={checked} onCheckedChange={(c) => onChange(c as boolean)} />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
           </div>
         </div>
 
@@ -360,17 +345,12 @@ export function PRDFileExecutionDialog({
             <li>• Model: {getModelName(models, modelId)}</li>
             <li>
               • Template: {selectedTemplate || 'default'}
-              {selectedTemplateInfo
-                ? ` (${formatTemplateSource(selectedTemplateInfo.source)})`
-                : ''}
+              {selectedTemplateInfo ? ` (${selectedTemplateInfo.source})` : ''}
             </li>
             <li>• Max iterations: {maxIterations}</li>
             <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
             <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
-            <li>
-              • Quality gates:{' '}
-              {[runTests && 'tests', runLint && 'lint'].filter(Boolean).join(', ') || 'none'}
-            </li>
+            <li>• Quality gates: {qualityGatesLabel}</li>
             <li className="text-green-600 dark:text-green-400">• PRD file: {file?.filePath}</li>
             <li className="text-green-600 dark:text-green-400">
               • Each iteration spawns a fresh agent
