@@ -27,10 +27,18 @@ interface AIRequirementGeneratorProps {
   isGenerating?: boolean
 }
 
+/** Extract error message from unknown error type */
 function getErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'An unexpected error occurred'
 }
 
+/**
+ * AI-powered requirement generator component
+ *
+ * Provides a collapsible panel where users can describe requirements in natural
+ * language. Uses the selected AI agent to generate structured requirements that
+ * can be previewed, regenerated, and accepted into the requirement list.
+ */
 export function AIRequirementGenerator({
   onGenerate,
   onAcceptRequirements,
@@ -44,16 +52,17 @@ export function AIRequirementGenerator({
   const [error, setError] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
 
-  // Agent and model selection
+  // Agent and model selection with provider support
   const {
     agentType,
-    setAgentType,
     modelId,
     setModelId,
     models,
     modelsLoading,
-    availableAgents,
+    agentOptions,
     agentsLoading,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
   } = useAgentModelSelector()
 
   const resetState = useCallback(() => {
@@ -151,13 +160,14 @@ export function AIRequirementGenerator({
               {/* Agent and Model configuration */}
               <AgentModelSelector
                 agentType={agentType}
-                onAgentChange={setAgentType}
                 modelId={modelId}
                 onModelChange={setModelId}
                 models={models}
                 modelsLoading={modelsLoading}
-                availableAgents={availableAgents}
+                agentOptions={agentOptions}
                 agentsLoading={agentsLoading}
+                currentAgentOptionValue={currentAgentOptionValue}
+                onAgentOptionChange={handleAgentOptionChange}
                 disabled={isGenerating}
                 variant="default"
               />

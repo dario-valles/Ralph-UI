@@ -54,6 +54,9 @@ src-tauri/ralph-ui.db
 .ralph/
 .worktrees/
 
+# Cloudflare Wrangler local state
+.wrangler/
+
 # Tailscale HTTPS certificates
 certs/
 *.crt
