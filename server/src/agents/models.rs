@@ -126,8 +126,9 @@ pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
             ModelInfo::new("gpt-4o", "GPT-4o", "openai", false),
         ],
         AgentType::Codex => vec![
-            ModelInfo::new("gpt-4o", "GPT-4o", "openai", true),
-            ModelInfo::new("o1", "OpenAI o1", "openai", false),
+            ModelInfo::new("gpt-5.2-codex", "GPT-5.2 Codex", "openai", true),
+            ModelInfo::new("gpt-5.1-codex-mini", "GPT-5.1 Codex Mini", "openai", false),
+            ModelInfo::new("gpt-5.1-codex-max", "GPT-5.1 Codex Max", "openai", false),
         ],
         AgentType::Qwen => vec![
             ModelInfo::new("qwen-2.5-coder", "Qwen 2.5 Coder", "qwen", true),
@@ -136,6 +137,11 @@ pub fn get_fallback_models(agent_type: &AgentType) -> Vec<ModelInfo> {
         AgentType::Droid => vec![
             ModelInfo::new("claude-sonnet-4-5", "Claude Sonnet 4.5", "anthropic", true),
             ModelInfo::new("gpt-4o", "GPT-4o", "openai", false),
+        ],
+        AgentType::Gemini => vec![
+            ModelInfo::new("gemini-2.5-pro", "Gemini 2.5 Pro", "google", true),
+            ModelInfo::new("gemini-2.5-flash", "Gemini 2.5 Flash", "google", false),
+            ModelInfo::new("gemini-2.0-flash", "Gemini 2.0 Flash", "google", false),
         ],
     }
 }
@@ -172,7 +178,15 @@ mod tests {
         let models = get_fallback_models(&AgentType::Codex);
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.is_default));
-        assert!(models.iter().any(|m| m.id == "gpt-4o"));
+        assert!(models.iter().any(|m| m.id == "gpt-5.2-codex"));
+    }
+
+    #[test]
+    fn test_get_fallback_models_gemini() {
+        let models = get_fallback_models(&AgentType::Gemini);
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.is_default));
+        assert!(models.iter().any(|m| m.id == "gemini-2.5-pro"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 // Agent types for AI coding agents
 
-export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex' | 'qwen' | 'droid'
+export type AgentType = 'claude' | 'opencode' | 'cursor' | 'codex' | 'qwen' | 'droid' | 'gemini'
 
 /** Agent display names for UI */
 const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
@@ -10,6 +10,7 @@ const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
   codex: 'Codex',
   qwen: 'Qwen',
   droid: 'Droid',
+  gemini: 'Gemini',
 }
 
 /** Format agent type for display in UI */

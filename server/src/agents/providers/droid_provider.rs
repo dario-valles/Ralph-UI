@@ -84,3 +84,48 @@ impl AgentPlugin for DroidProvider {
         line.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::manager::AgentSpawnMode;
+
+    #[test]
+    fn test_droid_provider_new() {
+        let provider = DroidProvider::new();
+        assert_eq!(provider.agent_type(), AgentType::Droid);
+    }
+
+    #[test]
+    fn test_droid_provider_default() {
+        let provider = DroidProvider::default();
+        assert_eq!(provider.agent_type(), AgentType::Droid);
+    }
+
+    #[test]
+    fn test_discover_models_returns_empty() {
+        let provider = DroidProvider::new();
+        let models = provider.discover_models().unwrap();
+        assert!(models.is_empty());
+    }
+
+    #[test]
+    fn test_build_command() {
+        let provider = DroidProvider::new();
+        let config = AgentSpawnConfig {
+            agent_type: AgentType::Droid,
+            task_id: "test-task".to_string(),
+            worktree_path: "/tmp".to_string(),
+            branch: "main".to_string(),
+            max_iterations: 10,
+            prompt: Some("test prompt".to_string()),
+            model: None,
+            spawn_mode: AgentSpawnMode::Piped,
+            plugin_config: None,
+            env_vars: None,
+        };
+
+        // This test depends on environment, so we just check if it fails or returns command
+        let _ = provider.build_command(&config);
+    }
+}

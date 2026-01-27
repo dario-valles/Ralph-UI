@@ -92,10 +92,11 @@ impl ChatEventEmitter for BroadcastEmitter {
 /// Session resumption support by agent:
 /// - Claude: `--resume session-id`
 /// - Cursor: `--resume="chat-id"`
-/// - Codex: `codex resume <SESSION_ID>` (subcommand changes)
+/// - Codex: `codex exec resume <SESSION_ID>` (subcommand changes)
 /// - Qwen: `--continue` (uses implicit continuation, no ID needed)
 /// - OpenCode: `--session [id]`
 /// - Droid: `--session-id <id>`
+/// - Gemini: `--resume <id>`
 pub fn build_agent_command(
     agent_type: AgentType,
     prompt: &str,
@@ -134,13 +135,19 @@ pub fn build_agent_command(
         }
         AgentType::Codex => {
             if let Some(sid) = external_session_id {
-                // Codex uses a different subcommand for resume
+                // Codex uses exec resume subcommand for session continuation
                 (
                     "codex",
-                    vec!["resume".to_string(), sid.to_string(), prompt.to_string()],
+                    vec![
+                        "exec".to_string(),
+                        "resume".to_string(),
+                        sid.to_string(),
+                        prompt.to_string(),
+                    ],
                 )
             } else {
-                ("codex", vec!["--prompt".to_string(), prompt.to_string()])
+                // Codex uses exec subcommand for headless execution
+                ("codex", vec!["exec".to_string(), prompt.to_string()])
             }
         }
         AgentType::Qwen => {
@@ -154,14 +161,23 @@ pub fn build_agent_command(
             ("qwen", args)
         }
         AgentType::Droid => {
-            let mut args = vec!["chat".to_string()];
+            let mut args = vec!["exec".to_string()];
             if let Some(sid) = external_session_id {
-                args.push("--session-id".to_string());
+                args.push("-s".to_string());
                 args.push(sid.to_string());
             }
             args.push("--prompt".to_string());
             args.push(prompt.to_string());
             ("droid", args)
+        }
+        AgentType::Gemini => {
+            let mut args = vec!["-p".to_string(), "--yolo".to_string()];
+            if let Some(sid) = external_session_id {
+                args.push("--resume".to_string());
+                args.push(sid.to_string());
+            }
+            args.push(prompt.to_string());
+            ("gemini", args)
         }
     }
 }
@@ -463,6 +479,14 @@ fn parse_session_id_from_output(agent_type: AgentType, output: &str) -> Option<S
                 .and_then(|caps| caps.get(1))
                 .map(|m| m.as_str().to_string())
         }
+        AgentType::Gemini => {
+            // Gemini CLI outputs session ID in format: "Session: <id>" or similar
+            // Match session ID that follows "Session:" (accounting for spaces)
+            let re = Regex::new(r"(?i)session:\s*([a-zA-Z0-9_-]+)").ok()?;
+            re.captures(output)
+                .and_then(|caps| caps.get(1))
+                .map(|m| m.as_str().to_string())
+        }
     }
 }
 
@@ -540,7 +564,7 @@ mod tests {
     fn test_build_agent_command_droid() {
         let (program, args) = build_agent_command(AgentType::Droid, "test prompt", None);
         assert_eq!(program, "droid");
-        assert_eq!(args[0], "chat");
+        assert_eq!(args[0], "exec");
         assert_eq!(args[1], "--prompt");
         assert_eq!(args[2], "test prompt");
     }
@@ -550,8 +574,8 @@ mod tests {
         let (program, args) =
             build_agent_command(AgentType::Droid, "test prompt", Some("droid-session"));
         assert_eq!(program, "droid");
-        assert_eq!(args[0], "chat");
-        assert_eq!(args[1], "--session-id");
+        assert_eq!(args[0], "exec");
+        assert_eq!(args[1], "-s");
         assert_eq!(args[2], "droid-session");
         assert_eq!(args[3], "--prompt");
         assert_eq!(args[4], "test prompt");
@@ -568,13 +592,22 @@ mod tests {
     }
 
     #[test]
+    fn test_build_agent_command_codex() {
+        let (program, args) = build_agent_command(AgentType::Codex, "test prompt", None);
+        assert_eq!(program, "codex");
+        assert_eq!(args[0], "exec");
+        assert_eq!(args[1], "test prompt");
+    }
+
+    #[test]
     fn test_build_agent_command_codex_with_resume() {
         let (program, args) =
             build_agent_command(AgentType::Codex, "test prompt", Some("codex-session"));
         assert_eq!(program, "codex");
-        assert_eq!(args[0], "resume");
-        assert_eq!(args[1], "codex-session");
-        assert_eq!(args[2], "test prompt");
+        assert_eq!(args[0], "exec");
+        assert_eq!(args[1], "resume");
+        assert_eq!(args[2], "codex-session");
+        assert_eq!(args[3], "test prompt");
     }
 
     #[test]
@@ -584,6 +617,27 @@ mod tests {
         assert_eq!(args[0], "--continue");
         assert_eq!(args[1], "--prompt");
         assert_eq!(args[2], "test prompt");
+    }
+
+    #[test]
+    fn test_build_agent_command_gemini() {
+        let (program, args) = build_agent_command(AgentType::Gemini, "test prompt", None);
+        assert_eq!(program, "gemini");
+        assert_eq!(args[0], "-p");
+        assert_eq!(args[1], "--yolo");
+        assert_eq!(args[2], "test prompt");
+    }
+
+    #[test]
+    fn test_build_agent_command_gemini_with_resume() {
+        let (program, args) =
+            build_agent_command(AgentType::Gemini, "test prompt", Some("gemini-session"));
+        assert_eq!(program, "gemini");
+        assert_eq!(args[0], "-p");
+        assert_eq!(args[1], "--yolo");
+        assert_eq!(args[2], "--resume");
+        assert_eq!(args[3], "gemini-session");
+        assert_eq!(args[4], "test prompt");
     }
 
     #[test]
@@ -608,6 +662,13 @@ mod tests {
         let output = "Hello! How can I help you today?";
         let session_id = parse_session_id_from_output(AgentType::Claude, output);
         assert!(session_id.is_none());
+    }
+
+    #[test]
+    fn test_parse_session_id_gemini() {
+        let output = "Starting new session\nSession: gemini-abc123-xyz\nHello!";
+        let session_id = parse_session_id_from_output(AgentType::Gemini, output);
+        assert_eq!(session_id, Some("gemini-abc123-xyz".to_string()));
     }
 
     #[test]

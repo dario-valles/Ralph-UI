@@ -7,118 +7,64 @@ pub struct CliPathResolver;
 
 impl CliPathResolver {
     /// Resolve OpenCode binary path
-    /// Checks common installation locations before falling back to `which`
     pub fn resolve_opencode() -> Option<PathBuf> {
-        // 1. Check common paths first (fastest)
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".opencode/bin/opencode")),
-            dirs::home_dir().map(|h| h.join(".npm-global/bin/opencode")),
-            Some(PathBuf::from("/usr/local/bin/opencode")),
-            Some(PathBuf::from("/opt/homebrew/bin/opencode")),
-        ];
-
-        for path in common_paths.into_iter().flatten() {
-            if path.exists() {
-                log::info!("[CliPathResolver] Found OpenCode at: {:?}", path);
-                return Some(path);
-            }
-        }
-
-        // 2. Try which command
-        Self::which("opencode")
+        Self::resolve_cli(
+            "opencode",
+            &[dirs::home_dir().map(|h| h.join(".opencode/bin/opencode"))],
+        )
     }
 
     /// Resolve Claude CLI binary path
-    /// Claude is typically installed via npm global or brew
     pub fn resolve_claude() -> Option<PathBuf> {
-        // Check common paths first
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".npm-global/bin/claude")),
-            Some(PathBuf::from("/usr/local/bin/claude")),
-            Some(PathBuf::from("/opt/homebrew/bin/claude")),
-        ];
-
-        for path in common_paths.into_iter().flatten() {
-            if path.exists() {
-                log::info!("[CliPathResolver] Found Claude at: {:?}", path);
-                return Some(path);
-            }
-        }
-
-        // Try which command
-        Self::which("claude")
+        Self::resolve_cli("claude", &[])
     }
 
     /// Resolve Cursor Agent binary path
     pub fn resolve_cursor() -> Option<PathBuf> {
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".cursor/bin/cursor-agent")),
-            Some(PathBuf::from("/usr/local/bin/cursor-agent")),
-            Some(PathBuf::from("/opt/homebrew/bin/cursor-agent")),
-        ];
-
-        for path in common_paths.into_iter().flatten() {
-            if path.exists() {
-                log::info!("[CliPathResolver] Found Cursor at: {:?}", path);
-                return Some(path);
-            }
-        }
-
-        Self::which("cursor-agent")
+        Self::resolve_cli(
+            "cursor-agent",
+            &[dirs::home_dir().map(|h| h.join(".cursor/bin/cursor-agent"))],
+        )
     }
 
     /// Resolve Codex CLI binary path
     pub fn resolve_codex() -> Option<PathBuf> {
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".npm-global/bin/codex")),
-            Some(PathBuf::from("/usr/local/bin/codex")),
-            Some(PathBuf::from("/opt/homebrew/bin/codex")),
-        ];
-
-        for path in common_paths.into_iter().flatten() {
-            if path.exists() {
-                log::info!("[CliPathResolver] Found Codex at: {:?}", path);
-                return Some(path);
-            }
-        }
-
-        Self::which("codex")
+        Self::resolve_cli("codex", &[])
     }
 
     /// Resolve Qwen CLI binary path
     pub fn resolve_qwen() -> Option<PathBuf> {
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".npm-global/bin/qwen")),
-            Some(PathBuf::from("/usr/local/bin/qwen")),
-            Some(PathBuf::from("/opt/homebrew/bin/qwen")),
-        ];
-
-        for path in common_paths.into_iter().flatten() {
-            if path.exists() {
-                log::info!("[CliPathResolver] Found Qwen at: {:?}", path);
-                return Some(path);
-            }
-        }
-
-        Self::which("qwen")
+        Self::resolve_cli("qwen", &[])
     }
 
     /// Resolve Droid CLI binary path
     pub fn resolve_droid() -> Option<PathBuf> {
-        let common_paths = [
-            dirs::home_dir().map(|h| h.join(".npm-global/bin/droid")),
-            Some(PathBuf::from("/usr/local/bin/droid")),
-            Some(PathBuf::from("/opt/homebrew/bin/droid")),
+        Self::resolve_cli("droid", &[])
+    }
+
+    /// Resolve Gemini CLI binary path
+    pub fn resolve_gemini() -> Option<PathBuf> {
+        Self::resolve_cli("gemini", &[])
+    }
+
+    /// Resolve a CLI binary by checking common paths then falling back to `which`
+    fn resolve_cli(name: &str, extra_paths: &[Option<PathBuf>]) -> Option<PathBuf> {
+        // Build common paths list: extra paths + standard locations
+        let standard_paths = [
+            dirs::home_dir().map(|h| h.join(format!(".npm-global/bin/{}", name))),
+            Some(PathBuf::from(format!("/usr/local/bin/{}", name))),
+            Some(PathBuf::from(format!("/opt/homebrew/bin/{}", name))),
         ];
 
-        for path in common_paths.into_iter().flatten() {
+        // Check extra paths first, then standard paths
+        for path in extra_paths.iter().chain(standard_paths.iter()).flatten() {
             if path.exists() {
-                log::info!("[CliPathResolver] Found Droid at: {:?}", path);
-                return Some(path);
+                log::info!("[CliPathResolver] Found {} at: {:?}", name, path);
+                return Some(path.clone());
             }
         }
 
-        Self::which("droid")
+        Self::which(name)
     }
 
     /// Use the `which` command to find a binary in PATH
@@ -197,5 +143,11 @@ mod tests {
     fn test_resolve_droid_returns_path_or_none() {
         // This test just ensures the function doesn't panic
         let _ = CliPathResolver::resolve_droid();
+    }
+
+    #[test]
+    fn test_resolve_gemini_returns_path_or_none() {
+        // This test just ensures the function doesn't panic
+        let _ = CliPathResolver::resolve_gemini();
     }
 }

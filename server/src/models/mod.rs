@@ -57,6 +57,7 @@ pub enum AgentType {
     Codex,
     Qwen,
     Droid,
+    Gemini,
 }
 
 impl AgentType {
@@ -69,6 +70,7 @@ impl AgentType {
             AgentType::Codex,
             AgentType::Qwen,
             AgentType::Droid,
+            AgentType::Gemini,
         ]
     }
 
@@ -81,6 +83,7 @@ impl AgentType {
             AgentType::Codex => "codex",
             AgentType::Qwen => "qwen",
             AgentType::Droid => "droid",
+            AgentType::Gemini => "gemini",
         }
     }
 }
@@ -102,8 +105,9 @@ impl std::str::FromStr for AgentType {
             "codex" => Ok(AgentType::Codex),
             "qwen" => Ok(AgentType::Qwen),
             "droid" => Ok(AgentType::Droid),
+            "gemini" => Ok(AgentType::Gemini),
             _ => Err(format!(
-                "Unknown agent type: '{}'. Expected one of: claude, opencode, cursor, codex, qwen, droid",
+                "Unknown agent type: '{}'. Expected one of: claude, opencode, cursor, codex, qwen, droid, gemini",
                 s
             )),
         }

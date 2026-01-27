@@ -67,8 +67,12 @@ describe('fallback-models', () => {
       expect(getDefaultModel('cursor')).toBe('claude-sonnet-4-5')
     })
 
-    it('returns gpt-4o for codex agent', () => {
-      expect(getDefaultModel('codex')).toBe('gpt-4o')
+    it('returns gpt-5.2-codex for codex agent', () => {
+      expect(getDefaultModel('codex')).toBe('gpt-5.2-codex')
+    })
+
+    it('returns gemini-2.5-pro for gemini agent', () => {
+      expect(getDefaultModel('gemini')).toBe('gemini-2.5-pro')
     })
   })
 
@@ -78,7 +82,8 @@ describe('fallback-models', () => {
       expect(getModelLabel('claude', 'claude-opus-4-5')).toBe('Claude Opus 4.5')
       expect(getModelLabel('opencode', 'anthropic/claude-sonnet-4-5')).toBe('Claude Sonnet 4.5')
       expect(getModelLabel('opencode', 'openai/gpt-4o')).toBe('GPT-4o')
-      expect(getModelLabel('codex', 'gpt-4o')).toBe('GPT-4o')
+      expect(getModelLabel('codex', 'gpt-5.2-codex')).toBe('GPT-5.2 Codex')
+      expect(getModelLabel('gemini', 'gemini-2.5-pro')).toBe('Gemini 2.5 Pro')
     })
 
     it('returns the value itself for unknown models', () => {

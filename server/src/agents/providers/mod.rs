@@ -4,6 +4,7 @@ mod claude_provider;
 mod codex_provider;
 mod cursor_provider;
 mod droid_provider;
+mod gemini_provider;
 mod opencode_provider;
 mod qwen_provider;
 
@@ -14,6 +15,7 @@ pub use claude_provider::ClaudeProvider;
 pub use codex_provider::CodexProvider;
 pub use cursor_provider::CursorProvider;
 pub use droid_provider::DroidProvider;
+pub use gemini_provider::GeminiProvider;
 pub use opencode_provider::OpencodeProvider;
 pub use qwen_provider::QwenProvider;
 
@@ -26,6 +28,7 @@ pub fn get_provider(agent_type: &AgentType) -> Box<dyn AgentPlugin> {
         AgentType::Cursor => Box::new(CursorProvider::new()),
         AgentType::Qwen => Box::new(QwenProvider::new()),
         AgentType::Droid => Box::new(DroidProvider::new()),
+        AgentType::Gemini => Box::new(GeminiProvider::new()),
     }
 }
 
@@ -67,5 +70,11 @@ mod tests {
     fn test_get_provider_droid() {
         let provider = get_provider(&AgentType::Droid);
         assert_eq!(provider.agent_type(), AgentType::Droid);
+    }
+
+    #[test]
+    fn test_get_provider_gemini() {
+        let provider = get_provider(&AgentType::Gemini);
+        assert_eq!(provider.agent_type(), AgentType::Gemini);
     }
 }

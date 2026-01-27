@@ -23,14 +23,20 @@ export const MODELS_BY_AGENT: Record<AgentType, ModelOption[]> = {
     { value: 'gpt-4o', label: 'GPT-4o' },
   ],
   codex: [
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'o1', label: 'OpenAI o1' },
+    { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+    { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+    { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
   ],
   qwen: [
     { value: 'qwen-coder-32b', label: 'Qwen Coder 32B' },
     { value: 'qwen-coder-7b', label: 'Qwen Coder 7B' },
   ],
   droid: [{ value: 'default', label: 'Default' }],
+  gemini: [
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  ],
 }
 
 // Get default model for an agent type

@@ -204,6 +204,7 @@ pub async fn check_agent_availability(
         AgentType::Codex => "codex",
         AgentType::Qwen => "qwen",
         AgentType::Droid => "droid",
+        AgentType::Gemini => "gemini",
     };
 
     // Check if the program exists in PATH using `which` on Unix or `where` on Windows

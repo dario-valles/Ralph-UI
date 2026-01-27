@@ -992,6 +992,7 @@ impl AgentManager {
             AgentType::Codex => self.build_codex_command(config),
             AgentType::Qwen => self.build_qwen_command(config),
             AgentType::Droid => self.build_droid_command(config),
+            AgentType::Gemini => self.build_gemini_command(config),
         }
     }
 
@@ -1163,6 +1164,9 @@ impl AgentManager {
 
         let mut cmd = Command::new(&codex_path);
 
+        // Codex uses "exec" subcommand for headless execution
+        cmd.arg("exec");
+
         let worktree = Path::new(&config.worktree_path);
         if worktree.exists() {
             cmd.current_dir(&config.worktree_path);
@@ -1257,6 +1261,42 @@ impl AgentManager {
 
         if let Some(model) = &config.model {
             cmd.arg("--model").arg(model);
+        }
+
+        Ok(cmd)
+    }
+
+    fn build_gemini_command(&self, config: &AgentSpawnConfig) -> Result<Command> {
+        let gemini_path = CliPathResolver::resolve_gemini().ok_or_else(|| {
+            anyhow!("Gemini CLI not found. Install via: npm install -g @google/gemini-cli")
+        })?;
+
+        log::info!("[AgentManager] Gemini path: {:?}", gemini_path);
+
+        let mut cmd = Command::new(&gemini_path);
+
+        let worktree = Path::new(&config.worktree_path);
+        if worktree.exists() {
+            cmd.current_dir(&config.worktree_path);
+        }
+
+        match &config.prompt {
+            Some(prompt) if !prompt.trim().is_empty() => {
+                cmd.arg("-p").arg(prompt);
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Gemini requires a non-empty prompt. Task description is empty for task {}",
+                    config.task_id
+                ));
+            }
+        }
+
+        // Enable autonomous mode (skip confirmations)
+        cmd.arg("--yolo");
+
+        if let Some(model) = &config.model {
+            cmd.arg("-m").arg(model);
         }
 
         Ok(cmd)
