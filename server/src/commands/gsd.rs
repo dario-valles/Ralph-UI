@@ -1339,6 +1339,30 @@ fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement
         parsed.len()
     );
 
+    // Detect if AI returned tool names instead of requirement objects
+    if !parsed.is_empty()
+        && parsed.iter().all(|v| v.is_string())
+        && parsed.iter().all(|v| {
+            v.as_str()
+                .map(|s| {
+                    s == "Task"
+                        || s == "TaskOutput"
+                        || s == "Bash"
+                        || s == "Glob"
+                        || s == "Grep"
+                        || s == "Read"
+                        || s == "Edit"
+                        || s == "Write"
+                        || s.starts_with("mcp__")
+                })
+                .unwrap_or(false)
+        })
+    {
+        return Err(
+            "The AI returned a list of tool names instead of requirement objects. This indicates the AI misunderstood the task. Please try again or use a different AI provider/model.".to_string()
+        );
+    }
+
     let mut requirements = Vec::new();
     let mut skipped = Vec::new();
 
@@ -1690,5 +1714,27 @@ Here are the requirements:
 "#;
         let result = extract_json_array(text_with_markdown);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_generated_requirements_detects_tool_names() {
+        // Simulate AI returning tool names instead of requirement objects
+        let tool_names = serde_json::to_string(&vec![
+            "Task",
+            "TaskOutput",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Read",
+            "Edit",
+            "Write",
+        ])
+        .unwrap();
+
+        let result = parse_generated_requirements(&tool_names);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("tool names"));
+        assert!(err.contains("misunderstood"));
     }
 }

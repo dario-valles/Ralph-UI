@@ -252,12 +252,14 @@ const REQUIREMENT_GENERATION_TEMPLATE: &str = r#"You are an expert requirements 
 {{ user_prompt }}
 
 ## Instructions
-Generate {{ count }} requirements as a JSON array. Each requirement must be:
+Generate {{ count }} software requirements as a JSON array. Each requirement must be:
 - Specific and measurable (avoid vague terms like "fast", "easy", "simple")
 - User-focused (describe the benefit to users)
 - Atomic (one capability per requirement, not multiple combined)
 - Testable with clear acceptance criteria
 - Non-overlapping with existing requirements
+
+**IMPORTANT**: You are generating SOFTWARE REQUIREMENTS, not CLI commands, not tool names, not function names. Each requirement should describe a FEATURE or CAPABILITY that a user would interact with.
 
 ## Output Format
 Output ONLY a valid JSON array with no additional text, no markdown formatting, and no trailing commas.
@@ -304,7 +306,9 @@ REMINDER: Every requirement object MUST include ALL fields. Do NOT omit the "tit
 ❌ DO NOT use trailing commas (not valid in strict JSON)
 ❌ DO NOT omit the "title" field (it is required for every requirement)
 ❌ DO NOT return a single object - always return an array
+❌ DO NOT list tool names, command names, or function names - you are generating REQUIREMENTS, not code
 ✅ DO output only the raw JSON array starting with [ and ending with ]
+✅ DO ensure each array element is an object with the fields listed above
 "#;
 
 #[cfg(test)]
