@@ -49,6 +49,9 @@ bun run dev
 
 # Open http://localhost:1420 in browser
 # Enter the auth token displayed by the server
+
+# Install git hooks (recommended, one-time setup)
+./scripts/install-hooks.sh
 ```
 
 ## Running the Server
@@ -412,6 +415,8 @@ cargo fmt --check              # Rust formatting
 cargo clippy -- -D warnings    # Rust lints (strict, no warnings)
 cargo test                     # Backend tests
 ```
+
+**Pre-commit hooks:** Run `./scripts/install-hooks.sh` to install git hooks that automatically check `cargo fmt` and `bun run lint` before each commit. This prevents CI failures from formatting issues.
 
 **Clippy Configuration:** Crate-level clippy allows are defined in `server/src/lib.rs` with explanatory comments. Only add new allows if fixing the warning would significantly reduce readability or require major refactoring.
 

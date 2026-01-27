@@ -1055,19 +1055,19 @@ mod tests {
 
     #[test]
     fn test_get_prd_filename_with_file_prd_id() {
-        let filename = get_prd_filename("session123", Some("Ignored Title"), Some("file:existing-prd"));
+        let filename = get_prd_filename(
+            "session123",
+            Some("Ignored Title"),
+            Some("file:existing-prd"),
+        );
         // Should use the file-based PRD ID directly
         assert_eq!(filename, "existing-prd");
     }
 
     #[test]
     fn test_get_prd_path_reminder_contains_exact_path() {
-        let reminder = get_prd_path_reminder(
-            "/my/project",
-            "session123",
-            Some("Camera Feature"),
-            None,
-        );
+        let reminder =
+            get_prd_path_reminder("/my/project", "session123", Some("Camera Feature"), None);
 
         // Should contain the exact path with .ralph-ui/prds/
         assert!(reminder.contains("/my/project/.ralph-ui/prds/"));
@@ -1085,14 +1085,7 @@ mod tests {
         session.title = Some("Cool Feature".to_string());
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(
-            &session,
-            &history,
-            "Create a PRD",
-            &[],
-            false,
-            None,
-        );
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false, None);
 
         // Should contain both the full instruction AND the reminder
         assert!(prompt.contains("PLAN FILE INSTRUCTION"));
@@ -1155,14 +1148,7 @@ mod tests {
         // No project_path set
 
         let history: Vec<ChatMessage> = vec![];
-        let prompt = build_prd_chat_prompt(
-            &session,
-            &history,
-            "Create a PRD",
-            &[],
-            false,
-            None,
-        );
+        let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false, None);
 
         // Should NOT contain path reminder since there's no project path
         assert!(!prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));

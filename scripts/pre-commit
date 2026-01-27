@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# Pre-commit hook for Ralph-UI
+# Runs formatting and lint checks before allowing commits
+
+# Check if any Rust files are staged
+if git diff --cached --name-only | grep -q '\.rs$'; then
+    echo "Checking Rust formatting..."
+    if ! cargo fmt --manifest-path server/Cargo.toml -- --check; then
+        echo ""
+        echo "ERROR: Rust formatting check failed."
+        echo "Run 'cargo fmt --manifest-path server/Cargo.toml' to fix."
+        exit 1
+    fi
+fi
+
+# Check if any frontend files are staged
+if git diff --cached --name-only | grep -qE '\.(ts|tsx|js|jsx)$'; then
+    echo "Checking frontend lint..."
+    if ! bun run lint; then
+        echo ""
+        echo "ERROR: Frontend lint check failed."
+        echo "Run 'bun run lint:fix' to auto-fix issues."
+        exit 1
+    fi
+fi
+
+echo "Pre-commit checks passed."
