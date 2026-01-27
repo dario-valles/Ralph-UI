@@ -16,7 +16,8 @@ import {
 import { useOnboardingStore } from '@/stores/onboardingStore'
 import { getAllAgentsStatus } from '@/lib/api/agent-api'
 import type { AgentType, AgentStatusInfo } from '@/types'
-import { Bot, Check, X, Loader2, RefreshCw, Info, AlertCircle } from 'lucide-react'
+import { Bot, Check, X, Loader2, RefreshCw, AlertCircle, Copy, CheckCheck } from 'lucide-react'
+import { toast } from '@/stores/toastStore'
 
 export function AgentsTab() {
   const {
@@ -237,59 +238,95 @@ interface AgentRowProps {
 }
 
 function AgentRow({ agent, checked, onToggle }: AgentRowProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(agent.installHint)
+      setCopied(true)
+      toast.success('Copied to clipboard')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
+
   return (
     <div
-      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+      className={`rounded-lg border transition-colors ${
         agent.available
           ? 'bg-background hover:bg-muted/50 cursor-pointer'
-          : 'bg-muted/30 opacity-60'
+          : 'bg-muted/30'
       }`}
-      onClick={agent.available ? onToggle : undefined}
     >
-      {/* Checkbox */}
-      <Checkbox
-        checked={checked}
-        disabled={!agent.available}
-        onCheckedChange={agent.available ? onToggle : undefined}
-        onClick={(e) => e.stopPropagation()}
-      />
-
-      {/* Agent icon */}
+      {/* Main row */}
       <div
-        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-          agent.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-        }`}
+        className="flex items-center gap-3 p-3"
+        onClick={agent.available ? onToggle : undefined}
       >
-        <Bot className="h-4 w-4" />
-      </div>
+        {/* Checkbox */}
+        <Checkbox
+          checked={checked}
+          disabled={!agent.available}
+          onCheckedChange={agent.available ? onToggle : undefined}
+          onClick={(e) => e.stopPropagation()}
+        />
 
-      {/* Agent info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm">{agent.displayName}</span>
-          <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {agent.cliCommand}
-          </code>
+        {/* Agent icon */}
+        <div
+          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+            agent.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+          }`}
+        >
+          <Bot className="h-4 w-4" />
         </div>
-        {!agent.available && (
-          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-            <Info className="h-3 w-3" />
-            {agent.installHint}
-          </p>
+
+        {/* Agent info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm">{agent.displayName}</span>
+            <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              {agent.cliCommand}
+            </code>
+          </div>
+        </div>
+
+        {/* Status badge */}
+        {agent.available ? (
+          <Badge variant="success" size="sm" className="flex-shrink-0">
+            <Check className="h-3 w-3 mr-1" />
+            Installed
+          </Badge>
+        ) : (
+          <Badge variant="secondary" size="sm" className="flex-shrink-0">
+            <X className="h-3 w-3 mr-1" />
+            Not Found
+          </Badge>
         )}
       </div>
 
-      {/* Status badge */}
-      {agent.available ? (
-        <Badge variant="success" size="sm" className="flex-shrink-0">
-          <Check className="h-3 w-3 mr-1" />
-          Installed
-        </Badge>
-      ) : (
-        <Badge variant="secondary" size="sm" className="flex-shrink-0">
-          <X className="h-3 w-3 mr-1" />
-          Not Found
-        </Badge>
+      {/* Install hint row (only for unavailable agents) */}
+      {!agent.available && (
+        <div className="px-3 pb-3 pt-0">
+          <div className="flex items-center gap-2 bg-muted/50 rounded-md p-2">
+            <code className="text-xs text-muted-foreground flex-1 break-all">
+              {agent.installHint}
+            </code>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 flex-shrink-0"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <CheckCheck className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )
