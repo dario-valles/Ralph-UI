@@ -44,37 +44,22 @@ pub static PROVIDERS: &[ApiProviderPreset] = &[
         id: "zai",
         name: "Z.AI",
         base_url: "https://api.z.ai/api/anthropic",
-        models: Some(&[
-            ("GLM-4.7", true), // default
-            ("GLM-4.5-Air", false),
-        ]),
-        model_mappings: Some(ModelMappings {
-            opus: Some("GLM-4.7"),
-            sonnet: Some("GLM-4.7"),
-            haiku: Some("GLM-4.5-Air"),
-        }),
+        models: None, // Uses standard Claude models (same naming convention)
+        model_mappings: None,
     },
     ApiProviderPreset {
         id: "minimax",
         name: "MiniMax",
         base_url: "https://api.minimax.io/anthropic",
-        models: Some(&[("MiniMax-M2.1", true)]),
-        model_mappings: Some(ModelMappings {
-            opus: Some("MiniMax-M2.1"),
-            sonnet: Some("MiniMax-M2.1"),
-            haiku: Some("MiniMax-M2.1"),
-        }),
+        models: None, // Uses standard Claude models (same naming convention)
+        model_mappings: None,
     },
     ApiProviderPreset {
         id: "minimax-cn",
         name: "MiniMax (China)",
         base_url: "https://api.minimaxi.com/anthropic",
-        models: Some(&[("MiniMax-M2.1", true)]),
-        model_mappings: Some(ModelMappings {
-            opus: Some("MiniMax-M2.1"),
-            sonnet: Some("MiniMax-M2.1"),
-            haiku: Some("MiniMax-M2.1"),
-        }),
+        models: None, // Uses standard Claude models (same naming convention)
+        model_mappings: None,
     },
 ];
 
@@ -232,18 +217,10 @@ mod tests {
             env.get("ANTHROPIC_AUTH_TOKEN"),
             Some(&"zai-token".to_string())
         );
-        assert_eq!(
-            env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
-            Some(&"GLM-4.7".to_string())
-        );
-        assert_eq!(
-            env.get("ANTHROPIC_DEFAULT_SONNET_MODEL"),
-            Some(&"GLM-4.7".to_string())
-        );
-        assert_eq!(
-            env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
-            Some(&"GLM-4.5-Air".to_string())
-        );
+        // Z.AI uses same Claude model names, no model mappings needed
+        assert!(!env.contains_key("ANTHROPIC_DEFAULT_OPUS_MODEL"));
+        assert!(!env.contains_key("ANTHROPIC_DEFAULT_SONNET_MODEL"));
+        assert!(!env.contains_key("ANTHROPIC_DEFAULT_HAIKU_MODEL"));
     }
 
     #[test]
@@ -254,10 +231,8 @@ mod tests {
             env.get("ANTHROPIC_BASE_URL"),
             Some(&"https://api.minimax.io/anthropic".to_string())
         );
-        assert_eq!(
-            env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"),
-            Some(&"MiniMax-M2.1".to_string())
-        );
+        // MiniMax uses same Claude model names, no model mappings needed
+        assert!(!env.contains_key("ANTHROPIC_DEFAULT_OPUS_MODEL"));
     }
 
     #[test]
@@ -275,10 +250,7 @@ mod tests {
         assert_eq!(info.name, "Z.AI");
         assert!(info.has_token);
         assert!(!info.is_active);
-        assert_eq!(info.models.len(), 2);
-        assert!(info
-            .models
-            .iter()
-            .any(|m| m.name == "GLM-4.7" && m.is_default));
+        // Z.AI uses CLI model discovery (same as Anthropic)
+        assert!(info.models.is_empty());
     }
 }
