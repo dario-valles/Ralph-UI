@@ -217,7 +217,14 @@ export function PRDChatPanel() {
       }
     }
     init()
-  }, [loadSessions, loadHistory, processingSessionId, activeProject?.path, setInitialLoadComplete, setCurrentSession])
+  }, [
+    loadSessions,
+    loadHistory,
+    processingSessionId,
+    activeProject?.path,
+    setInitialLoadComplete,
+    setCurrentSession,
+  ])
 
   useEffect(() => {
     prevProcessingSessionIdRef.current = processingSessionId
@@ -238,7 +245,15 @@ export function PRDChatPanel() {
         })
       }
     }
-  }, [prdIdFromUrl, currentSession, startSession, setCurrentSession, activeProject?.path, initialLoadComplete, sessions])
+  }, [
+    prdIdFromUrl,
+    currentSession,
+    startSession,
+    setCurrentSession,
+    activeProject?.path,
+    initialLoadComplete,
+    sessions,
+  ])
 
   // Auto-select most recent session
   useEffect(() => {
@@ -260,7 +275,9 @@ export function PRDChatPanel() {
   const prevConnectionStatusRef = useRef(connectionStatus)
 
   useEffect(() => {
-    const wasDisconnected = ['disconnected', 'reconnecting', 'offline'].includes(prevConnectionStatusRef.current)
+    const wasDisconnected = ['disconnected', 'reconnecting', 'offline'].includes(
+      prevConnectionStatusRef.current
+    )
     const isNowConnected = connectionStatus === 'connected'
     prevConnectionStatusRef.current = connectionStatus
 
@@ -281,7 +298,14 @@ export function PRDChatPanel() {
       }
       refreshSession()
     }
-  }, [connectionStatus, currentSession, loadHistory, loadSessions, setCurrentSession, activeProject?.path])
+  }, [
+    connectionStatus,
+    currentSession,
+    loadHistory,
+    loadSessions,
+    setCurrentSession,
+    activeProject?.path,
+  ])
 
   // Clear streaming content when streaming completes
   useEffect(() => {
@@ -331,7 +355,15 @@ export function PRDChatPanel() {
       loadRequirements()
       loadRoadmap()
     }
-  }, [currentSession?.id, currentSession?.projectPath, loadAvailableAgents, checkResearchStatus, loadSynthesis, loadRequirements, loadRoadmap])
+  }, [
+    currentSession?.id,
+    currentSession?.projectPath,
+    loadAvailableAgents,
+    checkResearchStatus,
+    loadSynthesis,
+    loadRequirements,
+    loadRoadmap,
+  ])
 
   // ============================================================================
   // Event Handlers
@@ -359,7 +391,9 @@ export function PRDChatPanel() {
         openTypeSelector()
       }
     } catch (err) {
-      setAgentError(`Failed to check agent availability: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setAgentError(
+        `Failed to check agent availability: ${err instanceof Error ? err.message : 'Unknown error'}`
+      )
     }
   }
 
@@ -383,7 +417,12 @@ export function PRDChatPanel() {
     toast.warning('Request will complete in background. You can retry with a new message.')
   }
 
-  const handleTypeSelected = (prdType: PRDTypeValue, guidedMode: boolean, projectPath?: string, title?: string) => {
+  const handleTypeSelected = (
+    prdType: PRDTypeValue,
+    guidedMode: boolean,
+    projectPath?: string,
+    title?: string
+  ) => {
     if (projectPath) {
       registerProject(projectPath)
     }
@@ -429,7 +468,10 @@ export function PRDChatPanel() {
       setExecutePrdFile(prdFile)
     } catch (err) {
       console.error('Failed to load PRD file:', err)
-      toast.error('Failed to load PRD', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Failed to load PRD',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     }
   }
 
@@ -444,7 +486,10 @@ export function PRDChatPanel() {
           break
         case 'requirements':
           await generateRequirements()
-          toast.success('Requirements Generated', 'Requirements have been extracted and are ready for scoping.')
+          toast.success(
+            'Requirements Generated',
+            'Requirements have been extracted and are ready for scoping.'
+          )
           break
         case 'scope':
           if (requirementsDoc) {
@@ -455,7 +500,10 @@ export function PRDChatPanel() {
           break
         case 'roadmap':
           await generateRoadmap()
-          toast.success('Roadmap Generated', 'Execution roadmap has been created from scoped requirements.')
+          toast.success(
+            'Roadmap Generated',
+            'Execution roadmap has been created from scoped requirements.'
+          )
           break
         case 'export':
           setShowExportDialog(true)
@@ -463,7 +511,10 @@ export function PRDChatPanel() {
       }
     } catch (err) {
       console.error(`Failed to execute phase action ${action}:`, err)
-      toast.error('Action Failed', err instanceof Error ? err.message : 'An unexpected error occurred.')
+      toast.error(
+        'Action Failed',
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
     } finally {
       setRunningPhaseAction(null)
     }
@@ -479,7 +530,11 @@ export function PRDChatPanel() {
 
     if (currentSession) {
       const completedAreas = successfulResults.map((r) => r.researchType).join(', ')
-      const themesPreview = synthesis.keyThemes?.slice(0, 5).map((t) => `- ${t}`).join('\n') || ''
+      const themesPreview =
+        synthesis.keyThemes
+          ?.slice(0, 5)
+          .map((t) => `- ${t}`)
+          .join('\n') || ''
 
       let content = `## Research Complete\n\n**Analyzed areas:** ${completedAreas || 'None'}`
 
@@ -510,7 +565,10 @@ export function PRDChatPanel() {
     setShowResearchModal(false)
 
     if (failedResults.length > 0) {
-      toast.warning('Research Partially Complete', `${successfulResults.length} succeeded, ${failedResults.length} failed.`)
+      toast.warning(
+        'Research Partially Complete',
+        `${successfulResults.length} succeeded, ${failedResults.length} failed.`
+      )
     } else {
       toast.success('Research Complete', `${results.length} research reports generated.`)
     }
@@ -518,7 +576,12 @@ export function PRDChatPanel() {
 
   const handleScopeComplete = () => {
     setShowScopeSheet(false)
-    toast.success('Scoping Complete', 'Requirements have been categorized. Click Roadmap to generate execution plan.')
+    toast.success(
+      'Scoping Complete',
+      'Requirements have been categorized. Generating execution plan...'
+    )
+    // Auto-generate roadmap after scoping is complete
+    handlePhaseAction('roadmap')
   }
 
   // AI-powered bulk requirement generation
@@ -547,15 +610,13 @@ export function PRDChatPanel() {
     }
   }
 
-  const handleAcceptGeneratedRequirements = async (requirements: import('@/types/gsd').GeneratedRequirement[]) => {
+  const handleAcceptGeneratedRequirements = async (
+    requirements: import('@/types/gsd').GeneratedRequirement[]
+  ) => {
     if (!currentSession || !activeProject?.path) {
       throw new Error('No active session')
     }
-    await gsdApi.addGeneratedRequirements(
-      activeProject.path,
-      currentSession.id,
-      requirements
-    )
+    await gsdApi.addGeneratedRequirements(activeProject.path, currentSession.id, requirements)
     // Reload requirements to reflect changes
     await loadRequirements()
     toast.success('Requirements Added', `${requirements.length} requirements added successfully.`)
@@ -594,7 +655,7 @@ export function PRDChatPanel() {
       await loadSessions(activeProject.path)
 
       // Select the newly created session
-      const newSession = sessions.find(s => s.id === newState.sessionId)
+      const newSession = sessions.find((s) => s.id === newState.sessionId)
       if (newSession) {
         setCurrentSession(newSession)
       }
@@ -613,7 +674,9 @@ export function PRDChatPanel() {
   // Computed Values
   // ============================================================================
 
-  const effectiveRunningAction: PhaseAction | null = isResearchRunning ? 'research' : runningPhaseAction
+  const effectiveRunningAction: PhaseAction | null = isResearchRunning
+    ? 'research'
+    : runningPhaseAction
 
   const currentPhaseState: PhaseState = {
     ...phaseState,
@@ -693,7 +756,10 @@ export function PRDChatPanel() {
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative min-h-0">
           {/* Loading Spinner */}
           {loading && (
-            <div data-testid="loading-spinner" className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
+            <div
+              data-testid="loading-spinner"
+              className="absolute inset-0 flex items-center justify-center bg-background/50 z-10"
+            >
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           )}
@@ -773,7 +839,8 @@ export function PRDChatPanel() {
           <DialogHeader>
             <DialogTitle>Delete Session?</DialogTitle>
             <DialogDescription>
-              This will permanently delete the session and all its messages. This action cannot be undone.
+              This will permanently delete the session and all its messages. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -833,12 +900,16 @@ export function PRDChatPanel() {
       <CloneSessionDialog
         open={showCloneDialog}
         onOpenChange={setShowCloneDialog}
-        session={sessionToClone ? {
-          sessionId: sessionToClone.id,
-          phase: undefined,
-          isComplete: false,
-          updatedAt: sessionToClone.updatedAt,
-        } : null}
+        session={
+          sessionToClone
+            ? {
+                sessionId: sessionToClone.id,
+                phase: undefined,
+                isComplete: false,
+                updatedAt: sessionToClone.updatedAt,
+              }
+            : null
+        }
         projectPath={activeProject?.path ?? ''}
         onCloneComplete={handleCloneComplete}
       />

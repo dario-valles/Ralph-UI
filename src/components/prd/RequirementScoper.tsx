@@ -401,6 +401,13 @@ export function RequirementScoper({
     setHasChanges(false)
   }, [localRequirements, onApplyScope])
 
+  const handleProceed = async () => {
+    if (hasChanges) {
+      await handleApply()
+    }
+    onProceed()
+  }
+
   const handleAddCustomRequirement = useCallback(async () => {
     if (!onAddRequirement || !newReqTitle.trim()) return
 
@@ -698,7 +705,7 @@ export function RequirementScoper({
               )}
             </div>
             <Button
-              onClick={onProceed}
+              onClick={handleProceed}
               disabled={isLoading || stats.unscoped > 0}
               className="gap-2"
             >
