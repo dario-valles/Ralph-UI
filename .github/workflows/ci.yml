@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
 
 jobs:
   frontend:
@@ -40,6 +43,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -75,6 +81,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -89,5 +98,5 @@ jobs:
       - name: Build frontend
         run: bun run build
 
-      - name: Build backend
-        run: cargo build --release --manifest-path server/Cargo.toml
+      - name: Build backend (debug for faster CI)
+        run: cargo build --manifest-path server/Cargo.toml

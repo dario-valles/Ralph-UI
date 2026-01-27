@@ -1,0 +1,10 @@
+# Cargo build configuration for optimized CI/release builds
+
+[profile.release]
+lto = "thin"              # Fast LTO - good balance between speed and optimization
+codegen-units = 1         # Single codegen unit for better optimization
+strip = true              # Strip debug symbols from binary
+panic = "abort"           # Smaller panic handler (no unwinding)
+
+[profile.dev]
+split-debuginfo = "packed"  # Faster incremental builds with packed debug info

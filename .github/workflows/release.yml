@@ -12,6 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
 
 jobs:
   build:
@@ -51,6 +54,9 @@ jobs:
       - name: Build frontend
         run: bun run build
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -67,7 +73,14 @@ jobs:
         if: runner.os == 'Linux' && !matrix.cross
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
-      # Windows: install OpenSSL via vcpkg
+      # Windows: cache and install OpenSSL via vcpkg
+      - name: Cache vcpkg (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/installed
+          key: vcpkg-openssl-x64-windows-static-md-v1
+
       - name: Install OpenSSL (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -84,6 +97,8 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
+            # Disable sccache for cross builds (runs inside Docker)
+            unset RUSTC_WRAPPER
             cross build --release --target ${{ matrix.target }} --manifest-path server/Cargo.toml
           else
             cargo build --release --target ${{ matrix.target }} --manifest-path server/Cargo.toml
