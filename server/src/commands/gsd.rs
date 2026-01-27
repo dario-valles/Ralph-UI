@@ -1585,10 +1585,11 @@ fn parse_category(category: &str) -> crate::gsd::config::RequirementCategory {
 /// Parse scope string to ScopeLevel enum
 fn parse_scope(scope: &str) -> crate::gsd::config::ScopeLevel {
     use crate::gsd::config::ScopeLevel;
-    match scope.to_lowercase().as_str() {
-        "v1" => ScopeLevel::V1,
-        "v2" => ScopeLevel::V2,
-        "out_of_scope" => ScopeLevel::OutOfScope,
+    let normalized = scope.trim().to_lowercase();
+    match normalized.as_str() {
+        "v1" | "v1 (must have)" | "must have" => ScopeLevel::V1,
+        "v2" | "v2 (nice to have)" | "nice to have" => ScopeLevel::V2,
+        "out_of_scope" | "out-of-scope" | "out of scope" | "outofscope" => ScopeLevel::OutOfScope,
         _ => ScopeLevel::Unscoped,
     }
 }
@@ -1687,7 +1688,19 @@ pub async fn add_generated_requirements(
             let category = parse_category(&gen_req.category);
             let id = doc.next_id(&category);
             let mut req = Requirement::new(id, category, gen_req.title, gen_req.description);
+
+            // Parse scope with logging for debugging
             req.scope = parse_scope(&gen_req.suggested_scope);
+            if req.scope == crate::gsd::config::ScopeLevel::Unscoped
+                && !gen_req.suggested_scope.is_empty()
+            {
+                log::warn!(
+                    "Failed to parse scope '{}' for requirement '{}'. defaulting to Unscoped",
+                    gen_req.suggested_scope,
+                    req.title
+                );
+            }
+
             req.acceptance_criteria = gen_req.acceptance_criteria;
             doc.add(req.clone());
             req
