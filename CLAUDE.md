@@ -421,6 +421,31 @@ cargo test                     # Backend tests
 
 **Clippy Configuration:** Crate-level clippy allows are defined in `server/src/lib.rs` with explanatory comments. Only add new allows if fixing the warning would significantly reduce readability or require major refactoring.
 
+### Commit Message Conventions
+
+Use conventional commit prefixes to ensure proper categorization in release notes:
+
+| Prefix | Category | Example |
+|--------|----------|---------|
+| `feat:` | 🚀 Features | `feat: add dark mode support` |
+| `fix:` | 🐛 Bug Fixes | `fix: resolve login timeout issue` |
+| `docs:` | 📚 Documentation | `docs: update API reference` |
+| `chore:` | 🧹 Maintenance | `chore: update dependencies` |
+| `refactor:` | 🧹 Maintenance | `refactor: simplify auth logic` |
+| `test:` | 🧹 Maintenance | `test: add unit tests for parser` |
+| `ci:` | 🧹 Maintenance | `ci: fix release workflow` |
+
+**Format:** `<prefix>(<scope>): <description>`
+
+```bash
+# Examples
+feat(ui): add agent status indicators
+fix(server): handle websocket reconnection
+chore: bump version to 0.1.2
+```
+
+These prefixes map to GitHub labels for auto-generated release notes (see `.github/release.yml`).
+
 ## Deployment
 
 ### Docker
