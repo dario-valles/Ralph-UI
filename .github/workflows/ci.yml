@@ -9,8 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 1
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: sccache
 
 jobs:
   frontend:
@@ -46,6 +44,7 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.6
+        continue-on-error: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -83,6 +82,7 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.6
+        continue-on-error: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
