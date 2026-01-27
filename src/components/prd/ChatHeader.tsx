@@ -211,14 +211,14 @@ export function ChatHeader({
             <div className="flex items-center bg-muted/40 rounded-lg border border-border/40">
               {/* Agent selector with icon */}
               <div className="flex items-center gap-1.5 pl-2.5 pr-1">
-                <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Bot className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
                 <Select
                   id="agent-selector"
                   aria-label="Agent"
                   value={currentAgentOptionValue}
                   onChange={(e) => onAgentOptionChange(e.target.value)}
                   disabled={streaming}
-                  className="w-24 text-sm h-8 bg-transparent border-0 font-medium cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
+                  className="w-28 text-sm h-8 bg-transparent border-0 font-medium text-foreground cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
                 >
                   {agentOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -231,7 +231,7 @@ export function ChatHeader({
               <div className="w-px h-6 bg-border/60" />
               {/* Model selector with icon */}
               <div className="flex items-center gap-1.5 pl-2 pr-1">
-                <Sparkles className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Sparkles className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
                 <ModelSelector
                   id="model-selector"
                   value={selectedModel || defaultModelId || ''}
@@ -239,7 +239,7 @@ export function ChatHeader({
                   models={models}
                   loading={modelsLoading}
                   disabled={streaming}
-                  className="w-36 xl:w-44 text-sm h-8 bg-transparent border-0 font-medium cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
+                  className="w-40 xl:w-48 text-sm h-8 bg-transparent border-0 font-medium text-foreground cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
                 />
               </div>
             </div>
