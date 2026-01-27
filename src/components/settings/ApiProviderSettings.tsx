@@ -118,7 +118,8 @@ export function ApiProviderSettings() {
       <CardHeader>
         <CardTitle>API Providers</CardTitle>
         <CardDescription>
-          Configure alternative API providers (z.ai, MiniMax) that provide Claude-compatible APIs
+          Configure alternative API providers (z.ai, MiniMax) that provide Claude-compatible APIs.
+          Configured providers appear as separate options in the agent selector (e.g., "Claude (Z.AI)").
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -147,7 +148,8 @@ export function ApiProviderSettings() {
                           Active
                         </Badge>
                       )}
-                      {provider.hasToken && !provider.isActive && (
+                      {/* Show "Configured" for non-active providers with tokens, or Anthropic (always available) */}
+                      {!provider.isActive && (provider.hasToken || provider.id === 'anthropic') && (
                         <Badge variant="outline" className="text-xs">
                           Configured
                         </Badge>
