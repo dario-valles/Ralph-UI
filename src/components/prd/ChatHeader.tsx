@@ -18,10 +18,12 @@ import {
   ScrollText,
   ChevronDown,
   Play,
+  Sparkles,
 } from 'lucide-react'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import type { ChatSession, QualityAssessment } from '@/types'
-import { formatAgentName, type AgentType } from '@/types/agent'
+import type { AgentType } from '@/types/agent'
+import type { AgentOption } from '@/hooks/useAgentModelSelector'
 import type { ModelInfo } from '@/lib/model-api'
 import { cn } from '@/lib/utils'
 
@@ -32,8 +34,10 @@ interface ChatHeaderProps {
   sessions: ChatSession[]
   /** Current agent type */
   agentType: AgentType
-  /** Available agent types */
-  availableAgents: AgentType[]
+  /** Agent options with provider support (new API) */
+  agentOptions: AgentOption[]
+  /** Current agent option value (e.g., "claude" or "claude:zai") */
+  currentAgentOptionValue: string
   /** Currently selected model ID */
   selectedModel: string
   /** Default model ID for the agent */
@@ -58,8 +62,8 @@ interface ChatHeaderProps {
   isPlanVisible: boolean
   /** Scroll direction for auto-hide (mobile) */
   scrollDirection: 'up' | 'down' | null
-  /** Handler for agent change */
-  onAgentChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
+  /** Handler for agent option change (new API) */
+  onAgentOptionChange: (value: string) => void
   /** Handler for model change */
   onModelChange: (modelId: string) => void
   /** Handler for session selection (mobile) */
@@ -82,7 +86,8 @@ export function ChatHeader({
   currentSession,
   sessions,
   agentType,
-  availableAgents,
+  agentOptions,
+  currentAgentOptionValue,
   selectedModel,
   defaultModelId,
   models,
@@ -95,7 +100,7 @@ export function ChatHeader({
   watchedPlanPath,
   isPlanVisible,
   scrollDirection,
-  onAgentChange,
+  onAgentOptionChange,
   onModelChange,
   onSelectSession,
   onCreateSession,
@@ -173,7 +178,8 @@ export function ChatHeader({
           {/* Combined settings & actions dropdown */}
           <MobileActionsDropdown
             agentType={agentType}
-            availableAgents={availableAgents}
+            agentOptions={agentOptions}
+            currentAgentOptionValue={currentAgentOptionValue}
             selectedModel={selectedModel}
             defaultModelId={defaultModelId}
             models={models}
@@ -183,7 +189,7 @@ export function ChatHeader({
             hasMessages={hasMessages}
             qualityAssessment={qualityAssessment}
             watchedPlanPath={watchedPlanPath}
-            onAgentChange={onAgentChange}
+            onAgentOptionChange={onAgentOptionChange}
             onModelChange={onModelChange}
             onRefreshQuality={onRefreshQuality}
             onExecutePrd={onExecutePrd}
@@ -201,32 +207,41 @@ export function ChatHeader({
             </CardTitle>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Agent/Model Selector - Refined pill design */}
-            <div className="flex items-center gap-0.5 bg-gradient-to-b from-muted/40 to-muted/60 rounded-xl p-1 border border-border/30 shadow-sm">
-              <Select
-                id="agent-selector"
-                aria-label="Agent"
-                value={agentType}
-                onChange={onAgentChange}
-                disabled={streaming}
-                className="w-20 text-xs h-7 bg-background/80 backdrop-blur-sm border-0 rounded-lg font-medium shadow-sm"
-              >
-                {availableAgents.map((agent) => (
-                  <option key={agent} value={agent}>
-                    {formatAgentName(agent)}
-                  </option>
-                ))}
-              </Select>
-              <div className="w-px h-5 bg-gradient-to-b from-transparent via-border to-transparent" />
-              <ModelSelector
-                id="model-selector"
-                value={selectedModel || defaultModelId || ''}
-                onChange={onModelChange}
-                models={models}
-                loading={modelsLoading}
-                disabled={streaming}
-                className="w-32 xl:w-40 text-xs h-7 bg-background/80 backdrop-blur-sm border-0 rounded-lg font-medium shadow-sm"
-              />
+            {/* Agent/Model Selector - Clean grouped design */}
+            <div className="flex items-center bg-muted/40 rounded-lg border border-border/40">
+              {/* Agent selector with icon */}
+              <div className="flex items-center gap-1.5 pl-2.5 pr-1">
+                <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Select
+                  id="agent-selector"
+                  aria-label="Agent"
+                  value={currentAgentOptionValue}
+                  onChange={(e) => onAgentOptionChange(e.target.value)}
+                  disabled={streaming}
+                  className="w-24 text-sm h-8 bg-transparent border-0 font-medium cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
+                >
+                  {agentOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              {/* Vertical divider */}
+              <div className="w-px h-6 bg-border/60" />
+              {/* Model selector with icon */}
+              <div className="flex items-center gap-1.5 pl-2 pr-1">
+                <Sparkles className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <ModelSelector
+                  id="model-selector"
+                  value={selectedModel || defaultModelId || ''}
+                  onChange={onModelChange}
+                  models={models}
+                  loading={modelsLoading}
+                  disabled={streaming}
+                  className="w-36 xl:w-44 text-sm h-8 bg-transparent border-0 font-medium cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
+                />
+              </div>
             </div>
 
             {/* Plan Sidebar Toggle */}
@@ -279,7 +294,8 @@ export function ChatHeader({
 
 interface MobileActionsDropdownProps {
   agentType: AgentType
-  availableAgents: AgentType[]
+  agentOptions: AgentOption[]
+  currentAgentOptionValue: string
   selectedModel: string
   defaultModelId: string
   models: ModelInfo[]
@@ -289,15 +305,15 @@ interface MobileActionsDropdownProps {
   hasMessages: boolean
   qualityAssessment: QualityAssessment | null
   watchedPlanPath: string | null
-  onAgentChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
+  onAgentOptionChange: (value: string) => void
   onModelChange: (modelId: string) => void
   onRefreshQuality: () => void
   onExecutePrd: () => void
 }
 
 function MobileActionsDropdown({
-  agentType,
-  availableAgents,
+  agentOptions,
+  currentAgentOptionValue,
   selectedModel,
   defaultModelId,
   models,
@@ -307,7 +323,7 @@ function MobileActionsDropdown({
   hasMessages,
   qualityAssessment,
   watchedPlanPath,
-  onAgentChange,
+  onAgentOptionChange,
   onModelChange,
   onRefreshQuality,
   onExecutePrd,
@@ -340,14 +356,14 @@ function MobileActionsDropdown({
               <Select
                 id="mobile-agent-selector"
                 aria-label="Agent"
-                value={agentType}
-                onChange={onAgentChange}
+                value={currentAgentOptionValue}
+                onChange={(e) => onAgentOptionChange(e.target.value)}
                 disabled={streaming}
                 className="flex-1 text-xs h-8 bg-background/80 backdrop-blur-sm border-border/40 rounded-lg font-medium shadow-sm"
               >
-                {availableAgents.map((agent) => (
-                  <option key={agent} value={agent}>
-                    {formatAgentName(agent)}
+                {agentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </Select>

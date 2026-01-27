@@ -52,9 +52,15 @@ vi.mock('@/lib/events-client', () => ({
   subscribeEvent: vi.fn(() => Promise.resolve(() => {})),
 }))
 
-// Mock the useAvailableModels hook
-vi.mock('@/hooks/useAvailableModels', () => ({
-  useAvailableModels: () => ({
+// Mock the useAgentModelSelector hook
+const mockHandleAgentOptionChange = vi.fn()
+
+vi.mock('@/hooks/useAgentModelSelector', () => ({
+  useAgentModelSelector: () => ({
+    agentType: 'claude',
+    providerId: undefined,
+    modelId: 'claude-sonnet-4-5',
+    setModelId: vi.fn(),
     models: [
       {
         id: 'claude-sonnet-4-5',
@@ -64,10 +70,17 @@ vi.mock('@/hooks/useAvailableModels', () => ({
       },
       { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'anthropic', isDefault: false },
     ],
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
+    modelsLoading: false,
     defaultModelId: 'claude-sonnet-4-5',
+    availableAgents: ['claude', 'opencode', 'cursor'],
+    agentOptions: [
+      { value: 'claude', label: 'Claude', agentType: 'claude' },
+      { value: 'opencode', label: 'OpenCode', agentType: 'opencode' },
+      { value: 'cursor', label: 'Cursor', agentType: 'cursor' },
+    ],
+    agentsLoading: false,
+    handleAgentOptionChange: mockHandleAgentOptionChange,
+    currentAgentOptionValue: 'claude',
   }),
 }))
 
@@ -288,8 +301,9 @@ describe('PRDChatPanel', () => {
       fireEvent.change(agentSelector, { target: { value: 'opencode' } })
 
       // Changing agent with a current session should update the session's agent
+      // Second param is providerId (undefined for non-Claude agents)
       await waitFor(() => {
-        expect(mockUpdateSessionAgent).toHaveBeenCalledWith('opencode')
+        expect(mockUpdateSessionAgent).toHaveBeenCalledWith('opencode', undefined)
       })
     })
 
