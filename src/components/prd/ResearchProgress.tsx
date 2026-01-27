@@ -6,7 +6,7 @@
  * streaming output from each agent.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import { ResearchSummary } from './gsd/ResearchSummary'
 import { usePRDChatStore } from '@/stores/prdChatStore'
-import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 import { subscribeEvent } from '@/lib/events-client'
 import type { ResearchStatus, ResearchResult, ResearchSynthesis } from '@/types/gsd'
 import {
@@ -107,7 +107,7 @@ interface AgentStatusCardProps {
 }
 
 /** Get icon for agent type */
-function getAgentIcon(agentName: string): React.ReactNode {
+function getAgentIcon(agentName: string): ReactNode {
   switch (agentName) {
     case 'architecture':
       return <Building className="h-4 w-4" />
@@ -338,28 +338,40 @@ export function ResearchProgress({
   const [selectedResult, setSelectedResult] = useState<ResearchResult | null>(null)
   const [showSummary, setShowSummary] = useState(false)
   const [agentOutputs, setAgentOutputs] = useState<Record<string, string>>({})
-  // Track user's explicit model selection (empty means use default)
-  const [userSelectedModel, setUserSelectedModel] = useState<string>('')
   // Selective re-run mode: which agents are selected
   const [selectiveMode, setSelectiveMode] = useState(false)
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
 
-  // Get agent selection from store
+  // Get agent selection from store (for persisting selection)
   const {
-    availableResearchAgents,
     selectedResearchAgent,
     setSelectedResearchAgent,
     loadAvailableAgents,
   } = usePRDChatStore()
 
-  // Get available models for the selected research agent (default to 'claude')
-  const effectiveAgentType = selectedResearchAgent || 'claude'
-  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(effectiveAgentType)
+  // Use the unified agent/model selector hook with provider support
+  const {
+    agentType,
+    modelId: selectedModel,
+    setModelId,
+    models,
+    modelsLoading,
+    agentOptions,
+    agentsLoading,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
+  } = useAgentModelSelector({
+    initialAgent: selectedResearchAgent || 'claude',
+  })
 
-  // Effective model is user selection or default
-  const selectedModel = userSelectedModel || defaultModelId || ''
+  // Sync agent selection to store when it changes
+  useEffect(() => {
+    if (agentType !== selectedResearchAgent) {
+      setSelectedResearchAgent(agentType)
+    }
+  }, [agentType, selectedResearchAgent, setSelectedResearchAgent])
 
-  // Load available agents on mount
+  // Load available agents on mount (for compatibility)
   useEffect(() => {
     loadAvailableAgents()
   }, [loadAvailableAgents])
@@ -433,8 +445,8 @@ export function ResearchProgress({
   const handleStartResearch = useCallback(async () => {
     // Clear previous outputs before starting new research
     setAgentOutputs({})
-    await onStartResearch(questioningContext, selectedResearchAgent || undefined, selectedModel || undefined)
-  }, [onStartResearch, questioningContext, selectedResearchAgent, selectedModel])
+    await onStartResearch(questioningContext, agentType || undefined, selectedModel || undefined)
+  }, [onStartResearch, questioningContext, agentType, selectedModel])
 
   // Retry only the failed agents - compute failed names inline to avoid memoization issues
   const handleRetryFailed = useCallback(async () => {
@@ -455,11 +467,11 @@ export function ResearchProgress({
     })
     await onStartResearch(
       questioningContext,
-      selectedResearchAgent || undefined,
+      agentType || undefined,
       selectedModel || undefined,
       failedNames
     )
-  }, [onStartResearch, questioningContext, selectedResearchAgent, selectedModel, status])
+  }, [onStartResearch, questioningContext, agentType, selectedModel, status])
 
   const handleSynthesize = useCallback(async () => {
     await onSynthesize()
@@ -495,7 +507,7 @@ export function ResearchProgress({
 
     await onStartResearch(
       questioningContext,
-      selectedResearchAgent || undefined,
+      agentType || undefined,
       selectedModel || undefined,
       agentNames
     )
@@ -503,7 +515,7 @@ export function ResearchProgress({
     // Exit selective mode and clear selection after starting
     setSelectiveMode(false)
     setSelectedAgents(new Set())
-  }, [selectedAgents, onStartResearch, questioningContext, selectedResearchAgent, selectedModel])
+  }, [selectedAgents, onStartResearch, questioningContext, agentType, selectedModel])
 
   // Toggle selective mode
   const handleToggleSelectiveMode = useCallback(() => {
@@ -603,13 +615,15 @@ export function ResearchProgress({
         {/* Agent and Model selectors - only show before research starts */}
         {!hasStarted && (
           <AgentModelSelector
-            agentType={selectedResearchAgent || 'claude'}
-            onAgentChange={(agent) => setSelectedResearchAgent(agent)}
+            agentType={agentType}
             modelId={selectedModel}
-            onModelChange={setUserSelectedModel}
+            onModelChange={setModelId}
             models={models}
             modelsLoading={modelsLoading}
-            availableAgents={availableResearchAgents.length > 0 ? availableResearchAgents : ['claude']}
+            agentOptions={agentOptions}
+            agentsLoading={agentsLoading}
+            currentAgentOptionValue={currentAgentOptionValue}
+            onAgentOptionChange={handleAgentOptionChange}
             disabled={isLoading || isRunning}
             variant="default"
           />
@@ -625,7 +639,7 @@ export function ResearchProgress({
           ) : isRunning ? (
             <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-              Research in progress using {selectedResearchAgent || 'Claude'}...
+              Research in progress using {agentType ? agentType.charAt(0).toUpperCase() + agentType.slice(1) : 'Claude'}...
             </div>
           ) : selectiveMode ? (
             <div className="flex items-center gap-2 flex-wrap">

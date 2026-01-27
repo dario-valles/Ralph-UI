@@ -44,16 +44,17 @@ export function AIRequirementGenerator({
   const [error, setError] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
 
-  // Agent and model selection
+  // Agent and model selection with provider support
   const {
     agentType,
-    setAgentType,
     modelId,
     setModelId,
     models,
     modelsLoading,
-    availableAgents,
+    agentOptions,
     agentsLoading,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
   } = useAgentModelSelector()
 
   const resetState = useCallback(() => {
@@ -151,13 +152,14 @@ export function AIRequirementGenerator({
               {/* Agent and Model configuration */}
               <AgentModelSelector
                 agentType={agentType}
-                onAgentChange={setAgentType}
                 modelId={modelId}
                 onModelChange={setModelId}
                 models={models}
                 modelsLoading={modelsLoading}
-                availableAgents={availableAgents}
+                agentOptions={agentOptions}
                 agentsLoading={agentsLoading}
+                currentAgentOptionValue={currentAgentOptionValue}
+                onAgentOptionChange={handleAgentOptionChange}
                 disabled={isGenerating}
                 variant="default"
               />
