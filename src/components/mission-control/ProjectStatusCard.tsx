@@ -1,7 +1,7 @@
 // Individual project summary card for Mission Control
 
 import { Link } from 'react-router-dom'
-import { FolderOpen, Play, Pause, Clock, ArrowRight, FileText } from 'lucide-react'
+import { FolderOpen, Play, Pause, Clock, ArrowRight, FileText, MessageSquarePlus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -105,22 +105,37 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
           )}
         </div>
 
-        {/* Action */}
-        <Link to="/ralph-loop" state={{ projectPath: project.path }} className="block">
-          <Button
-            variant={isRunning ? 'default' : 'ghost'}
-            size="sm"
-            className="w-full justify-between"
-            onClick={() => {
-              // Set this project as active before navigating
-              setActiveProject(project.id)
-              onNavigate?.()
-            }}
-          >
-            {isRunning ? 'Go to Ralph Loop' : 'Start Ralph Loop'}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </Link>
+        {/* Actions */}
+        <div className="flex gap-2">
+          <Link to="/ralph-loop" state={{ projectPath: project.path }} className="flex-1">
+            <Button
+              variant={isRunning ? 'default' : 'ghost'}
+              size="sm"
+              className="w-full justify-between"
+              onClick={() => {
+                setActiveProject(project.id)
+                onNavigate?.()
+              }}
+            >
+              {isRunning ? 'Go to Ralph Loop' : 'Start Ralph Loop'}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link to="/prds/chat" state={{ projectPath: project.path, startNew: true }}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-3"
+              onClick={() => {
+                setActiveProject(project.id)
+                onNavigate?.()
+              }}
+              title="New PRD Chat"
+            >
+              <MessageSquarePlus className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
       </CardContent>
     </Card>
   )
