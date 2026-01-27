@@ -1204,6 +1204,9 @@ pub async fn generate_requirements_from_prompt(
     output.truncate(bytes_read);
     let output_str = String::from_utf8_lossy(&output);
 
+    // Log raw AI output for debugging
+    log::debug!("[GenerateRequirements] AI output:\n{}", output_str);
+
     // Wait for process with timeout
     let wait_result =
         tokio::time::timeout(tokio::time::Duration::from_secs(10), child.wait()).await;
@@ -1237,10 +1240,35 @@ fn parse_requirement_item(
     item: &serde_json::Value,
     idx: usize,
 ) -> Result<GeneratedRequirement, String> {
+    // Check if item is an object
+    if !item.is_object() {
+        return Err(format!(
+            "Requirement {idx} is not a valid object, got: {}",
+            item
+        ));
+    }
+
+    // Collect available fields for better error messages
+    let available_fields = item
+        .as_object()
+        .map(|obj| obj.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+
     let title = item
         .get("title")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("Requirement {idx} missing title"))?
+        .ok_or_else(|| {
+            let fields_str = if available_fields.is_empty() {
+                "no fields".to_string()
+            } else {
+                format!("fields: {}", available_fields.join(", "))
+            };
+            format!(
+                "Requirement {idx} missing 'title' field (has {}). Got: {}",
+                fields_str,
+                serde_json::to_string_pretty(item).unwrap_or_else(|_| "[invalid JSON]".to_string())
+            )
+        })?
         .to_string();
 
     let acceptance_criteria = item
@@ -1277,21 +1305,90 @@ fn parse_requirement_item(
 
 /// Parse generated requirements from AI agent output
 fn parse_generated_requirements(output: &str) -> Result<Vec<GeneratedRequirement>, String> {
-    let json_str = extract_json_array(output).ok_or("Could not find JSON array in agent output")?;
+    let json_str = extract_json_array(output).ok_or_else(|| {
+        // Check if there's a single object instead of array
+        let trimmed = output.trim();
+        if trimmed.starts_with('{') && !trimmed.starts_with('[') {
+            "Found a JSON object instead of an array. The AI may have returned a single requirement instead of an array.".to_string()
+        } else {
+            log::error!("[ParseRequirements] Failed to extract JSON from output: {}", output);
+            "Could not find JSON array in agent output".to_string()
+        }
+    })?;
 
-    let parsed: Vec<serde_json::Value> =
-        serde_json::from_str(&json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).map_err(|e| {
+        log::error!(
+            "[ParseRequirements] JSON parse error: {}\nInput: {}",
+            e,
+            json_str
+        );
+        // Add hint for common JSON mistakes
+        let error_str = e.to_string();
+        if error_str.contains("trailing comma") {
+            format!(
+                "Invalid JSON: {}. The AI may have generated malformed JSON with trailing commas.",
+                e
+            )
+        } else {
+            format!("Failed to parse JSON: {e}")
+        }
+    })?;
 
-    let requirements: Result<Vec<_>, _> = parsed
-        .iter()
-        .enumerate()
-        .map(|(idx, item)| parse_requirement_item(item, idx))
-        .collect();
+    log::debug!(
+        "[ParseRequirements] Extracted JSON array with {} items",
+        parsed.len()
+    );
 
-    let requirements = requirements?;
+    let mut requirements = Vec::new();
+    let mut skipped = Vec::new();
+
+    for (idx, item) in parsed.iter().enumerate() {
+        match parse_requirement_item(item, idx) {
+            Ok(req) => requirements.push(req),
+            Err(e) => {
+                log::warn!("[ParseRequirements] Skipping requirement {}: {}", idx, e);
+                skipped.push((idx, e));
+            }
+        }
+    }
 
     if requirements.is_empty() {
-        return Err("No valid requirements found in output".to_string());
+        let error_msg = if skipped.is_empty() {
+            "No valid requirements found in output".to_string()
+        } else {
+            // Include ALL errors, not just the first one
+            let all_errors: Vec<String> = skipped
+                .iter()
+                .map(|(idx, e)| format!("Requirement {}: {}", idx, e))
+                .collect();
+            format!(
+                "All {} requirement(s) failed to parse:\n{}",
+                skipped.len(),
+                all_errors.join("\n")
+            )
+        };
+        return Err(error_msg);
+    }
+
+    // Warn if high failure rate
+    if !skipped.is_empty() {
+        let total = skipped.len() + requirements.len();
+        let skip_percentage = (skipped.len() as f64 / total as f64) * 100.0;
+        if skip_percentage > 50.0 {
+            log::warn!(
+                "[ParseRequirements] High failure rate: {}/{} requirements ({:.0}%) failed to parse. First error: {}",
+                skipped.len(),
+                total,
+                skip_percentage,
+                skipped[0].1
+            );
+        } else {
+            log::info!(
+                "[ParseRequirements] Parsed {} requirements, skipped {} invalid",
+                requirements.len(),
+                skipped.len()
+            );
+        }
     }
 
     Ok(requirements)
@@ -1506,4 +1603,92 @@ pub async fn add_generated_requirements(
     );
 
     Ok(added)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_requirement_item_with_empty_object() {
+        let empty = serde_json::json!({});
+        let result = parse_requirement_item(&empty, 0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("missing 'title'"));
+        assert!(err.contains("no fields"));
+    }
+
+    #[test]
+    fn test_parse_requirement_item_missing_title_but_has_other_fields() {
+        let partial = serde_json::json!({
+            "description": "Some description",
+            "category": "core"
+        });
+        let result = parse_requirement_item(&partial, 0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("missing 'title'"));
+        assert!(err.contains("description"));
+        assert!(err.contains("category"));
+    }
+
+    #[test]
+    fn test_parse_requirement_item_with_valid_data() {
+        let valid = serde_json::json!({
+            "title": "Test Requirement",
+            "category": "core",
+            "description": "Test description",
+            "acceptanceCriteria": ["criterion 1"],
+            "suggestedScope": "v1"
+        });
+        let result = parse_requirement_item(&valid, 0);
+        assert!(result.is_ok());
+        let req = result.unwrap();
+        assert_eq!(req.title, "Test Requirement");
+        assert_eq!(req.id, "GEN-01");
+    }
+
+    #[test]
+    fn test_parse_generated_requirements_partial_success() {
+        let mixed = serde_json::to_string(&vec![
+            serde_json::json!({"title": "Valid", "category": "core", "description": "A"}),
+            serde_json::json!({}), // Invalid
+            serde_json::json!({"title": "Also Valid", "category": "ui", "description": "B"}),
+        ])
+        .unwrap();
+
+        let result = parse_generated_requirements(&mixed);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 2); // Should skip the middle one
+    }
+
+    #[test]
+    fn test_parse_generated_requirements_all_invalid() {
+        let all_invalid =
+            serde_json::to_string(&vec![serde_json::json!({}), serde_json::json!({})]).unwrap();
+
+        let result = parse_generated_requirements(&all_invalid);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("All 2 requirement(s) failed"));
+        // Should include both errors
+        assert!(err.contains("Requirement 0"));
+        assert!(err.contains("Requirement 1"));
+    }
+
+    #[test]
+    fn test_extract_json_array_from_text() {
+        let text_with_markdown = r#"
+Here are the requirements:
+
+```json
+[
+  {"title": "Req1", "category": "core"}
+]
+```
+"#;
+        let result = extract_json_array(text_with_markdown);
+        assert!(result.is_some());
+    }
 }

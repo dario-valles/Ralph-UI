@@ -260,12 +260,15 @@ Generate {{ count }} requirements as a JSON array. Each requirement must be:
 - Non-overlapping with existing requirements
 
 ## Output Format
-Output ONLY a valid JSON array with no additional text. Each object must have these exact fields:
+Output ONLY a valid JSON array with no additional text, no markdown formatting, and no trailing commas.
+Each object must have these exact fields:
 - "category": one of "core", "ui", "data", "integration", "security", "performance", "testing", "documentation", "other"
-- "title": concise title (5-10 words)
+- "title": concise title (5-10 words) - THIS FIELD IS MANDATORY
 - "description": detailed description (1-3 sentences)
 - "acceptanceCriteria": array of 2-4 testable criteria
 - "suggestedScope": one of "v1", "v2", "out_of_scope" based on complexity and importance
+
+REMINDER: Every requirement object MUST include ALL fields. Do NOT omit the "title" field - it is required for every requirement.
 
 ## Example Output
 [
@@ -294,6 +297,14 @@ Output ONLY a valid JSON array with no additional text. Each object must have th
     "suggestedScope": "v1"
   }
 ]
+
+## Common Mistakes to Avoid
+❌ DO NOT include explanatory text before/after the JSON
+❌ DO NOT wrap the JSON in markdown code blocks (```json ... ```)
+❌ DO NOT use trailing commas (not valid in strict JSON)
+❌ DO NOT omit the "title" field (it is required for every requirement)
+❌ DO NOT return a single object - always return an array
+✅ DO output only the raw JSON array starting with [ and ending with ]
 "#;
 
 #[cfg(test)]
