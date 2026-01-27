@@ -71,6 +71,8 @@ export type PRDTypeValue =
 export interface ChatSession {
   id: string
   agentType: string
+  /** Provider ID for Claude (e.g., "zai", "minimax") - only used with Claude agent */
+  providerId?: string
   projectPath?: string
   prdId?: string
   title?: string

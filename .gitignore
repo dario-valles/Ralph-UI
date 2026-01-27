@@ -61,3 +61,6 @@ src-tauri/ralph-ui.db
 certs/
 *.crt
 *.key
+
+# Test screenshots
+test-screenshots/

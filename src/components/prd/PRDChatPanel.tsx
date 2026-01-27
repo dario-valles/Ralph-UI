@@ -33,7 +33,7 @@ import { prdChatApi, prdApi, gsdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ChatSession } from '@/types'
 import { cn, generateUUID } from '@/lib/utils'
-import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 import { useIsMobile, useScrollDirection } from '@/hooks/useMediaQuery'
 import { usePRDChatPanelState } from '@/hooks/usePRDChatPanelState'
@@ -125,7 +125,6 @@ export function PRDChatPanel() {
     isResearchRunning,
     isSynthesizing,
     isGeneratingRequirements,
-    availableResearchAgents,
     loadAvailableAgents,
     checkResearchStatus,
     loadSynthesis,
@@ -147,9 +146,21 @@ export function PRDChatPanel() {
   // Track scroll direction for mobile header auto-hide
   const scrollDirection = useScrollDirection(messagesContainerRef, 15)
 
-  // Load available models for the current agent type
-  const agentType = (currentSession?.agentType || 'claude') as AgentType
-  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(agentType)
+  // Load available models for the current agent type with provider support
+  const sessionAgentType = (currentSession?.agentType || 'claude') as AgentType
+  const sessionProviderId = currentSession?.providerId
+  const {
+    agentType,
+    models,
+    modelsLoading,
+    defaultModelId,
+    agentOptions,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
+  } = useAgentModelSelector({
+    initialAgent: sessionAgentType,
+    initialProvider: sessionProviderId,
+  })
 
   // Memoize the plan update callback
   const handlePlanUpdated = useCallback(
@@ -315,8 +326,10 @@ export function PRDChatPanel() {
   // Event Handlers
   // ============================================================================
 
-  const handleAgentChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newAgentType = e.target.value
+  /** Handle agent option change (supports composite values like "claude:zai") */
+  const handleAgentOptionChangeWithValidation = async (value: string) => {
+    // Parse composite value (e.g., "claude:zai" -> agent="claude", provider="zai")
+    const [newAgentType, newProviderId] = value.split(':')
     setAgentError(null)
 
     try {
@@ -325,8 +338,12 @@ export function PRDChatPanel() {
         setAgentError(result.error || `Agent '${newAgentType}' is not available`)
         return
       }
+
+      // Update the hook state
+      handleAgentOptionChange(value)
+
       if (currentSession) {
-        await updateSessionAgent(newAgentType)
+        await updateSessionAgent(newAgentType, newProviderId)
       } else {
         openTypeSelector()
       }
@@ -639,7 +656,8 @@ export function PRDChatPanel() {
           currentSession={currentSession}
           sessions={sessions}
           agentType={agentType}
-          availableAgents={availableResearchAgents.length > 0 ? availableResearchAgents : ['claude']}
+          agentOptions={agentOptions}
+          currentAgentOptionValue={currentAgentOptionValue}
           selectedModel={selectedModel}
           defaultModelId={defaultModelId}
           models={models}
@@ -652,7 +670,7 @@ export function PRDChatPanel() {
           watchedPlanPath={watchedPlanPath}
           isPlanVisible={isPlanVisible}
           scrollDirection={scrollDirection}
-          onAgentChange={handleAgentChange}
+          onAgentOptionChange={handleAgentOptionChangeWithValidation}
           onModelChange={setUserSelectedModel}
           onSelectSession={setCurrentSession}
           onCreateSession={openTypeSelector}

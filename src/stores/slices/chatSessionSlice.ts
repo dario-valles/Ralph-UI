@@ -67,18 +67,18 @@ export const createChatSessionSlice = (
     }
   },
 
-  // Update the agent type for the current session
-  updateSessionAgent: async (agentType: string) => {
+  // Update the agent type and optional provider for the current session
+  updateSessionAgent: async (agentType: string, providerId?: string) => {
     const ctx = getSessionWithPath(get)
     if (!ctx) return
 
     try {
-      await prdChatApi.updateSessionAgent(ctx.session.id, ctx.projectPath, agentType)
+      await prdChatApi.updateSessionAgent(ctx.session.id, ctx.projectPath, agentType, providerId)
 
       set((state) => ({
-        currentSession: state.currentSession ? { ...state.currentSession, agentType } : null,
+        currentSession: state.currentSession ? { ...state.currentSession, agentType, providerId } : null,
         sessions: state.sessions.map((s) =>
-          s.id === ctx.session.id ? { ...s, agentType } : s
+          s.id === ctx.session.id ? { ...s, agentType, providerId } : s
         ),
       }))
     } catch (error) {

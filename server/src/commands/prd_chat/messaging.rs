@@ -587,10 +587,54 @@ fn build_prd_chat_prompt(
     // Include planning documents if available (persists across session resumption)
     inject_planning_context(&mut prompt, planning_context);
 
+    // Add path reminder at the end (LLMs pay more attention to the end of prompts)
+    // This reinforces the plan file instruction even when session resumption is active
+    if let Some(ref project_path) = session.project_path {
+        let path_reminder = get_prd_path_reminder(
+            project_path,
+            &session.id,
+            session.title.as_deref(),
+            session.prd_id.as_deref(),
+        );
+        prompt.push_str(&path_reminder);
+    }
+
     // Current user message
     prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
 
     prompt
+}
+
+/// Generate a short, direct path reminder to be placed at the end of prompts.
+/// This reinforces the PRD path instruction since LLMs pay more attention to the end of prompts.
+/// Used in combination with `get_prd_plan_instruction` which provides full context earlier.
+fn get_prd_path_reminder(
+    project_path: &str,
+    session_id: &str,
+    title: Option<&str>,
+    prd_id: Option<&str>,
+) -> String {
+    let prd_name = get_prd_filename(session_id, title, prd_id);
+    format!(
+        "\n---\n\
+        ⚠️ SYSTEM REQUIREMENT - PRD FILE PATH:\n\
+        You MUST write the PRD to this EXACT path: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\
+        DO NOT create files at any other location. The UI tracks this specific file.\n\
+        ---\n"
+    )
+}
+
+/// Extract the PRD filename based on session, title, and prd_id.
+/// Shared logic used by both `get_prd_plan_instruction` and `get_prd_path_reminder`.
+fn get_prd_filename(session_id: &str, title: Option<&str>, prd_id: Option<&str>) -> String {
+    if let Some(id) = prd_id {
+        if id.starts_with("file:") {
+            return id.trim_start_matches("file:").to_string();
+        }
+    }
+    title
+        .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
+        .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id))
 }
 
 /// Generate the plan file instruction to be injected into prompts
@@ -606,20 +650,7 @@ pub fn get_prd_plan_instruction(
     title: Option<&str>,
     prd_id: Option<&str>,
 ) -> String {
-    // If we have a file-based PRD ID, use that filename directly (same logic as get_prd_plan_file_path)
-    let prd_name = if let Some(id) = prd_id {
-        if id.starts_with("file:") {
-            id.trim_start_matches("file:").to_string()
-        } else {
-            title
-                .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
-                .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id))
-        }
-    } else {
-        title
-            .map(|t| crate::ralph_loop::make_prd_filename(t, session_id))
-            .unwrap_or_else(|| crate::ralph_loop::make_prd_filename("prd", session_id))
-    };
+    let prd_name = get_prd_filename(session_id, title, prd_id);
 
     format!(
         "\n=== PLAN FILE INSTRUCTION ===\n\n\
@@ -1004,5 +1035,138 @@ mod tests {
         assert_eq!(paths.len(), 2);
         assert!(paths[0].contains("img1.png"));
         assert!(paths[1].contains("img2.gif"));
+    }
+
+    #[test]
+    fn test_get_prd_filename_with_title() {
+        let filename = get_prd_filename("abc12345", Some("My Cool Feature"), None);
+        // Should sanitize title and append 8-char session ID
+        assert!(filename.starts_with("my-cool-feature-"));
+        assert!(filename.contains("abc12345"));
+    }
+
+    #[test]
+    fn test_get_prd_filename_without_title() {
+        let filename = get_prd_filename("session123", None, None);
+        // Should default to "prd" with session ID
+        assert!(filename.starts_with("prd-"));
+        assert!(filename.contains("session1"));
+    }
+
+    #[test]
+    fn test_get_prd_filename_with_file_prd_id() {
+        let filename = get_prd_filename("session123", Some("Ignored Title"), Some("file:existing-prd"));
+        // Should use the file-based PRD ID directly
+        assert_eq!(filename, "existing-prd");
+    }
+
+    #[test]
+    fn test_get_prd_path_reminder_contains_exact_path() {
+        let reminder = get_prd_path_reminder(
+            "/my/project",
+            "session123",
+            Some("Camera Feature"),
+            None,
+        );
+
+        // Should contain the exact path with .ralph-ui/prds/
+        assert!(reminder.contains("/my/project/.ralph-ui/prds/"));
+        assert!(reminder.contains("camera-feature-"));
+        assert!(reminder.contains(".md"));
+        // Should contain the warning markers
+        assert!(reminder.contains("SYSTEM REQUIREMENT"));
+        assert!(reminder.contains("DO NOT create files at any other location"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_includes_path_reminder_at_end() {
+        let mut session = make_test_session("test12345678");
+        session.project_path = Some("/my/project".to_string());
+        session.title = Some("Cool Feature".to_string());
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Create a PRD",
+            &[],
+            false,
+            None,
+        );
+
+        // Should contain both the full instruction AND the reminder
+        assert!(prompt.contains("PLAN FILE INSTRUCTION"));
+        assert!(prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+
+        // The path reminder should appear AFTER the planning context injection
+        // and BEFORE the user message
+        let reminder_pos = prompt.find("SYSTEM REQUIREMENT - PRD FILE PATH").unwrap();
+        let user_msg_pos = prompt.find("User: Create a PRD").unwrap();
+        assert!(
+            reminder_pos < user_msg_pos,
+            "Path reminder should appear before user message"
+        );
+
+        // The path reminder should be near the end (after history section would be)
+        let plan_instruction_pos = prompt.find("PLAN FILE INSTRUCTION").unwrap();
+        assert!(
+            reminder_pos > plan_instruction_pos,
+            "Path reminder should appear after the main plan instruction"
+        );
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_path_reminder_with_session_resumption() {
+        let mut session = make_test_session("test12345678");
+        session.project_path = Some("/my/project".to_string());
+        session.title = Some("My Feature".to_string());
+
+        let history = vec![ChatMessage {
+            id: "1".to_string(),
+            session_id: "test12345678".to_string(),
+            role: MessageRole::User,
+            content: "Previous message".to_string(),
+            created_at: "2026-01-17T00:00:00Z".to_string(),
+            attachments: None,
+        }];
+
+        // When has_external_session is true (session resumption)
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Continue working",
+            &[],
+            true, // Session resumption active
+            None,
+        );
+
+        // History should be omitted (for token savings)
+        assert!(!prompt.contains("Conversation History"));
+        assert!(!prompt.contains("Previous message"));
+
+        // But the path reminder should STILL be present
+        assert!(prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+        assert!(prompt.contains(".ralph-ui/prds/my-feature-"));
+    }
+
+    #[test]
+    fn test_build_prd_chat_prompt_no_path_reminder_without_project_path() {
+        let session = make_test_session("test");
+        // No project_path set
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_prd_chat_prompt(
+            &session,
+            &history,
+            "Create a PRD",
+            &[],
+            false,
+            None,
+        );
+
+        // Should NOT contain path reminder since there's no project path
+        assert!(!prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+        // Should also not contain the main plan instruction
+        assert!(!prompt.contains("PLAN FILE INSTRUCTION"));
     }
 }

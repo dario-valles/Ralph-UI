@@ -57,13 +57,14 @@ export const prdChatApi = {
     return await invoke('list_prd_chat_sessions', { projectPath })
   },
 
-  /** Update agent type for a session */
+  /** Update agent type and optional provider for a session */
   updateSessionAgent: async (
     sessionId: string,
     projectPath: string,
-    agentType: string
+    agentType: string,
+    providerId?: string
   ): Promise<void> => {
-    return await invoke('update_prd_chat_agent', { sessionId, projectPath, agentType })
+    return await invoke('update_prd_chat_agent', { sessionId, projectPath, agentType, providerId })
   },
 
   deleteSession: async (sessionId: string, projectPath: string): Promise<void> => {

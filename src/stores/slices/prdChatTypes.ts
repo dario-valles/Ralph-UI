@@ -101,7 +101,7 @@ export interface ChatSessionSlice {
   // State is in ChatCoreState
   // Actions
   startSession: (options: StartSessionOptions) => Promise<void>
-  updateSessionAgent: (agentType: string) => Promise<void>
+  updateSessionAgent: (agentType: string, providerId?: string) => Promise<void>
   loadSessions: (projectPath?: string) => Promise<void>
   setCurrentSession: (session: ChatSession | null) => void
   deleteSession: (sessionId: string) => Promise<void>
