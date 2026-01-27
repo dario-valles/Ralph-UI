@@ -229,24 +229,16 @@ mod tests {
 
     #[test]
     fn test_get_provider_models_zai() {
+        // Z.AI uses Claude model naming, so it uses CLI discovery (no predefined models)
         let models = get_provider_models("zai");
-        assert!(models.is_some());
-        let models = models.unwrap();
-        assert!(!models.is_empty());
-        assert!(models.iter().any(|m| m.id == "GLM-4.7" && m.is_default));
-        assert!(models
-            .iter()
-            .any(|m| m.id == "GLM-4.5-Air" && !m.is_default));
-        assert!(models.iter().all(|m| m.provider == "zai"));
+        assert!(models.is_none());
     }
 
     #[test]
     fn test_get_provider_models_minimax() {
+        // MiniMax uses Claude model naming, so it uses CLI discovery (no predefined models)
         let models = get_provider_models("minimax");
-        assert!(models.is_some());
-        let models = models.unwrap();
-        assert!(!models.is_empty());
-        assert!(models.iter().any(|m| m.id == "MiniMax-M2.1"));
+        assert!(models.is_none());
     }
 
     #[test]

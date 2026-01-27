@@ -115,20 +115,17 @@ mod tests {
             .unwrap();
         assert!(!models.is_empty());
 
-        // With zai provider - should use predefined models
+        // With zai provider - uses CLI discovery (same Claude model naming)
         let models = get_available_models(AgentType::Claude, Some("zai"), &state)
             .await
             .unwrap();
         assert!(!models.is_empty());
-        assert!(models.iter().any(|m| m.id == "GLM-4.7"));
-        assert!(models.iter().any(|m| m.provider == "zai"));
 
-        // With minimax provider
+        // With minimax provider - uses CLI discovery (same Claude model naming)
         let models = get_available_models(AgentType::Claude, Some("minimax"), &state)
             .await
             .unwrap();
         assert!(!models.is_empty());
-        assert!(models.iter().any(|m| m.id == "MiniMax-M2.1"));
     }
 
     #[tokio::test]
@@ -139,7 +136,7 @@ mod tests {
         let models = get_available_models(AgentType::Cursor, Some("zai"), &state)
             .await
             .unwrap();
-        // Should NOT return Z.AI models, should return Cursor models
-        assert!(!models.iter().any(|m| m.id == "GLM-4.7"));
+        // Should return Cursor models, not Claude models
+        assert!(!models.is_empty());
     }
 }
