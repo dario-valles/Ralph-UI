@@ -79,3 +79,8 @@ reddit-posts.md
 .kiro/
 .trae/
 .windsurf/
+
+# Project-specific directories
+screenshots/
+skills/
+docs/
