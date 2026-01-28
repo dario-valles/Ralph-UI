@@ -34,6 +34,7 @@ target
 .vscode/*
 !.vscode/extensions.json
 .idea
+.opencode/*
 .DS_Store
 *.suo
 *.ntvs*
@@ -65,3 +66,16 @@ certs/
 # Test screenshots
 test-screenshots/
 reddit-posts.md
+
+# AI coding agent tools
+.agent/
+.agents/
+.claude/skills/agent-browser
+.continue/
+.cursor/
+.gemini/
+.github/skills/
+.goose/
+.kiro/
+.trae/
+.windsurf/
