@@ -266,6 +266,88 @@ export interface GsdCustomPrompts {
 }
 
 /**
+ * Project types with tailored question flows
+ */
+export type ProjectType =
+  | 'web_app' // Full-stack web application
+  | 'cli_tool' // Command-line interface
+  | 'api_service' // REST/GraphQL API
+  | 'library' // Code library/package
+  | 'mobile_app' // iOS/Android app
+  | 'desktop_app' // Desktop app (Electron, Tauri)
+  | 'data_pipeline' // ETL/data processing
+  | 'devops_tool' // DevOps/infrastructure tool
+  | 'documentation' // Documentation site
+  | 'other' // Catch-all
+
+/**
+ * Result of project type detection
+ */
+export interface ProjectTypeDetection {
+  detectedType: ProjectType
+  confidence: 'high' | 'medium' | 'low'
+  evidence: string[] // Files/patterns found
+  suggestedFrameworks: string[] // e.g., ['React', 'Vite']
+  needsConfirmation: boolean // True if confidence < high
+}
+
+/**
+ * Type of quality issue
+ */
+export type ContextQualityIssueType =
+  | 'vague'
+  | 'missing_info'
+  | 'not_actionable'
+  | 'too_broad'
+  | 'contradictory'
+
+/**
+ * A quality issue with the context
+ */
+export interface ContextQualityIssue {
+  issueType: ContextQualityIssueType
+  message: string
+  severity: 'error' | 'warning' | 'info'
+  field: 'what' | 'why' | 'who' | 'done' | 'general'
+}
+
+/**
+ * Context quality analysis result
+ */
+export interface ContextQualityReport {
+  specificityScore: number // 0-100: How specific is the description?
+  completenessScore: number // 0-100: How complete is the context?
+  actionabilityScore: number // 0-100: Can you act on this?
+  overallScore: number // Average of above
+  issues: ContextQualityIssue[] // Specific problems found
+  suggestions: string[] // How to improve
+  isGoodEnough: boolean // True if overall >= 70
+}
+
+/**
+ * Smart context suggestions for a project type
+ */
+export interface ContextSuggestions {
+  projectType: ProjectType
+  what: string[] // 3-5 example "what" descriptions
+  why: string[] // 3-5 example "why" descriptions
+  who: string[] // 3-5 example "who" descriptions
+  done: string[] // 3-5 example "done" descriptions
+}
+
+/**
+ * AI-generated project idea for brainstorming
+ */
+export interface GeneratedIdea {
+  id: string
+  title: string // "Recipe Knowledge Base"
+  summary: string // 2-sentence overview
+  context: QuestioningContext // Fully filled what/why/who/done
+  suggestedFeatures: string[] // 3-5 key features
+  techStack?: string[] // Suggested technologies
+}
+
+/**
  * Configuration for the GSD workflow
  */
 export interface GsdConfig {

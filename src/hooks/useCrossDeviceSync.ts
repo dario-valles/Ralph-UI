@@ -83,13 +83,13 @@ export function useCrossDeviceSync(options: CrossDeviceSyncOptions = {}) {
 
     // Helper to create filtered subscription handlers
     function createHandler<T extends { sessionId?: string }>(
-      eventName: string,
+      _eventName: string,
       callback?: (payload: T) => void
     ) {
       return (payload: T) => {
         if (!isMounted) return
         if (sessionId && payload.sessionId && payload.sessionId !== sessionId) return
-        console.log(`[CrossDeviceSync] ${eventName}:`, payload)
+        // console.log(`[CrossDeviceSync] ${eventName}:`, payload)
         callback?.(payload)
       }
     }
@@ -116,15 +116,12 @@ export function useCrossDeviceSync(options: CrossDeviceSyncOptions = {}) {
           'agent:failed',
           createHandler('Agent failed', onAgentFailed)
         ),
-        subscribeEvent<{ sessionId?: string }>(
-          'mission_control:refresh',
-          (payload) => {
-            if (!isMounted) return
-            if (sessionId && payload.sessionId && payload.sessionId !== sessionId) return
-            console.log('[CrossDeviceSync] Mission control refresh triggered')
-            if (onRefresh) debouncedRefresh.current(onRefresh)
-          }
-        ),
+        subscribeEvent<{ sessionId?: string }>('mission_control:refresh', (payload) => {
+          if (!isMounted) return
+          if (sessionId && payload.sessionId && payload.sessionId !== sessionId) return
+          // console.log('[CrossDeviceSync] Mission control refresh triggered')
+          if (onRefresh) debouncedRefresh.current(onRefresh)
+        }),
       ]
 
       const results = await Promise.all(subscriptions)
@@ -144,7 +141,15 @@ export function useCrossDeviceSync(options: CrossDeviceSyncOptions = {}) {
         clearTimeout(refreshTimeoutRef.current)
       }
     }
-  }, [sessionId, onTaskChange, onSessionChange, onAgentChange, onAgentCompleted, onAgentFailed, onRefresh])
+  }, [
+    sessionId,
+    onTaskChange,
+    onSessionChange,
+    onAgentChange,
+    onAgentCompleted,
+    onAgentFailed,
+    onRefresh,
+  ])
 }
 
 /**
@@ -200,7 +205,7 @@ let globalListenersInitialized = false
  */
 export function setupGlobalSyncListeners(): void {
   if (globalListenersInitialized) {
-    console.log('[CrossDeviceSync] Global listeners already initialized')
+    // console.log('[CrossDeviceSync] Global listeners already initialized')
     return
   }
 
@@ -209,7 +214,7 @@ export function setupGlobalSyncListeners(): void {
   }
 
   globalListenersInitialized = true
-  console.log('[CrossDeviceSync] Setting up global event listeners')
+  // console.log('[CrossDeviceSync] Setting up global event listeners')
 
   // Import events-client dynamically to avoid SSR issues
   import('@/lib/events-client').then(({ subscribeEvent }) => {
@@ -225,31 +230,30 @@ export function setupGlobalSyncListeners(): void {
         store.completeToolCall(payload)
       })
 
-      console.log('[CrossDeviceSync] Tool call listeners registered')
+      // console.log('[CrossDeviceSync] Tool call listeners registered')
     })
 
     // Log cross-device sync events for debugging
-    subscribeEvent<TaskStatusChangedPayload>('task:status_changed', (payload) => {
-      console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
+    subscribeEvent<TaskStatusChangedPayload>('task:status_changed', () => {
+      // console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
     })
 
-    subscribeEvent<SessionStatusChangedPayload>('session:status_changed', (payload) => {
-      console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
+    subscribeEvent<SessionStatusChangedPayload>('session:status_changed', () => {
+      // console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
     })
 
-    subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', (payload) => {
-      console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
+    subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', () => {
+      // console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
     })
 
-    subscribeEvent<AgentCompletedPayload>('agent:completed', (payload) => {
-      console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
+    subscribeEvent<AgentCompletedPayload>('agent:completed', () => {
+      // console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
     })
 
-    subscribeEvent<AgentFailedPayload>('agent:failed', (payload) => {
-      console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
+    subscribeEvent<AgentFailedPayload>('agent:failed', () => {
+      // console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
     })
 
-    console.log('[CrossDeviceSync] Global event listeners registered')
+    // console.log('[CrossDeviceSync] Global event listeners registered')
   })
 }
-

@@ -15,6 +15,11 @@ import type {
   ResearchStatus,
   ResearchResult,
   ResearchSynthesis,
+  ProjectTypeDetection,
+  ContextQualityReport,
+  ContextSuggestions,
+  ProjectType,
+  QuestioningContext,
 } from '@/types/gsd'
 import type {
   RequirementsDoc,
@@ -175,6 +180,19 @@ export interface GsdSlice {
   phaseState: HybridPhaseState
   isGeneratingRequirements: boolean
 
+  // NEW: Project type detection
+  projectType: ProjectType | null
+  projectTypeDetection: ProjectTypeDetection | null
+  isDetectingProjectType: boolean
+
+  // NEW: Context quality
+  contextQuality: ContextQualityReport | null
+  isAnalyzingQuality: boolean
+
+  // NEW: Smart suggestions
+  contextSuggestions: ContextSuggestions | null
+  isLoadingSuggestions: boolean
+
   // Actions
   generateRequirements: () => Promise<RequirementsDoc | null>
   loadRequirements: () => Promise<void>
@@ -188,6 +206,15 @@ export interface GsdSlice {
   loadRoadmap: () => Promise<void>
   clearHybridState: () => void
   updatePhaseState: () => void
+
+  // New Actions
+  detectProjectType: () => Promise<ProjectTypeDetection | null>
+  analyzeContextQuality: (context: QuestioningContext) => Promise<ContextQualityReport | null>
+  generateContextSuggestions: (
+    projectType: ProjectType,
+    context: QuestioningContext
+  ) => Promise<ContextSuggestions | null>
+  setProjectType: (type: ProjectType | null) => void
 }
 
 // ============================================================================

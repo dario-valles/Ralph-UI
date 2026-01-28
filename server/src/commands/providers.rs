@@ -122,15 +122,81 @@ pub fn test_provider_connection(provider_id: &str) -> Result<ProviderTestResult,
         });
     }
 
-    // TODO: In the future, we could make an actual API call to verify the token
-    // For now, just confirm the token is set
-    Ok(ProviderTestResult {
-        success: true,
-        message: format!(
-            "API token configured for {} ({})",
-            preset.name, preset.base_url
-        ),
-    })
+    // Attempt a lightweight API call to verify the token
+    match verify_token_with_api(
+        provider_id,
+        &preset.base_url,
+        secrets.get_token(provider_id),
+    ) {
+        Ok(_) => Ok(ProviderTestResult {
+            success: true,
+            message: format!(
+                "API token verified for {} ({})",
+                preset.name, preset.base_url
+            ),
+        }),
+        Err(e) => Ok(ProviderTestResult {
+            success: false,
+            message: format!("Token validation failed: {}", e),
+        }),
+    }
+}
+
+/// Helper function to verify token via HTTP request
+fn verify_token_with_api(
+    provider_id: &str,
+    base_url: &str,
+    token: Option<&String>,
+) -> Result<(), String> {
+    let token = token.ok_or("No token provided")?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Failed to build client: {}", e))?;
+
+    // Different providers have different verification endpoints/headers
+    let (url, headers) = if provider_id.contains("anthropic") || base_url.contains("anthropic") {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            "x-api-key",
+            reqwest::header::HeaderValue::from_str(token).unwrap(),
+        );
+        h.insert(
+            "anthropic-version",
+            reqwest::header::HeaderValue::from_static("2023-06-01"),
+        );
+        (
+            format!("{}/v1/models?limit=1", base_url.trim_end_matches('/')),
+            h,
+        )
+    } else if provider_id.contains("openai") || base_url.contains("openai") {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+        );
+        (format!("{}/v1/models", base_url.trim_end_matches('/')), h)
+    } else {
+        // Generic OpenAI-compatible providers
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+        );
+        (format!("{}/models", base_url.trim_end_matches('/')), h)
+    };
+
+    let res = client
+        .get(&url)
+        .headers(headers)
+        .send()
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("API returned error: {}", res.status()))
+    }
 }
 
 /// Get provider environment variables for spawning Claude CLI

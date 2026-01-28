@@ -23,7 +23,7 @@ interface ExtendedNotificationOptions extends NotificationOptions {
 }
 
 // Service worker version for debugging
-const SW_VERSION = '1.1.0'
+// const SW_VERSION = '1.1.0'
 
 // Clean up old caches from previous versions
 cleanupOutdatedCaches()
@@ -104,10 +104,10 @@ self.addEventListener('activate', (event) => {
  * Handle push events from the server
  */
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push event received')
+  // console.log('[SW] Push event received')
 
   if (!event.data) {
-    console.log('[SW] Push event has no data')
+    // console.log('[SW] Push event has no data')
     return
   }
 
@@ -253,7 +253,7 @@ self.addEventListener('notificationclose', (event) => {
  * This fires when the push subscription expires or is revoked
  */
 self.addEventListener('pushsubscriptionchange', (event) => {
-  console.log('[SW] Push subscription changed')
+  // console.log('[SW] Push subscription changed')
 
   // Cast to ExtendableEvent to access waitUntil
   const extEvent = event as ExtendableEvent & { oldSubscription?: PushSubscription }
@@ -268,7 +268,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
           }
         )
 
-        console.log('[SW] Re-subscribed to push notifications')
+        // console.log('[SW] Re-subscribed to push notifications')
 
         // Notify all clients about the new subscription
         const allClients = await self.clients.matchAll({ type: 'window' })
@@ -285,4 +285,4 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   )
 })
 
-console.log('[SW] Service worker loaded v' + SW_VERSION)
+// console.log('[SW] Service worker loaded v' + SW_VERSION)

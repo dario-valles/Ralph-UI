@@ -14,6 +14,11 @@ import type {
   RequirementsValidationResult,
   GeneratedRequirement,
   GenerateRequirementsResult,
+  ProjectTypeDetection,
+  ContextQualityReport,
+  ContextSuggestions,
+  GeneratedIdea,
+  ProjectType,
 } from '@/types/gsd'
 import type {
   RequirementsDoc,
@@ -70,7 +75,14 @@ export const gsdApi = {
     model?: string,
     researchTypes?: string[]
   ): Promise<ResearchStatus> => {
-    return await invoke('start_research', { projectPath, sessionId, context, agentType, model, researchTypes })
+    return await invoke('start_research', {
+      projectPath,
+      sessionId,
+      context,
+      agentType,
+      model,
+      researchTypes,
+    })
   },
 
   /** Get research results for a session */
@@ -294,5 +306,42 @@ export const gsdApi = {
       sessionId,
       requirements,
     })
+  },
+
+  /** Detect project type from configuration files */
+  detectProjectType: async (projectPath: string): Promise<ProjectTypeDetection> => {
+    return await invoke('detect_project_type', { projectPath })
+  },
+
+  /** Analyze context quality using AI */
+  analyzeContextQuality: async (
+    context: QuestioningContext,
+    projectType?: ProjectType
+  ): Promise<ContextQualityReport> => {
+    return await invoke('analyze_context_quality', { context, projectType })
+  },
+
+  /** Generate smart context suggestions using AI */
+  generateContextSuggestions: async (
+    projectType: ProjectType,
+    context: QuestioningContext
+  ): Promise<ContextSuggestions> => {
+    return await invoke('generate_context_suggestions', { projectType, context })
+  },
+
+  /** Improve context using AI */
+  improveContextWithAi: async (
+    context: QuestioningContext,
+    projectType?: ProjectType
+  ): Promise<QuestioningContext> => {
+    return await invoke('improve_context_with_ai', { context, projectType })
+  },
+
+  /** Generate project idea starters using AI */
+  generateIdeaStarters: async (
+    projectType: ProjectType,
+    context: QuestioningContext
+  ): Promise<GeneratedIdea[]> => {
+    return await invoke('generate_idea_starters', { projectType, context })
   },
 }

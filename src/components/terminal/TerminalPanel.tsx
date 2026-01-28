@@ -214,7 +214,10 @@ export function TerminalPanel() {
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px] shrink-0 select-none"
+        className={cn(
+          "flex items-center justify-between px-2 py-1 bg-muted/50 border-b min-h-[40px] md:min-h-[32px] shrink-0 select-none",
+          effectiveFullScreen && "relative z-10"
+        )}
         style={{ touchAction: 'none' }}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -223,7 +226,7 @@ export function TerminalPanel() {
         </div>
 
         <div className="flex items-center gap-0.5 shrink-0">
-          {/* Split controls - hidden on mobile */}
+          {/* Split controls - visible when terminal is not minimized (including fullscreen mode), hidden on mobile */}
           {!isMinimized && !isMobile && (
             <>
               <Tooltip content="Split Right" side="bottom">

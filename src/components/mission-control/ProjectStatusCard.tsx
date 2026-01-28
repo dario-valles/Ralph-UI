@@ -1,12 +1,32 @@
 // Individual project summary card for Mission Control
 
 import { Link } from 'react-router-dom'
-import { FolderOpen, Play, Pause, Clock, ArrowRight, FileText, MessageSquarePlus } from 'lucide-react'
+import {
+  FolderOpen,
+  Play,
+  Pause,
+  Clock,
+  ArrowRight,
+  FileText,
+  MessageSquarePlus,
+  MoreVertical,
+  Copy,
+  List,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
+import { toast } from '@/stores/toastStore'
 import type { ProjectStatus } from '@/hooks/useMissionControlData'
 
 interface ProjectStatusCardProps {
@@ -65,6 +85,16 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
   const config = healthConfig[configKey]
   const HealthIcon = config.icon
 
+  const handleCopyPath = () => {
+    navigator.clipboard.writeText(project.path)
+    toast.success('Path copied', 'Project path copied to clipboard')
+  }
+
+  const handleProjectAction = () => {
+    setActiveProject(project.id)
+    onNavigate?.()
+  }
+
   return (
     <Card
       className={cn(
@@ -81,14 +111,61 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-medium truncate">{project.name}</h3>
-              <p className="text-xs text-muted-foreground truncate">{project.path}</p>
+              <p className="text-xs text-muted-foreground truncate" title={project.path}>
+                {project.path}
+              </p>
             </div>
           </div>
 
-          <Badge variant="outline" className={cn('flex-shrink-0', config.bgColor, config.color)}>
-            <HealthIcon className="h-3 w-3 mr-1" />
-            {config.label}
-          </Badge>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Badge variant="outline" className={cn(config.bgColor, config.color)}>
+              <HealthIcon className="h-3 w-3 mr-1" />
+              {config.label}
+            </Badge>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Project Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleCopyPath}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Path
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/ralph-loop"
+                    state={{ projectPath: project.path }}
+                    onClick={handleProjectAction}
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Ralph Loop
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/prds" onClick={handleProjectAction}>
+                    <List className="mr-2 h-4 w-4" />
+                    View PRDs
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/prds/chat"
+                    state={{ projectPath: project.path, startNew: true }}
+                    onClick={handleProjectAction}
+                  >
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                    New PRD Chat
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Footer */}
@@ -98,10 +175,15 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
             {formatLastActivity(lastActivity)}
           </div>
           {prdCount !== null && prdCount > 0 && (
-            <div className="flex items-center gap-1">
+            <Link
+              to="/prds"
+              onClick={handleProjectAction}
+              className="flex items-center gap-1 hover:text-primary transition-colors hover:underline"
+              title="View all PRDs"
+            >
               <FileText className="h-3 w-3" />
               {prdCount} PRD{prdCount !== 1 ? 's' : ''}
-            </div>
+            </Link>
           )}
         </div>
 
@@ -112,24 +194,25 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
               variant={isRunning ? 'default' : 'ghost'}
               size="sm"
               className="w-full justify-between"
-              onClick={() => {
-                setActiveProject(project.id)
-                onNavigate?.()
-              }}
+              onClick={handleProjectAction}
             >
               {isRunning ? 'Go to Ralph Loop' : 'Start Ralph Loop'}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
+
+          <Link to="/prds" onClick={handleProjectAction}>
+            <Button variant="outline" size="sm" className="px-3" title="View PRDs">
+              <List className="h-4 w-4" />
+            </Button>
+          </Link>
+
           <Link to="/prds/chat" state={{ projectPath: project.path, startNew: true }}>
             <Button
               variant="outline"
               size="sm"
               className="px-3"
-              onClick={() => {
-                setActiveProject(project.id)
-                onNavigate?.()
-              }}
+              onClick={handleProjectAction}
               title="New PRD Chat"
             >
               <MessageSquarePlus className="h-4 w-4" />

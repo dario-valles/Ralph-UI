@@ -84,6 +84,13 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     roadmapDoc: gsdSlice.roadmapDoc,
     phaseState: gsdSlice.phaseState,
     isGeneratingRequirements: gsdSlice.isGeneratingRequirements,
+    projectType: gsdSlice.projectType,
+    projectTypeDetection: gsdSlice.projectTypeDetection,
+    isDetectingProjectType: gsdSlice.isDetectingProjectType,
+    contextQuality: gsdSlice.contextQuality,
+    isAnalyzingQuality: gsdSlice.isAnalyzingQuality,
+    contextSuggestions: gsdSlice.contextSuggestions,
+    isLoadingSuggestions: gsdSlice.isLoadingSuggestions,
 
     // =========================================================================
     // Chat Session Actions
@@ -135,5 +142,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     loadRoadmap: gsdSlice.loadRoadmap,
     clearHybridState: gsdSlice.clearHybridState,
     updatePhaseState: gsdSlice.updatePhaseState,
+    detectProjectType: gsdSlice.detectProjectType,
+    analyzeContextQuality: gsdSlice.analyzeContextQuality,
+    generateContextSuggestions: gsdSlice.generateContextSuggestions,
+    setProjectType: gsdSlice.setProjectType,
   }
 })

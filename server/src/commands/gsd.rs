@@ -13,6 +13,10 @@ use crate::gsd::{
     requirements::{Requirement, RequirementsDoc, ScopeSelection},
     research::{get_available_agents, synthesize_research, ResearchResult, ResearchSynthesis},
     roadmap::{derive_roadmap, RoadmapDoc},
+    startup::{
+        detect_project_type as detect_type, ContextQualityReport, ContextSuggestions,
+        GeneratedIdea, ProjectType, ProjectTypeDetection,
+    },
     state::{GsdPhase, GsdWorkflowState, QuestioningContext, ResearchStatus},
     verification::{verify_plans, VerificationResult},
 };
@@ -1805,6 +1809,793 @@ pub async fn add_generated_requirements(
     );
 
     Ok(added)
+}
+
+/// Detect project type from configuration files
+pub async fn detect_project_type(project_path: String) -> Result<ProjectTypeDetection, String> {
+    let path = as_path(&project_path);
+    Ok(detect_type(path))
+}
+
+/// Analyzes the quality of questioning context using LLM
+pub async fn analyze_context_quality(
+    context: QuestioningContext,
+    project_type: Option<ProjectType>,
+) -> Result<ContextQualityReport, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    // Build template context
+    let template_content = get_builtin_template("context_quality_analysis")
+        .ok_or("Context quality analysis template not found")?;
+
+    let mut tera_context = Context::new();
+    if let Some(pt) = project_type {
+        // Convert camelCase to snake_case for template
+        let project_type_str = match pt {
+            ProjectType::WebApp => "web_app",
+            ProjectType::CliTool => "cli_tool",
+            ProjectType::ApiService => "api_service",
+            ProjectType::Library => "library",
+            ProjectType::MobileApp => "mobile_app",
+            ProjectType::DesktopApp => "desktop_app",
+            ProjectType::DataPipeline => "data_pipeline",
+            ProjectType::DevopsTool => "devops_tool",
+            ProjectType::Documentation => "documentation",
+            ProjectType::Other => "other",
+        };
+        tera_context.insert("project_type", project_type_str);
+    }
+
+    // Sanitize context fields
+    let mut context_obj = serde_json::Map::new();
+    if let Some(what) = &context.what {
+        context_obj.insert("what".to_string(), sanitize_tera_input(what).into());
+    }
+    if let Some(why) = &context.why {
+        context_obj.insert("why".to_string(), sanitize_tera_input(why).into());
+    }
+    if let Some(who) = &context.who {
+        context_obj.insert("who".to_string(), sanitize_tera_input(who).into());
+    }
+    if let Some(done) = &context.done {
+        context_obj.insert("done".to_string(), sanitize_tera_input(done).into());
+    }
+    context_obj.insert(
+        "notes".to_string(),
+        context
+            .notes
+            .iter()
+            .map(|s| sanitize_tera_input(s))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    tera_context.insert("context", &context_obj);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    // Resolve agent (use Claude by default)
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        // Fallback to heuristic-based analysis if agent not available
+        return analyze_context_quality_heuristic(&context);
+    }
+
+    log::info!("[ContextQuality] Running {agent:?} to analyze context");
+
+    // Spawn agent with tools disabled
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("ctx-quality-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    // Read output with timeout
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(60), // 1 minute timeout
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Context quality analysis timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    // Parse JSON response
+    let report: ContextQualityReport = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse quality report: {e}\nOutput: {output_str}"))?;
+
+    log::info!(
+        "[ContextQuality] Analysis complete: overall score {}",
+        report.overall_score
+    );
+    Ok(report)
+}
+
+/// Fallback heuristic-based context quality analysis
+fn analyze_context_quality_heuristic(
+    context: &QuestioningContext,
+) -> Result<ContextQualityReport, String> {
+    use crate::gsd::startup::ContextQualityIssue;
+
+    let mut issues = Vec::new();
+    let mut suggestions = Vec::new();
+
+    // Check completeness
+    let has_what = context.what.as_deref().map_or(false, |s| s.len() > 10);
+    let has_why = context.why.as_deref().map_or(false, |s| s.len() > 10);
+    let has_who = context.who.as_deref().map_or(false, |s| s.len() > 10);
+    let has_done = context.done.as_deref().map_or(false, |s| s.len() > 10);
+
+    let filled_count = [has_what, has_why, has_who, has_done]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
+    // Completeness score
+    let completeness_score = match filled_count {
+        0 | 1 => 20,
+        2 => 40,
+        3 => 70,
+        4 => 100,
+        _ => 0,
+    };
+
+    // Check specificity
+    let specificity_score = if has_what {
+        let what_len = context.what.as_deref().map_or(0, |s| s.len());
+        match what_len {
+            0..=20 => 30,
+            21..=50 => 50,
+            51..=100 => 70,
+            _ => 85,
+        }
+    } else {
+        20
+    };
+
+    // Actionability score (based on what and done fields mainly)
+    let actionability_score = if has_what && has_done {
+        75
+    } else if has_what {
+        50
+    } else {
+        20
+    };
+
+    // Generate issues
+    if !has_what {
+        issues.push(ContextQualityIssue {
+            issue_type: "missing_info".to_string(),
+            message: "Missing 'what' - what are you building?".to_string(),
+            severity: "error".to_string(),
+            field: "what".to_string(),
+        });
+        suggestions.push("Describe what you're building in 1-2 sentences".to_string());
+    }
+
+    if !has_why {
+        issues.push(ContextQualityIssue {
+            issue_type: "missing_info".to_string(),
+            message: "Missing 'why' - what problem are you solving?".to_string(),
+            severity: "error".to_string(),
+            field: "why".to_string(),
+        });
+        suggestions.push("Explain the motivation or problem being solved".to_string());
+    }
+
+    if !has_who {
+        issues.push(ContextQualityIssue {
+            issue_type: "missing_info".to_string(),
+            message: "Missing 'who' - who will use this?".to_string(),
+            severity: "warning".to_string(),
+            field: "who".to_string(),
+        });
+        suggestions.push("Identify your target users or audience".to_string());
+    }
+
+    if !has_done {
+        issues.push(ContextQualityIssue {
+            issue_type: "missing_info".to_string(),
+            message: "Missing 'done' - what defines success?".to_string(),
+            severity: "error".to_string(),
+            field: "done".to_string(),
+        });
+        suggestions.push("Define clear success criteria or definition of done".to_string());
+    }
+
+    let overall_score = (specificity_score + completeness_score + actionability_score) / 3;
+    let is_good_enough = overall_score >= 70;
+
+    Ok(ContextQualityReport {
+        specificity_score: specificity_score as u32,
+        completeness_score: completeness_score as u32,
+        actionability_score: actionability_score as u32,
+        overall_score: overall_score as u32,
+        issues,
+        suggestions,
+        is_good_enough,
+    })
+}
+
+/// Generates smart context suggestions using LLM
+pub async fn generate_context_suggestions(
+    project_type: ProjectType,
+    context: QuestioningContext,
+) -> Result<ContextSuggestions, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    // Build template context
+    let template_content = get_builtin_template("context_suggestions")
+        .ok_or("Context suggestions template not found")?;
+
+    let mut tera_context = Context::new();
+
+    // Convert project type to string
+    let project_type_str = match project_type {
+        ProjectType::WebApp => "web_app",
+        ProjectType::CliTool => "cli_tool",
+        ProjectType::ApiService => "api_service",
+        ProjectType::Library => "library",
+        ProjectType::MobileApp => "mobile_app",
+        ProjectType::DesktopApp => "desktop_app",
+        ProjectType::DataPipeline => "data_pipeline",
+        ProjectType::DevopsTool => "devops_tool",
+        ProjectType::Documentation => "documentation",
+        ProjectType::Other => "other",
+    };
+    tera_context.insert("project_type", project_type_str);
+
+    // Sanitize context fields
+    let mut context_obj = serde_json::Map::new();
+    if let Some(what) = &context.what {
+        context_obj.insert("what".to_string(), sanitize_tera_input(what).into());
+    }
+    if let Some(why) = &context.why {
+        context_obj.insert("why".to_string(), sanitize_tera_input(why).into());
+    }
+    if let Some(who) = &context.who {
+        context_obj.insert("who".to_string(), sanitize_tera_input(who).into());
+    }
+    if let Some(done) = &context.done {
+        context_obj.insert("done".to_string(), sanitize_tera_input(done).into());
+    }
+    context_obj.insert(
+        "notes".to_string(),
+        context
+            .notes
+            .iter()
+            .map(|s| sanitize_tera_input(s))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    tera_context.insert("context", &context_obj);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    // Resolve agent
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        // Fallback to heuristic suggestions
+        return generate_context_suggestions_heuristic(project_type, &context);
+    }
+
+    log::info!("[ContextSuggestions] Running {agent:?} to generate suggestions");
+
+    // Spawn agent with tools disabled
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("ctx-suggestions-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    // Read output with timeout
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(90), // 1.5 minute timeout
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Context suggestions generation timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    // Parse JSON response
+    let suggestions: ContextSuggestions = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse suggestions: {e}\nOutput: {output_str}"))?;
+
+    log::info!("[ContextSuggestions] Generated {} suggestion categories", 4);
+    Ok(suggestions)
+}
+
+/// Fallback heuristic-based context suggestions
+fn generate_context_suggestions_heuristic(
+    project_type: ProjectType,
+    _context: &QuestioningContext,
+) -> Result<ContextSuggestions, String> {
+    let (what, why, who, done) = match project_type {
+        ProjectType::WebApp => (
+            vec![
+                "A web application that allows users to [core action] and [secondary action]".to_string(),
+                "A responsive web platform for [target users] to [primary goal]".to_string(),
+                "An interactive web experience focused on [key feature] with real-time updates".to_string(),
+            ],
+            vec![
+                "To simplify [problem] and provide a more efficient way to [solution]".to_string(),
+                "To fill the gap in the market for [need] with an accessible web solution".to_string(),
+                "To empower users to [action] without requiring specialized software or training".to_string(),
+            ],
+            vec![
+                "Users who need to [action] but lack existing tools".to_string(),
+                "Individuals or teams working in [domain] who need [capability]".to_string(),
+                "Professionals and hobbyists seeking a streamlined solution for [problem]".to_string(),
+            ],
+            vec![
+                "When users can successfully [primary action] and [secondary action] through the web interface".to_string(),
+                "When the application is deployed and accessible via [deployment target]".to_string(),
+                "When user testing shows [specific metric] improvement over baseline".to_string(),
+            ],
+        ),
+        ProjectType::CliTool => (
+            vec![
+                "A command-line tool that automates [task] for developers".to_string(),
+                "A CLI utility to streamline [workflow] by [action]".to_string(),
+                "A terminal-based application that provides [capability] with simple commands".to_string(),
+            ],
+            vec![
+                "To reduce the time and effort required for [task]".to_string(),
+                "To provide a consistent interface for [operation] across different platforms".to_string(),
+                "To eliminate manual steps in [workflow] and reduce human error".to_string(),
+            ],
+            vec![
+                "Developers and system administrators who frequently need to [action]".to_string(),
+                "Users who prefer command-line interfaces over GUI applications".to_string(),
+                "Teams automating deployment or CI/CD workflows".to_string(),
+            ],
+            vec![
+                "When the tool accepts all required arguments and produces valid output".to_string(),
+                "When the tool can be installed via [package manager] and added to PATH".to_string(),
+                "When tests pass for common use cases and edge cases are documented".to_string(),
+            ],
+        ),
+        ProjectType::ApiService => (
+            vec![
+                "A RESTful API service that exposes [capability] to client applications".to_string(),
+                "A backend service that handles [operation] with proper authentication and rate limiting".to_string(),
+                "A microservice architecture for [domain] with real-time data processing".to_string(),
+            ],
+            vec![
+                "To provide a standardized interface for [service] that can be consumed by multiple clients".to_string(),
+                "To enable third-party integration with [system] through documented endpoints".to_string(),
+                "To decouple [frontend] concerns from backend business logic".to_string(),
+            ],
+            vec![
+                "Mobile applications that need to access [data] from the cloud".to_string(),
+                "Web applications requiring secure user authentication and data storage".to_string(),
+                "Third-party developers building on top of [platform]".to_string(),
+            ],
+            vec![
+                "When all endpoints return valid responses with proper status codes".to_string(),
+                "When API documentation is complete and endpoints are accessible from external clients".to_string(),
+                "When load testing shows acceptable performance under expected traffic".to_string(),
+            ],
+        ),
+        _ => (
+            vec![
+                "A software solution that provides [core functionality] for users".to_string(),
+                "An application to address [problem] with efficient and intuitive design".to_string(),
+                "A platform that enables [action] with modern tools and best practices".to_string(),
+            ],
+            vec![
+                "To solve [problem] that affects users in [context]".to_string(),
+                "To improve [process] by reducing [metric] and increasing [benefit]".to_string(),
+                "To enable users to accomplish [goal] more easily than current alternatives".to_string(),
+            ],
+            vec![
+                "Users who need to [action] on a regular basis".to_string(),
+                "Organizations seeking to improve their [workflow]".to_string(),
+                "Individuals looking for a better solution to [problem]".to_string(),
+            ],
+            vec![
+                "When the core functionality works as specified in requirements".to_string(),
+                "When the application can be deployed and accessed by end users".to_string(),
+                "When key performance metrics meet or exceed targets defined in planning".to_string(),
+            ],
+        ),
+    };
+
+    Ok(ContextSuggestions {
+        project_type,
+        what,
+        why,
+        who,
+        done,
+    })
+}
+
+/// Generate idea starters using LLM
+pub async fn generate_idea_starters(
+    project_type: ProjectType,
+    context: QuestioningContext,
+) -> Result<Vec<GeneratedIdea>, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    // Build template context
+    let template_content =
+        get_builtin_template("idea_starters").ok_or("Idea starters template not found")?;
+
+    let mut tera_context = Context::new();
+
+    // Convert project type to string
+    let project_type_str = match project_type {
+        ProjectType::WebApp => "web_app",
+        ProjectType::CliTool => "cli_tool",
+        ProjectType::ApiService => "api_service",
+        ProjectType::Library => "library",
+        ProjectType::MobileApp => "mobile_app",
+        ProjectType::DesktopApp => "desktop_app",
+        ProjectType::DataPipeline => "data_pipeline",
+        ProjectType::DevopsTool => "devops_tool",
+        ProjectType::Documentation => "documentation",
+        ProjectType::Other => "other",
+    };
+    tera_context.insert("project_type", project_type_str);
+
+    // Sanitize context fields
+    let mut context_obj = serde_json::Map::new();
+    if let Some(what) = &context.what {
+        context_obj.insert("what".to_string(), sanitize_tera_input(what).into());
+    } else {
+        context_obj.insert("what".to_string(), "".to_string().into());
+    }
+    if let Some(why) = &context.why {
+        context_obj.insert("why".to_string(), sanitize_tera_input(why).into());
+    } else {
+        context_obj.insert("why".to_string(), "".to_string().into());
+    }
+    if let Some(who) = &context.who {
+        context_obj.insert("who".to_string(), sanitize_tera_input(who).into());
+    } else {
+        context_obj.insert("who".to_string(), "".to_string().into());
+    }
+    if let Some(done) = &context.done {
+        context_obj.insert("done".to_string(), sanitize_tera_input(done).into());
+    } else {
+        context_obj.insert("done".to_string(), "".to_string().into());
+    }
+    context_obj.insert(
+        "notes".to_string(),
+        context
+            .notes
+            .iter()
+            .map(|s| sanitize_tera_input(s))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    tera_context.insert("context", &context_obj);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    // Resolve agent
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        // Fallback to heuristic idea starters
+        return generate_idea_starters_heuristic(project_type);
+    }
+
+    log::info!("[IdeaStarters] Running {agent:?} to generate ideas");
+
+    // Spawn agent with tools disabled
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("idea-starters-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    // Read output with timeout
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(120), // 2 minute timeout
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Idea starters generation timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    // Parse JSON response
+    let ideas: Vec<GeneratedIdea> = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse ideas: {e}\nOutput: {output_str}"))?;
+
+    log::info!("[IdeaStarters] Generated {} ideas", ideas.len());
+    Ok(ideas)
+}
+
+/// Fallback heuristic-based idea starters
+fn generate_idea_starters_heuristic(
+    project_type: ProjectType,
+) -> Result<Vec<GeneratedIdea>, String> {
+    match project_type {
+        ProjectType::WebApp => Ok(vec![
+            GeneratedIdea {
+                id: "idea-web-1".to_string(),
+                title: "Task Management Dashboard".to_string(),
+                summary: "A collaborative web application for teams to manage tasks, projects, and deadlines with real-time updates.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A web-based task and project management platform with kanban boards, task lists, calendars, and real-time collaboration features".to_string()),
+                    why: Some("To help teams stay organized, track progress, and meet deadlines more efficiently without complex project management software".to_string()),
+                    who: Some("Small to medium-sized teams, freelancers, and project managers who need a simple but powerful task tracking solution".to_string()),
+                    done: Some("When teams can create projects, add tasks with deadlines, assign tasks, track progress with kanban views, and receive real-time notifications".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Drag-and-drop kanban board".to_string(),
+                    "Real-time task updates".to_string(),
+                    "Calendar and timeline views".to_string(),
+                    "Team member assignment and comments".to_string(),
+                    "Deadline reminders and notifications".to_string(),
+                ],
+                tech_stack: Some(vec!["React".to_string(), "Node.js".to_string(), "PostgreSQL".to_string(), "Socket.io".to_string()]),
+            },
+            GeneratedIdea {
+                id: "idea-web-2".to_string(),
+                title: "Knowledge Base Wiki".to_string(),
+                summary: "A modern documentation platform with rich text editing, search, and collaborative features.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A web-based knowledge base and documentation platform with markdown support, search, version history, and collaborative editing".to_string()),
+                    why: Some("To provide teams with a centralized place to document processes, share knowledge, and maintain up-to-date documentation".to_string()),
+                    who: Some("Development teams, documentation writers, and organizations that need to maintain and share technical documentation".to_string()),
+                    done: Some("When users can create, edit, and organize documentation pages, search content effectively, and track changes with version history".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Markdown and rich text editor".to_string(),
+                    "Full-text search with filters".to_string(),
+                    "Version history and rollback".to_string(),
+                    "Real-time collaborative editing".to_string(),
+                    "Organize with tags and categories".to_string(),
+                ],
+                tech_stack: Some(vec!["Next.js".to_string(), "MDX".to_string(), "Elasticsearch".to_string(), "PostgreSQL".to_string()]),
+            },
+        ]),
+        ProjectType::CliTool => Ok(vec![
+            GeneratedIdea {
+                id: "idea-cli-1".to_string(),
+                title: "Git Workflow Automation Tool".to_string(),
+                summary: "A CLI tool to automate common Git workflows and enforce best practices across teams.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A command-line tool that automates Git workflows including branching, commit message linting, and PR generation".to_string()),
+                    why: Some("To reduce manual Git operations, enforce consistent commit messages, and streamline the pull request process".to_string()),
+                    who: Some("Software developers and development teams using Git for version control".to_string()),
+                    done: Some("When developers can run simple commands to create feature branches, validate commit messages, and generate pull request templates".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Branch naming conventions enforcement".to_string(),
+                    "Commit message linting with presets".to_string(),
+                    "Automated PR description generation".to_string(),
+                    "Git hooks integration".to_string(),
+                    "Team workflow customization".to_string(),
+                ],
+                tech_stack: Some(vec!["Rust".to_string(), "Git CLI".to_string()]),
+            },
+            GeneratedIdea {
+                id: "idea-cli-2".to_string(),
+                title: "Project Template Generator".to_string(),
+                summary: "A CLI tool to scaffold new projects with best practices and custom templates.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A command-line tool that generates new project structures with predefined templates, dependencies, and configuration files".to_string()),
+                    why: Some("To accelerate project setup and ensure consistent code quality across new projects".to_string()),
+                    who: Some("Developers and teams frequently starting new projects who want to skip manual setup".to_string()),
+                    done: Some("When users can run a single command to generate a complete project structure with dependencies installed and configured".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Multiple project templates (web, cli, library)".to_string(),
+                    "Interactive configuration wizard".to_string(),
+                    "Template versioning and updates".to_string(),
+                    "Custom template support".to_string(),
+                    "Post-generation setup scripts".to_string(),
+                ],
+                tech_stack: Some(vec!["Rust".to_string(), "Handlebars".to_string(), "Git".to_string()]),
+            },
+        ]),
+        ProjectType::ApiService => Ok(vec![
+            GeneratedIdea {
+                id: "idea-api-1".to_string(),
+                title: "User Authentication API".to_string(),
+                summary: "A standalone authentication service supporting OAuth, JWT tokens, and multi-factor authentication.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A RESTful API service that handles user authentication, registration, password reset, and token management".to_string()),
+                    why: Some("To provide a secure, reusable authentication solution that can be integrated by multiple applications".to_string()),
+                    who: Some("Development teams building applications that need user authentication without implementing it from scratch".to_string()),
+                    done: Some("When applications can register users, authenticate with OAuth providers, issue and validate JWT tokens, and handle password resets securely".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "OAuth 2.0 integration (Google, GitHub)".to_string(),
+                    "JWT token generation and validation".to_string(),
+                    "Password reset via email".to_string(),
+                    "Multi-factor authentication (TOTP)".to_string(),
+                    "Rate limiting and security headers".to_string(),
+                ],
+                tech_stack: Some(vec!["Rust".to_string(), "Axum".to_string(), "PostgreSQL".to_string(), "Redis".to_string()]),
+            },
+            GeneratedIdea {
+                id: "idea-api-2".to_string(),
+                title: "File Storage API".to_string(),
+                summary: "A cloud storage API with file uploads, downloads, and metadata management.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A RESTful API for file upload, download, organization, and metadata management with chunked uploads for large files".to_string()),
+                    why: Some("To provide a simple, programmable file storage solution without cloud vendor lock-in".to_string()),
+                    who: Some("Applications needing to store user-generated content or manage large file uploads".to_string()),
+                    done: Some("When applications can upload files via chunked uploads, download files, organize files in folders, and query file metadata".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Chunked uploads with resume capability".to_string(),
+                    "Folder organization and navigation".to_string(),
+                    "File metadata and search".to_string(),
+                    "Presigned URLs for direct downloads".to_string(),
+                    "Storage backends (S3, local disk)".to_string(),
+                ],
+                tech_stack: Some(vec!["Rust".to_string(), "Actix-web".to_string(), "S3 SDK".to_string(), "PostgreSQL".to_string()]),
+            },
+        ]),
+        _ => Ok(vec![
+            GeneratedIdea {
+                id: "idea-generic-1".to_string(),
+                title: "Data Processing Pipeline".to_string(),
+                summary: "An automated pipeline for ingesting, transforming, and analyzing data from multiple sources.".to_string(),
+                context: QuestioningContext {
+                    what: Some("A data processing system that ingests data from APIs and files, applies transformations, and stores results for analysis".to_string()),
+                    why: Some("To automate data workflows and reduce manual data preparation effort".to_string()),
+                    who: Some("Data analysts, data engineers, and teams working with regularly updated data sources".to_string()),
+                    done: Some("When the system can automatically ingest data from configured sources, apply defined transformations, and output processed data to storage or analytics".to_string()),
+                    notes: vec![],
+                },
+                suggested_features: vec![
+                    "Multiple data source connectors".to_string(),
+                    "Declarative transformation rules".to_string(),
+                    "Error handling and retry logic".to_string(),
+                    "Monitoring and logging".to_string(),
+                    "Scheduled and event-driven runs".to_string(),
+                ],
+                tech_stack: Some(vec!["Python".to_string(), "Apache Airflow".to_string(), "PostgreSQL".to_string()]),
+            },
+        ]),
+    }
 }
 
 #[cfg(test)]

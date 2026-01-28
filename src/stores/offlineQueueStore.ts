@@ -82,7 +82,7 @@ export const useOfflineQueueStore = create<OfflineQueueStore>()(
           queue: [...state.queue, action],
         }))
 
-        console.log(`Queued offline action: ${cmd} (${id})`)
+        // console.log(`Queued offline action: ${cmd} (${id})`)
         return id
       },
 
@@ -163,7 +163,7 @@ export function cleanupOldActions(): void {
   const freshQueue = store.queue.filter((action) => now - action.timestamp < MAX_ACTION_AGE_MS)
 
   if (freshQueue.length !== store.queue.length) {
-    console.log(`Cleaned up ${store.queue.length - freshQueue.length} old queued actions`)
+    // console.log(`Cleaned up ${store.queue.length - freshQueue.length} old queued actions`)
     useOfflineQueueStore.setState({ queue: freshQueue })
   }
 }

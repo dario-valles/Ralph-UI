@@ -13,6 +13,7 @@
 
 use crate::commands;
 use crate::gsd::requirements::{RequirementsDoc, ScopeSelection};
+use crate::gsd::startup::ProjectType;
 use crate::gsd::state::{GsdPhase, QuestioningContext};
 use crate::ralph_loop::PrdExecutionConfig;
 use serde_json::Value;
@@ -343,6 +344,38 @@ pub async fn route_gsd_command(
             )
         }
 
+        "detect_project_type" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(cmd, commands::gsd::detect_project_type(project_path))
+        }
+
+        "analyze_context_quality" => {
+            let context: QuestioningContext = get_arg(&args, "context")?;
+            let project_type: Option<ProjectType> = get_opt_arg(&args, "projectType")?;
+            route_async!(
+                cmd,
+                commands::gsd::analyze_context_quality(context, project_type)
+            )
+        }
+
+        "generate_context_suggestions" => {
+            let project_type: ProjectType = get_arg(&args, "projectType")?;
+            let context: QuestioningContext = get_arg(&args, "context")?;
+            route_async!(
+                cmd,
+                commands::gsd::generate_context_suggestions(project_type, context)
+            )
+        }
+
+        "generate_idea_starters" => {
+            let project_type: ProjectType = get_arg(&args, "projectType")?;
+            let context: QuestioningContext = get_arg(&args, "context")?;
+            route_async!(
+                cmd,
+                commands::gsd::generate_idea_starters(project_type, context)
+            )
+        }
+
         _ => Err(format!("Unknown GSD command: {}", cmd)),
     }
 }
@@ -382,5 +415,9 @@ pub fn is_gsd_command(cmd: &str) -> bool {
             | "clone_gsd_session"
             | "generate_requirements_from_prompt"
             | "add_generated_requirements"
+            | "detect_project_type"
+            | "analyze_context_quality"
+            | "generate_context_suggestions"
+            | "generate_idea_starters"
     )
 }

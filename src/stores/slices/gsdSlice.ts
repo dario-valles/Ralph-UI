@@ -7,32 +7,43 @@
  * - Generating/loading roadmap
  * - Phase state management
  */
-import { gsdApi } from '@/lib/backend-api'
+import { gsdApi } from '@/lib/api/gsd-api'
 import { errorToString } from '@/lib/store-utils'
+import type { SetState, GetState, GsdSlice } from './prdChatTypes'
+import { getSessionWithPath, INITIAL_RESEARCH_STATUS, INITIAL_PHASE_STATE } from './prdChatTypes'
 import type {
-  SetState,
-  GetState,
-  GsdSlice,
-} from './prdChatTypes'
-import {
-  getSessionWithPath,
-  INITIAL_RESEARCH_STATUS,
-  INITIAL_PHASE_STATE,
-} from './prdChatTypes'
-import type { ScopeSelection, RequirementCategory, Requirement, RequirementsDoc, RoadmapDoc } from '@/types/planning'
+  ScopeSelection,
+  RequirementCategory,
+  Requirement,
+  RequirementsDoc,
+  RoadmapDoc,
+} from '@/types/planning'
+import type {
+  ProjectType,
+  QuestioningContext,
+  ProjectTypeDetection,
+  ContextQualityReport,
+  ContextSuggestions,
+} from '@/types/gsd'
 
 /**
  * Creates the GSD slice
  */
-export const createGsdSlice = (
-  set: SetState,
-  get: GetState
-): GsdSlice => ({
+export const createGsdSlice = (set: SetState, get: GetState): GsdSlice => ({
   // Initial state
   requirementsDoc: null,
   roadmapDoc: null,
   phaseState: INITIAL_PHASE_STATE,
   isGeneratingRequirements: false,
+
+  // New Initial State
+  projectType: null,
+  projectTypeDetection: null,
+  isDetectingProjectType: false,
+  contextQuality: null,
+  isAnalyzingQuality: false,
+  contextSuggestions: null,
+  isLoadingSuggestions: false,
 
   // Generate requirements from research
   generateRequirements: async (): Promise<RequirementsDoc | null> => {
@@ -191,6 +202,10 @@ export const createGsdSlice = (
       isResearchRunning: false,
       isSynthesizing: false,
       isGeneratingRequirements: false,
+      projectType: null,
+      projectTypeDetection: null,
+      contextQuality: null,
+      contextSuggestions: null,
     })
   },
 
@@ -247,5 +262,60 @@ export const createGsdSlice = (
         unscopedCount,
       },
     })
+  },
+
+  detectProjectType: async (): Promise<ProjectTypeDetection | null> => {
+    const ctx = getSessionWithPath(get)
+    if (!ctx) return null
+
+    set({ isDetectingProjectType: true })
+    try {
+      const detection = await gsdApi.detectProjectType(ctx.projectPath)
+      set({ projectTypeDetection: detection, projectType: detection.detectedType })
+      return detection
+    } catch (error) {
+      console.error('Failed to detect project type:', error)
+      return null
+    } finally {
+      set({ isDetectingProjectType: false })
+    }
+  },
+
+  analyzeContextQuality: async (
+    context: QuestioningContext
+  ): Promise<ContextQualityReport | null> => {
+    const { projectType } = get()
+    set({ isAnalyzingQuality: true })
+    try {
+      const report = await gsdApi.analyzeContextQuality(context, projectType || undefined)
+      set({ contextQuality: report })
+      return report
+    } catch (error) {
+      console.error('Failed to analyze context quality:', error)
+      return null
+    } finally {
+      set({ isAnalyzingQuality: false })
+    }
+  },
+
+  generateContextSuggestions: async (
+    projectType: ProjectType,
+    context: QuestioningContext
+  ): Promise<ContextSuggestions | null> => {
+    set({ isLoadingSuggestions: true })
+    try {
+      const suggestions = await gsdApi.generateContextSuggestions(projectType, context)
+      set({ contextSuggestions: suggestions })
+      return suggestions
+    } catch (error) {
+      console.error('Failed to generate suggestions:', error)
+      return null
+    } finally {
+      set({ isLoadingSuggestions: false })
+    }
+  },
+
+  setProjectType: (type: ProjectType | null) => {
+    set({ projectType: type })
   },
 })

@@ -1,25 +1,22 @@
-/**
- * Questioning Guide Component
- *
- * Displays a checklist of context items to help guide the user
- * through the deep questioning phase, with probing questions to
- * encourage more concrete, specific answers.
- */
-
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
 import { CheckCircle2, Circle, X, HelpCircle, Sparkles, ChevronRight } from 'lucide-react'
-import type { QuestioningContext } from '@/types/gsd'
+import type { QuestioningContext, ProjectType } from '@/types/gsd'
 import { getRandomProbingQuestion, detectVagueAnswer, type ProbingQuestion } from './prompts'
+import { ContextQualityIndicator } from './ContextQualityIndicator'
+import { SmartContextSuggestions } from './SmartContextSuggestions'
 
 interface QuestioningGuideProps {
   /** Current questioning context */
   context: QuestioningContext
+  /** Current project type */
+  projectType?: ProjectType
   /** Callback when a context item is updated */
   onContextItemUpdate: (key: 'what' | 'why' | 'who' | 'done', value: string) => void
   /** Callback to close the guide */
@@ -65,7 +62,25 @@ const CONTEXT_ITEMS: ContextItemConfig[] = [
   },
 ]
 
-export function QuestioningGuide({ context, onContextItemUpdate, onClose }: QuestioningGuideProps) {
+const PROJECT_TYPE_LABELS: Record<string, string> = {
+  web_app: 'Web Application',
+  cli_tool: 'CLI Tool',
+  api_service: 'API Service',
+  library: 'Library',
+  mobile_app: 'Mobile App',
+  desktop_app: 'Desktop App',
+  data_pipeline: 'Data Pipeline',
+  devops_tool: 'DevOps Tool',
+  documentation: 'Documentation',
+  other: 'Other Project',
+}
+
+export function QuestioningGuide({
+  context,
+  projectType,
+  onContextItemUpdate,
+  onClose,
+}: QuestioningGuideProps) {
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showProbing, setShowProbing] = useState<string | null>(null)
@@ -102,6 +117,12 @@ export function QuestioningGuide({ context, onContextItemUpdate, onClose }: Ques
     setEditValue('')
   }
 
+  const handleImproveContext = (suggestions: string[]) => {
+    // Show suggestions to user - they can manually apply them
+    console.log('Context improvement suggestions:', suggestions)
+    // TODO: Could show a modal or toast with the suggestions
+  }
+
   const getContextValue = (key: 'what' | 'why' | 'who' | 'done'): string | undefined => {
     return context[key]
   }
@@ -121,7 +142,21 @@ export function QuestioningGuide({ context, onContextItemUpdate, onClose }: Ques
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">{completedCount}/4 items completed</p>
+
+        {projectType && (
+          <Badge variant="secondary" className="mt-2 w-fit">
+            {PROJECT_TYPE_LABELS[projectType] || projectType}
+          </Badge>
+        )}
+
+        <ContextQualityIndicator
+          context={context}
+          projectType={projectType}
+          onImprove={handleImproveContext}
+          className="mt-3"
+        />
+
+        <p className="text-xs text-muted-foreground mt-2">{completedCount}/4 items completed</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {CONTEXT_ITEMS.map((item) => {
@@ -227,42 +262,53 @@ export function QuestioningGuide({ context, onContextItemUpdate, onClose }: Ques
                     onFocus={() => handleStartEdit(item.key)}
                   />
 
-                  {/* Show probing prompt button for empty items */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowProbing(showProbing === item.key ? null : item.key)}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Need help thinking about this?
-                  </Button>
-
-                  {showProbing === item.key && (
-                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
-                      <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-2">
-                        {getProbingForArea(item.key).question}
-                      </p>
-                      <div className="space-y-1">
-                        {getProbingForArea(item.key).examples.map((ex, i) => (
-                          <p
-                            key={i}
-                            className="text-xs text-amber-600/80 dark:text-amber-400/80 italic"
-                          >
-                            &ldquo;{ex}&rdquo;
-                          </p>
-                        ))}
-                      </div>
+                  {projectType ? (
+                    <SmartContextSuggestions
+                      projectType={projectType}
+                      context={context}
+                      missingItem={item.key}
+                      onAdopt={(suggestion) => onContextItemUpdate(item.key, suggestion)}
+                    />
+                  ) : (
+                    <>
+                      {/* Show probing prompt button for empty items if no project type */}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 text-xs mt-2 text-amber-600 hover:text-amber-700"
-                        onClick={() => refreshProbing(item.key)}
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowProbing(showProbing === item.key ? null : item.key)}
                       >
-                        <ChevronRight className="h-3 w-3 mr-1" />
-                        Different question
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Need help thinking about this?
                       </Button>
-                    </div>
+
+                      {showProbing === item.key && (
+                        <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-2">
+                            {getProbingForArea(item.key).question}
+                          </p>
+                          <div className="space-y-1">
+                            {getProbingForArea(item.key).examples.map((ex, i) => (
+                              <p
+                                key={i}
+                                className="text-xs text-amber-600/80 dark:text-amber-400/80 italic"
+                              >
+                                &ldquo;{ex}&rdquo;
+                              </p>
+                            ))}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs mt-2 text-amber-600 hover:text-amber-700"
+                            onClick={() => refreshProbing(item.key)}
+                          >
+                            <ChevronRight className="h-3 w-3 mr-1" />
+                            Different question
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}

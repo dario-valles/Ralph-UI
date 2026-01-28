@@ -31,8 +31,10 @@ import {
 } from 'lucide-react'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
+import { GSDOnboardingTour } from './gsd/GSDOnboardingTour'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
+import { useOnboardingStore } from '@/stores/onboardingStore'
 
 type WorkflowMode = 'guided' | 'github'
 
@@ -164,6 +166,9 @@ export function PRDTypeSelector({
   const [showGitHubImport, setShowGitHubImport] = useState(false)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  const { hasSeenGSDOnboarding, markGSDOnboardingAsSeen } = useOnboardingStore()
 
   // Derive project name from path
   const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
@@ -171,12 +176,20 @@ export function PRDTypeSelector({
   const handleModeSelect = (mode: WorkflowMode) => {
     setSelectedMode(mode)
     if (mode === 'guided') {
-      // For guided mode, go to type selection step
-      setStep('type')
+      if (!hasSeenGSDOnboarding) {
+        setShowOnboarding(true)
+      } else {
+        setStep('type')
+      }
     } else if (mode === 'github') {
-      // For GitHub mode, show the import dialog
       setShowGitHubImport(true)
     }
+  }
+
+  const handleOnboardingComplete = () => {
+    markGSDOnboardingAsSeen()
+    setShowOnboarding(false)
+    setStep('type')
   }
 
   const handleBack = () => {
@@ -207,6 +220,12 @@ export function PRDTypeSelector({
 
   const canContinue = selectedMode === 'guided' && selectedType
 
+  if (showOnboarding) {
+    return (
+      <GSDOnboardingTour onComplete={handleOnboardingComplete} onSkip={handleOnboardingComplete} />
+    )
+  }
+
   // Step 1: Workflow Mode Selection
   if (step === 'mode') {
     return (
@@ -223,6 +242,7 @@ export function PRDTypeSelector({
                 key={option.id}
                 onClick={() => handleModeSelect(option.id)}
                 disabled={loading}
+                aria-label={option.label}
                 className={cn(
                   'flex flex-col p-5 rounded-lg border-2 text-left transition-all',
                   'hover:border-primary/50 hover:bg-accent/50',
@@ -343,6 +363,7 @@ export function PRDTypeSelector({
                 key={type.value}
                 onClick={() => setSelectedType(type.value)}
                 disabled={loading}
+                aria-label={type.label}
                 className={cn(
                   'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
                   type.color,

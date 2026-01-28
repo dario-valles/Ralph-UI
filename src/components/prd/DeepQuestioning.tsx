@@ -14,11 +14,21 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChatInput } from './ChatInput'
 import { ChatMessageItem } from './ChatMessageItem'
 import { QuestioningGuide } from './gsd/QuestioningGuide'
+import { IdeaStarterModal } from './gsd/IdeaStarterModal'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
-import type { QuestioningContext } from '@/types/gsd'
+import type { QuestioningContext, ProjectType, GeneratedIdea } from '@/types/gsd'
 import type { ChatMessage, ChatAttachment } from '@/types'
-import { MessageSquare, ArrowRight, Bot, ChevronRight, ChevronLeft } from 'lucide-react'
+import {
+  MessageSquare,
+  ArrowRight,
+  Bot,
+  ChevronRight,
+  ChevronLeft,
+  Sparkles,
+  Loader2,
+} from 'lucide-react'
+import { gsdApi } from '@/lib/api/gsd-api'
 
 interface DeepQuestioningProps {
   /** Current questioning context */
@@ -49,6 +59,37 @@ Just start typing and we'll figure it out together.`,
   createdAt: new Date().toISOString(),
 }
 
+const getTypeAwareWelcome = (projectType?: ProjectType): string => {
+  if (!projectType || projectType === 'other') {
+    return SYSTEM_WELCOME.content
+  }
+
+  const typeMessages: Partial<Record<ProjectType, string>> = {
+    web_app: `Hi! I'm here to help you plan your **Web Application**. I noticed you're building a web app - let's think through the key aspects.
+
+Consider telling me about:
+- What core features will your web app have?
+- Who are your target users?
+- What tech stack are you considering (React, Next.js, etc.)?`,
+
+    cli_tool: `Hi! I'm here to help you plan your **CLI Tool**. Let's think through what makes a great command-line interface.
+
+Consider telling me about:
+- What specific task will your CLI perform?
+- Who will use it (developers, DevOps, end users)?
+- What flags or commands do you envision?`,
+
+    api_service: `Hi! I'm here to help you plan your **API Service**. Let's define the interface and architecture.
+
+Consider telling me about:
+- What data or functionality will the API expose?
+- Who will consume this API?
+- What protocol will you use (REST, GraphQL, gRPC)?`,
+  }
+
+  return typeMessages[projectType] || SYSTEM_WELCOME.content
+}
+
 export function DeepQuestioning({
   context,
   onContextUpdate,
@@ -58,6 +99,9 @@ export function DeepQuestioning({
 }: DeepQuestioningProps) {
   const [showGuide, setShowGuide] = useState(true)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([SYSTEM_WELCOME])
+  const [projectType, setProjectType] = useState<ProjectType | undefined>()
+  const [isDetectingType, setIsDetectingType] = useState(false)
+  const [showIdeaStarter, setShowIdeaStarter] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Get project context
@@ -83,10 +127,59 @@ export function DeepQuestioning({
     }
   }, [projectPath, sessionId, currentSession, startSession])
 
+  // Detect project type
+  useEffect(() => {
+    if (!projectPath || projectType) return
+
+    const abortController = new AbortController()
+
+    const detect = async () => {
+      setIsDetectingType(true)
+      try {
+        const result = await gsdApi.detectProjectType(projectPath)
+        // Check if component is still mounted before updating state
+        if (!abortController.signal.aborted) {
+          setProjectType(result.detectedType)
+
+          // Update welcome message if we have a specific type and haven't started chatting
+          if (
+            result.detectedType !== 'other' &&
+            storeMessages.length === 0 &&
+            localMessages.length === 1
+          ) {
+            setLocalMessages([
+              {
+                ...SYSTEM_WELCOME,
+                content: getTypeAwareWelcome(result.detectedType),
+              },
+            ])
+          }
+        }
+      } catch (err) {
+        if (!abortController.signal.aborted) {
+          console.error('Failed to detect project type:', err)
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsDetectingType(false)
+        }
+      }
+    }
+
+    detect()
+
+    // Cleanup function to abort on unmount
+    return () => {
+      abortController.abort()
+    }
+  }, [projectPath, projectType, storeMessages.length, localMessages.length])
+
   // Derive messages from store - use useMemo for stable reference
   const displayMessages = useMemo(() => {
     if (storeMessages.length > 0) {
-      return [SYSTEM_WELCOME, ...storeMessages]
+      // Use the potentially updated welcome message
+      const welcome = localMessages[0]
+      return [welcome, ...storeMessages]
     }
     return localMessages
   }, [storeMessages, localMessages])
@@ -171,14 +264,46 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
     onProceed()
   }, [onProceed])
 
+  const handleIdeaSelect = (idea: GeneratedIdea) => {
+    onContextUpdate(idea.context)
+    setShowIdeaStarter(false)
+    // Add a message about adopting the idea
+    setLocalMessages((prev) => [
+      ...prev,
+      {
+        id: `local-idea-${Date.now()}`,
+        sessionId: sessionId || '',
+        role: 'assistant',
+        content: `Great choice! I've updated the context with the "${idea.title}" starter. Feel free to refine any details.`,
+        createdAt: new Date().toISOString(),
+      },
+    ])
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 h-full">
       {/* Header */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            <CardTitle>Deep Questioning</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              <CardTitle>Deep Questioning</CardTitle>
+              {isDetectingType && (
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {projectType && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-8"
+                onClick={() => setShowIdeaStarter(true)}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-yellow-500" />
+                Help me brainstorm
+              </Button>
+            )}
           </div>
           <CardDescription>
             Describe your idea naturally. I&apos;ll help you clarify the key aspects and extract the
@@ -186,6 +311,17 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Idea Starter Modal */}
+      {projectType && (
+        <IdeaStarterModal
+          open={showIdeaStarter}
+          onOpenChange={setShowIdeaStarter}
+          projectType={projectType}
+          currentContext={context}
+          onSelect={handleIdeaSelect}
+        />
+      )}
 
       {/* Main content area */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
@@ -265,6 +401,7 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
               </Button>
               <QuestioningGuide
                 context={context}
+                projectType={projectType}
                 onContextItemUpdate={(key, value) => onContextUpdate({ [key]: value })}
                 onClose={() => setShowGuide(false)}
               />

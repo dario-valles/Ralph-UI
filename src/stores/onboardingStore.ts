@@ -8,6 +8,7 @@ interface OnboardingStore {
   // State
   dismissedHints: Set<string>
   hasSeenMainOnboarding: boolean
+  hasSeenGSDOnboarding: boolean
 
   // Agent setup state
   hasCompletedAgentSetup: boolean
@@ -18,6 +19,7 @@ interface OnboardingStore {
   dismissHint: (hintId: string) => void
   hasHintBeenDismissed: (hintId: string) => boolean
   markMainOnboardingAsSeen: () => void
+  markGSDOnboardingAsSeen: () => void
   resetOnboarding: () => void
 
   // Agent setup actions
@@ -32,6 +34,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
     (set, get) => ({
       dismissedHints: new Set(),
       hasSeenMainOnboarding: false,
+      hasSeenGSDOnboarding: false,
 
       // Agent setup defaults
       hasCompletedAgentSetup: false,
@@ -52,10 +55,16 @@ export const useOnboardingStore = create<OnboardingStore>()(
           hasSeenMainOnboarding: true,
         })),
 
+      markGSDOnboardingAsSeen: () =>
+        set(() => ({
+          hasSeenGSDOnboarding: true,
+        })),
+
       resetOnboarding: () =>
         set(() => ({
           dismissedHints: new Set(),
           hasSeenMainOnboarding: false,
+          hasSeenGSDOnboarding: false,
           hasCompletedAgentSetup: false,
           enabledAgents: [],
           preferredAgent: null,
@@ -88,6 +97,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
       partialize: (state) => ({
         dismissedHints: Array.from(state.dismissedHints),
         hasSeenMainOnboarding: state.hasSeenMainOnboarding,
+        hasSeenGSDOnboarding: state.hasSeenGSDOnboarding,
         hasCompletedAgentSetup: state.hasCompletedAgentSetup,
         enabledAgents: state.enabledAgents,
         preferredAgent: state.preferredAgent,
@@ -97,6 +107,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
           | {
               dismissedHints?: string[]
               hasSeenMainOnboarding?: boolean
+              hasSeenGSDOnboarding?: boolean
               hasCompletedAgentSetup?: boolean
               enabledAgents?: AgentType[]
               preferredAgent?: AgentType | null
@@ -106,6 +117,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
           ...currentState,
           dismissedHints: new Set(persisted?.dismissedHints || []),
           hasSeenMainOnboarding: persisted?.hasSeenMainOnboarding || false,
+          hasSeenGSDOnboarding: persisted?.hasSeenGSDOnboarding || false,
           hasCompletedAgentSetup: persisted?.hasCompletedAgentSetup || false,
           enabledAgents: persisted?.enabledAgents || [],
           preferredAgent: persisted?.preferredAgent || null,

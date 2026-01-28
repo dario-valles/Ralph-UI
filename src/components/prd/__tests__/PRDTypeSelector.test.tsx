@@ -30,6 +30,24 @@ vi.mock('../ImportGitHubIssuesDialog', () => ({
   ImportGitHubIssuesDialog: () => null,
 }))
 
+// Mock GSDOnboardingTour component
+vi.mock('../gsd/GSDOnboardingTour', () => ({
+  GSDOnboardingTour: ({ onComplete, onSkip }: { onComplete: () => void; onSkip: () => void }) => (
+    <div data-testid="gsd-onboarding-tour">
+      <button onClick={onComplete}>Complete Onboarding</button>
+      <button onClick={onSkip}>Skip Onboarding</button>
+    </div>
+  ),
+}))
+
+// Mock onboarding store to indicate user has seen onboarding
+vi.mock('@/stores/onboardingStore', () => ({
+  useOnboardingStore: () => ({
+    hasSeenGSDOnboarding: true, // Mock as already seen to skip onboarding in tests
+    markGSDOnboardingAsSeen: vi.fn(),
+  }),
+}))
+
 describe('PRDTypeSelector', () => {
   const mockOnSelect = vi.fn()
 

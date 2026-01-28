@@ -1,5 +1,3 @@
-// Key bar customizer component - allows adding, removing, and rearranging keys
-
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +19,15 @@ import {
   type KeyDefinition,
 } from '@/stores/keyBarLayoutStore'
 import { cn } from '@/lib/utils'
+import { toast } from '@/stores/toastStore'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export function KeyBarCustomizer() {
   const {
@@ -44,6 +51,7 @@ export function KeyBarCustomizer() {
   const [showPalette, setShowPalette] = useState(false)
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [deletePresetId, setDeletePresetId] = useState<string | null>(null)
 
   const MIN_KEYS = 6
   const MAX_KEYS_PER_ROW = 10
@@ -109,11 +117,12 @@ export function KeyBarCustomizer() {
   const handleSave = () => {
     // Validate constraints before saving
     if (layout.length < MIN_KEYS) {
-      alert(`You must have at least ${MIN_KEYS} keys in the bar`)
+      toast.error('Cannot Save', `You must have at least ${MIN_KEYS} keys in the bar`)
       return
     }
     setCustomLayout(layout)
     setHasChanges(false)
+    toast.success('Layout Saved', 'Your custom key bar layout has been updated')
   }
 
   // Reset to default
@@ -121,6 +130,7 @@ export function KeyBarCustomizer() {
     setLayout(DEFAULT_LAYOUT)
     resetToDefault()
     setHasChanges(false)
+    toast.default('Layout Reset', 'Key bar reset to default layout')
   }
 
   // Handle switch preset
@@ -136,23 +146,30 @@ export function KeyBarCustomizer() {
   // Handle save as preset
   const handleSaveAsPreset = () => {
     if (!presetName.trim()) {
-      alert('Please enter a preset name')
+      toast.error('Preset Name Required', 'Please enter a name for your preset')
       return
     }
     savePreset(presetName, layout)
     setPresetName('')
     setShowSavePresetDialog(false)
+    toast.success('Preset Saved', `Layout saved as preset "${presetName}"`)
   }
 
   // Handle delete preset
   const handleDeletePreset = (presetId: string) => {
     const preset = presets.find((p) => p.id === presetId)
     if (preset?.isBuiltin) {
-      alert('Cannot delete built-in presets')
+      toast.error('Cannot Delete', 'Built-in presets cannot be deleted')
       return
     }
-    if (confirm(`Delete preset "${preset?.name}"?`)) {
-      deletePreset(presetId)
+    setDeletePresetId(presetId)
+  }
+
+  const confirmDeletePreset = () => {
+    if (deletePresetId) {
+      deletePreset(deletePresetId)
+      setDeletePresetId(null)
+      toast.success('Preset Deleted', 'The preset has been removed')
     }
   }
 
@@ -204,6 +221,26 @@ export function KeyBarCustomizer() {
             ))}
           </div>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deletePresetId} onOpenChange={(open) => !open && setDeletePresetId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Preset?</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this preset? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeletePresetId(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeletePreset}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Save as preset dialog */}
         {showSavePresetDialog ? (
