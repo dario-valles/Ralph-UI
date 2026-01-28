@@ -778,6 +778,7 @@ mod tests {
             if name == CONTEXT_QUALITY_ANALYSIS
                 || name == CONTEXT_SUGGESTIONS
                 || name == IDEA_STARTERS
+                || name == CONTEXT_IMPROVEMENT
             {
                 assert!(
                     template.contains("context."),
