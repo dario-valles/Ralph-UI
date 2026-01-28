@@ -32,6 +32,7 @@ import {
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
 import { GSDOnboardingTour } from './gsd/GSDOnboardingTour'
+import { ResearchIntro } from './gsd/ResearchIntro'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 import { useOnboardingStore } from '@/stores/onboardingStore'
@@ -158,7 +159,7 @@ export function PRDTypeSelector({
   className,
   defaultProjectPath,
 }: PRDTypeSelectorProps) {
-  const [step, setStep] = useState<'mode' | 'type'>('mode')
+  const [step, setStep] = useState<'mode' | 'type' | 'intro'>('mode')
   const [selectedMode, setSelectedMode] = useState<WorkflowMode | null>(null)
   const [selectedType, setSelectedType] = useState<PRDTypeValue | null>(null)
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
@@ -199,6 +200,12 @@ export function PRDTypeSelector({
 
   const handleContinue = () => {
     if (selectedMode === 'guided' && selectedType) {
+      // For Full New App, show the Research Intro first
+      if (selectedType === 'full_new_app' && step !== 'intro') {
+        setStep('intro')
+        return
+      }
+
       // Guided mode - show naming dialog
       setSessionTitle(getDefaultTitle(selectedType))
       setShowNameDialog(true)
@@ -218,11 +225,80 @@ export function PRDTypeSelector({
     setSessionTitle('')
   }
 
+  const handleIntroNext = () => {
+    // Proceed to naming dialog
+    setSessionTitle(getDefaultTitle(selectedType!))
+    setShowNameDialog(true)
+  }
+
   const canContinue = selectedMode === 'guided' && selectedType
+
+  const nameSessionDialog = (
+    <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5" />
+            Name Your Session
+          </DialogTitle>
+          <DialogDescription>
+            Give your PRD session a memorable name to easily find it later.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Label htmlFor="session-name" className="text-sm font-medium">
+            Session Name
+          </Label>
+          <Input
+            id="session-name"
+            value={sessionTitle}
+            onChange={(e) => setSessionTitle(e.target.value)}
+            placeholder="Enter a name for this session"
+            className="mt-2"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleConfirmName()
+              }
+            }}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancelName}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmName} disabled={loading}>
+            {loading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                Creating...
+              </>
+            ) : (
+              'Create Session'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 
   if (showOnboarding) {
     return (
       <GSDOnboardingTour onComplete={handleOnboardingComplete} onSkip={handleOnboardingComplete} />
+    )
+  }
+
+  // Step 1.5: Research Intro (only for Full New App)
+  if (step === 'intro') {
+    return (
+      <>
+        <ResearchIntro
+          onNext={handleIntroNext}
+          onSkip={handleIntroNext}
+          onBack={() => setStep('type')}
+        />
+        {nameSessionDialog}
+      </>
     )
   }
 
@@ -407,52 +483,7 @@ export function PRDTypeSelector({
         </div>
 
         {/* Name Session Dialog */}
-        <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Pencil className="h-5 w-5" />
-                Name Your Session
-              </DialogTitle>
-              <DialogDescription>
-                Give your PRD session a memorable name to easily find it later.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="session-name" className="text-sm font-medium">
-                Session Name
-              </Label>
-              <Input
-                id="session-name"
-                value={sessionTitle}
-                onChange={(e) => setSessionTitle(e.target.value)}
-                placeholder="Enter a name for this session"
-                className="mt-2"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleConfirmName()
-                  }
-                }}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelName}>
-                Cancel
-              </Button>
-              <Button onClick={handleConfirmName} disabled={loading}>
-                {loading ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  'Create Session'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {nameSessionDialog}
       </CardContent>
     </Card>
   )
