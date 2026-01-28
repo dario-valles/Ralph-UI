@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { MissionControlPage } from './components/mission-control'
 import { PRDList } from './components/prd/PRDList'
@@ -19,16 +19,34 @@ import { setupGlobalSyncListeners } from './hooks/useCrossDeviceSync'
 // Lazy-loaded routes for better code splitting
 const RalphLoopPage = lazy(() =>
   import('./components/ralph-loop').then((m) => ({ default: m.RalphLoopPage }))
+    .catch((err) => {
+      console.error('[App] Failed to load RalphLoopPage:', err)
+      // Return a fallback component
+      return { default: () => <div className="p-4">Failed to load Ralph Loop page</div> }
+    })
 )
 const SettingsPage = lazy(() =>
   import('./components/settings/SettingsPage').then((m) => ({
     default: m.SettingsPage,
   }))
+    .catch((err) => {
+      console.error('[App] Failed to load SettingsPage:', err)
+      return { default: () => <div className="p-4">Failed to load Settings page</div> }
+    })
 )
 
 /** Component that mounts global notification listeners inside the router */
 function GlobalNotificationListener(): null {
   useRalphLoopNotifications()
+  return null
+}
+
+/** Track route changes for debugging */
+function RouteChangeTracker(): null {
+  const location = useLocation()
+  useEffect(() => {
+    console.log('[App] Route changed to:', location.pathname)
+  }, [location])
   return null
 }
 
@@ -38,9 +56,15 @@ function App() {
   const { isConnected, showDialog, showAgentSetup, handleConnected, handleAgentSetupComplete } =
     useServerConnection()
 
+  // Log app mount for debugging
+  useEffect(() => {
+    console.log('[App] App component mounted')
+  }, [])
+
   useEffect(() => {
     // Only load projects and setup listeners when connected
     if (isConnected) {
+      console.log('[App] Connected to server, loading projects')
       loadProjects()
       // Setup global cross-device sync listeners (tool calls, status changes)
       setupGlobalSyncListeners()
@@ -84,44 +108,65 @@ function App() {
     cleanupStaleExecutions()
   }, [projects])
   return (
-    <ErrorBoundary>
+    <>
       {/* Show connection dialog in browser mode when not connected */}
       {showDialog && <ServerConnectionDialog onConnected={handleConnected} />}
 
       {/* Show agent setup dialog after connection for first-time users */}
       <AgentSetupDialog open={showAgentSetup} onComplete={handleAgentSetupComplete} />
 
-      <BrowserRouter>
-        <GlobalNotificationListener />
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<MissionControlPage />} />
-            <Route path="prds" element={<PRDList />} />
-            <Route path="prds/new" element={<Navigate to="/prds/chat" replace />} />
-            <Route path="prds/chat" element={<PRDChatPanel />} />
-            <Route path="prds/file" element={<PRDFileEditor />} />
-            <Route
-              path="ralph-loop"
-              element={
-                <Suspense fallback={<div className="p-4">Loading...</div>}>
-                  <RalphLoopPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="settings"
-              element={
-                <Suspense fallback={<div className="p-4">Loading...</div>}>
-                  <SettingsPage />
-                </Suspense>
-              }
-            />
-          </Route>
-        </Routes>
-        <ToastContainer />
-        <ServerUpdateBanner />
-      </BrowserRouter>
-    </ErrorBoundary>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <GlobalNotificationListener />
+          <RouteChangeTracker />
+          <Routes>
+            <Route path="/" element={<AppLayout />}>
+              <Route index element={<MissionControlPage />} />
+              <Route path="prds" element={<PRDList />} />
+              <Route path="prds/new" element={<Navigate to="/prds/chat" replace />} />
+              <Route path="prds/chat" element={<PRDChatPanel />} />
+              <Route path="prds/file" element={<PRDFileEditor />} />
+              <Route
+                path="ralph-loop"
+                element={
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                          <p className="text-lg font-medium mb-2">Loading Ralph Loop...</p>
+                          <p className="text-sm text-muted-foreground">Please wait while we load the page.</p>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <RalphLoopPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                          <p className="text-lg font-medium mb-2">Loading Settings...</p>
+                          <p className="text-sm text-muted-foreground">Please wait while we load the page.</p>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <SettingsPage />
+                  </Suspense>
+                }
+              />
+            </Route>
+          </Routes>
+          <ToastContainer />
+          <ServerUpdateBanner />
+        </BrowserRouter>
+      </ErrorBoundary>
+    </>
   )
 }
 

@@ -7,7 +7,5 @@ import './index.css'
 // The combined sw.ts handles both PWA caching and push notifications
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 )

@@ -9,7 +9,9 @@
 //! load_requirements, create_roadmap, load_roadmap, verify_gsd_plans,
 //! get_verification_history, clear_verification_history, export_gsd_to_ralph,
 //! save_planning_file, read_gsd_planning_file, generate_requirements_from_prompt,
-//! add_generated_requirements
+//! add_generated_requirements, detect_project_type, analyze_context_quality,
+//! generate_context_suggestions, generate_idea_starters, generate_idea_variations,
+//! analyze_market_opportunity, validate_idea_feasibility, explore_idea_space
 
 use crate::commands;
 use crate::gsd::requirements::{RequirementsDoc, ScopeSelection};
@@ -376,6 +378,46 @@ pub async fn route_gsd_command(
             )
         }
 
+        "generate_idea_variations" => {
+            let project_type: ProjectType = get_arg(&args, "projectType")?;
+            let context: QuestioningContext = get_arg(&args, "context")?;
+            let variation_dimensions: Vec<String> = get_arg(&args, "variationDimensions")?;
+            let count: u8 = get_opt_arg(&args, "count")?.unwrap_or(3);
+            route_async!(
+                cmd,
+                commands::gsd::generate_idea_variations(
+                    project_type,
+                    context,
+                    variation_dimensions,
+                    count
+                )
+            )
+        }
+
+        "analyze_market_opportunity" => {
+            let idea: crate::gsd::startup::GeneratedIdea = get_arg(&args, "idea")?;
+            route_async!(cmd, commands::gsd::analyze_market_opportunity(idea))
+        }
+
+        "validate_idea_feasibility" => {
+            let idea: crate::gsd::startup::GeneratedIdea = get_arg(&args, "idea")?;
+            let project_type: ProjectType = get_arg(&args, "projectType")?;
+            route_async!(
+                cmd,
+                commands::gsd::validate_idea_feasibility(idea, project_type)
+            )
+        }
+
+        "explore_idea_space" => {
+            let domain: String = get_arg(&args, "domain")?;
+            let interests: Vec<String> = get_arg(&args, "interests")?;
+            let count: u8 = get_opt_arg(&args, "count")?.unwrap_or(5);
+            route_async!(
+                cmd,
+                commands::gsd::explore_idea_space(domain, interests, count)
+            )
+        }
+
         _ => Err(format!("Unknown GSD command: {}", cmd)),
     }
 }
@@ -419,5 +461,9 @@ pub fn is_gsd_command(cmd: &str) -> bool {
             | "analyze_context_quality"
             | "generate_context_suggestions"
             | "generate_idea_starters"
+            | "generate_idea_variations"
+            | "analyze_market_opportunity"
+            | "validate_idea_feasibility"
+            | "explore_idea_space"
     )
 }

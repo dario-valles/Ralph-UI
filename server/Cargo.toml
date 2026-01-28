@@ -76,6 +76,9 @@ notify = "6.1"
 # File locking for concurrent access safety
 fs2 = "0.4"
 
+# Directory traversal for source file detection
+walkdir = "2"
+
 # HTTP server (Axum)
 axum = { version = "0.7", features = ["ws"] }
 tower = "0.4"

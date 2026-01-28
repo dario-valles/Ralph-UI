@@ -46,16 +46,44 @@ export function GsdExportDialog({
   // Generate default PRD name from session ID
   useEffect(() => {
     if (open && !prdName) {
-      // Create default name matching backend convention: {sanitized-title}-{short-id}
-      const sanitized = sessionTitle
-        .trim()
+      // Extract meaningful name from session title
+      // If title contains common patterns like "Full New App PRD", use only the unique part
+      let baseName = sessionTitle.trim()
+
+      // Remove common prefixes if they exist
+      const prefixesToRemove = [
+        'Full New App PRD',
+        'New Feature PRD',
+        'Bug Fix PRD',
+        'Refactoring PRD',
+        'API Integration PRD',
+        'General PRD',
+      ]
+
+      for (const prefix of prefixesToRemove) {
+        if (baseName.startsWith(prefix)) {
+          baseName = baseName.slice(prefix.length).trim()
+          break
+        }
+      }
+
+      // If nothing left after removing prefix, use original title
+      if (!baseName) {
+        baseName = sessionTitle.trim()
+      }
+
+      // Sanitize for filesystem
+      const sanitized = baseName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphen
         .replace(/^-+|-+$/g, '') // Trim leading/trailing hyphens
         .slice(0, 50) // Limit length
 
+      // Fallback if sanitization resulted in empty string
+      const finalName = sanitized || 'project-plan'
+
       const shortId = sessionId.slice(0, 8)
-      setPrdName(`${sanitized}-${shortId}`)
+      setPrdName(`${finalName}-${shortId}`)
     }
   }, [open, prdName, sessionId, sessionTitle])
 

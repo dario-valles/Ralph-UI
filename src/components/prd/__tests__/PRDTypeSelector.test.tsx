@@ -30,12 +30,12 @@ vi.mock('../ImportGitHubIssuesDialog', () => ({
   ImportGitHubIssuesDialog: () => null,
 }))
 
-// Mock GSDOnboardingTour component
-vi.mock('../gsd/GSDOnboardingTour', () => ({
-  GSDOnboardingTour: ({ onComplete, onSkip }: { onComplete: () => void; onSkip: () => void }) => (
-    <div data-testid="gsd-onboarding-tour">
-      <button onClick={onComplete}>Complete Onboarding</button>
-      <button onClick={onSkip}>Skip Onboarding</button>
+// Mock SimpleGSDIntro component
+vi.mock('../gsd/SimpleGSDIntro', () => ({
+  SimpleGSDIntro: ({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) => (
+    <div data-testid="simple-gsd-intro">
+      <button onClick={onStart}>Get Started</button>
+      <button onClick={onSkip}>Skip</button>
     </div>
   ),
 }))
@@ -59,32 +59,32 @@ describe('PRDTypeSelector', () => {
     it('renders workflow options on initial render', () => {
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      expect(screen.getByRole('button', { name: /AI-Guided PRD/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Import from GitHub/i })).toBeInTheDocument()
     })
 
-    it('shows recommended badge on AI-Guided PRD option', () => {
+    it('shows recommended badge on Full Project Plan option', () => {
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      const guidedButton = screen.getByRole('button', { name: /AI-Guided PRD/i })
+      const guidedButton = screen.getByRole('button', { name: /Full Project Plan/i })
       expect(within(guidedButton).getByText('Recommended')).toBeInTheDocument()
     })
 
-    it('displays features for AI-Guided PRD option', () => {
+    it('displays features for Full Project Plan option', () => {
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      // AI-Guided PRD features
-      expect(screen.getByText('Type-specific questions')).toBeInTheDocument()
+      // Full Project Plan features
+      expect(screen.getByText('Deep questioning session')).toBeInTheDocument()
       expect(screen.getByText('Parallel research agents')).toBeInTheDocument()
       expect(screen.getByText('Requirements scoping')).toBeInTheDocument()
       expect(screen.getByText('Roadmap generation')).toBeInTheDocument()
     })
 
-    it('navigates to type selection when clicking AI-Guided PRD', async () => {
+    it('navigates to type selection when clicking Full Project Plan', async () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
 
       // Should now show type selection step
       expect(screen.getByText('What type of PRD are you creating?')).toBeInTheDocument()
@@ -97,7 +97,7 @@ describe('PRDTypeSelector', () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
 
       expect(screen.getByRole('button', { name: /New Feature/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Full New App/i })).toBeInTheDocument()
@@ -107,11 +107,23 @@ describe('PRDTypeSelector', () => {
       expect(screen.getByRole('button', { name: /General/i })).toBeInTheDocument()
     })
 
+    it('shows PRD type groupings', async () => {
+      const user = userEvent.setup()
+      render(<PRDTypeSelector onSelect={mockOnSelect} />)
+
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
+
+      // Should show section headers
+      expect(screen.getByText('Quick PRD')).toBeInTheDocument()
+      expect(screen.getByText('Full Project Plan')).toBeInTheDocument()
+      expect(screen.getByText('Other')).toBeInTheDocument()
+    })
+
     it('shows Back button in step 2', async () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
 
       expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument()
     })
@@ -120,19 +132,19 @@ describe('PRDTypeSelector', () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
       await user.click(screen.getByRole('button', { name: /Back/i }))
 
       // Should be back on step 1
       expect(screen.getByText('How would you like to create your PRD?')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /AI-Guided PRD/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
     })
 
     it('continue button is disabled until a type is selected', async () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
 
       const continueButton = screen.getByRole('button', { name: /Continue/i })
       expect(continueButton).toBeDisabled()
@@ -142,48 +154,72 @@ describe('PRDTypeSelector', () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
-      await user.click(screen.getByRole('button', { name: /Bug Fix/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
+      await user.click(screen.getByRole('button', { name: /New Feature/i }))
 
       const continueButton = screen.getByRole('button', { name: /Continue/i })
       expect(continueButton).toBeEnabled()
     })
 
-    it('calls onSelect with correct parameters for Bug Fix', async () => {
+    it('calls onSelect with guidedMode=true for New Feature', async () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} defaultProjectPath="/test/project" />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
-      await user.click(screen.getByRole('button', { name: /Bug Fix/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
+      await user.click(screen.getByRole('button', { name: /New Feature/i }))
       await user.click(screen.getByRole('button', { name: /Continue/i }))
 
       // Opens naming dialog, confirm with default name
+      await user.click(screen.getByRole('button', { name: /Create Session/i }))
+
+      expect(mockOnSelect).toHaveBeenCalledWith(
+        'new_feature',
+        true, // guidedMode
+        '/test/project',
+        'My Feature' // default title
+      )
+    })
+
+    it('calls onSelect with guidedMode=false for Bug Fix (Quick PRD)', async () => {
+      const user = userEvent.setup()
+      render(<PRDTypeSelector onSelect={mockOnSelect} defaultProjectPath="/test/project" />)
+
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
+
+      // Click Bug Fix (Quick PRD)
+      await user.click(screen.getByRole('button', { name: /Bug Fix/i }))
+
+      // Should open naming dialog immediately
+      expect(screen.getByText('Name Your Session')).toBeInTheDocument()
+
+      // Confirm with default name
       await user.click(screen.getByRole('button', { name: /Create Session/i }))
 
       expect(mockOnSelect).toHaveBeenCalledWith(
         'bug_fix',
-        true, // guidedMode
+        false, // guidedMode = false for Quick PRD
         '/test/project',
-        'Bug Fix PRD' // default title
+        'Bug Fix'
       )
     })
 
-    it('calls onSelect with correct parameters for Refactoring', async () => {
+    it('calls onSelect with guidedMode=false for Refactoring (Quick PRD)', async () => {
       const user = userEvent.setup()
       render(<PRDTypeSelector onSelect={mockOnSelect} defaultProjectPath="/my/project" />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
       await user.click(screen.getByRole('button', { name: /Refactoring/i }))
-      await user.click(screen.getByRole('button', { name: /Continue/i }))
 
-      // Opens naming dialog, confirm with default name
+      // Should open naming dialog immediately
+      expect(screen.getByText('Name Your Session')).toBeInTheDocument()
+
       await user.click(screen.getByRole('button', { name: /Create Session/i }))
 
       expect(mockOnSelect).toHaveBeenCalledWith(
         'refactoring',
-        true,
+        false, // guidedMode = false for Quick PRD
         '/my/project',
-        'Refactoring PRD'
+        'Refactoring'
       )
     })
   })
@@ -207,7 +243,7 @@ describe('PRDTypeSelector', () => {
     it('disables workflow buttons when loading', () => {
       render(<PRDTypeSelector onSelect={mockOnSelect} loading={true} />)
 
-      const guidedButton = screen.getByRole('button', { name: /AI-Guided PRD/i })
+      const guidedButton = screen.getByRole('button', { name: /Full Project Plan/i })
       expect(guidedButton).toBeDisabled()
     })
 
@@ -215,7 +251,7 @@ describe('PRDTypeSelector', () => {
       const user = userEvent.setup()
       const { rerender } = render(<PRDTypeSelector onSelect={mockOnSelect} />)
 
-      await user.click(screen.getByRole('button', { name: /AI-Guided PRD/i }))
+      await user.click(screen.getByRole('button', { name: /Full Project Plan/i }))
 
       // Rerender with loading state
       rerender(<PRDTypeSelector onSelect={mockOnSelect} loading={true} />)

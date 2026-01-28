@@ -110,10 +110,12 @@ pub async fn send_prd_chat_message_server(
     broadcaster: &Arc<EventBroadcaster>,
 ) -> Result<crate::commands::prd_chat::SendMessageResponse, String> {
     use crate::commands::prd_chat::agent_executor::{
-        execute_chat_agent, generate_session_title, BroadcastEmitter,
+        execute_chat_agent_with_env, generate_session_title, BroadcastEmitter,
     };
+    use crate::commands::prd_chat::parse_agent_type_with_provider;
+    use crate::config::{build_provider_env_vars, SecretsConfig};
     use crate::file_storage::chat_ops;
-    use crate::models::{AgentType, ChatMessage, MessageRole};
+    use crate::models::{ChatMessage, MessageRole};
     use crate::parsers::structured_output;
     use uuid::Uuid;
 
@@ -148,22 +150,59 @@ pub async fn send_prd_chat_message_server(
     // Build prompt using the server helper
     let prompt = build_server_chat_prompt(&session, &history, &request.content);
 
-    // Parse agent type
-    let agent_type: AgentType = session
-        .agent_type
-        .parse()
-        .map_err(|e| format!("Invalid agent type: {}", e))?;
+    // Parse agent type and provider
+    let (agent_type, provider_id) = parse_agent_type_with_provider(&session.agent_type)?;
+
+    // Build provider environment variables if applicable
+    let provider_env_vars = if agent_type == crate::models::AgentType::Claude {
+        if let Some(provider_id) = &provider_id {
+            log::info!("🔄 Using Claude with provider: {}", provider_id);
+
+            // Load provider token from secrets
+            let secrets =
+                SecretsConfig::load().map_err(|e| format!("Failed to load secrets: {}", e))?;
+            let token = secrets.get_token(provider_id).cloned();
+
+            if token.is_some() {
+                log::info!("✓ Provider token loaded for: {}", provider_id);
+            } else {
+                log::warn!("⚠️  No token found for provider: {}", provider_id);
+            }
+
+            // Build environment variables for the provider
+            let env_vars = build_provider_env_vars(provider_id, token.as_deref());
+
+            // Log the environment variables being set (with masked token)
+            log::info!("🔧 Environment variables being set:");
+            for (key, value) in &env_vars {
+                if key.contains("TOKEN") || key.contains("KEY") {
+                    log::info!("  {}=***MASKED***", key);
+                } else {
+                    log::info!("  {}={}", key, value);
+                }
+            }
+
+            Some(env_vars)
+        } else {
+            log::info!("✓ Using Claude with default Anthropic provider");
+            None
+        }
+    } else {
+        log::info!("✓ Using agent: {} (no provider support)", agent_type);
+        None
+    };
 
     // Execute agent using the shared executor with BroadcastEmitter
     // Pass external_session_id to enable session resumption (saves 67-90% tokens)
     let emitter = BroadcastEmitter::new(broadcaster.clone());
-    let agent_result = execute_chat_agent(
+    let agent_result = execute_chat_agent_with_env(
         &emitter,
         &request.session_id,
         agent_type,
         &prompt,
         session.project_path.as_deref(),
         session.external_session_id.as_deref(),
+        provider_env_vars.as_ref(), // ← PASS PROVIDER ENV VARS
     )
     .await
     .map_err(|e| format!("Agent execution failed: {}", e))?;

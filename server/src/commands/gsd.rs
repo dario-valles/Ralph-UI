@@ -149,6 +149,17 @@ pub async fn start_research(
 ) -> Result<ResearchStatus, String> {
     let path = as_path(&project_path);
 
+    // Load chat session to get PRD type
+    let prd_type = crate::file_storage::chat_ops::get_chat_session(path, &session_id)
+        .ok()
+        .and_then(|session| session.prd_type);
+
+    log::info!(
+        "Starting research for session {} with PRD type: {:?}",
+        session_id,
+        prd_type
+    );
+
     // Build config with optional overrides
     let config = GsdConfig {
         research_agent_type: agent_type.unwrap_or_else(|| GsdConfig::default().research_agent_type),
@@ -166,6 +177,7 @@ pub async fn start_research(
         &context,
         Some(app_handle),
         research_types,
+        prd_type.as_deref(),
     )
     .await;
 
@@ -2596,6 +2608,448 @@ fn generate_idea_starters_heuristic(
             },
         ]),
     }
+}
+
+/// Generate idea variations based on dimensions
+pub async fn generate_idea_variations(
+    project_type: ProjectType,
+    context: QuestioningContext,
+    variation_dimensions: Vec<String>,
+    count: u8,
+) -> Result<Vec<crate::gsd::startup::ValidatedIdea>, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::gsd::startup::ValidatedIdea;
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    let template_content =
+        get_builtin_template("idea_variations").ok_or("Idea variations template not found")?;
+
+    let mut tera_context = Context::new();
+    let project_type_str = serde_json::to_string(&project_type)
+        .unwrap_or_default()
+        .replace('"', "");
+
+    tera_context.insert("project_type", &project_type_str);
+
+    // Sanitize context fields
+    let mut context_obj = serde_json::Map::new();
+    if let Some(what) = &context.what {
+        context_obj.insert("what".to_string(), sanitize_tera_input(what).into());
+    } else {
+        context_obj.insert("what".to_string(), "".to_string().into());
+    }
+    if let Some(why) = &context.why {
+        context_obj.insert("why".to_string(), sanitize_tera_input(why).into());
+    } else {
+        context_obj.insert("why".to_string(), "".to_string().into());
+    }
+    if let Some(who) = &context.who {
+        context_obj.insert("who".to_string(), sanitize_tera_input(who).into());
+    } else {
+        context_obj.insert("who".to_string(), "".to_string().into());
+    }
+    if let Some(done) = &context.done {
+        context_obj.insert("done".to_string(), sanitize_tera_input(done).into());
+    } else {
+        context_obj.insert("done".to_string(), "".to_string().into());
+    }
+    context_obj.insert(
+        "notes".to_string(),
+        context
+            .notes
+            .iter()
+            .map(|s| sanitize_tera_input(s))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    tera_context.insert("context", &context_obj);
+    tera_context.insert("variation_dimensions", &variation_dimensions);
+    tera_context.insert("count", &count);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        return Err("Claude agent not available for idea variations".to_string());
+    }
+
+    log::info!("[IdeaVariations] Running {agent:?} to generate variations");
+
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("idea-variations-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(120),
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Idea variations generation timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    // Parse as base ideas first, then wrap in ValidatedIdea
+    let base_ideas: Vec<crate::gsd::startup::GeneratedIdea> = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse ideas: {e}\nOutput: {output_str}"))?;
+
+    let validated_ideas: Vec<crate::gsd::startup::ValidatedIdea> = base_ideas
+        .into_iter()
+        .map(|base| ValidatedIdea {
+            base,
+            feasibility: None,
+            market: None,
+            user_score: None,
+            interest_match_score: None,
+        })
+        .collect();
+
+    log::info!(
+        "[IdeaVariations] Generated {} variations",
+        validated_ideas.len()
+    );
+    Ok(validated_ideas)
+}
+
+/// Analyze market opportunity for an idea
+pub async fn analyze_market_opportunity(
+    idea: crate::gsd::startup::GeneratedIdea,
+) -> Result<crate::gsd::startup::MarketOpportunity, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    let template_content =
+        get_builtin_template("market_analysis").ok_or("Market analysis template not found")?;
+
+    let mut tera_context = Context::new();
+
+    // Serialize idea for template
+    let idea_json =
+        serde_json::to_value(&idea).map_err(|e| format!("Failed to serialize idea: {e}"))?;
+    tera_context.insert("idea", &idea_json);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        return Err("Claude agent not available for market analysis".to_string());
+    }
+
+    log::info!("[MarketAnalysis] Running {agent:?} for market analysis");
+
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("market-analysis-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(120),
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Market analysis timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    let analysis: crate::gsd::startup::MarketOpportunity = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse market analysis: {e}\nOutput: {output_str}"))?;
+
+    log::info!("[MarketAnalysis] Analysis complete");
+    Ok(analysis)
+}
+
+/// Validate technical feasibility of an idea
+pub async fn validate_idea_feasibility(
+    idea: crate::gsd::startup::GeneratedIdea,
+    project_type: ProjectType,
+) -> Result<crate::gsd::startup::IdeaFeasibility, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    let template_content = get_builtin_template("feasibility_analysis")
+        .ok_or("Feasibility analysis template not found")?;
+
+    let mut tera_context = Context::new();
+
+    let idea_json =
+        serde_json::to_value(&idea).map_err(|e| format!("Failed to serialize idea: {e}"))?;
+    tera_context.insert("idea", &idea_json);
+
+    let project_type_str = serde_json::to_string(&project_type)
+        .unwrap_or_default()
+        .replace('"', "");
+    tera_context.insert("project_type", &project_type_str);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        return Err("Claude agent not available for feasibility analysis".to_string());
+    }
+
+    log::info!("[FeasibilityAnalysis] Running {agent:?} for feasibility analysis");
+
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("feasibility-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(120),
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Feasibility analysis timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    let analysis: crate::gsd::startup::IdeaFeasibility = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse feasibility analysis: {e}\nOutput: {output_str}"))?;
+
+    log::info!(
+        "[FeasibilityAnalysis] Analysis complete: score {}",
+        analysis.feasibility_score
+    );
+    Ok(analysis)
+}
+
+/// Explore idea space from interests
+pub async fn explore_idea_space(
+    domain: String,
+    interests: Vec<String>,
+    count: u8,
+) -> Result<Vec<crate::gsd::startup::ValidatedIdea>, String> {
+    use crate::agents::providers::get_provider;
+    use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
+    use crate::gsd::startup::ValidatedIdea;
+    use crate::templates::builtin::get_builtin_template;
+    use std::process::Stdio;
+    use tera::{Context, Tera};
+    use tokio::io::AsyncReadExt;
+    use tokio::process::Command;
+
+    let template_content =
+        get_builtin_template("brainstorm_ideas").ok_or("Brainstorm ideas template not found")?;
+
+    let mut tera_context = Context::new();
+    tera_context.insert("interests", &interests);
+    tera_context.insert("domain", &domain);
+    tera_context.insert("count", &count);
+
+    let rendered_prompt = Tera::one_off(template_content, &tera_context, false)
+        .map_err(|e| format!("Failed to render template: {e}"))?;
+
+    let agent: AgentType = "claude"
+        .parse()
+        .map_err(|e| format!("Invalid agent type: {e}"))?;
+    let provider = get_provider(&agent);
+    if !provider.is_available() {
+        return Err("Claude agent not available for idea exploration".to_string());
+    }
+
+    log::info!("[ExploreSpace] Running {agent:?} to explore idea space");
+
+    let spawn_config = AgentSpawnConfig {
+        agent_type: agent.clone(),
+        task_id: format!("explore-space-{}", uuid::Uuid::new_v4()),
+        worktree_path: ".".to_string(),
+        branch: "main".to_string(),
+        max_iterations: 0,
+        prompt: Some(rendered_prompt),
+        model: None,
+        spawn_mode: AgentSpawnMode::Piped,
+        plugin_config: None,
+        env_vars: None,
+        disable_tools: true,
+    };
+
+    let std_cmd = provider
+        .build_command(&spawn_config)
+        .map_err(|e| format!("Failed to build command: {e}"))?;
+
+    let mut child = Command::from(std_cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn agent: {e}"))?;
+
+    let mut stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+
+    let mut output = Vec::new();
+    let read_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(120),
+        stdout.read_to_end(&mut output),
+    )
+    .await;
+
+    match read_result {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to read agent output: {e}"));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err("Idea exploration timed out".to_string());
+        }
+    }
+
+    let _ = tokio::time::timeout(tokio::time::Duration::from_secs(5), child.wait()).await;
+
+    let output_str = String::from_utf8_lossy(&output);
+
+    let base_ideas: Vec<crate::gsd::startup::GeneratedIdea> = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse ideas: {e}\nOutput: {output_str}"))?;
+
+    let validated_ideas: Vec<crate::gsd::startup::ValidatedIdea> = base_ideas
+        .into_iter()
+        .map(|base| ValidatedIdea {
+            base,
+            feasibility: None,
+            market: None,
+            user_score: None,
+            interest_match_score: None,
+        })
+        .collect();
+
+    log::info!("[ExploreSpace] Generated {} ideas", validated_ideas.len());
+    Ok(validated_ideas)
 }
 
 #[cfg(test)]

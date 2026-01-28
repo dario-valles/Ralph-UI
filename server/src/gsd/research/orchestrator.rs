@@ -181,6 +181,50 @@ impl ResearchResult {
     }
 }
 
+/// Check if project has source files that warrant codebase analysis
+fn has_source_files(project_path: &Path) -> bool {
+    let common_extensions = [
+        "ts", "tsx", "js", "jsx", // JavaScript/TypeScript
+        "rs",  // Rust
+        "py",  // Python
+        "go",  // Go
+        "java", "kt", "scala", // JVM languages
+        "cpp", "cc", "c", "h",   // C/C++
+        "cs",  // C#
+        "rb",  // Ruby
+        "php", // PHP
+        "swift", "m", // Swift/Objective-C
+        "ex", "exs", // Elixir
+    ];
+
+    // Check if project has any source files (ignoring node_modules, .git, etc.)
+    let has_sources = walkdir::WalkDir::new(project_path)
+        .max_depth(3)
+        .into_iter()
+        .filter_entry(|e| {
+            let path = e.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            // Skip common directories
+            !matches!(
+                name.as_ref(),
+                "node_modules" | "target" | "build" | "dist" | ".git" | "vendor" | "__pycache__"
+            )
+        })
+        .any(|e| {
+            if let Ok(entry) = e {
+                if entry.file_type().is_file() {
+                    if let Some(ext) = entry.path().extension() {
+                        let ext_str = ext.to_string_lossy();
+                        return common_extensions.contains(&ext_str.as_ref());
+                    }
+                }
+            }
+            false
+        });
+
+    has_sources
+}
+
 /// Orchestrator for running parallel research agents
 pub struct ResearchOrchestrator {
     config: GsdConfig,
@@ -512,8 +556,9 @@ pub async fn run_research_agents(
     project_path: &str,
     session_id: &str,
     context: &str,
+    prd_type: Option<&str>,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
-    run_research_agents_with_handle(config, project_path, session_id, context, None).await
+    run_research_agents_with_handle(config, project_path, session_id, context, None, prd_type).await
 }
 
 /// Run all research agents in parallel with optional app handle for event emission
@@ -523,6 +568,7 @@ pub async fn run_research_agents_with_handle(
     session_id: &str,
     context: &str,
     app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
+    prd_type: Option<&str>,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
     // Run all research types
     run_research_agents_selective(
@@ -532,11 +578,15 @@ pub async fn run_research_agents_with_handle(
         context,
         app_handle,
         None, // None means run all
+        prd_type,
     )
     .await
 }
 
 /// Run specific research agents in parallel (or all if research_types is None)
+///
+/// # Arguments
+/// * `prd_type` - Optional PRD type. If "full_new_app", codebase analysis is skipped
 pub async fn run_research_agents_selective(
     config: &GsdConfig,
     project_path: &str,
@@ -544,6 +594,7 @@ pub async fn run_research_agents_selective(
     context: &str,
     app_handle: Option<std::sync::Arc<crate::server::EventBroadcaster>>,
     research_types: Option<Vec<String>>,
+    prd_type: Option<&str>,
 ) -> (ResearchStatus, Vec<ResearchResult>) {
     let orchestrator = if let Some(handle) = app_handle {
         ResearchOrchestrator::with_app_handle(
@@ -565,7 +616,17 @@ pub async fn run_research_agents_selective(
     let timeout_secs = config.research_timeout_secs;
 
     // Determine which research types to run
+    // For "full_new_app" PRD type, skip codebase analysis if no source files exist
+    let is_new_app = prd_type == Some("full_new_app");
+    let has_code = has_source_files(Path::new(project_path));
+
     let should_run = |research_type: &str| -> bool {
+        // Special handling for codebase research
+        if research_type == "codebase" && is_new_app && !has_code {
+            // Skip codebase analysis for new applications without source code
+            return false;
+        }
+
         match &research_types {
             None => true, // Run all if no specific types provided
             Some(types) => types
@@ -728,6 +789,76 @@ pub fn get_available_agents() -> Vec<AgentType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
+
+    #[test]
+    fn test_has_source_files_with_ts_files() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create some TypeScript files
+        let src_dir = project_path.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        File::create(src_dir.join("app.ts")).unwrap();
+        File::create(src_dir.join("utils.ts")).unwrap();
+
+        assert!(has_source_files(project_path));
+    }
+
+    #[test]
+    fn test_has_source_files_with_rust_files() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create some Rust files
+        let src_dir = project_path.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        File::create(src_dir.join("main.rs")).unwrap();
+        File::create(src_dir.join("lib.rs")).unwrap();
+
+        assert!(has_source_files(project_path));
+    }
+
+    #[test]
+    fn test_has_source_files_empty_project() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create project structure but no source files
+        let src_dir = project_path.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        File::create(src_dir.join("README.md")).unwrap();
+        File::create(src_dir.join(".gitignore")).unwrap();
+
+        assert!(!has_source_files(project_path));
+    }
+
+    #[test]
+    fn test_has_source_files_ignores_node_modules() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create node_modules with source files (should be ignored)
+        let node_modules = project_path.join("node_modules");
+        fs::create_dir_all(&node_modules.join("package")).unwrap();
+        File::create(node_modules.join("package").join("index.ts")).unwrap();
+
+        // No source files outside node_modules
+        assert!(!has_source_files(project_path));
+    }
+
+    #[test]
+    fn test_has_source_files_with_python_files() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create Python files
+        File::create(project_path.join("main.py")).unwrap();
+        File::create(project_path.join("utils.py")).unwrap();
+
+        assert!(has_source_files(project_path));
+    }
 
     #[tokio::test]
     async fn test_run_research_agents() {
@@ -745,7 +876,7 @@ mod tests {
         let context = "Building a chat application";
 
         let (status, results) =
-            run_research_agents(&config, project_path, session_id, context).await;
+            run_research_agents(&config, project_path, session_id, context, None).await;
 
         // All four agents should have run
         assert_eq!(results.len(), 4);

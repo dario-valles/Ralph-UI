@@ -31,8 +31,7 @@ import {
 } from 'lucide-react'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
-import { GSDOnboardingTour } from './gsd/GSDOnboardingTour'
-import { ResearchIntro } from './gsd/ResearchIntro'
+import { SimpleGSDIntro } from './gsd/SimpleGSDIntro'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 import { useOnboardingStore } from '@/stores/onboardingStore'
@@ -51,12 +50,12 @@ interface WorkflowOption {
 const WORKFLOW_OPTIONS: WorkflowOption[] = [
   {
     id: 'guided',
-    label: 'AI-Guided PRD',
-    description: 'AI helps you build a comprehensive PRD through conversation',
+    label: 'Full Project Plan',
+    description: 'AI-guided workflow with research, requirements, and roadmap',
     icon: <MessageSquareText className="h-6 w-6" />,
     badge: 'Recommended',
     features: [
-      'Type-specific questions',
+      'Deep questioning session',
       'Parallel research agents',
       'Requirements scoping',
       'Roadmap generation',
@@ -75,6 +74,57 @@ const WORKFLOW_OPTIONS: WorkflowOption[] = [
   },
 ]
 
+const QUICK_PRD_TYPES: PRDTypeOption[] = [
+  {
+    value: 'bug_fix',
+    label: 'Bug Fix',
+    description: 'Fix an existing problem or issue',
+    icon: Bug,
+    color: 'bg-red-50 border-red-200 hover:bg-red-100 dark:bg-red-950/30 dark:border-red-900/50 dark:hover:bg-red-950/50',
+  },
+  {
+    value: 'refactoring',
+    label: 'Refactoring',
+    description: 'Improve code without changing behavior',
+    icon: RefreshCcw,
+    color: 'bg-purple-50 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/30 dark:border-purple-900/50 dark:hover:bg-purple-950/50',
+  },
+  {
+    value: 'api_integration',
+    label: 'API Integration',
+    description: 'Integrate with external APIs or services',
+    icon: Plug,
+    color: 'bg-green-50 border-green-200 hover:bg-green-100 dark:bg-green-950/30 dark:border-green-900/50 dark:hover:bg-green-950/50',
+  },
+]
+
+const FULL_PRD_TYPES: PRDTypeOption[] = [
+  {
+    value: 'new_feature',
+    label: 'New Feature',
+    description: 'Build something new from scratch',
+    icon: Sparkles,
+    color: 'bg-blue-50 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:border-blue-900/50 dark:hover:bg-blue-950/50',
+  },
+  {
+    value: 'full_new_app',
+    label: 'Full New App',
+    description: 'Design and plan an entirely new application',
+    icon: Rocket,
+    color: 'bg-amber-50 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/30 dark:border-amber-900/50 dark:hover:bg-amber-950/50',
+  },
+]
+
+const GENERAL_PRD_TYPES: PRDTypeOption[] = [
+  {
+    value: 'general',
+    label: 'General',
+    description: 'Other product requirements',
+    icon: FileText,
+    color: 'bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/50 dark:border-gray-700 dark:hover:bg-gray-800',
+  },
+]
+
 interface PRDTypeOption {
   value: PRDTypeValue
   label: string
@@ -83,50 +133,6 @@ interface PRDTypeOption {
   color: string
 }
 
-const PRD_TYPES: PRDTypeOption[] = [
-  {
-    value: 'new_feature',
-    label: 'New Feature',
-    description: 'Build something new from scratch',
-    icon: Sparkles,
-    color: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
-  },
-  {
-    value: 'full_new_app',
-    label: 'Full New App',
-    description: 'Design and plan an entirely new application',
-    icon: Rocket,
-    color: 'bg-amber-50 border-amber-200 hover:bg-amber-100',
-  },
-  {
-    value: 'bug_fix',
-    label: 'Bug Fix',
-    description: 'Fix an existing problem or issue',
-    icon: Bug,
-    color: 'bg-red-50 border-red-200 hover:bg-red-100',
-  },
-  {
-    value: 'refactoring',
-    label: 'Refactoring',
-    description: 'Improve code without changing behavior',
-    icon: RefreshCcw,
-    color: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
-  },
-  {
-    value: 'api_integration',
-    label: 'API Integration',
-    description: 'Integrate with external APIs or services',
-    icon: Plug,
-    color: 'bg-green-50 border-green-200 hover:bg-green-100',
-  },
-  {
-    value: 'general',
-    label: 'General',
-    description: 'Other product requirements',
-    icon: FileText,
-    color: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
-  },
-]
 
 interface PRDTypeSelectorProps {
   onSelect: (
@@ -143,14 +149,14 @@ interface PRDTypeSelectorProps {
 // Helper to get default title for PRD type
 function getDefaultTitle(prdType: PRDTypeValue): string {
   const typeLabels: Record<PRDTypeValue, string> = {
-    new_feature: 'New Feature PRD',
-    bug_fix: 'Bug Fix PRD',
-    refactoring: 'Refactoring PRD',
-    api_integration: 'API Integration PRD',
-    full_new_app: 'Full New App PRD',
-    general: 'General PRD',
+    new_feature: 'My Feature',        // Shorter, more user-friendly
+    bug_fix: 'Bug Fix',
+    refactoring: 'Refactoring',
+    api_integration: 'API Integration',
+    full_new_app: 'My Project',        // Changed from "Full New App PRD"
+    general: 'My PRD',
   }
-  return typeLabels[prdType] || 'PRD'
+  return typeLabels[prdType] || 'My Project'
 }
 
 export function PRDTypeSelector({
@@ -167,7 +173,6 @@ export function PRDTypeSelector({
   const [showGitHubImport, setShowGitHubImport] = useState(false)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
-  const [showOnboarding, setShowOnboarding] = useState(false)
 
   const { hasSeenGSDOnboarding, markGSDOnboardingAsSeen } = useOnboardingStore()
 
@@ -176,20 +181,24 @@ export function PRDTypeSelector({
 
   const handleModeSelect = (mode: WorkflowMode) => {
     setSelectedMode(mode)
-    if (mode === 'guided') {
-      if (!hasSeenGSDOnboarding) {
-        setShowOnboarding(true)
-      } else {
-        setStep('type')
-      }
-    } else if (mode === 'github') {
+
+    if (mode === 'github') {
       setShowGitHubImport(true)
+      return
     }
+
+    // For guided mode, show simplified intro if first-time
+    if (mode === 'guided' && !hasSeenGSDOnboarding) {
+      setStep('intro') // Show simplified intro (not 4-step tour)
+      return
+    }
+
+    // Experienced users go straight to type selection
+    setStep('type')
   }
 
-  const handleOnboardingComplete = () => {
+  const handleIntroComplete = () => {
     markGSDOnboardingAsSeen()
-    setShowOnboarding(false)
     setStep('type')
   }
 
@@ -200,22 +209,27 @@ export function PRDTypeSelector({
 
   const handleContinue = () => {
     if (selectedMode === 'guided' && selectedType) {
-      // For Full New App, show the Research Intro first
-      if (selectedType === 'full_new_app' && step !== 'intro') {
-        setStep('intro')
-        return
-      }
-
-      // Guided mode - show naming dialog
+      // All types go directly to naming dialog
       setSessionTitle(getDefaultTitle(selectedType))
       setShowNameDialog(true)
     }
   }
 
+  const handleQuickPRDSelect = (prdType: PRDTypeValue) => {
+    setSelectedType(prdType)
+    setSessionTitle(getDefaultTitle(prdType))
+    setShowNameDialog(true)
+    // Set selectedMode to null to indicate this is a quick PRD (not guided)
+    setSelectedMode(null)
+  }
+
   const handleConfirmName = () => {
     const title = sessionTitle.trim() || undefined
     if (selectedType) {
-      onSelect(selectedType, true, projectPath || undefined, title)
+      // If selectedMode is null, it's a quick PRD (guidedMode: false)
+      // Otherwise, it's a full project plan (guidedMode: true)
+      const isGuided = selectedMode === 'guided'
+      onSelect(selectedType, isGuided, projectPath || undefined, title)
     }
     setShowNameDialog(false)
   }
@@ -223,12 +237,6 @@ export function PRDTypeSelector({
   const handleCancelName = () => {
     setShowNameDialog(false)
     setSessionTitle('')
-  }
-
-  const handleIntroNext = () => {
-    // Proceed to naming dialog
-    setSessionTitle(getDefaultTitle(selectedType!))
-    setShowNameDialog(true)
   }
 
   const canContinue = selectedMode === 'guided' && selectedType
@@ -282,21 +290,11 @@ export function PRDTypeSelector({
     </Dialog>
   )
 
-  if (showOnboarding) {
-    return (
-      <GSDOnboardingTour onComplete={handleOnboardingComplete} onSkip={handleOnboardingComplete} />
-    )
-  }
-
-  // Step 1.5: Research Intro (only for Full New App)
+  // Step 0: Simple GSD Intro (only for first-time users)
   if (step === 'intro') {
     return (
       <>
-        <ResearchIntro
-          onNext={handleIntroNext}
-          onSkip={handleIntroNext}
-          onBack={() => setStep('type')}
-        />
+        <SimpleGSDIntro onStart={handleIntroComplete} onSkip={handleIntroComplete} />
         {nameSessionDialog}
       </>
     )
@@ -430,35 +428,106 @@ export function PRDTypeSelector({
         <CardDescription>Select a type to get tailored questions and guidance</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* PRD Type Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {PRD_TYPES.map((type) => {
-            const Icon = type.icon
-            return (
-              <button
-                key={type.value}
-                onClick={() => setSelectedType(type.value)}
-                disabled={loading}
-                aria-label={type.label}
-                className={cn(
-                  'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
-                  type.color,
-                  selectedType === type.value
-                    ? 'ring-2 ring-primary ring-offset-2'
-                    : 'border-transparent',
-                  loading && 'opacity-50 cursor-not-allowed'
-                )}
-              >
-                <div className="shrink-0 mt-0.5">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="font-medium">{type.label}</div>
-                  <div className="text-sm text-muted-foreground">{type.description}</div>
-                </div>
-              </button>
-            )
-          })}
+        {/* Quick PRD Options */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Quick PRD</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {QUICK_PRD_TYPES.map((type) => {
+              const Icon = type.icon
+              return (
+                <button
+                  key={type.value}
+                  onClick={() => handleQuickPRDSelect(type.value)}
+                  disabled={loading}
+                  aria-label={type.label}
+                  className={cn(
+                    'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
+                    type.color,
+                    'hover:shadow-sm',
+                    loading && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{type.label}</div>
+                    <div className="text-xs text-muted-foreground">{type.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Full Project Plan Options */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Full Project Plan</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {FULL_PRD_TYPES.map((type) => {
+              const Icon = type.icon
+              return (
+                <button
+                  key={type.value}
+                  onClick={() => setSelectedType(type.value)}
+                  disabled={loading}
+                  aria-label={type.label}
+                  className={cn(
+                    'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
+                    type.color,
+                    selectedType === type.value
+                      ? 'ring-2 ring-primary ring-offset-2'
+                      : 'border-transparent',
+                    'hover:shadow-sm',
+                    loading && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-medium">{type.label}</div>
+                    <div className="text-sm text-muted-foreground">{type.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* General Option */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Other</h3>
+          <div className="grid grid-cols-1 gap-3">
+            {GENERAL_PRD_TYPES.map((type) => {
+              const Icon = type.icon
+              return (
+                <button
+                  key={type.value}
+                  onClick={() => setSelectedType(type.value)}
+                  disabled={loading}
+                  aria-label={type.label}
+                  className={cn(
+                    'flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all',
+                    type.color,
+                    selectedType === type.value
+                      ? 'ring-2 ring-primary ring-offset-2'
+                      : 'border-transparent',
+                    'hover:shadow-sm',
+                    loading && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-medium">{type.label}</div>
+                    <div className="text-sm text-muted-foreground">{type.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Navigation */}

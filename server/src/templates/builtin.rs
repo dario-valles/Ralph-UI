@@ -17,6 +17,10 @@ pub const CONTEXT_QUALITY_ANALYSIS: &str = "context_quality_analysis";
 pub const CONTEXT_SUGGESTIONS: &str = "context_suggestions";
 pub const CONTEXT_IMPROVEMENT: &str = "context_improvement";
 pub const IDEA_STARTERS: &str = "idea_starters";
+pub const IDEA_VARIATIONS: &str = "idea_variations";
+pub const MARKET_ANALYSIS: &str = "market_analysis";
+pub const FEASIBILITY_ANALYSIS: &str = "feasibility_analysis";
+pub const BRAINSTORM_IDEAS: &str = "brainstorm_ideas";
 
 /// Get all built-in templates
 pub fn get_builtin_templates() -> HashMap<String, String> {
@@ -63,6 +67,22 @@ pub fn get_builtin_templates() -> HashMap<String, String> {
         IDEA_STARTERS.to_string(),
         IDEA_STARTERS_TEMPLATE.to_string(),
     );
+    templates.insert(
+        IDEA_VARIATIONS.to_string(),
+        IDEA_VARIATIONS_TEMPLATE.to_string(),
+    );
+    templates.insert(
+        MARKET_ANALYSIS.to_string(),
+        MARKET_ANALYSIS_TEMPLATE.to_string(),
+    );
+    templates.insert(
+        FEASIBILITY_ANALYSIS.to_string(),
+        FEASIBILITY_ANALYSIS_TEMPLATE.to_string(),
+    );
+    templates.insert(
+        BRAINSTORM_IDEAS.to_string(),
+        BRAINSTORM_IDEAS_TEMPLATE.to_string(),
+    );
 
     templates
 }
@@ -84,6 +104,10 @@ pub fn get_builtin_template(name: &str) -> Option<&'static str> {
         CONTEXT_SUGGESTIONS => Some(CONTEXT_SUGGESTIONS_TEMPLATE),
         CONTEXT_IMPROVEMENT => Some(CONTEXT_IMPROVEMENT_TEMPLATE),
         IDEA_STARTERS => Some(IDEA_STARTERS_TEMPLATE),
+        IDEA_VARIATIONS => Some(IDEA_VARIATIONS_TEMPLATE),
+        MARKET_ANALYSIS => Some(MARKET_ANALYSIS_TEMPLATE),
+        FEASIBILITY_ANALYSIS => Some(FEASIBILITY_ANALYSIS_TEMPLATE),
+        BRAINSTORM_IDEAS => Some(BRAINSTORM_IDEAS_TEMPLATE),
         _ => None,
     }
 }
@@ -105,6 +129,10 @@ pub fn list_builtin_templates() -> Vec<&'static str> {
         CONTEXT_SUGGESTIONS,
         CONTEXT_IMPROVEMENT,
         IDEA_STARTERS,
+        IDEA_VARIATIONS,
+        MARKET_ANALYSIS,
+        FEASIBILITY_ANALYSIS,
+        BRAINSTORM_IDEAS,
     ]
 }
 
@@ -728,6 +756,338 @@ Output ONLY a valid JSON array with no additional text, no markdown formatting, 
 - If context is empty, generate diverse ideas across the project type
  "#;
 
+const IDEA_VARIATIONS_TEMPLATE: &str = r#"You are an expert product ideation consultant specializing in generating creative variations of product concepts.
+
+## Base Concept
+**What**: {{ context.what }}
+**Why**: {{ context.why }}
+**Who**: {{ context.who }}
+**Done**: {{ context.done }}
+
+## Variation Dimensions to Explore
+{% for dimension in variation_dimensions %}
+- {{ dimension }}
+{% endfor %}
+
+## Your Task
+Generate {{ count }} distinct variations of the base concept by exploring different angles along the specified dimensions. Each variation should:
+
+- Maintain the core value proposition but approach it differently
+- Be clearly differentiated from other variations
+- Have a unique angle or twist
+- Include specific "what/why/who/done" context
+- Suggest 3-5 key features that differentiate this variation
+- Recommend a tech stack appropriate for this approach
+
+## Dimension Guidance
+
+### Target User Variations
+- Explore different user segments (enterprise vs consumer, technical vs non-technical, etc.)
+- Consider different skill levels or expertise levels
+- Think about different use cases or contexts
+
+### Tech Stack Variations
+- Explore different architectural approaches (serverless vs monolithic, real-time vs batch, etc.)
+- Consider different technology ecosystems (modern vs established, cutting-edge vs proven)
+- Think about trade-offs in complexity, scalability, and developer experience
+
+### Feature Variations
+- Focus on different core features as the primary value driver
+- Explore minimal vs feature-rich approaches
+- Consider automation vs manual control trade-offs
+
+### Business Model Variations
+- Explore different monetization approaches (freemium, enterprise, marketplace, etc.)
+- Consider different growth strategies (viral, SEO, sales-led, etc.)
+- Think about B2B vs B2C approaches
+
+### Platform Variations
+- Web vs mobile vs desktop vs CLI
+- Consider multi-platform vs single-platform focus
+- Think about platform-specific capabilities
+
+## Output Format
+Output ONLY a valid JSON array with no additional text, no markdown formatting, and no trailing commas:
+
+```json
+[
+  {
+    "id": "variation-1",
+    "title": "<Descriptive title highlighting the key variation>",
+    "summary": "<2-sentence overview of how this variation differs from the base>",
+    "context": {
+      "what": "<specific description for this variation>",
+      "why": "<motivation specific to this approach>",
+      "who": "<target users for this variation>",
+      "done": "<definition of done for this variation>",
+      "notes": []
+    },
+    "suggestedFeatures": [
+      "<key differentiating feature 1>",
+      "<key differentiating feature 2>",
+      "<feature 3>",
+      "<feature 4>"
+    ],
+    "techStack": [
+      "<technology appropriate for this variation>"
+    ]
+  }
+]
+```
+
+## Guidelines
+- Each variation should feel like a distinct product approach
+- Don't just change minor details - explore fundamentally different angles
+- Make sure each variation is viable and implementable
+- The summary should clearly explain what makes this variation unique
+ "#;
+
+const MARKET_ANALYSIS_TEMPLATE: &str = r#"You are a market research analyst specializing in technology products and startups. Analyze the market opportunity for the given product idea.
+
+## Product Idea
+**Title**: {{ idea.title }}
+**Summary**: {{ idea.summary }}
+
+**What**: {{ idea.context.what }}
+**Why**: {{ idea.context.why }}
+**Who**: {{ idea.context.who }}
+
+## Your Task
+Provide a comprehensive market analysis including:
+
+1. **Market Size**: Estimate TAM (Total Addressable Market), SAM (Serviceable Addressable Market), and target user count
+2. **Competition**: Identify 3-5 key competitors with their strengths and weaknesses
+3. **Market Gaps**: Identify underserved needs or opportunities
+4. **Acquisition Channels**: Suggest effective channels for reaching target users
+5. **Monetization Potential**: Assess revenue potential and suggest business models
+
+## Output Format
+Output ONLY a valid JSON object with no additional text, no markdown formatting, and no trailing commas:
+
+```json
+{
+  "tam": "<X billion USD or descriptive market size>",
+  "sam": "<Y million USD or serviceable market>",
+  "targetUserCount": "<estimated target users (e.g., '50K-100K developers' or '1M+ small businesses')>",
+  "acquisitionChannels": [
+    "<channel 1 with brief rationale>",
+    "<channel 2>",
+    "<channel 3>"
+  ],
+  "competition": "low|medium|high",
+  "monetizationPotential": "low|medium|high",
+  "competitors": [
+    {
+      "name": "<Competitor name>",
+      "strengths": [
+        "<strength 1>",
+        "<strength 2>"
+      ],
+      "weaknesses": [
+        "<weakness 1>",
+        "<weakness 2>"
+      ]
+    }
+  ],
+  "gaps": [
+    "<market gap or opportunity 1>",
+    "<market gap or opportunity 2>",
+    "<market gap or opportunity 3>"
+  ]
+}
+```
+
+## Guidelines
+- Be realistic about market size - justify your estimates with the type of users and problem
+- Competition should be "low" if this is a novel approach with few direct competitors
+- Monetization potential should consider both willingness to pay and ability to capture value
+- Include both direct competitors (similar products) and indirect alternatives (solving the same problem differently)
+- Market gaps should be specific opportunities this product can exploit
+- Acquisition channels should be practical for the given target users and budget
+ "#;
+
+const FEASIBILITY_ANALYSIS_TEMPLATE: &str = r#"You are a senior software architect and technical consultant. Analyze the technical feasibility of the given product idea.
+
+## Product Idea
+**Title**: {{ idea.title }}
+**Summary**: {{ idea.summary }}
+
+**What**: {{ idea.context.what }}
+**Why**: {{ idea.context.why }}
+**Key Features**:
+{% for feature in idea.suggested_features %}
+- {{ feature }}
+{% endfor %}
+
+**Suggested Tech Stack**:
+{% for tech in idea.tech_stack %}
+- {{ tech }}
+{% endfor %}
+
+## Project Type
+{{ project_type }}
+
+## Your Task
+Provide a comprehensive technical feasibility analysis including:
+
+1. **Feasibility Score** (0-100): Overall technical feasibility considering complexity, risk, and implementation challenges
+2. **Complexity Level**: low, medium, or high
+3. **Time Estimates**: Weeks for MVP, V1, and V2
+4. **Required Skills**: Technical skills needed (frameworks, languages, domains)
+5. **Risk Factors**: Key technical risks with mitigation strategies
+6. **Simplified MVP** (if score < 70): A more achievable initial version
+
+## Output Format
+Output ONLY a valid JSON object with no additional text, no markdown formatting, and no trailing commas:
+
+```json
+{
+  "feasibilityScore": <0-100 number>,
+  "complexityLevel": "low|medium|high",
+  "estimatedWeeks": {
+    "mvp": <number, e.g., 4>,
+    "v1": <number, e.g., 8>,
+    "v2": <number, e.g., 12>
+  },
+  "requiredSkills": [
+    "<skill 1, e.g., 'React/TypeScript'>",
+    "<skill 2, e.g., 'PostgreSQL'>",
+    "<skill 3>"
+  ],
+  "riskFactors": [
+    {
+      "risk": "<specific technical risk>",
+      "mitigation": "<how to address this risk>"
+    }
+  ],
+  "simplifiedMvp": {
+    "id": "{{ idea.id }}-simplified",
+    "title": "<Simpler title>",
+    "summary": "<1-2 sentence overview of simplified approach>",
+    "context": {
+      "what": "<simplified what>",
+      "why": "<same why>",
+      "who": "<same who>",
+      "done": "<simplified done criteria>",
+      "notes": []
+    },
+    "suggestedFeatures": [
+      "<reduced feature set>"
+    ],
+    "techStack": [
+      "<simplified tech stack if different>"
+    ]
+  }
+}
+```
+
+## Guidelines
+
+### Feasibility Scoring
+- **90-100**: Straightforward implementation, well-understood tech stack, minimal external dependencies
+- **70-89**: Standard complexity, some challenging aspects, proven technologies
+- **50-69**: Significant challenges, requires expertise, some uncertainty
+- **30-49**: High complexity, many unknowns, cutting-edge or experimental tech
+- **<30**: Extremely ambitious, requires breakthrough or major simplification
+
+### Complexity Levels
+- **Low**: Single developer, standard frameworks, no complex integrations
+- **Medium**: Small team (2-3), some specialized knowledge, moderate integrations
+- **High**: Multiple specialized skills, complex architecture, significant integrations
+
+### Time Estimates
+- MVP: Core value only, minimal polish, manual workarounds OK
+- V1: Production-ready with core features, proper UX, basic scalability
+- V2: Advanced features, optimization, polish, scalability
+
+### When to Provide Simplified MVP
+- Provide a simplified MVP idea if feasibility score is below 70
+- The simplified version should:
+  - Reduce feature scope to absolute minimum
+  - Use more proven/established technologies
+  - Eliminate or defer the most complex aspects
+  - Still deliver core value proposition
+- Don't simplify if the idea is already achievable (score >= 70)
+
+### Risk Factors
+Include risks like:
+- Third-party API reliability
+- Scalability challenges
+- Security/privacy concerns
+- Performance requirements
+- Regulatory/compliance issues
+- Technical expertise availability
+- Integration complexity
+
+Each risk must include a practical mitigation strategy.
+ "#;
+
+const BRAINSTORM_IDEAS_TEMPLATE: &str = r#"You are a creative product consultant helping users explore project ideas based on their interests.
+
+## User's Interests
+{% for interest in interests %}
+- {{ interest }}
+{% endfor %}
+
+{% if domain %}
+## Domain of Interest
+{{ domain }}
+{% endif %}
+
+## Your Task
+Generate {{ count }} diverse project ideas that align with the user's interests. Each idea should:
+
+- Be inspired by the listed interests but not limited to them
+- Span different complexity levels (mix of simple, moderate, and complex)
+- Cover different types of projects (web app, CLI, API, library, etc. if appropriate)
+- Be specific and implementable
+- Include clear value propositions
+- Suggest realistic tech stacks
+
+## Idea Diversity
+Generate ideas across these dimensions:
+1. **Complexity**: Mix of weekend projects, month-long builds, and ambitious undertakings
+2. **Novelty**: Some practical/utilitarian, some creative/experimental
+3. **Scope**: From focused tools to comprehensive platforms
+4. **Personal vs Professional**: Ideas for personal use vs commercial potential
+
+## Output Format
+Output ONLY a valid JSON array with no additional text, no markdown formatting, and no trailing commas:
+
+```json
+[
+  {
+    "id": "brainstorm-1",
+    "title": "<Catchy title>",
+    "summary": "<2-sentence overview>",
+    "context": {
+      "what": "<specific description>",
+      "why": "<motivation or problem it solves>",
+      "who": "<target users or just yourself>",
+      "done": "<clear completion criteria>",
+      "notes": []
+    },
+    "suggestedFeatures": [
+      "<core feature 1>",
+      "<feature 2>",
+      "<feature 3>"
+    ],
+    "techStack": [
+      "<appropriate tech>"
+    ]
+  }
+]
+```
+
+## Guidelines
+- Draw connections between interests in creative ways
+- Don't just clone existing products - add unique angles
+- Make sure ideas are actually buildable (not science fiction)
+- Consider both learning projects and portfolio-worthy work
+- Include a mix of established tech stacks and newer/interesting technologies
+- Ideas should feel exciting and motivating to build
+ "#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,10 +1139,14 @@ mod tests {
                 || name == CONTEXT_SUGGESTIONS
                 || name == IDEA_STARTERS
                 || name == CONTEXT_IMPROVEMENT
+                || name == IDEA_VARIATIONS
+                || name == MARKET_ANALYSIS
+                || name == FEASIBILITY_ANALYSIS
+                || name == BRAINSTORM_IDEAS
             {
                 assert!(
-                    template.contains("context."),
-                    "Template '{}' should contain context placeholders",
+                    template.contains("context.") || template.contains("idea."),
+                    "Template '{}' should contain context or idea placeholders",
                     name
                 );
                 continue;
