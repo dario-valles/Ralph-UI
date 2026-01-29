@@ -7,16 +7,16 @@
 //! - git_routes: Git and GitHub commands
 //! - ralph_loop_routes: Ralph Loop execution commands
 //! - prd_routes: PRD and chat commands
-//! - gsd_routes: GSD workflow commands
+//! - prd_workflow_routes: PRD workflow commands (centralized PRD creation system)
 //! - config_routes: Configuration and misc commands
 //! - parallel_routes: Parallel execution commands (reserved for future use)
 
 pub mod agent_routes;
 pub mod config_routes;
 pub mod git_routes;
-pub mod gsd_routes;
 pub mod parallel_routes;
 pub mod prd_routes;
+pub mod prd_workflow_routes;
 pub mod ralph_loop_routes;
 pub mod session_routes;
 pub mod task_routes;
@@ -146,8 +146,8 @@ pub async fn route_command(
         return prd_routes::route_prd_command(cmd, args, state).await;
     }
 
-    if gsd_routes::is_gsd_command(cmd) {
-        return gsd_routes::route_gsd_command(cmd, args, state).await;
+    if prd_workflow_routes::is_prd_workflow_command(cmd) {
+        return prd_workflow_routes::route_prd_workflow_command(cmd, args, state).await;
     }
 
     if config_routes::is_config_command(cmd) {
