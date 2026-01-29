@@ -1,13 +1,20 @@
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Folder, FolderOpen, Plus } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Folder, FolderOpen, Plus, Search } from 'lucide-react'
 import type { ProjectFolder } from '@/types'
 
 interface FolderPickerProps {
@@ -29,8 +36,12 @@ export function FolderPicker({
   const [newFolderName, setNewFolderName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [filterQuery, setFilterQuery] = useState('')
 
   const selectedFolder = folders.find((f) => f.id === selectedFolderId)
+  const filteredFolders = folders.filter((f) =>
+    f.name.toLowerCase().includes(filterQuery.toLowerCase())
+  )
 
   const handleCreateFolder = async () => {
     const trimmedName = newFolderName.trim()
@@ -86,98 +97,106 @@ export function FolderPicker({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[200px]">
-          <DropdownMenuItem onClick={() => onSelect(null)}>
-            <Folder className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>Uncategorized</span>
-          </DropdownMenuItem>
+          {/* Search input for filtering folders */}
+          <div className="p-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Filter folders..."
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                className="pl-8 h-8"
+              />
+            </div>
+          </div>
 
-          {folders.map((folder) => (
-            <DropdownMenuItem
-              key={folder.id}
-              onClick={() => onSelect(folder.id)}
-              className="gap-2"
-            >
-              <FolderOpen className="h-4 w-4 text-primary" />
-              <div className="flex-1 min-w-0">
-                <div className="truncate">{folder.name}</div>
-                {folder.projectCount !== undefined && (
-                  <div className="text-xs text-muted-foreground">
-                    {folder.projectCount} {folder.projectCount === 1 ? 'project' : 'projects'}
-                  </div>
-                )}
-              </div>
+          <div className="max-h-[300px] overflow-y-auto">
+            <DropdownMenuItem onClick={() => onSelect(null)}>
+              <Folder className="h-4 w-4 mr-2 text-muted-foreground" />
+              <span>Uncategorized</span>
             </DropdownMenuItem>
-          ))}
 
-          <DropdownMenuItem
-            onClick={() => {
-              setShowCreateDialog(true)
-              setError(null)
-            }}
-            className="gap-2 text-primary"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Create new folder...</span>
-          </DropdownMenuItem>
+            {filteredFolders.map((folder) => (
+              <DropdownMenuItem
+                key={folder.id}
+                onClick={() => onSelect(folder.id)}
+                className="gap-2"
+              >
+                <FolderOpen className="h-4 w-4 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{folder.name}</div>
+                  {folder.projectCount !== undefined && (
+                    <div className="text-xs text-muted-foreground">
+                      {folder.projectCount} {folder.projectCount === 1 ? 'project' : 'projects'}
+                    </div>
+                  )}
+                </div>
+              </DropdownMenuItem>
+            ))}
+
+            <DropdownMenuItem
+              onClick={() => {
+                setShowCreateDialog(true)
+                setError(null)
+                setFilterQuery('') // Clear filter when opening create dialog
+              }}
+              className="gap-2 text-primary"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Create new folder...</span>
+            </DropdownMenuItem>
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Create Folder Dialog (inline) */}
-      {showCreateDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-background border rounded-lg shadow-lg max-w-md w-full p-4 space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold">Create New Folder</h3>
-              <p className="text-sm text-muted-foreground">
-                Enter a name for the new folder
-              </p>
-            </div>
+      {/* Create Folder Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+            <DialogDescription>
+              Enter a name for the new folder
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={newFolderName}
-                onChange={(e) => {
-                  setNewFolderName(e.target.value)
-                  setError(null)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreateFolder()
-                  if (e.key === 'Escape') setShowCreateDialog(false)
-                }}
-                placeholder="e.g., Work Projects"
-                className={cn(
-                  'w-full px-3 py-2 text-sm rounded-md border bg-background',
-                  'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
-                  error && 'border-destructive'
-                )}
-                autoFocus
-                disabled={isCreating}
-              />
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
-
-            <div className="flex items-center gap-2 justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCreateDialog(false)}
-                disabled={isCreating}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleCreateFolder}
-                disabled={isCreating || !newFolderName.trim()}
-              >
-                {isCreating ? 'Creating...' : 'Create'}
-              </Button>
-            </div>
+          <div className="space-y-2 py-4">
+            <Input
+              value={newFolderName}
+              onChange={(e) => {
+                setNewFolderName(e.target.value)
+                setError(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateFolder()
+                if (e.key === 'Escape') setShowCreateDialog(false)
+              }}
+              placeholder="e.g., Work Projects"
+              autoFocus
+              disabled={isCreating}
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
-        </div>
-      )}
+
+          <div className="flex items-center gap-2 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCreateDialog(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleCreateFolder}
+              disabled={isCreating || !newFolderName.trim()}
+            >
+              {isCreating ? 'Creating...' : 'Create'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
