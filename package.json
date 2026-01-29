@@ -1,6 +1,6 @@
 {
   "name": "ralph-ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Orchestrate autonomous AI coding agents with the Ralph Wiggum Loop technique",
   "author": "Dario Valles",
