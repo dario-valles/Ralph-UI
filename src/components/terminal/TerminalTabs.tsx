@@ -1,6 +1,6 @@
 // Terminal tabs component
 
-import { X, Plus, Bot } from 'lucide-react'
+import { X, Plus, Bot, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -15,8 +15,9 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
     useTerminalStore()
   const { getActiveProject } = useProjectStore()
 
+  const activeProject = getActiveProject()
+
   const handleNewTerminal = () => {
-    const activeProject = getActiveProject()
     createTerminal(activeProject?.path)
   }
 
@@ -28,6 +29,10 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
       // No warning needed as it's non-destructive
     }
     closeTerminal(id)
+  }
+
+  const isTerminalMismatched = (terminal: typeof terminals[0]) => {
+    return activeProject && terminal.cwd && terminal.cwd !== activeProject.path
   }
 
   return (
@@ -57,6 +62,12 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
             <Bot className="h-3 w-3 flex-shrink-0 text-blue-500 dark:text-blue-400" />
           )}
           <span className="truncate max-w-28">{terminal.title}</span>
+          {/* Directory mismatch indicator */}
+          {isTerminalMismatched(terminal) && (
+            <Tooltip content={`Terminal in: ${terminal.cwd}`} side="top">
+              <AlertCircle className="h-3 w-3 flex-shrink-0 text-amber-500" />
+            </Tooltip>
+          )}
           {/* Exited status indicator for agent terminals */}
           {terminal.terminalType === 'agent' && terminal.agentStatus === 'exited' && (
             <span className="text-[10px] text-muted-foreground">(exited)</span>

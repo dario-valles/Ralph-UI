@@ -9,6 +9,7 @@ import type {
   AgentTerminalStatus,
 } from '@/types/terminal'
 import { hasStoredSession, killTerminal } from '@/lib/terminal-api'
+import { useProjectStore } from '@/stores/projectStore'
 
 // A pane can either be a terminal or a split container
 interface TerminalPane {
@@ -167,7 +168,11 @@ export const useTerminalStore = create<TerminalStore>()(
         const id = generateTerminalId()
         const { terminals, panelMode, rootPane } = get()
 
-        const workingDir = cwd || ''
+        // Get active project if available
+        const activeProject = useProjectStore.getState().getActiveProject()
+
+        // Priority: explicit cwd > active project path > empty string
+        const workingDir = cwd || activeProject?.path || ''
 
         const newTerminal: TerminalInstance = {
           id,
@@ -283,12 +288,16 @@ export const useTerminalStore = create<TerminalStore>()(
         const existingTerminal = terminals.find((t) => t.id === id)
         if (!existingTerminal || !rootPane) return null
 
+        // Get active project for new terminal
+        const activeProject = useProjectStore.getState().getActiveProject()
+        const newTerminalCwd = activeProject?.path || ''
+
         // Create new terminal
         const newId = generateTerminalId()
         const newTerminal: TerminalInstance = {
           id: newId,
           title: getDefaultTitle(terminals.length),
-          cwd: existingTerminal.cwd,
+          cwd: newTerminalCwd,
           isActive: false,
           createdAt: new Date().toISOString(),
           terminalType: 'shell',
