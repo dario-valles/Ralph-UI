@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::sync::mpsc;
 
-// Re-export types from log_collector for backward compatibility
+// Re-export types from log_collector
 pub use crate::agents::log_collector::{
     AgentCompletionEvent, AgentLogEvent, AgentPtyDataEvent, AgentPtyExitEvent, RateLimitEvent,
     ToolCallCompleteEvent, ToolCallStartEvent,

@@ -201,3 +201,56 @@ pub fn assign_project_to_folder(
 ) -> Result<(), String> {
     file_projects::assign_project_to_folder(&project_id, folder_id.as_deref())
 }
+
+/// Create a new filesystem directory
+/// This creates an actual directory on the filesystem, not a project folder category
+pub fn create_filesystem_directory(path: String) -> Result<DirectoryEntry, String> {
+    let dir_path = std::path::PathBuf::from(&path);
+
+    // Validate the path doesn't already exist
+    if dir_path.exists() {
+        return Err(format!("Path already exists: {}", path));
+    }
+
+    // Validate the parent directory exists
+    if let Some(parent) = dir_path.parent() {
+        if !parent.exists() {
+            return Err(format!(
+                "Parent directory does not exist: {}",
+                parent.display()
+            ));
+        }
+        if !parent.is_dir() {
+            return Err(format!(
+                "Parent path is not a directory: {}",
+                parent.display()
+            ));
+        }
+    } else {
+        return Err("Invalid path: no parent directory".to_string());
+    }
+
+    // Extract the directory name for validation
+    let name = dir_path
+        .file_name()
+        .ok_or_else(|| "Invalid path: no directory name".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    // Validate the name doesn't contain path separators
+    if name.contains('/') || name.contains('\\') {
+        return Err("Directory name cannot contain path separators".to_string());
+    }
+
+    // Create the directory
+    std::fs::create_dir(&dir_path).map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    let is_hidden = name.starts_with('.');
+
+    Ok(DirectoryEntry {
+        name,
+        path,
+        is_directory: true,
+        is_hidden,
+    })
+}

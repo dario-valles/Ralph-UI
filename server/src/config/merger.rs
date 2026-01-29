@@ -66,10 +66,6 @@ pub struct PartialFallbackSettings {
     pub fallback_chain: Option<Vec<String>>,
     pub test_primary_recovery: Option<bool>,
     pub recovery_test_interval: Option<u32>,
-    /// DEPRECATED: Use fallback_chain instead. Kept for backward compatibility.
-    #[serde(default, skip_serializing)]
-    #[deprecated(note = "Use fallback_chain instead")]
-    pub fallback_agent: Option<String>,
 }
 
 /// Configuration merger
@@ -232,7 +228,6 @@ impl ConfigMerger {
         }
     }
 
-    #[allow(deprecated)]
     fn merge_fallback(&self, base: &FallbackSettings, over: &FallbackSettings) -> FallbackSettings {
         FallbackSettings {
             enabled: over.enabled,
@@ -256,11 +251,6 @@ impl ConfigMerger {
                 .or_else(|| base.fallback_chain.clone()),
             test_primary_recovery: over.test_primary_recovery.or(base.test_primary_recovery),
             recovery_test_interval: over.recovery_test_interval.or(base.recovery_test_interval),
-            // Deprecated field: prefer fallback_chain, but preserve for backward compat
-            fallback_agent: over
-                .fallback_agent
-                .clone()
-                .or_else(|| base.fallback_agent.clone()),
         }
     }
 
@@ -339,7 +329,6 @@ impl ConfigMerger {
         }
     }
 
-    #[allow(deprecated)]
     fn merge_partial_fallback(
         &self,
         base: &FallbackSettings,
@@ -369,11 +358,6 @@ impl ConfigMerger {
             recovery_test_interval: partial
                 .recovery_test_interval
                 .or(base.recovery_test_interval),
-            // Deprecated field: prefer fallback_chain, but preserve for backward compat
-            fallback_agent: partial
-                .fallback_agent
-                .clone()
-                .or_else(|| base.fallback_agent.clone()),
         }
     }
 }

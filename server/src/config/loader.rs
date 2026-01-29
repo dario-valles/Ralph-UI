@@ -236,7 +236,7 @@ pub struct FallbackSettings {
     /// Error handling strategy (retry, skip, abort)
     #[serde(rename = "errorStrategy", alias = "error_strategy", default)]
     pub error_strategy: Option<ErrorStrategyConfig>,
-    /// Ordered list of fallback agents (replaces deprecated fallback_agent)
+    /// Ordered list of fallback agents to try when primary fails
     #[serde(rename = "fallbackChain", alias = "fallback_chain", default)]
     pub fallback_chain: Option<Vec<String>>,
     /// Whether to test if primary agent has recovered
@@ -253,16 +253,6 @@ pub struct FallbackSettings {
         default
     )]
     pub recovery_test_interval: Option<u32>,
-    /// DEPRECATED: Use fallback_chain instead. Kept for backward compatibility.
-    /// This field is read from old configs but not written to new ones.
-    #[serde(
-        rename = "fallbackAgent",
-        alias = "fallback_agent",
-        default,
-        skip_serializing
-    )]
-    #[deprecated(note = "Use fallback_chain instead")]
-    pub fallback_agent: Option<String>,
 }
 
 fn default_backoff() -> u64 {
@@ -273,7 +263,6 @@ fn default_max_backoff() -> u64 {
 }
 
 impl Default for FallbackSettings {
-    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             enabled: default_true(),
@@ -285,7 +274,6 @@ impl Default for FallbackSettings {
             fallback_chain: None,
             test_primary_recovery: None,
             recovery_test_interval: None,
-            fallback_agent: None,
         }
     }
 }
@@ -353,8 +341,7 @@ impl ConfigLoader {
         Ok(Some(config))
     }
 
-    /// Validate config values and warn about deprecated fields
-    #[allow(deprecated)]
+    /// Validate config values
     fn validate_config(&self, config: &RalphConfig) -> Result<()> {
         if config.execution.max_parallel <= 0 {
             return Err(anyhow!("max_parallel must be greater than 0"));
@@ -366,15 +353,6 @@ impl ConfigLoader {
 
         if config.execution.max_retries < 0 {
             return Err(anyhow!("max_retries cannot be negative"));
-        }
-
-        // Warn about deprecated fallback_agent field
-        if config.fallback.fallback_agent.is_some() {
-            log::warn!(
-                "[ConfigLoader] DEPRECATED: 'fallback_agent' field is deprecated. \
-                 Use 'fallback_chain' instead. The value will be automatically migrated \
-                 at runtime, but please update your config file."
-            );
         }
 
         Ok(())

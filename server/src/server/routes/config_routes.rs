@@ -236,6 +236,11 @@ pub async fn route_config_command(
             ))
         }
 
+        "create_filesystem_directory" => {
+            let path: String = get_arg(&args, "path")?;
+            route_sync!(commands::projects::create_filesystem_directory(path))
+        }
+
         // Mission Control Commands
         "get_activity_feed" => {
             let limit: Option<i32> = get_opt_arg(&args, "limit")?;
@@ -615,6 +620,7 @@ pub fn is_config_command(cmd: &str) -> bool {
             | "create_folder"
             | "get_all_folders"
             | "assign_project_to_folder"
+            | "create_filesystem_directory"
             // Mission control
             | "get_activity_feed"
             | "get_global_stats"
