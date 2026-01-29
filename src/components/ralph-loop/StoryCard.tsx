@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { CheckCircle2, Circle, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { CheckCircle2, Circle, X, Lock, ArrowRight, ArrowLeft, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { RalphStory } from '@/types'
 
@@ -16,10 +17,45 @@ export interface StoryCardProps {
   story: RalphStory
   isNext: boolean
   onToggle: () => void
+  /** All stories for computing dependents and blocked status */
+  allStories?: RalphStory[]
 }
 
-export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JSX.Element {
+export function StoryCard({ story, isNext, onToggle, allStories = [] }: StoryCardProps): React.JSX.Element {
   const [showDetail, setShowDetail] = useState(false)
+
+  // Compute dependents (stories that depend on this one)
+  const dependents = useMemo(() => {
+    return allStories.filter(s => s.dependencies?.includes(story.id)).map(s => s.id)
+  }, [allStories, story.id])
+
+  // Check if this story is blocked (has unfinished dependencies)
+  const isBlocked = useMemo(() => {
+    if (!story.dependencies?.length) return false
+    return story.dependencies.some(depId => {
+      const depStory = allStories.find(s => s.id === depId)
+      return depStory && !depStory.passes
+    })
+  }, [story.dependencies, allStories])
+
+  // Check if ready (no deps or all deps satisfied)
+  const isReady = useMemo(() => {
+    if (story.passes) return false // Already done
+    if (!story.dependencies?.length) return true
+    return story.dependencies.every(depId => {
+      const depStory = allStories.find(s => s.id === depId)
+      return depStory?.passes
+    })
+  }, [story.dependencies, story.passes, allStories])
+
+  // Get names of blocking stories
+  const blockingStoryIds = useMemo(() => {
+    if (!story.dependencies?.length) return []
+    return story.dependencies.filter(depId => {
+      const depStory = allStories.find(s => s.id === depId)
+      return depStory && !depStory.passes
+    })
+  }, [story.dependencies, allStories])
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't open modal if clicking the toggle button
@@ -36,10 +72,12 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
         className={cn(
           'p-2 sm:p-3 rounded-lg border cursor-pointer transition-colors hover:border-primary/50',
           story.passes && 'bg-green-500/5 border-green-500/30 dark:bg-green-500/10',
+          isBlocked && !story.passes && 'bg-red-500/5 border-red-500/30 dark:bg-red-500/10',
           !story.passes &&
             isNext &&
+            !isBlocked &&
             'bg-blue-500/5 border-blue-500/30 dark:bg-blue-500/10',
-          !story.passes && !isNext && 'bg-card border-border'
+          !story.passes && !isNext && !isBlocked && 'bg-card border-border'
         )}
       >
         <div className="flex items-start justify-between gap-2">
@@ -54,14 +92,27 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
             >
               {story.passes ? (
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+              ) : isBlocked ? (
+                <Lock className="h-4 w-4 text-red-500 dark:text-red-400" />
               ) : (
                 <Circle className="h-4 w-4 text-muted-foreground" />
               )}
             </button>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-[10px] text-muted-foreground">{story.id}</span>
-                {isNext && !story.passes && (
+                {isBlocked && !story.passes && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5">
+                    Blocked
+                  </Badge>
+                )}
+                {isReady && !story.passes && !isBlocked && (
+                  <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5">
+                    <Check className="h-3 w-3 mr-0.5" />
+                    Ready
+                  </Badge>
+                )}
+                {isNext && !story.passes && !isBlocked && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
                     Next
                   </Badge>
@@ -72,6 +123,12 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               >
                 {story.title}
               </h4>
+              {/* Blocked by indicator */}
+              {isBlocked && blockingStoryIds.length > 0 && (
+                <p className="text-[10px] text-red-500 dark:text-red-400 mt-0.5">
+                  Blocked by: {blockingStoryIds.join(', ')}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                 {story.acceptance}
               </p>
@@ -86,15 +143,44 @@ export function StoryCard({ story, isNext, onToggle }: StoryCardProps): React.JS
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {story.effort && (
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1">
+              {story.effort && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                  {story.effort}
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                {story.effort}
+                P{story.priority}
               </Badge>
+            </div>
+            {/* Dependency indicators */}
+            {(story.dependencies?.length > 0 || dependents.length > 0) && (
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                {story.dependencies?.length > 0 && (
+                  <Tooltip
+                    content={`Depends on: ${story.dependencies.join(', ')}`}
+                    side="left"
+                  >
+                    <span className="flex items-center gap-0.5 cursor-help">
+                      <ArrowRight className="h-3 w-3" />
+                      {story.dependencies.length}
+                    </span>
+                  </Tooltip>
+                )}
+                {dependents.length > 0 && (
+                  <Tooltip
+                    content={`Blocks: ${dependents.join(', ')}`}
+                    side="left"
+                  >
+                    <span className="flex items-center gap-0.5 cursor-help">
+                      <ArrowLeft className="h-3 w-3" />
+                      {dependents.length}
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
             )}
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-              P{story.priority}
-            </Badge>
           </div>
         </div>
       </div>

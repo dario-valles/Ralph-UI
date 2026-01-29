@@ -739,7 +739,10 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
         // Try to parse as a story header
         if let Some((id, title)) = parse_story_header(line) {
             // Now look for "**Acceptance Criteria**:" or "Acceptance Criteria:" section
+            // Also look for "**Depends on:**" for dependency extraction
             let mut acceptance_lines = Vec::new();
+            let mut dependencies: Vec<String> = Vec::new();
+            let mut effort: Option<String> = None;
             let mut j = i + 1;
             let mut found_acceptance_section = false;
 
@@ -751,8 +754,29 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
                     break;
                 }
 
-                // Check for acceptance criteria section header
+                let trimmed = current_line.trim();
                 let lower = current_line.to_lowercase();
+
+                // Extract dependencies from "**Depends on:** [US-1.1, US-1.2]" or "Depends on: US-1.1, US-1.2"
+                if lower.contains("depends on") {
+                    let deps = extract_dependency_ids(trimmed);
+                    if !deps.is_empty() {
+                        dependencies = deps;
+                    }
+                    j += 1;
+                    continue;
+                }
+
+                // Extract effort from "**Effort:** S" or "Effort: M"
+                if lower.contains("effort:") || lower.contains("**effort**") {
+                    if let Some(effort_value) = extract_effort(trimmed) {
+                        effort = Some(effort_value);
+                    }
+                    j += 1;
+                    continue;
+                }
+
+                // Check for acceptance criteria section header
                 if lower.contains("acceptance criteria") {
                     found_acceptance_section = true;
                     j += 1;
@@ -761,8 +785,6 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
 
                 // If we're in the acceptance section, collect bullet points
                 if found_acceptance_section {
-                    let trimmed = current_line.trim();
-
                     // Stop at next section header within the story (bold headers that aren't acceptance)
                     if trimmed.starts_with("**") && !lower.contains("acceptance") {
                         // But don't stop if this is another story header (handled above)
@@ -802,7 +824,10 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
                     .join("\n")
             };
 
-            stories.push(RalphStory::new(&id, &title, &acceptance));
+            let mut story = RalphStory::new(&id, &title, &acceptance);
+            story.dependencies = dependencies;
+            story.effort = effort;
+            stories.push(story);
             i = j;
             continue;
         }
@@ -929,6 +954,60 @@ fn parse_ai_story_response(response: &str) -> Result<Vec<ExtractedStory>, String
     }
 }
 
+/// Extract dependency IDs from a line like "**Depends on:** [US-1.1, US-1.2]" or "Depends on: US-1.1, US-1.2"
+fn extract_dependency_ids(line: &str) -> Vec<String> {
+    // Remove markdown formatting
+    let cleaned = line.replace("**", "").replace("*", "").to_lowercase();
+
+    // Find the "depends on" part and extract what comes after
+    if let Some(idx) = cleaned.find("depends on") {
+        let after_depends = &cleaned[idx + "depends on".len()..];
+        // Remove ":" and brackets
+        let ids_str = after_depends
+            .trim()
+            .trim_start_matches(':')
+            .trim()
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .trim();
+
+        // Split by comma and clean up each ID
+        let deps: Vec<String> = ids_str
+            .split(',')
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty() && (s.starts_with("US-") || s.starts_with("T-")))
+            .collect();
+
+        return deps;
+    }
+
+    Vec::new()
+}
+
+/// Extract effort estimate from a line like "**Effort:** S" or "Effort: M/L/XL"
+fn extract_effort(line: &str) -> Option<String> {
+    let cleaned = line.replace("**", "").replace("*", "");
+
+    if let Some(idx) = cleaned.to_lowercase().find("effort") {
+        let after_effort = &cleaned[idx + "effort".len()..];
+        let value = after_effort
+            .trim()
+            .trim_start_matches(':')
+            .trim()
+            .to_uppercase();
+
+        // Match common effort values
+        let valid_efforts = ["XS", "S", "M", "L", "XL", "XXL"];
+        for effort in valid_efforts {
+            if value.starts_with(effort) {
+                return Some(effort.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// Get the prompt.md content
 pub fn get_ralph_prompt(project_path: String, prd_name: String) -> Result<String, String> {
     super::helpers::prompt_builder(&project_path, &prd_name).read_prompt()
@@ -941,4 +1020,104 @@ pub fn set_ralph_prompt(
     content: String,
 ) -> Result<(), String> {
     super::helpers::prompt_builder(&project_path, &prd_name).write_prompt(&content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_dependency_ids_bracket_format() {
+        let line = "**Depends on:** [US-1.1, US-1.2]";
+        let deps = extract_dependency_ids(line);
+        assert_eq!(deps, vec!["US-1.1", "US-1.2"]);
+    }
+
+    #[test]
+    fn test_extract_dependency_ids_plain_format() {
+        let line = "Depends on: US-1.1, US-2.1";
+        let deps = extract_dependency_ids(line);
+        assert_eq!(deps, vec!["US-1.1", "US-2.1"]);
+    }
+
+    #[test]
+    fn test_extract_dependency_ids_single() {
+        let line = "**Depends on:** US-1.1";
+        let deps = extract_dependency_ids(line);
+        assert_eq!(deps, vec!["US-1.1"]);
+    }
+
+    #[test]
+    fn test_extract_dependency_ids_task_format() {
+        let line = "Depends on: T-1, T-2";
+        let deps = extract_dependency_ids(line);
+        assert_eq!(deps, vec!["T-1", "T-2"]);
+    }
+
+    #[test]
+    fn test_extract_effort() {
+        assert_eq!(extract_effort("**Effort:** S"), Some("S".to_string()));
+        assert_eq!(extract_effort("Effort: M"), Some("M".to_string()));
+        assert_eq!(extract_effort("**Effort:** XL"), Some("XL".to_string()));
+        assert_eq!(extract_effort("No effort here"), None);
+    }
+
+    #[test]
+    fn test_parse_markdown_stories_with_dependencies() {
+        let content = r#"# Test PRD
+
+#### US-1.1: First Story
+**As a** user,
+**I want** to do something,
+**So that** I get benefit.
+
+**Acceptance Criteria:**
+- Criterion 1
+- Criterion 2
+
+---
+
+#### US-1.2: Second Story
+**Depends on:** [US-1.1]
+**As a** user,
+**I want** to do something else,
+**So that** I get another benefit.
+
+**Acceptance Criteria:**
+- Criterion A
+- Criterion B
+
+**Effort:** M
+"#;
+
+        let stories = parse_markdown_stories_with_acceptance(content);
+        assert_eq!(stories.len(), 2);
+
+        // First story has no dependencies
+        assert_eq!(stories[0].id, "US-1.1");
+        assert!(stories[0].dependencies.is_empty());
+
+        // Second story depends on first
+        assert_eq!(stories[1].id, "US-1.2");
+        assert_eq!(stories[1].dependencies, vec!["US-1.1"]);
+        assert_eq!(stories[1].effort, Some("M".to_string()));
+    }
+
+    #[test]
+    fn test_parse_story_header_markdown() {
+        let result = parse_story_header("#### US-1.1: Some Title");
+        assert_eq!(
+            result,
+            Some(("US-1.1".to_string(), "Some Title".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_story_header_bold() {
+        let result = parse_story_header("**US-1.1:** Some Title");
+        assert_eq!(
+            result,
+            Some(("US-1.1".to_string(), "Some Title".to_string()))
+        );
+    }
 }

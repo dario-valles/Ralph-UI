@@ -62,6 +62,7 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
   const [configOpen, setConfigOpen] = useState(false)
   const [regeneratingStories, setRegeneratingStories] = useState(false)
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
+  const [executionPreviewOpen, setExecutionPreviewOpen] = useState(false)
 
   // Available agents - use shared hook
   const { agents: availableAgents } = useAvailableAgents()
@@ -297,7 +298,15 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
   ])
 
   // Action handlers
-  const handleStartLoop = useCallback(async () => {
+
+  // Shows execution preview dialog before starting
+  const handleStartLoop = useCallback(() => {
+    if (!prd) return
+    setExecutionPreviewOpen(true)
+  }, [prd])
+
+  // Actually executes the loop (called from preview dialog)
+  const executeLoop = useCallback(async () => {
     if (!prd) {
       return
     }
@@ -566,6 +575,8 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
     regeneratingStories,
     regenerateConfirmOpen,
     setRegenerateConfirmOpen,
+    executionPreviewOpen,
+    setExecutionPreviewOpen,
 
     // Worktree dialog state
     diffDialogOpen,
@@ -607,6 +618,7 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
 
     // Actions
     handleStartLoop,
+    executeLoop,
     handleStopLoop,
     handleSaveConfig,
     handleToggleStory,

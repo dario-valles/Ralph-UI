@@ -8,6 +8,7 @@ import {
   FileCode,
   ListChecks,
   GitCompare,
+  GitBranch,
 } from 'lucide-react'
 
 /**
@@ -238,6 +239,25 @@ This will help clarify the implementation scope.`,
     type: 'template',
     template:
       '#### US-X.X: [Title]\n**As a** [user],\n**I want** [action],\n**So that** [benefit].\n\n**Acceptance Criteria:**\n- [Criterion 1]\n',
+  },
+  {
+    id: 'story-dep',
+    label: 'Story with Dependencies',
+    description: 'Insert a User Story template with dependency syntax',
+    icon: <GitBranch className="h-4 w-4 mr-2" />,
+    type: 'template',
+    template: `#### US-X.X: [Title]
+**Depends on:** [US-1.1, US-1.2]
+**As a** [user],
+**I want** [action],
+**So that** [benefit].
+
+**Acceptance Criteria:**
+- [Criterion 1]
+- [Criterion 2]
+
+**Effort:** [S/M/L/XL]
+`,
   },
   {
     id: 'task',

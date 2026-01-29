@@ -13,6 +13,7 @@ import {
   Loader2,
   Sparkles,
   Lightbulb,
+  GitBranch,
 } from 'lucide-react'
 import type { RalphPrd, RalphPrdStatus, RalphProgressSummary, RalphStory, IterationRecord } from '@/types'
 import type { CommitInfo } from '@/lib/api/git-api'
@@ -24,6 +25,7 @@ import { IterationHistoryView } from './IterationHistoryView'
 import { AssignmentsPanel } from './AssignmentsPanel'
 import { LearningsPanel } from './LearningsPanel'
 import { BriefViewer } from './BriefViewer'
+import { DependencyGraph } from './DependencyGraph'
 
 // Tab trigger styling - consistent across all tabs for mobile-first responsive design
 const TAB_TRIGGER_CLASSES =
@@ -52,6 +54,8 @@ export interface DashboardTabsProps {
   activeExecutionId: string | null
   isRunning: boolean
   regeneratingStories: boolean
+  /** IDs of stories currently being executed in parallel */
+  runningStoryIds?: string[]
 
   // Tab state
   activeTab: string
@@ -73,6 +77,11 @@ export interface DashboardTabsProps {
   prdName: string
 }
 
+// Count stories with dependencies
+function countDependencies(props: DashboardTabsProps): number {
+  return props.prd?.stories?.filter(s => s.dependencies?.length > 0).length ?? 0
+}
+
 // Tab configuration - defines all dashboard tabs in a data-driven way
 const TABS: TabConfig[] = [
   {
@@ -80,6 +89,12 @@ const TABS: TabConfig[] = [
     icon: CheckCircle2,
     getCount: (props) => `${props.prdStatus?.passed ?? 0}/${props.prdStatus?.total ?? 0}`,
     showMobileCount: true,
+  },
+  {
+    value: 'dependencies',
+    icon: GitBranch,
+    label: 'Deps',
+    getCount: countDependencies,
   },
   {
     value: 'progress',
@@ -112,6 +127,7 @@ export function DashboardTabs(props: DashboardTabsProps): React.JSX.Element {
     activeExecutionId,
     isRunning,
     regeneratingStories,
+    runningStoryIds = [],
     activeTab,
     setActiveTab,
     isTreeVisible,
@@ -183,6 +199,14 @@ export function DashboardTabs(props: DashboardTabsProps): React.JSX.Element {
             stories={prd.stories}
             prdStatus={prdStatus}
             onToggleStory={onToggleStory}
+          />
+        </TabsContent>
+
+        <TabsContent value="dependencies" className="p-0 mt-0 flex-1 min-h-0 overflow-hidden">
+          <DependencyGraph
+            stories={prd.stories}
+            runningStoryIds={runningStoryIds}
+            className="h-full"
           />
         </TabsContent>
 

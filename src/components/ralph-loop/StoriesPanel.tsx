@@ -21,6 +21,7 @@ export function StoriesPanel({
             story={story}
             isNext={prdStatus?.nextStoryId === story.id}
             onToggle={() => onToggleStory(story)}
+            allStories={stories}
           />
         ))}
       </div>

@@ -5,6 +5,7 @@ import { useRalphLoopDashboard } from './hooks/useRalphLoopDashboard'
 import { RalphLoopHeader } from './RalphLoopHeader'
 import { DashboardTabs } from './DashboardTabs'
 import { ExecutionDialogs } from './ExecutionDialogs'
+import { ExecutionPreviewDialog } from './ExecutionPreviewDialog'
 
 export interface RalphLoopDashboardProps {
   projectPath: string
@@ -39,6 +40,8 @@ export function RalphLoopDashboard({
     regeneratingStories,
     regenerateConfirmOpen,
     setRegenerateConfirmOpen,
+    executionPreviewOpen,
+    setExecutionPreviewOpen,
 
     // Worktree dialog state
     diffDialogOpen,
@@ -78,6 +81,7 @@ export function RalphLoopDashboard({
 
     // Actions
     handleStartLoop,
+    executeLoop,
     handleStopLoop,
     handleSaveConfig,
     handleToggleStory,
@@ -201,6 +205,15 @@ export function RalphLoopDashboard({
         setConflicts={setConflicts}
         projectPath={projectPath}
         onMergeComplete={handleMergeComplete}
+      />
+
+      {/* Execution Preview Dialog */}
+      <ExecutionPreviewDialog
+        open={executionPreviewOpen}
+        onOpenChange={setExecutionPreviewOpen}
+        stories={prd.stories}
+        onConfirm={executeLoop}
+        loading={loading}
       />
     </div>
   )
