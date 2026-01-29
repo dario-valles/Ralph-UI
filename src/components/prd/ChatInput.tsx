@@ -294,6 +294,7 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
       <SlashCommandMenu
         isOpen={slashMenuOpen}
         query={slashQuery}
+        selectedIndex={slashIndex}
         onSelect={handleCommandSelect}
       />
 

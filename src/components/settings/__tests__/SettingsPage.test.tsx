@@ -82,6 +82,16 @@ vi.mock('@/hooks/useAvailableModels', () => ({
   })),
 }))
 
+// Mock useAvailableAgents hook
+vi.mock('@/hooks/useAvailableAgents', () => ({
+  useAvailableAgents: vi.fn(() => ({
+    agents: ['claude', 'opencode', 'cursor', 'codex'],
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  })),
+}))
+
 const mockConfig: RalphConfig = {
   execution: {
     maxParallel: 4,
@@ -234,11 +244,11 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Default Agent Type')).toBeInTheDocument()
+      expect(screen.getByLabelText('Agent')).toBeInTheDocument()
     })
 
     // Verify agent type options by checking the select contains them
-    const agentSelect = screen.getByLabelText('Default Agent Type') as HTMLSelectElement
+    const agentSelect = screen.getByLabelText('Agent') as HTMLSelectElement
     const options = Array.from(agentSelect.options).map((o) => o.text)
     expect(options).toContain('Claude')
     expect(options).toContain('OpenCode')
@@ -258,7 +268,7 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     await waitFor(() => {
-      const agentSelect = screen.getByLabelText('Default Agent Type') as HTMLSelectElement
+      const agentSelect = screen.getByLabelText('Agent') as HTMLSelectElement
       expect(agentSelect.value).toBe('opencode')
     })
   })

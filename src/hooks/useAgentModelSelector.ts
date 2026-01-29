@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import type { AgentType, ApiProviderInfo } from '@/types'
+import { formatAgentName } from '@/types/agent'
 import type { ModelInfo } from '@/lib/model-api'
 import { useAvailableModels } from './useAvailableModels'
 import { useAvailableAgents } from './useAvailableAgents'
@@ -181,7 +182,7 @@ export function useAgentModelSelector(
     return [
       {
         value: agent,
-        label: agent.charAt(0).toUpperCase() + agent.slice(1),
+        label: formatAgentName(agent),
         agentType: agent,
       },
     ]
