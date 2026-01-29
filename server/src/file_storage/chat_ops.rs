@@ -220,8 +220,6 @@ mod tests {
             created_at: Utc::now().to_rfc3339(),
             updated_at: Utc::now().to_rfc3339(),
             message_count: Some(0),
-            gsd_mode: false,
-            gsd_state: None,
             pending_operation_started_at: None,
             external_session_id: None,
         }

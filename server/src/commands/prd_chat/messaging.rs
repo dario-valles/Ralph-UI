@@ -1,10 +1,9 @@
 // PRD Chat messaging operations - send messages, get history, build prompts
 
 use crate::file_storage::{attachments, chat_ops};
-use crate::gsd::planning_storage::{read_planning_file, PlanningFile};
-use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
 use crate::parsers::structured_output;
+use crate::prd_workflow::{read_research_file, ProjectContext, WorkflowPhase};
 use crate::templates::builtin::{get_builtin_template, PRD_CHAT_SYSTEM};
 use crate::templates::engine::{TemplateContext, TemplateEngine};
 use crate::utils::as_path;
@@ -28,14 +27,13 @@ struct PlanningContext {
     roadmap: Option<String>,
 }
 
-/// Load all available planning documents for a GSD session.
+/// Load all available planning documents for a PRD workflow session.
 /// Returns documents that exist, with None for missing ones.
-fn load_planning_context(project_path: &Path, session_id: &str) -> PlanningContext {
+fn load_planning_context(project_path: &Path, workflow_id: &str) -> PlanningContext {
     PlanningContext {
-        summary: read_planning_file(project_path, session_id, PlanningFile::Summary).ok(),
-        requirements: read_planning_file(project_path, session_id, PlanningFile::RequirementsMd)
-            .ok(),
-        roadmap: read_planning_file(project_path, session_id, PlanningFile::Roadmap).ok(),
+        summary: read_research_file(project_path, workflow_id, "SUMMARY.md").ok(),
+        requirements: read_research_file(project_path, workflow_id, "REQUIREMENTS.md").ok(),
+        roadmap: read_research_file(project_path, workflow_id, "ROADMAP.md").ok(),
     }
 }
 
@@ -133,19 +131,19 @@ pub async fn send_prd_chat_message(
         .chain(historical_attachment_paths)
         .collect();
 
-    // Load planning documents for GSD sessions.
+    // Load planning documents for PRD workflow sessions.
     // These persist across session resumption when conversation history is omitted,
     // ensuring the agent always has access to research, requirements, and roadmap.
-    let planning_context = if get_gsd_phase(&session).is_some() {
+    let planning_context = if get_workflow_phase(&session).is_some() {
         Some(load_planning_context(project_path_obj, &session.id))
     } else {
         None
     };
 
-    // Build prompt based on mode - use deep questioning prompt for GSD DeepQuestioning phase
+    // Build prompt based on mode - use discovery prompt for PRD workflow Discovery phase
     // When resuming an external session, history is omitted (agent maintains its own context)
-    let prompt = match get_gsd_phase(&session) {
-        Some(GsdPhase::DeepQuestioning) => build_deep_questioning_prompt(
+    let prompt = match get_workflow_phase(&session) {
+        Some(WorkflowPhase::Discovery) => build_deep_questioning_prompt(
             &session,
             &history,
             &request.content,
@@ -337,25 +335,23 @@ pub async fn get_prd_chat_history(
 // Prompt Building Functions
 // ============================================================================
 
-/// Get the current GSD phase from a chat session
-pub fn get_gsd_phase(session: &ChatSession) -> Option<GsdPhase> {
-    if !session.gsd_mode {
-        return None;
-    }
-    session.gsd_state.as_ref().and_then(|state_json| {
-        serde_json::from_str::<GsdWorkflowState>(state_json)
-            .ok()
-            .map(|state| state.current_phase)
-    })
+/// Get the current workflow phase from a chat session
+///
+/// Note: This function is for PRD workflow sessions that use the prd_workflow module.
+/// Currently returns None as GSD mode has been removed. The workflow phase
+/// is managed separately through the prd_workflow_routes.
+pub fn get_workflow_phase(_session: &ChatSession) -> Option<WorkflowPhase> {
+    // Workflow phase is now managed through prd_workflow module, not embedded in session
+    None
 }
 
-/// Extract questioning context from GSD state
-fn get_questioning_context(session: &ChatSession) -> Option<QuestioningContext> {
-    session.gsd_state.as_ref().and_then(|state_json| {
-        serde_json::from_str::<GsdWorkflowState>(state_json)
-            .ok()
-            .map(|state| state.questioning_context)
-    })
+/// Extract project context from workflow state
+///
+/// Note: This function is for PRD workflow sessions. Currently returns None
+/// as project context is managed through the prd_workflow module, not embedded in session.
+fn get_project_context(_session: &ChatSession) -> Option<ProjectContext> {
+    // Project context is now managed through prd_workflow module
+    None
 }
 
 /// Build prompt for Deep Questioning phase - focuses on discovery, not PRD creation
@@ -400,7 +396,7 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
     );
 
     // Add context status if available
-    if let Some(context) = get_questioning_context(session) {
+    if let Some(context) = get_project_context(session) {
         prompt.push_str("CURRENT CONTEXT STATUS:\n");
         prompt.push_str(&format!(
             "- What: {}\n",
@@ -609,6 +605,8 @@ fn get_prd_path_reminder(
         ⚠️ SYSTEM REQUIREMENT - PRD FILE PATH:\n\
         You MUST write the PRD to this EXACT path: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\
         DO NOT create files at any other location. The UI tracks this specific file.\n\
+        \n\
+        REMINDER: You are a PRD writer, not a developer. Do NOT create code files.\n\
         ---\n"
     )
 }
@@ -651,6 +649,12 @@ pub fn get_prd_plan_instruction(
         - Key decisions and rationale\n\
         - User stories with acceptance criteria\n\
         - Open questions to resolve\n\n\
+        ⚠️ FILE CREATION RESTRICTIONS:\n\
+        - You may ONLY create/edit the PRD markdown file at the path above\n\
+        - DO NOT create source code files (.js, .ts, .py, .rs, .css, .html, etc.)\n\
+        - DO NOT create config files (package.json, manifest.json, Cargo.toml, etc.)\n\
+        - DO NOT create directories or any files outside .ralph-ui/prds/\n\
+        - If you feel the urge to write code, STOP and document it as a PRD requirement instead\n\n\
         **IMPORTANT: User Story Format**\n\
         When writing user stories, ALWAYS use markdown headers (not bold text):\n\n\
         ```markdown\n\
@@ -687,8 +691,6 @@ mod tests {
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,
-            gsd_mode: false,
-            gsd_state: None,
             pending_operation_started_at: None,
             external_session_id: None,
         }

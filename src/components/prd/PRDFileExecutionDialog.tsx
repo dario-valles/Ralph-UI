@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, Repeat, GitBranch, FileCode } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Loader2, Repeat, GitBranch, FileCode, ListOrdered, Layers } from 'lucide-react'
 import { ralphLoopApi, templateApi } from '@/lib/backend-api'
-import type { PRDFile, TemplateInfo } from '@/types'
+import type { PRDFile, TemplateInfo, RalphExecutionMode } from '@/types'
 import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import { getModelName } from '@/lib/model-api'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 // LocalStorage key for last-used template per project
 const LAST_TEMPLATE_KEY = 'ralph-ui-last-template'
@@ -67,6 +69,10 @@ export function PRDFileExecutionDialog({
   const [maxIterations, setMaxIterations] = useState(50)
   const [runTests, setRunTests] = useState(true)
   const [runLint, setRunLint] = useState(true)
+
+  // Execution mode state (parallel execution Beta)
+  const [executionMode, setExecutionMode] = useState<RalphExecutionMode>('sequential')
+  const [maxParallel, setMaxParallel] = useState(3)
 
   // Template selection state (US-014)
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
@@ -151,6 +157,8 @@ export function PRDFileExecutionDialog({
         runLint: runLint,
         useWorktree,
         templateName: selectedTemplate || undefined,
+        executionMode,
+        maxParallel: executionMode === 'parallel' ? maxParallel : undefined,
       })
 
       onOpenChange(false)
@@ -263,6 +271,93 @@ export function PRDFileExecutionDialog({
           )}
         </div>
 
+        {/* Execution Mode Selection */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-muted-foreground" />
+            <Label>Execution Mode</Label>
+          </div>
+          <div className="flex rounded-md border border-border/50 overflow-hidden">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setExecutionMode('sequential')}
+              className={cn(
+                'flex-1 h-10 px-4 text-sm gap-2 rounded-none border-r border-border/50',
+                executionMode === 'sequential' && 'bg-muted text-foreground'
+              )}
+            >
+              <ListOrdered className="h-4 w-4" />
+              Sequential
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setExecutionMode('parallel')}
+              className={cn(
+                'flex-1 h-10 px-4 text-sm gap-2 rounded-none',
+                executionMode === 'parallel' && 'bg-muted text-foreground'
+              )}
+            >
+              <GitBranch className="h-4 w-4" />
+              Parallel
+              <Badge
+                variant="outline"
+                className="ml-0.5 text-[9px] px-1 py-0 h-3.5 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+              >
+                Beta
+              </Badge>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {executionMode === 'sequential'
+              ? 'Execute requirements one at a time in dependency order'
+              : 'Execute independent requirements in parallel using multiple agents'}
+          </p>
+        </div>
+
+        {/* Max Parallel Agents - only show in parallel mode */}
+        {executionMode === 'parallel' && (
+          <div className="rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <Label>Parallel Configuration</Label>
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1 py-0 h-3.5 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+              >
+                Beta
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-parallel" className="text-sm">
+                Max Parallel Agents: {maxParallel}
+              </Label>
+              <input
+                id="max-parallel"
+                type="range"
+                min={2}
+                max={5}
+                value={maxParallel}
+                onChange={(e) => setMaxParallel(parseInt(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>2</span>
+                <span>3</span>
+                <span>4</span>
+                <span>5</span>
+              </div>
+            </div>
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Each parallel agent works in its own git worktree. Independent stories run
+              simultaneously while dependent stories wait.
+            </p>
+          </div>
+        )}
+
         {/* Max Iterations and Max Cost */}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <div className="space-y-2">
@@ -347,13 +442,23 @@ export function PRDFileExecutionDialog({
               • Template: {selectedTemplate || 'default'}
               {selectedTemplateInfo ? ` (${selectedTemplateInfo.source})` : ''}
             </li>
+            <li>
+              • Execution mode:{' '}
+              {executionMode === 'sequential' ? (
+                'Sequential'
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400">
+                  Parallel (Beta) - up to {maxParallel} agents
+                </span>
+              )}
+            </li>
             <li>• Max iterations: {maxIterations}</li>
             <li>• Max cost: {maxCost ? `$${maxCost}` : 'no limit'}</li>
             <li>• Worktree isolation: {useWorktree ? 'enabled' : 'disabled'}</li>
             <li>• Quality gates: {qualityGatesLabel}</li>
             <li className="text-green-600 dark:text-green-400">• PRD file: {file?.filePath}</li>
             <li className="text-green-600 dark:text-green-400">
-              • Each iteration spawns a fresh agent
+              • {executionMode === 'parallel' ? 'Multiple agents work in parallel worktrees' : 'Each iteration spawns a fresh agent'}
             </li>
           </ul>
         </div>

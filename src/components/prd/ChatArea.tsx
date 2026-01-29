@@ -1,8 +1,9 @@
 import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus, MessageSquare, Bot, ArrowDown } from 'lucide-react'
+import { Plus, MessageSquare, ArrowDown } from 'lucide-react'
 import { ChatMessageItem } from './ChatMessageItem'
 import { StreamingIndicator } from './StreamingIndicator'
+import { PRDGuidancePanel } from './PRDGuidancePanel'
 import type { ChatSession, ChatMessage } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +20,8 @@ interface ChatAreaProps {
   onCreateSession: () => void
   onQuickStart: () => void
   onSendMessage: (content: string) => void
+  /** Called when user wants to insert text into input (from guidance panel) */
+  onInsertInput?: (text: string) => void
   onRetry: () => void
   onCancel: () => void
   onScrollToBottom: () => void
@@ -40,6 +43,7 @@ export function ChatArea({
   onCreateSession,
   onQuickStart,
   onSendMessage,
+  onInsertInput,
   onRetry,
   onCancel,
   onScrollToBottom,
@@ -94,8 +98,25 @@ export function ChatArea({
     )
   }
 
-  // Empty messages state
+  // Empty messages state - show type-specific guidance if PRD type is set
   if (messages.length === 0) {
+    // Show type-specific guidance panel if PRD type is set
+    if (currentSession.prdType && onInsertInput) {
+      return (
+        <div
+          ref={containerRef}
+          className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-0"
+        >
+          <PRDGuidancePanel
+            prdType={currentSession.prdType}
+            onInsertPrompt={onInsertInput}
+            onInsertCommand={onInsertInput}
+          />
+        </div>
+      )
+    }
+
+    // Fallback: generic empty state when no PRD type
     return (
       <div
         ref={containerRef}
@@ -107,44 +128,22 @@ export function ChatArea({
             <div className="absolute top-1/3 right-1/4 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl" />
           </div>
 
-          <div className="relative mb-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Bot className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-500 border-2 border-background flex items-center justify-center">
-              <span className="text-[10px] text-white">AI</span>
-            </div>
-          </div>
-
-          <h3 className="text-lg sm:text-xl font-bold tracking-tight mb-1">
-            Ready to help
-          </h3>
-          <p className="text-sm text-muted-foreground mb-1">
-            {currentSession.prdType
-              ? `Creating a ${currentSession.prdType.replace('_', ' ')} PRD`
-              : 'Ask me anything about your PRD'}
-          </p>
-          {currentSession.guidedMode && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-4">
-              Guided mode active
-            </p>
-          )}
+          <h3 className="text-lg sm:text-xl font-bold tracking-tight mb-1">Ready to help</h3>
+          <p className="text-sm text-muted-foreground mb-4">Ask me anything about your PRD</p>
 
           {/* Quick action pills */}
           <div className="flex flex-wrap gap-2 mt-2 max-w-sm justify-center">
-            {[
-              'Help me create a PRD',
-              'What should my PRD include?',
-              'PRD best practices',
-            ].map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => onSendMessage(prompt)}
-                className="px-3 py-1.5 text-xs font-medium rounded-full border border-border/50 bg-card hover:bg-muted hover:border-emerald-500/30 transition-all duration-200 hover:shadow-sm"
-              >
-                {prompt}
-              </button>
-            ))}
+            {['Help me create a PRD', 'What should my PRD include?', 'PRD best practices'].map(
+              (prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => onSendMessage(prompt)}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full border border-border/50 bg-card hover:bg-muted hover:border-emerald-500/30 transition-all duration-200 hover:shadow-sm"
+                >
+                  {prompt}
+                </button>
+              )
+            )}
           </div>
         </div>
       </div>

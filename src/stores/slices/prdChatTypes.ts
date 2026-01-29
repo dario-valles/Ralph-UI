@@ -1,5 +1,7 @@
 /**
  * Shared types for PRD Chat store slices
+ *
+ * Note: GSD workflow has been replaced by prd-workflow. Use prdWorkflowStore for workflow management.
  */
 import type {
   ChatSession,
@@ -9,70 +11,8 @@ import type {
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
-  AgentType,
 } from '@/types'
-import type {
-  ResearchStatus,
-  ResearchResult,
-  ResearchSynthesis,
-  ProjectTypeDetection,
-  ContextQualityReport,
-  ContextSuggestions,
-  ProjectType,
-  QuestioningContext,
-  IdeaGenerationState,
-  IdeaGenMode,
-  ValidatedIdea,
-  VariationDimension,
-} from '@/types/gsd'
-import type {
-  RequirementsDoc,
-  RoadmapDoc,
-  ScopeSelection,
-  RequirementCategory,
-  Requirement,
-} from '@/types/planning'
 import type { AsyncState } from '@/lib/store-utils'
-
-/**
- * Phase state for hybrid GSD in chat
- */
-export interface HybridPhaseState {
-  /** Whether research has been started */
-  researchStarted: boolean
-  /** Whether research is complete */
-  researchComplete: boolean
-  /** Whether requirements have been generated */
-  requirementsGenerated: boolean
-  /** Whether scoping is complete (no unscoped requirements) */
-  scopingComplete: boolean
-  /** Whether roadmap has been generated */
-  roadmapGenerated: boolean
-  /** Number of unscoped requirements */
-  unscopedCount: number
-}
-
-/**
- * Initial research status
- */
-export const INITIAL_RESEARCH_STATUS: ResearchStatus = {
-  architecture: { running: false, complete: false },
-  codebase: { running: false, complete: false },
-  bestPractices: { running: false, complete: false },
-  risks: { running: false, complete: false },
-}
-
-/**
- * Initial phase state
- */
-export const INITIAL_PHASE_STATE: HybridPhaseState = {
-  researchStarted: false,
-  researchComplete: false,
-  requirementsGenerated: false,
-  scopingComplete: false,
-  roadmapGenerated: false,
-  unscopedCount: 0,
-}
 
 /**
  * Options for starting a chat session
@@ -151,105 +91,6 @@ export interface FileWatchSlice {
   updatePlanContent: (content: string, path: string) => void
 }
 
-/**
- * Research slice state and actions (hybrid GSD)
- */
-export interface ResearchSlice {
-  // State
-  researchStatus: ResearchStatus
-  researchResults: ResearchResult[]
-  researchSynthesis: ResearchSynthesis | null
-  selectedResearchAgent: AgentType | null
-  availableResearchAgents: AgentType[]
-  isResearchRunning: boolean
-  isSynthesizing: boolean
-
-  // Actions
-  loadAvailableAgents: () => Promise<void>
-  setSelectedResearchAgent: (agent: AgentType | null) => void
-  setResearchStatus: (status: ResearchStatus | null, isRunning?: boolean) => void
-  checkResearchStatus: () => Promise<void>
-  loadSynthesis: () => Promise<void>
-  startResearch: (context: string, agentType?: string) => Promise<void>
-  synthesizeResearch: () => Promise<ResearchSynthesis | null>
-}
-
-/**
- * GSD workflow slice state and actions (requirements, scoping, roadmap)
- */
-export interface GsdSlice {
-  // State
-  requirementsDoc: RequirementsDoc | null
-  roadmapDoc: RoadmapDoc | null
-  phaseState: HybridPhaseState
-  isGeneratingRequirements: boolean
-
-  // NEW: Project type detection
-  projectType: ProjectType | null
-  projectTypeDetection: ProjectTypeDetection | null
-  isDetectingProjectType: boolean
-
-  // NEW: Context quality
-  contextQuality: ContextQualityReport | null
-  isAnalyzingQuality: boolean
-
-  // NEW: Smart suggestions
-  contextSuggestions: ContextSuggestions | null
-  isLoadingSuggestions: boolean
-
-  // Actions
-  generateRequirements: () => Promise<RequirementsDoc | null>
-  loadRequirements: () => Promise<void>
-  applyScopeSelection: (selection: ScopeSelection) => Promise<void>
-  addRequirement: (
-    category: RequirementCategory,
-    title: string,
-    description: string
-  ) => Promise<Requirement | null>
-  generateRoadmap: () => Promise<RoadmapDoc | null>
-  loadRoadmap: () => Promise<void>
-  clearHybridState: () => void
-  updatePhaseState: () => void
-
-  // New Actions
-  detectProjectType: () => Promise<ProjectTypeDetection | null>
-  analyzeContextQuality: (context: QuestioningContext) => Promise<ContextQualityReport | null>
-  generateContextSuggestions: (
-    projectType: ProjectType,
-    context: QuestioningContext
-  ) => Promise<ContextSuggestions | null>
-  setProjectType: (type: ProjectType | null) => void
-}
-
-/**
- * Idea Generation slice state and actions
- */
-export interface IdeaGenerationSlice {
-  // State
-  ideaGeneration: IdeaGenerationState
-
-  // Actions
-  setIdeaGenMode: (mode: IdeaGenMode) => void
-  setInterests: (interests: string[]) => void
-  setVariationDimensions: (dimensions: VariationDimension[]) => void
-  generateIdeas: (
-    projectType: ProjectType,
-    context: QuestioningContext
-  ) => Promise<void>
-  generateVariations: (
-    projectType: ProjectType,
-    context: QuestioningContext,
-    dimensions: VariationDimension[],
-    count?: number
-  ) => Promise<void>
-  exploreSpace: (domain: string, interests: string[], count?: number) => Promise<void>
-  validateIdea: (idea: ValidatedIdea, projectType: ProjectType) => Promise<void>
-  analyzeMarket: (idea: ValidatedIdea) => Promise<void>
-  selectIdea: (ideaId: string) => void
-  clearIdeaGeneration: () => void
-  clearError: () => void
-}
-
 // ============================================================================
 // Combined Store Type
 // ============================================================================
@@ -257,13 +98,7 @@ export interface IdeaGenerationSlice {
 /**
  * Full PRD Chat store type combining all slices
  */
-export type PRDChatStore = ChatCoreState &
-  ChatSessionSlice &
-  MessagingSlice &
-  FileWatchSlice &
-  ResearchSlice &
-  GsdSlice &
-  IdeaGenerationSlice
+export type PRDChatStore = ChatCoreState & ChatSessionSlice & MessagingSlice & FileWatchSlice
 
 /**
  * Zustand setter type for slices

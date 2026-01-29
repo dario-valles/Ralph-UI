@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Github, CheckCircle2, AlertTriangle, Tag, FileText } from 'lucide-react'
-import { githubApi, Issue, IssueImportResult } from '@/lib/git-api'
+import { githubApi, Issue, IssueImportResult } from '@/lib/api/git-api'
 
 interface ImportGitHubIssuesDialogProps {
   projectPath: string

@@ -1,4 +1,13 @@
-import { useState, useRef, useEffect, useCallback, KeyboardEvent, DragEvent } from 'react'
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  KeyboardEvent,
+  DragEvent,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Send, Paperclip, Image as ImageIcon, X, Sparkles } from 'lucide-react'
@@ -10,7 +19,19 @@ import { fileToAttachment, validateAttachments, combinePasteBlocksWithText } fro
 import { AttachmentPreview } from './AttachmentPreview'
 import { PastedTextPreviewList } from './PastedTextPreview'
 import { SlashCommandMenu } from './SlashCommandMenu'
-import { SLASH_COMMANDS, type SlashCommand } from '@/lib/prd-chat-commands'
+import {
+  SLASH_COMMANDS,
+  isActionCommand,
+  type SlashCommand,
+  type SlashCommandResult,
+} from '@/lib/prd-chat-commands'
+
+export interface ChatInputHandle {
+  /** Insert text at current cursor position or replace selection */
+  insertText: (text: string) => void
+  /** Focus the input */
+  focus: () => void
+}
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: ChatAttachment[]) => void
@@ -18,9 +39,14 @@ interface ChatInputProps {
   placeholder?: string
   /** Optional left-side action buttons (e.g., phase buttons) */
   leftActions?: React.ReactNode
+  /** Callback when an action command is executed */
+  onActionCommand?: (command: SlashCommand) => Promise<SlashCommandResult>
 }
 
-export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatInputProps) {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
+  { onSend, disabled, placeholder, leftActions, onActionCommand },
+  ref
+) {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
@@ -35,6 +61,22 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Expose imperative handle for inserting text
+  useImperativeHandle(ref, () => ({
+    insertText: (text: string) => {
+      setValue(text)
+      // Focus and move cursor to end
+      setTimeout(() => {
+        textareaRef.current?.focus()
+        const len = text.length
+        textareaRef.current?.setSelectionRange(len, len)
+      }, 0)
+    },
+    focus: () => {
+      textareaRef.current?.focus()
+    },
+  }))
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -75,20 +117,41 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
     setSlashMenuOpen(false)
   }, [value, pasteBlocks, attachments, onSend])
 
-  const handleCommandSelect = (command: SlashCommand) => {
-    // Replace the slash command with the template
+  const handleCommandSelect = async (command: SlashCommand) => {
+    // Reset slash menu first
+    setSlashMenuOpen(false)
+    setSlashQuery('')
+
+    // Get position before the slash command
     const lastSlashIndex = value.lastIndexOf('/')
-    if (lastSlashIndex !== -1) {
-      const newValue = value.substring(0, lastSlashIndex) + command.template
-      setValue(newValue)
-      
-      // Reset slash menu
-      setSlashMenuOpen(false)
-      setSlashQuery('')
-      
-      // Focus back on textarea
-      textareaRef.current?.focus()
+    const textBeforeSlash = lastSlashIndex !== -1 ? value.substring(0, lastSlashIndex) : value
+
+    if (isActionCommand(command)) {
+      // Handle action commands
+      setValue(textBeforeSlash) // Clear the slash command from input
+
+      if (onActionCommand) {
+        try {
+          const result = await onActionCommand(command)
+          if (!result.success && result.error) {
+            setError(result.error)
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Command failed')
+        }
+      } else {
+        // No handler provided - show message
+        setError(`Action command /${command.id} not yet implemented`)
+      }
+    } else {
+      // Handle template commands
+      if (command.template) {
+        setValue(textBeforeSlash + command.template)
+      }
     }
+
+    // Focus back on textarea
+    textareaRef.current?.focus()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -429,4 +492,4 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
 
     </div>
   )
-}
+})

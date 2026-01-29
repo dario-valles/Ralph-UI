@@ -41,12 +41,6 @@ pub struct ChatFile {
     pub structured_mode: bool,
     /// Extracted structure JSON (optional)
     pub extracted_structure: Option<String>,
-    /// Whether GSD (Get Stuff Done) workflow mode is enabled
-    #[serde(default)]
-    pub gsd_mode: bool,
-    /// GSD workflow state (JSON-serialized GsdWorkflowState)
-    #[serde(default)]
-    pub gsd_state: Option<String>,
     /// When the chat was created
     pub created_at: DateTime<Utc>,
     /// When the chat was last updated
@@ -125,8 +119,6 @@ impl From<&ChatSession> for ChatFile {
             template_id: session.template_id.clone(),
             structured_mode: session.structured_mode,
             extracted_structure: session.extracted_structure.clone(),
-            gsd_mode: session.gsd_mode,
-            gsd_state: session.gsd_state.clone(),
             created_at,
             updated_at,
             messages: Vec::new(),
@@ -155,8 +147,6 @@ impl ChatFile {
             template_id: self.template_id.clone(),
             structured_mode: self.structured_mode,
             extracted_structure: self.extracted_structure.clone(),
-            gsd_mode: self.gsd_mode,
-            gsd_state: self.gsd_state.clone(),
             created_at: self.created_at.to_rfc3339(),
             updated_at: self.updated_at.to_rfc3339(),
             message_count: Some(self.messages.len() as i32),
@@ -358,8 +348,6 @@ mod tests {
             template_id: None,
             structured_mode: false,
             extracted_structure: None,
-            gsd_mode: false,
-            gsd_state: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             messages: vec![

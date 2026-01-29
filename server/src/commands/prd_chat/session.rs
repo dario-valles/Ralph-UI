@@ -1,7 +1,6 @@
 // PRD Chat session operations - CRUD for chat sessions
 
 use crate::file_storage::chat_ops;
-use crate::gsd;
 use crate::models::{AgentType, ChatMessage, ChatSession, MessageRole, PRDType};
 use crate::utils::as_path;
 use uuid::Uuid;
@@ -41,13 +40,10 @@ pub async fn start_prd_chat_session(
     let session_id = Uuid::new_v4().to_string();
     let guided_mode = request.guided_mode.unwrap_or(true);
     let structured_mode = request.structured_mode.unwrap_or(false);
-    let gsd_mode = request.gsd_mode.unwrap_or(false);
 
     // Set title: use custom title if provided, otherwise default based on PRD type
     let default_title = if let Some(custom_title) = request.title {
         Some(custom_title)
-    } else if gsd_mode {
-        Some("GSD Workflow".to_string())
     } else {
         prd_type_enum.as_ref().map(|pt| get_prd_type_title(pt))
     };
@@ -64,8 +60,6 @@ pub async fn start_prd_chat_session(
         template_id: request.template_id,
         structured_mode,
         extracted_structure: None,
-        gsd_mode,
-        gsd_state: None,
         created_at: now.clone(),
         updated_at: now.clone(),
         message_count: Some(0),
@@ -81,14 +75,8 @@ pub async fn start_prd_chat_session(
     chat_ops::create_chat_session(project_path_obj, &session)
         .map_err(|e| format!("Failed to create chat session: {}", e))?;
 
-    // If GSD mode is enabled, initialize the planning directory
-    if gsd_mode {
-        gsd::planning_storage::init_planning_session(project_path_obj, &session_id)
-            .map_err(|e| format!("Failed to initialize GSD planning session: {}", e))?;
-    }
-
-    // If guided mode is enabled (and not GSD mode), add an initial welcome message with the first question
-    if guided_mode && !gsd_mode {
+    // If guided mode is enabled, add an initial welcome message with the first question
+    if guided_mode {
         let welcome_message = generate_welcome_message(prd_type_enum.as_ref());
 
         let assistant_message = ChatMessage {

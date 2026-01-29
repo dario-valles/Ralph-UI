@@ -189,30 +189,6 @@ describe('PRDChatPanel', () => {
     watchedPlanContent: null,
     watchedPlanPath: null,
     isWatchingPlan: false,
-    // Hybrid GSD state
-    researchStatus: {
-      architecture: { running: false, complete: false },
-      codebase: { running: false, complete: false },
-      bestPractices: { running: false, complete: false },
-      risks: { running: false, complete: false },
-    },
-    researchResults: [],
-    researchSynthesis: null,
-    requirementsDoc: null,
-    roadmapDoc: null,
-    selectedResearchAgent: null,
-    availableResearchAgents: ['claude', 'opencode', 'cursor'],
-    phaseState: {
-      researchStarted: false,
-      researchComplete: false,
-      requirementsGenerated: false,
-      scopingComplete: false,
-      roadmapGenerated: false,
-      unscopedCount: 0,
-    },
-    isResearchRunning: false,
-    isSynthesizing: false,
-    isGeneratingRequirements: false,
     // Actions
     sendMessage: mockSendMessage,
     startSession: mockStartSession,
@@ -230,20 +206,6 @@ describe('PRDChatPanel', () => {
     stopWatchingPlanFile: mockStopWatchingPlanFile,
     updatePlanContent: mockUpdatePlanContent,
     updateSessionAgent: mockUpdateSessionAgent,
-    // Hybrid GSD actions
-    loadAvailableAgents: vi.fn(),
-    setSelectedResearchAgent: vi.fn(),
-    checkResearchStatus: vi.fn(),
-    loadSynthesis: vi.fn(),
-    loadRequirements: vi.fn(),
-    loadRoadmap: vi.fn(),
-    startResearch: vi.fn(),
-    synthesizeResearch: vi.fn(),
-    generateRequirements: vi.fn(),
-    applyScopeSelection: vi.fn(),
-    addRequirement: vi.fn(),
-    generateRoadmap: vi.fn(),
-    updatePhaseState: vi.fn(),
   }
 
   beforeEach(() => {

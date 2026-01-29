@@ -1,32 +1,27 @@
 /**
  * PRD Chat State Management Store
  *
- * This store manages all PRD chat functionality including:
+ * This store manages PRD chat functionality including:
  * - Chat sessions and messages
  * - Messaging with AI agents
  * - File watching for plan updates
- * - Research operations (hybrid GSD)
- * - Requirements and roadmap generation (GSD workflow)
  *
- * The store is organized using the Zustand slices pattern for maintainability.
+ * Note: For PRD workflow management (phases, requirements, research),
+ * use prdWorkflowStore instead.
  */
 import { create } from 'zustand'
 import {
   // Types
   type PRDChatStore,
-  type HybridPhaseState,
   type StartSessionOptions,
   // Slices
   createChatSessionSlice,
   createMessagingSlice,
   createFileWatchSlice,
-  createResearchSlice,
-  createGsdSlice,
-  createIdeaGenerationSlice,
 } from './slices'
 
-// Re-export types for backward compatibility
-export type { HybridPhaseState, StartSessionOptions }
+// Re-export types
+export type { StartSessionOptions }
 
 /**
  * PRD Chat Store
@@ -37,9 +32,6 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
   const chatSessionSlice = createChatSessionSlice(set, get)
   const messagingSlice = createMessagingSlice(set, get)
   const fileWatchSlice = createFileWatchSlice(set, get)
-  const researchSlice = createResearchSlice(set, get)
-  const gsdSlice = createGsdSlice(set, get)
-  const ideaGenSlice = createIdeaGenerationSlice(set, get)
 
   return {
     // Core State (ChatCoreState)
@@ -60,31 +52,6 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     watchedPlanContent: fileWatchSlice.watchedPlanContent,
     watchedPlanPath: fileWatchSlice.watchedPlanPath,
     isWatchingPlan: fileWatchSlice.isWatchingPlan,
-
-    // Research State (Hybrid GSD)
-    researchStatus: researchSlice.researchStatus,
-    researchResults: researchSlice.researchResults,
-    researchSynthesis: researchSlice.researchSynthesis,
-    selectedResearchAgent: researchSlice.selectedResearchAgent,
-    availableResearchAgents: researchSlice.availableResearchAgents,
-    isResearchRunning: researchSlice.isResearchRunning,
-    isSynthesizing: researchSlice.isSynthesizing,
-
-    // GSD Workflow State
-    requirementsDoc: gsdSlice.requirementsDoc,
-    roadmapDoc: gsdSlice.roadmapDoc,
-    phaseState: gsdSlice.phaseState,
-    isGeneratingRequirements: gsdSlice.isGeneratingRequirements,
-    projectType: gsdSlice.projectType,
-    projectTypeDetection: gsdSlice.projectTypeDetection,
-    isDetectingProjectType: gsdSlice.isDetectingProjectType,
-    contextQuality: gsdSlice.contextQuality,
-    isAnalyzingQuality: gsdSlice.isAnalyzingQuality,
-    contextSuggestions: gsdSlice.contextSuggestions,
-    isLoadingSuggestions: gsdSlice.isLoadingSuggestions,
-
-    // Idea Generation State
-    ideaGeneration: ideaGenSlice.ideaGeneration,
 
     // Chat Session Actions
     startSession: chatSessionSlice.startSession,
@@ -107,40 +74,5 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     startWatchingPlanFile: fileWatchSlice.startWatchingPlanFile,
     stopWatchingPlanFile: fileWatchSlice.stopWatchingPlanFile,
     updatePlanContent: fileWatchSlice.updatePlanContent,
-
-    // Research Actions (Hybrid GSD)
-    loadAvailableAgents: researchSlice.loadAvailableAgents,
-    setSelectedResearchAgent: researchSlice.setSelectedResearchAgent,
-    setResearchStatus: researchSlice.setResearchStatus,
-    checkResearchStatus: researchSlice.checkResearchStatus,
-    loadSynthesis: researchSlice.loadSynthesis,
-    startResearch: researchSlice.startResearch,
-    synthesizeResearch: researchSlice.synthesizeResearch,
-
-    // GSD Workflow Actions
-    generateRequirements: gsdSlice.generateRequirements,
-    loadRequirements: gsdSlice.loadRequirements,
-    applyScopeSelection: gsdSlice.applyScopeSelection,
-    addRequirement: gsdSlice.addRequirement,
-    generateRoadmap: gsdSlice.generateRoadmap,
-    loadRoadmap: gsdSlice.loadRoadmap,
-    clearHybridState: gsdSlice.clearHybridState,
-    updatePhaseState: gsdSlice.updatePhaseState,
-    detectProjectType: gsdSlice.detectProjectType,
-    analyzeContextQuality: gsdSlice.analyzeContextQuality,
-    generateContextSuggestions: gsdSlice.generateContextSuggestions,
-    setProjectType: gsdSlice.setProjectType,
-
-    // Idea Generation Actions
-    setIdeaGenMode: ideaGenSlice.setIdeaGenMode,
-    setInterests: ideaGenSlice.setInterests,
-    setVariationDimensions: ideaGenSlice.setVariationDimensions,
-    generateIdeas: ideaGenSlice.generateIdeas,
-    generateVariations: ideaGenSlice.generateVariations,
-    exploreSpace: ideaGenSlice.exploreSpace,
-    validateIdea: ideaGenSlice.validateIdea,
-    analyzeMarket: ideaGenSlice.analyzeMarket,
-    selectIdea: ideaGenSlice.selectIdea,
-    clearIdeaGeneration: ideaGenSlice.clearIdeaGeneration,
   }
 })

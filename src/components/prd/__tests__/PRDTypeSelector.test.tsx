@@ -30,21 +30,11 @@ vi.mock('../ImportGitHubIssuesDialog', () => ({
   ImportGitHubIssuesDialog: () => null,
 }))
 
-// Mock SimpleGSDIntro component
-vi.mock('../gsd/SimpleGSDIntro', () => ({
-  SimpleGSDIntro: ({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) => (
-    <div data-testid="simple-gsd-intro">
-      <button onClick={onStart}>Get Started</button>
-      <button onClick={onSkip}>Skip</button>
-    </div>
-  ),
-}))
-
 // Mock onboarding store to indicate user has seen onboarding
 vi.mock('@/stores/onboardingStore', () => ({
   useOnboardingStore: () => ({
-    hasSeenGSDOnboarding: true, // Mock as already seen to skip onboarding in tests
-    markGSDOnboardingAsSeen: vi.fn(),
+    hasSeenMainOnboarding: true,
+    markMainOnboardingAsSeen: vi.fn(),
   }),
 }))
 

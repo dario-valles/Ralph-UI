@@ -174,8 +174,6 @@ mod tests {
             created_at: "2026-01-17T00:00:00Z".to_string(),
             updated_at: "2026-01-17T00:00:00Z".to_string(),
             message_count: None,
-            gsd_mode: false,
-            gsd_state: None,
             pending_operation_started_at: None,
             external_session_id: None,
         }

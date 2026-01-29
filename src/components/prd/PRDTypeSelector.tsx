@@ -31,10 +31,8 @@ import {
 } from 'lucide-react'
 import { ProjectPicker } from '@/components/projects/ProjectPicker'
 import { ImportGitHubIssuesDialog } from './ImportGitHubIssuesDialog'
-import { SimpleGSDIntro } from './gsd/SimpleGSDIntro'
 import type { PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
-import { useOnboardingStore } from '@/stores/onboardingStore'
 
 type WorkflowMode = 'guided' | 'github'
 
@@ -165,7 +163,7 @@ export function PRDTypeSelector({
   className,
   defaultProjectPath,
 }: PRDTypeSelectorProps) {
-  const [step, setStep] = useState<'mode' | 'type' | 'intro'>('mode')
+  const [step, setStep] = useState<'mode' | 'type'>('mode')
   const [selectedMode, setSelectedMode] = useState<WorkflowMode | null>(null)
   const [selectedType, setSelectedType] = useState<PRDTypeValue | null>(null)
   const [projectPath, setProjectPath] = useState<string>(defaultProjectPath || '')
@@ -173,8 +171,6 @@ export function PRDTypeSelector({
   const [showGitHubImport, setShowGitHubImport] = useState(false)
   const [showNameDialog, setShowNameDialog] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
-
-  const { hasSeenGSDOnboarding, markGSDOnboardingAsSeen } = useOnboardingStore()
 
   // Derive project name from path
   const projectName = projectPath ? projectPath.split('/').pop() || projectPath : ''
@@ -187,18 +183,7 @@ export function PRDTypeSelector({
       return
     }
 
-    // For guided mode, show simplified intro if first-time
-    if (mode === 'guided' && !hasSeenGSDOnboarding) {
-      setStep('intro') // Show simplified intro (not 4-step tour)
-      return
-    }
-
-    // Experienced users go straight to type selection
-    setStep('type')
-  }
-
-  const handleIntroComplete = () => {
-    markGSDOnboardingAsSeen()
+    // Go straight to type selection
     setStep('type')
   }
 
@@ -289,16 +274,6 @@ export function PRDTypeSelector({
       </DialogContent>
     </Dialog>
   )
-
-  // Step 0: Simple GSD Intro (only for first-time users)
-  if (step === 'intro') {
-    return (
-      <>
-        <SimpleGSDIntro onStart={handleIntroComplete} onSkip={handleIntroComplete} />
-        {nameSessionDialog}
-      </>
-    )
-  }
 
   // Step 1: Workflow Mode Selection
   if (step === 'mode') {

@@ -15,24 +15,19 @@ import { Button } from '@/components/ui/button'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { usePrdWorkflowStore } from '@/stores/prdWorkflowStore'
 import { PRDTypeSelector } from './PRDTypeSelector'
 import { SessionsSidebar } from './SessionsSidebar'
 import { PRDPlanSidebar } from './PRDPlanSidebar'
 import { PRDFileExecutionDialog } from './PRDFileExecutionDialog'
-import { ResearchProgressModal } from './ResearchProgressModal'
-import { RequirementsScopeSheet } from './RequirementsScopeSheet'
-import { GsdExportDialog } from './GsdExportDialog'
-import { CloneSessionDialog } from './CloneSessionDialog'
 import { ChatHeader } from './ChatHeader'
 import { ChatArea } from './ChatArea'
-import { ChatInputArea } from './ChatInputArea'
+import { ChatInputArea, type ChatInputHandle } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
-import type { ResearchSynthesis, ResearchResult, GsdWorkflowState } from '@/types/gsd'
-import type { PhaseAction, PhaseState } from './PhaseActionBar'
-import { prdChatApi, prdApi, gsdApi } from '@/lib/backend-api'
+import { prdChatApi, prdApi } from '@/lib/backend-api'
 import { toast } from '@/stores/toastStore'
-import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ChatSession } from '@/types'
-import { cn, generateUUID } from '@/lib/utils'
+import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ExecutionMode } from '@/types'
+import { cn } from '@/lib/utils'
 import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 import { usePRDChatEvents } from '@/hooks/usePRDChatEvents'
 import { useIsMobile, useScrollDirection } from '@/hooks/useMediaQuery'
@@ -56,6 +51,7 @@ export function PRDChatPanel() {
   const prevSessionIdRef = useRef<string | null>(null)
   const prevAgentTypeRef = useRef<string>('')
   const prevProjectPathRef = useRef<string | undefined>(undefined)
+  const chatInputRef = useRef<ChatInputHandle>(null)
 
   // Consolidated UI state
   const {
@@ -89,15 +85,6 @@ export function PRDChatPanel() {
   // State for PRD execution dialog
   const [executePrdFile, setExecutePrdFile] = useState<PRDFile | null>(null)
 
-  // Hybrid GSD modal states
-  const [showResearchModal, setShowResearchModal] = useState(false)
-  const [showScopeSheet, setShowScopeSheet] = useState(false)
-  const [showExportDialog, setShowExportDialog] = useState(false)
-  const [isGeneratingFromPrompt, setIsGeneratingFromPrompt] = useState(false)
-  const [showCloneDialog, setShowCloneDialog] = useState(false)
-  const [sessionToClone, setSessionToClone] = useState<ChatSession | null>(null)
-  const [runningPhaseAction, setRunningPhaseAction] = useState<PhaseAction | null>(null)
-
   const {
     sessions,
     currentSession,
@@ -121,21 +108,15 @@ export function PRDChatPanel() {
     stopWatchingPlanFile,
     updatePlanContent,
     updateSessionAgent,
-    phaseState,
-    requirementsDoc,
-    isResearchRunning,
-    isSynthesizing,
-    isGeneratingRequirements,
-    loadAvailableAgents,
-    checkResearchStatus,
-    loadSynthesis,
-    generateRequirements,
-    applyScopeSelection,
-    addRequirement,
-    generateRoadmap,
-    loadRequirements,
-    loadRoadmap,
   } = usePRDChatStore()
+
+  // Workflow store for execution mode
+  const {
+    currentWorkflow,
+    loadWorkflow,
+    createWorkflow,
+    updateExecutionMode,
+  } = usePrdWorkflowStore()
 
   // Auto-scroll hook for messages
   const {
@@ -270,6 +251,33 @@ export function PRDChatPanel() {
     }
   }, [currentSession, loadHistory])
 
+  // Load or create workflow when session changes
+  useEffect(() => {
+    if (!currentSession?.projectPath) return
+
+    const initWorkflow = async () => {
+      const workflowId = `session-${currentSession.id}`
+      try {
+        // Try to load existing workflow
+        await loadWorkflow(currentSession.projectPath!, workflowId)
+        const state = usePrdWorkflowStore.getState()
+        // If no workflow exists, create one
+        if (!state.currentWorkflow) {
+          await createWorkflow(
+            currentSession.projectPath!,
+            workflowId,
+            'existing', // Default to existing project mode
+            currentSession.id
+          )
+        }
+      } catch (err) {
+        console.error('[PRDChatPanel] Failed to init workflow:', err)
+      }
+    }
+
+    initWorkflow()
+  }, [currentSession?.id, currentSession?.projectPath, loadWorkflow, createWorkflow])
+
   // Connection status tracking for mobile resilience
   const connectionStatus = useConnectionStore((state) => state.status)
   const prevConnectionStatusRef = useRef(connectionStatus)
@@ -346,24 +354,6 @@ export function PRDChatPanel() {
     }
   }, [watchedPlanContent, assessQuality])
 
-  // Load available agents and existing data when session changes
-  useEffect(() => {
-    if (currentSession?.projectPath) {
-      loadAvailableAgents()
-      checkResearchStatus()
-      loadSynthesis()
-      loadRequirements()
-      loadRoadmap()
-    }
-  }, [
-    currentSession?.id,
-    currentSession?.projectPath,
-    loadAvailableAgents,
-    checkResearchStatus,
-    loadSynthesis,
-    loadRequirements,
-    loadRoadmap,
-  ])
 
   // ============================================================================
   // Event Handlers
@@ -475,193 +465,6 @@ export function PRDChatPanel() {
     }
   }
 
-  const handlePhaseAction = async (action: PhaseAction) => {
-    if (!currentSession?.projectPath) return
-
-    setRunningPhaseAction(action)
-    try {
-      switch (action) {
-        case 'research':
-          setShowResearchModal(true)
-          break
-        case 'requirements':
-          await generateRequirements()
-          toast.success(
-            'Requirements Generated',
-            'Requirements have been extracted and are ready for scoping.'
-          )
-          break
-        case 'scope':
-          if (requirementsDoc) {
-            setShowScopeSheet(true)
-          } else {
-            toast.error('No Requirements', 'Generate requirements first before scoping.')
-          }
-          break
-        case 'roadmap':
-          await generateRoadmap()
-          toast.success(
-            'Roadmap Generated',
-            'Execution roadmap has been created from scoped requirements.'
-          )
-          break
-        case 'export':
-          setShowExportDialog(true)
-          break
-      }
-    } catch (err) {
-      console.error(`Failed to execute phase action ${action}:`, err)
-      toast.error(
-        'Action Failed',
-        err instanceof Error ? err.message : 'An unexpected error occurred.'
-      )
-    } finally {
-      setRunningPhaseAction(null)
-    }
-  }
-
-  const handleResearchComplete = (synthesis: ResearchSynthesis, results: ResearchResult[]) => {
-    usePRDChatStore.setState({ researchSynthesis: synthesis })
-    usePRDChatStore.getState().updatePhaseState()
-
-    // Partition results once for reuse
-    const successfulResults = results.filter((r) => r.success)
-    const failedResults = results.filter((r) => !r.success)
-
-    if (currentSession) {
-      const completedAreas = successfulResults.map((r) => r.researchType).join(', ')
-      const themesPreview =
-        synthesis.keyThemes
-          ?.slice(0, 5)
-          .map((t) => `- ${t}`)
-          .join('\n') || ''
-
-      let content = `## Research Complete\n\n**Analyzed areas:** ${completedAreas || 'None'}`
-
-      if (failedResults.length > 0) {
-        const failedAreas = failedResults.map((r) => r.researchType).join(', ')
-        content += `\n\n**Failed:** ${failedAreas} (can be re-run from the research panel)`
-      }
-
-      if (themesPreview) {
-        content += `\n\n**Key themes:**\n${themesPreview}`
-      }
-
-      content += `\n\n---\n*Research saved to \`.ralph-ui/planning/\`. Click **Requirements** below to generate requirements.*`
-
-      const synthesisMessage = {
-        id: `synthesis-${generateUUID()}`,
-        sessionId: currentSession.id,
-        role: 'assistant' as const,
-        content,
-        createdAt: new Date().toISOString(),
-        metadata: { type: 'research-synthesis' },
-      }
-      usePRDChatStore.setState((state) => ({
-        messages: [...state.messages, synthesisMessage],
-      }))
-    }
-
-    setShowResearchModal(false)
-
-    if (failedResults.length > 0) {
-      toast.warning(
-        'Research Partially Complete',
-        `${successfulResults.length} succeeded, ${failedResults.length} failed.`
-      )
-    } else {
-      toast.success('Research Complete', `${results.length} research reports generated.`)
-    }
-  }
-
-  const handleScopeComplete = () => {
-    setShowScopeSheet(false)
-    toast.success(
-      'Scoping Complete',
-      'Requirements have been categorized. Generating execution plan...'
-    )
-    // Auto-generate roadmap after scoping is complete
-    handlePhaseAction('roadmap')
-  }
-
-  // AI-powered bulk requirement generation
-  const handleGenerateRequirementsFromPrompt = async (
-    prompt: string,
-    agentType?: string,
-    model?: string,
-    count?: number
-  ) => {
-    if (!currentSession || !activeProject?.path) {
-      throw new Error('No active session')
-    }
-    setIsGeneratingFromPrompt(true)
-    try {
-      const result = await gsdApi.generateRequirementsFromPrompt(
-        activeProject.path,
-        currentSession.id,
-        prompt,
-        count,
-        agentType,
-        model
-      )
-      return result
-    } finally {
-      setIsGeneratingFromPrompt(false)
-    }
-  }
-
-  const handleAcceptGeneratedRequirements = async (
-    requirements: import('@/types/gsd').GeneratedRequirement[]
-  ) => {
-    if (!currentSession || !activeProject?.path) {
-      throw new Error('No active session')
-    }
-    await gsdApi.addGeneratedRequirements(activeProject.path, currentSession.id, requirements)
-    // Reload requirements to reflect changes
-    await loadRequirements()
-    toast.success('Requirements Added', `${requirements.length} requirements added successfully.`)
-  }
-
-  const handleExportComplete = (prdName: string, result: { storyCount: number }) => {
-    setShowExportDialog(false)
-
-    // Add success message to chat
-    if (currentSession) {
-      const exportMessage = {
-        id: `export-${generateUUID()}`,
-        sessionId: currentSession.id,
-        role: 'assistant' as const,
-        content: `## PRD Exported Successfully!\n\nYour PRD **${prdName}** has been created at \`.ralph-ui/prds/${prdName}.json\`.\n\n**Summary:**\n- ${result.storyCount} stories created from your requirements\n- Ready for execution with the Ralph Wiggum Loop\n\nYou can now execute this PRD from the PRD list or start a new planning session.`,
-        createdAt: new Date().toISOString(),
-        metadata: { type: 'export-success' },
-      }
-      usePRDChatStore.setState((state) => ({
-        messages: [...state.messages, exportMessage],
-      }))
-    }
-  }
-
-  const handleCloneSession = (session: ChatSession) => {
-    setSessionToClone(session)
-    setShowCloneDialog(true)
-  }
-
-  const handleCloneComplete = async (newState: GsdWorkflowState) => {
-    setShowCloneDialog(false)
-    setSessionToClone(null)
-
-    // Reload sessions to show the new one
-    if (activeProject?.path) {
-      await loadSessions(activeProject.path)
-
-      // Select the newly created session
-      const newSession = sessions.find((s) => s.id === newState.sessionId)
-      if (newSession) {
-        setCurrentSession(newSession)
-      }
-    }
-  }
-
   const handlePlanToggle = () => {
     if (isMobile) {
       setMobilePlanSheetOpen(!mobilePlanSheetOpen)
@@ -670,19 +473,20 @@ export function PRDChatPanel() {
     }
   }
 
+  const handleExecutionModeChange = async (mode: ExecutionMode) => {
+    if (!currentSession?.projectPath || !currentWorkflow) return
+    await updateExecutionMode(currentSession.projectPath, currentWorkflow.id, mode)
+  }
+
+  /** Insert text into the chat input (used by guidance panel) */
+  const handleInsertInput = useCallback((text: string) => {
+    chatInputRef.current?.insertText(text)
+    chatInputRef.current?.focus()
+  }, [])
+
   // ============================================================================
   // Computed Values
   // ============================================================================
-
-  const effectiveRunningAction: PhaseAction | null = isResearchRunning
-    ? 'research'
-    : runningPhaseAction
-
-  const currentPhaseState: PhaseState = {
-    ...phaseState,
-    isRunning: isResearchRunning || isSynthesizing || isGeneratingRequirements || loading,
-    runningAction: effectiveRunningAction,
-  }
 
   const hasMessages = messages.length > 0
   const isPlanVisible = isMobile ? mobilePlanSheetOpen : showPlanSidebar
@@ -717,7 +521,6 @@ export function PRDChatPanel() {
         onCreateSession={openTypeSelector}
         onSelectSession={setCurrentSession}
         onDeleteSession={openDeleteConfirm}
-        onCloneSession={handleCloneSession}
         qualityAssessment={qualityAssessment}
         loading={loading}
         onRefreshQuality={assessQuality}
@@ -793,6 +596,7 @@ export function PRDChatPanel() {
             onCreateSession={openTypeSelector}
             onQuickStart={handleQuickStart}
             onSendMessage={handleSendMessage}
+            onInsertInput={handleInsertInput}
             onRetry={handleRetryMessage}
             onCancel={handleCancelStreaming}
             onScrollToBottom={scrollToBottom}
@@ -800,15 +604,16 @@ export function PRDChatPanel() {
 
           {/* Input Area */}
           <ChatInputArea
+            ref={chatInputRef}
             currentSession={currentSession}
             hasMessages={hasMessages}
             loading={loading}
             streaming={streaming}
             qualityAssessment={qualityAssessment}
-            phaseState={currentPhaseState}
+            executionMode={currentWorkflow?.executionMode}
             onSendMessage={handleSendMessage}
-            onPhaseAction={handlePhaseAction}
             onRefreshQuality={assessQuality}
+            onExecutionModeChange={handleExecutionModeChange}
           />
         </CardContent>
       </Card>
@@ -859,60 +664,6 @@ export function PRDChatPanel() {
         file={executePrdFile}
         open={!!executePrdFile}
         onOpenChange={(open) => !open && setExecutePrdFile(null)}
-      />
-
-      {/* Hybrid GSD Modals */}
-      {currentSession?.projectPath && (
-        <>
-          <ResearchProgressModal
-            open={showResearchModal}
-            onOpenChange={setShowResearchModal}
-            projectPath={currentSession.projectPath}
-            sessionId={currentSession.id}
-            onComplete={handleResearchComplete}
-            conversationContext={messages.map((m) => `${m.role}: ${m.content}`).join('\n')}
-          />
-
-          <RequirementsScopeSheet
-            open={showScopeSheet}
-            onOpenChange={setShowScopeSheet}
-            requirements={requirementsDoc}
-            onApplyScope={applyScopeSelection}
-            onAddRequirement={addRequirement}
-            onComplete={handleScopeComplete}
-            isLoading={loading}
-            onGenerateRequirements={handleGenerateRequirementsFromPrompt}
-            onAcceptGeneratedRequirements={handleAcceptGeneratedRequirements}
-            isGenerating={isGeneratingFromPrompt}
-          />
-
-          <GsdExportDialog
-            open={showExportDialog}
-            onOpenChange={setShowExportDialog}
-            sessionId={currentSession?.id || ''}
-            sessionTitle={currentSession?.title || 'untitled-prd'}
-            projectPath={activeProject?.path || ''}
-            onExportComplete={handleExportComplete}
-          />
-        </>
-      )}
-
-      {/* Clone Session Dialog - outside currentSession check since it clones any session */}
-      <CloneSessionDialog
-        open={showCloneDialog}
-        onOpenChange={setShowCloneDialog}
-        session={
-          sessionToClone
-            ? {
-                sessionId: sessionToClone.id,
-                phase: undefined,
-                isComplete: false,
-                updatedAt: sessionToClone.updatedAt,
-              }
-            : null
-        }
-        projectPath={activeProject?.path ?? ''}
-        onCloneComplete={handleCloneComplete}
       />
     </div>
   )
