@@ -12,7 +12,7 @@
     - [x] Sub-task: Mock up UI changes for a more "IDE-like" chat experience.
 - [x] Task: Conductor - User Manual Verification 'Analysis & PRD Flow Audit' (Protocol in workflow.md)
 
-## Phase 2: PRD Flow Implementation
+## Phase 2: PRD Flow Implementation [checkpoint: eeecf48]
 - [x] Task: Implement improved system prompts.
     - [x] Sub-task: Update backend prompt templates.
     - [x] Sub-task: Write tests to verify prompt outputs against expected PRD structure.
@@ -23,7 +23,7 @@
 - [x] Task: Validate PRD Flow.
     - [x] Sub-task: Run an end-to-end test generating a sample PRD.
     - [x] Sub-task: Verify the generated PRD content matches the project standards.
-- [ ] Task: Conductor - User Manual Verification 'PRD Flow Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'PRD Flow Implementation' (Protocol in workflow.md)
 
 ## Phase 3: System Stability & Polish
 - [ ] Task: Review and fix high-priority bugs.
