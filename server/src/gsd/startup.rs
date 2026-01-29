@@ -101,6 +101,96 @@ pub struct GeneratedIdea {
     pub tech_stack: Option<Vec<String>>,
 }
 
+/// Complexity level for feasibility analysis
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComplexityLevel {
+    Low,
+    Medium,
+    High,
+}
+
+/// Competition level
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompetitionLevel {
+    Low,
+    Medium,
+    High,
+}
+
+/// Monetization potential
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MonetizationPotential {
+    Low,
+    Medium,
+    High,
+}
+
+/// Estimated timeframes for development
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimatedWeeks {
+    pub mvp: u8,
+    pub v1: u8,
+    pub v2: u8,
+}
+
+/// Risk factor with mitigation strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RiskFactor {
+    pub risk: String,
+    pub mitigation: String,
+}
+
+/// Technical feasibility analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdeaFeasibility {
+    pub feasibility_score: u8,
+    pub complexity_level: ComplexityLevel,
+    pub estimated_weeks: EstimatedWeeks,
+    pub required_skills: Vec<String>,
+    pub risk_factors: Vec<RiskFactor>,
+    pub simplified_mvp: Option<Box<GeneratedIdea>>,
+}
+
+/// Competitor information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompetitorInfo {
+    pub name: String,
+    pub strengths: Vec<String>,
+    pub weaknesses: Vec<String>,
+}
+
+/// Market opportunity analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketOpportunity {
+    pub tam: String,
+    pub sam: String,
+    pub target_user_count: String,
+    pub acquisition_channels: Vec<String>,
+    pub competition: CompetitionLevel,
+    pub monetization_potential: MonetizationPotential,
+    pub competitors: Vec<CompetitorInfo>,
+    pub gaps: Vec<String>,
+}
+
+/// Validated idea with feasibility and market analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidatedIdea {
+    pub base: GeneratedIdea,
+    pub feasibility: Option<IdeaFeasibility>,
+    pub market: Option<MarketOpportunity>,
+    pub user_score: Option<u8>,
+    pub interest_match_score: Option<u8>,
+}
+
 /// Detect project type from file structure
 pub fn detect_project_type(project_path: &Path) -> ProjectTypeDetection {
     let mut evidence = Vec::new();

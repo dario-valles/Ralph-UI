@@ -135,11 +135,48 @@ pub async fn update_prd_chat_agent(
     session_id: String,
     project_path: String,
     agent_type: String,
+    provider_id: Option<String>,
 ) -> Result<(), String> {
     let project_path_obj = as_path(&project_path);
 
-    chat_ops::update_chat_session_agent(project_path_obj, &session_id, &agent_type)
+    // Build composite agent_type if provider is specified
+    let composite_agent_type = if agent_type == "claude" {
+        if let Some(provider) = &provider_id {
+            if provider != "anthropic" {
+                log::info!(
+                    "🔄 Updating session {} to use Claude with provider: {}",
+                    session_id,
+                    provider
+                );
+                format!("{}:{}", agent_type, provider)
+            } else {
+                log::info!(
+                    "✓ Updating session {} to use Claude (Anthropic)",
+                    session_id
+                );
+                agent_type
+            }
+        } else {
+            log::info!("✓ Updating session {} to use Claude (default)", session_id);
+            agent_type
+        }
+    } else {
+        log::info!(
+            "✓ Updating session {} to use agent: {}",
+            session_id,
+            agent_type
+        );
+        agent_type
+    };
+
+    chat_ops::update_chat_session_agent(project_path_obj, &session_id, &composite_agent_type)
         .map_err(|e| format!("Failed to update agent type: {}", e))?;
+
+    log::info!(
+        "✓ Session agent updated successfully: {} -> {}",
+        session_id,
+        composite_agent_type
+    );
 
     Ok(())
 }

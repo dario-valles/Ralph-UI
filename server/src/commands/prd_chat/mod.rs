@@ -68,14 +68,37 @@ pub struct AgentAvailabilityResult {
 // Shared Helper Functions
 // ============================================================================
 
-/// Parse agent type string to enum
+/// Parse composite agent type string (e.g., "claude:zai" or "claude")
+/// Returns (base_agent_type, optional_provider_id)
+pub fn parse_agent_type_with_provider(
+    agent_type: &str,
+) -> Result<(AgentType, Option<String>), String> {
+    let parts: Vec<&str> = agent_type.split(':').collect();
+
+    let base_agent = match parts.first().map(|s| s.to_lowercase()).as_deref() {
+        Some("claude") => AgentType::Claude,
+        Some("opencode") => AgentType::Opencode,
+        Some("cursor") => AgentType::Cursor,
+        Some("codex") => AgentType::Codex,
+        Some("qwen") => AgentType::Qwen,
+        Some("droid") => AgentType::Droid,
+        Some("gemini") => AgentType::Gemini,
+        _ => return Err(format!("Unknown agent type: {}", agent_type)),
+    };
+
+    // Extract provider if present (only valid for Claude agent)
+    let provider = if parts.len() > 1 && base_agent == AgentType::Claude {
+        Some(parts[1].to_string())
+    } else {
+        None
+    };
+
+    Ok((base_agent, provider))
+}
+
+/// Legacy function - now parses only base agent type
 pub fn parse_agent_type(agent_type: &str) -> Result<AgentType, String> {
-    match agent_type.to_lowercase().as_str() {
-        "claude" => Ok(AgentType::Claude),
-        "opencode" => Ok(AgentType::Opencode),
-        "cursor" => Ok(AgentType::Cursor),
-        _ => Err(format!("Unknown agent type: {}", agent_type)),
-    }
+    parse_agent_type_with_provider(agent_type).map(|(agent_type, _provider)| agent_type)
 }
 
 /// Get a default title for a PRD type
@@ -195,6 +218,59 @@ mod tests {
         let result = parse_agent_type("invalid_agent");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unknown agent type"));
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_claude_zai() {
+        let (agent, provider) = parse_agent_type_with_provider("claude:zai").unwrap();
+        assert_eq!(agent, AgentType::Claude);
+        assert_eq!(provider, Some("zai".to_string()));
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_claude_only() {
+        let (agent, provider) = parse_agent_type_with_provider("claude").unwrap();
+        assert_eq!(agent, AgentType::Claude);
+        assert_eq!(provider, None);
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_non_claude_with_provider() {
+        // Provider ignored for non-Claude agents
+        let (agent, provider) = parse_agent_type_with_provider("cursor:zai").unwrap();
+        assert_eq!(agent, AgentType::Cursor);
+        assert_eq!(provider, None);
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_opencode() {
+        let (agent, provider) = parse_agent_type_with_provider("opencode").unwrap();
+        assert_eq!(agent, AgentType::Opencode);
+        assert_eq!(provider, None);
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_invalid() {
+        let result = parse_agent_type_with_provider("invalid:provider");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown agent type"));
+    }
+
+    #[test]
+    fn test_parse_agent_type_with_provider_case_insensitive() {
+        let (agent, provider) = parse_agent_type_with_provider("CLAUDE:ZAI").unwrap();
+        assert_eq!(agent, AgentType::Claude);
+        assert_eq!(provider, Some("ZAI".to_string()));
+    }
+
+    #[test]
+    fn test_parse_agent_type_legacy_still_works() {
+        // Legacy function should still work with composite types
+        let agent = parse_agent_type("claude:zai").unwrap();
+        assert_eq!(agent, AgentType::Claude);
+
+        let agent = parse_agent_type("claude").unwrap();
+        assert_eq!(agent, AgentType::Claude);
     }
 
     // -------------------------------------------------------------------------

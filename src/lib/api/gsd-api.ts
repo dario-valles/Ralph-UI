@@ -19,6 +19,8 @@ import type {
   ContextSuggestions,
   GeneratedIdea,
   ProjectType,
+  ValidatedIdea,
+  VariationDimension,
 } from '@/types/gsd'
 import type {
   RequirementsDoc,
@@ -343,5 +345,44 @@ export const gsdApi = {
     context: QuestioningContext
   ): Promise<GeneratedIdea[]> => {
     return await invoke('generate_idea_starters', { projectType, context })
+  },
+
+  /** Generate idea variations based on dimensions */
+  generateIdeaVariations: async (
+    projectType: ProjectType,
+    context: QuestioningContext,
+    variationDimensions: VariationDimension[],
+    count: number = 3
+  ): Promise<ValidatedIdea[]> => {
+    return await invoke('generate_idea_variations', {
+      projectType,
+      context,
+      variationDimensions,
+      count,
+    })
+  },
+
+  /** Analyze market opportunity for an idea */
+  analyzeMarketOpportunity: async (
+    idea: GeneratedIdea
+  ): Promise<import('@/types/gsd').MarketOpportunity> => {
+    return await invoke('analyze_market_opportunity', { idea })
+  },
+
+  /** Validate technical feasibility of an idea */
+  validateIdeaFeasibility: async (
+    idea: GeneratedIdea,
+    projectType: ProjectType
+  ): Promise<import('@/types/gsd').IdeaFeasibility> => {
+    return await invoke('validate_idea_feasibility', { idea, projectType })
+  },
+
+  /** Explore idea space from interests */
+  exploreIdeaSpace: async (
+    domain: string,
+    interests: string[],
+    count: number = 5
+  ): Promise<ValidatedIdea[]> => {
+    return await invoke('explore_idea_space', { domain, interests, count })
   },
 }

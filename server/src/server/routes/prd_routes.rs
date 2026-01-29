@@ -13,7 +13,7 @@ use crate::file_storage::chat_ops;
 use crate::utils::as_path;
 use serde_json::Value;
 
-use super::{get_arg, route_async, route_unit_async, ServerAppState};
+use super::{get_arg, get_opt_arg, route_async, route_unit_async, ServerAppState};
 
 /// Route PRD-related commands
 pub async fn route_prd_command(
@@ -99,10 +99,12 @@ pub async fn route_prd_command(
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
             let agent_type: String = get_arg(&args, "agentType")?;
+            let provider_id: Option<String> = get_opt_arg(&args, "providerId")?;
             route_unit_async!(commands::prd_chat::update_prd_chat_agent(
                 session_id,
                 project_path,
-                agent_type
+                agent_type,
+                provider_id
             ))
         }
 

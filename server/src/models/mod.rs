@@ -98,7 +98,10 @@ impl std::str::FromStr for AgentType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+        // Handle composite agent types (e.g., "claude:zai") by extracting the base type
+        let base_type = s.split(':').next().unwrap_or(s);
+
+        match base_type.to_lowercase().as_str() {
             "claude" => Ok(AgentType::Claude),
             "opencode" => Ok(AgentType::Opencode),
             "cursor" => Ok(AgentType::Cursor),
@@ -513,5 +516,33 @@ mod tests {
         let mut config = SessionConfig::default();
         config.max_retries = 0;
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_agent_type_from_str_claude_zai() {
+        // Test composite agent type parsing
+        let result = "claude:zai".parse::<AgentType>();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), AgentType::Claude);
+    }
+
+    #[test]
+    fn test_agent_type_from_str_claude_only() {
+        let result = "claude".parse::<AgentType>();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), AgentType::Claude);
+    }
+
+    #[test]
+    fn test_agent_type_from_str_case_insensitive() {
+        let result = "CLAUDE:ZAI".parse::<AgentType>();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), AgentType::Claude);
+    }
+
+    #[test]
+    fn test_agent_type_from_str_invalid() {
+        let result = "invalid_agent".parse::<AgentType>();
+        assert!(result.is_err());
     }
 }

@@ -20,6 +20,10 @@ import type {
   ContextSuggestions,
   ProjectType,
   QuestioningContext,
+  IdeaGenerationState,
+  IdeaGenMode,
+  ValidatedIdea,
+  VariationDimension,
 } from '@/types/gsd'
 import type {
   RequirementsDoc,
@@ -217,6 +221,35 @@ export interface GsdSlice {
   setProjectType: (type: ProjectType | null) => void
 }
 
+/**
+ * Idea Generation slice state and actions
+ */
+export interface IdeaGenerationSlice {
+  // State
+  ideaGeneration: IdeaGenerationState
+
+  // Actions
+  setIdeaGenMode: (mode: IdeaGenMode) => void
+  setInterests: (interests: string[]) => void
+  setVariationDimensions: (dimensions: VariationDimension[]) => void
+  generateIdeas: (
+    projectType: ProjectType,
+    context: QuestioningContext
+  ) => Promise<void>
+  generateVariations: (
+    projectType: ProjectType,
+    context: QuestioningContext,
+    dimensions: VariationDimension[],
+    count?: number
+  ) => Promise<void>
+  exploreSpace: (domain: string, interests: string[], count?: number) => Promise<void>
+  validateIdea: (idea: ValidatedIdea, projectType: ProjectType) => Promise<void>
+  analyzeMarket: (idea: ValidatedIdea) => Promise<void>
+  selectIdea: (ideaId: string) => void
+  clearIdeaGeneration: () => void
+  clearError: () => void
+}
+
 // ============================================================================
 // Combined Store Type
 // ============================================================================
@@ -229,7 +262,8 @@ export type PRDChatStore = ChatCoreState &
   MessagingSlice &
   FileWatchSlice &
   ResearchSlice &
-  GsdSlice
+  GsdSlice &
+  IdeaGenerationSlice
 
 /**
  * Zustand setter type for slices

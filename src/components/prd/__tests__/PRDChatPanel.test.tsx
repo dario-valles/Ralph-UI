@@ -583,7 +583,7 @@ describe('PRDChatPanel', () => {
       renderWithRouter(<PRDChatPanel />)
 
       // When no sessions exist, show the type selector to create a new one
-      expect(screen.getByRole('button', { name: /AI-Guided PRD/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Import from GitHub/i })).toBeInTheDocument()
     })
 
@@ -817,7 +817,7 @@ describe('PRDChatPanel', () => {
       renderWithRouter(<PRDChatPanel />)
 
       // Type selector is shown instead of empty state
-      expect(screen.getByRole('button', { name: /AI-Guided PRD/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
     })
   })
 

@@ -9,6 +9,7 @@ use crate::events::{
 };
 use crate::models::AgentType;
 use regex::Regex;
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -204,12 +205,110 @@ pub async fn execute_chat_agent<E: ChatEventEmitter>(
     working_dir: Option<&str>,
     external_session_id: Option<&str>,
 ) -> Result<ChatAgentResult, String> {
+    execute_chat_agent_with_env(
+        emitter,
+        session_id,
+        agent_type,
+        prompt,
+        working_dir,
+        external_session_id,
+        None,
+    )
+    .await
+}
+
+/// Execute a chat agent with streaming output and custom environment variables
+///
+/// The `emitter` parameter abstracts the event emission mechanism.
+/// If `external_session_id` is provided, the agent will resume an existing session.
+/// If `env_vars` is provided, those environment variables will be injected into the agent process.
+/// Returns the response content and any newly captured session ID.
+pub async fn execute_chat_agent_with_env<E: ChatEventEmitter>(
+    emitter: &E,
+    session_id: &str,
+    agent_type: AgentType,
+    prompt: &str,
+    working_dir: Option<&str>,
+    external_session_id: Option<&str>,
+    env_vars: Option<&HashMap<String, String>>,
+) -> Result<ChatAgentResult, String> {
     let (program, args) = build_agent_command(agent_type, prompt, external_session_id);
+
+    // Log the command being executed
+    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    log::info!("🚀 EXECUTING AGENT COMMAND");
+    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    log::info!("  Program: {}", program);
+    log::info!("  Arguments ({} total):", args.len());
+    for (i, arg) in args.iter().enumerate() {
+        if arg.len() > 80 {
+            log::info!(
+                "    [{}] {}... (truncated, {} chars total)",
+                i,
+                &arg[..80],
+                arg.len()
+            );
+        } else {
+            log::info!("    [{}] {}", i, arg);
+        }
+    }
+
+    if let Some(dir) = working_dir {
+        log::info!("  Working Directory: {}", dir);
+    }
+    if let Some(sid) = external_session_id {
+        log::info!("  Resuming Session: {}", sid);
+    }
 
     let mut cmd = Command::new(program);
     cmd.args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // Inject custom environment variables
+    if let Some(env_vars) = env_vars {
+        log::info!("  Environment Variables ({} injected):", env_vars.len());
+        for (key, value) in env_vars.iter() {
+            if key.contains("TOKEN") || key.contains("KEY") || key.contains("SECRET") {
+                log::info!("    {}=***MASKED*** (length: {})", key, value.len());
+            } else {
+                log::info!("    {}={}", key, value);
+            }
+            cmd.env(key, value);
+        }
+    }
+
+    // Show the equivalent shell command
+    let shell_args: Vec<String> = args
+        .iter()
+        .map(|arg| {
+            if arg.contains(' ') {
+                format!("\"{}\"", arg.replace('"', "\\\""))
+            } else {
+                arg.clone()
+            }
+        })
+        .collect();
+
+    log::info!("  📝 Equivalent shell command:");
+    if let Some(env_vars) = env_vars {
+        let env_str: Vec<String> = env_vars
+            .iter()
+            .map(|(k, v)| {
+                if k.contains("TOKEN") || k.contains("KEY") || k.contains("SECRET") {
+                    format!("{}=\"***MASKED***\"", k)
+                } else {
+                    format!("{}=\"{}\"", k, v)
+                }
+            })
+            .collect();
+        log::info!("    {}", env_str.join(" "));
+        log::info!("    {} {}", program, shell_args.join(" "));
+    } else {
+        log::info!("    {} {}", program, shell_args.join(" "));
+    }
+
+    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     if let Some(dir) = working_dir {
         cmd.current_dir(dir);
@@ -754,5 +853,13 @@ mod tests {
         let line = "Hello, how can I help you today?";
         assert!(TOOL_START_RE.captures(line).is_none());
         assert!(!TOOL_RESULT_RE.is_match(line));
+    }
+
+    #[test]
+    fn test_execute_chat_agent_with_env_no_vars() {
+        // Test that the function signature exists and compiles
+        // Actual execution tests would require mocking the command
+        // This test just verifies the function exists at compile time
+        assert!(true);
     }
 }

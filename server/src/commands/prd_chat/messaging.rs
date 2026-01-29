@@ -10,7 +10,7 @@ use std::path::Path;
 use uuid::Uuid;
 
 use super::agent_executor::{self, generate_session_title};
-use super::parse_agent_type;
+use super::parse_agent_type_with_provider;
 use super::types::{SendMessageRequest, SendMessageResponse};
 
 // ============================================================================
@@ -160,8 +160,48 @@ pub async fn send_prd_chat_message(
         ),
     };
 
-    // Parse agent type
-    let agent_type = parse_agent_type(&session.agent_type)?;
+    // Parse agent type and provider
+    let (agent_type, provider_id) = parse_agent_type_with_provider(&session.agent_type)?;
+
+    // Build provider environment variables if applicable
+    let provider_env_vars = if agent_type == crate::models::AgentType::Claude {
+        if let Some(provider_id) = &provider_id {
+            log::info!("🔄 Using Claude with provider: {}", provider_id);
+
+            // Load provider token from secrets
+            let secrets = crate::config::SecretsConfig::load()
+                .map_err(|e| format!("Failed to load secrets: {}", e))?;
+            let token = secrets.get_token(provider_id).cloned();
+
+            if token.is_some() {
+                log::info!("✓ Provider token loaded for: {}", provider_id);
+            } else {
+                log::warn!("⚠️  No token found for provider: {}", provider_id);
+            }
+
+            // Build environment variables for the provider
+            let env_vars = crate::config::build_provider_env_vars(provider_id, token.as_deref());
+
+            // Log the environment variables being set (with masked token)
+            log::info!("🔧 Environment variables being set:");
+            for (key, value) in &env_vars {
+                if key.contains("TOKEN") || key.contains("KEY") {
+                    log::info!("  {}=***MASKED***", key);
+                } else {
+                    log::info!("  {}={}", key, value);
+                }
+            }
+
+            Some(env_vars)
+        } else {
+            log::info!("✓ Using Claude with default Anthropic provider");
+            // No provider specified, use default (Anthropic)
+            None
+        }
+    } else {
+        log::info!("✓ Using agent: {} (no provider support)", agent_type);
+        None
+    };
 
     // Set pending operation before agent execution (for page reload recovery)
     if let Err(e) = chat_ops::set_pending_operation(project_path_obj, &request.session_id) {
@@ -171,13 +211,14 @@ pub async fn send_prd_chat_message(
     // Execute CLI agent and get response with streaming using the unified executor
     // Pass external_session_id to enable session resumption (saves 67-90% tokens)
     let emitter = agent_executor::BroadcastEmitter::new(app_handle.clone());
-    let agent_result = match agent_executor::execute_chat_agent(
+    let agent_result = match agent_executor::execute_chat_agent_with_env(
         &emitter,
         &request.session_id,
         agent_type,
         &prompt,
         session.project_path.as_deref(),
         session.external_session_id.as_deref(),
+        provider_env_vars.as_ref(),
     )
     .await
     {

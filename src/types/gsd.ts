@@ -518,3 +518,123 @@ export function getWorkflowCompletionPercentage(phase: GsdPhase): number {
   if (!info) return 0
   return Math.round((info.index / GSD_PHASES.length) * 100)
 }
+
+/**
+ * Idea generation modes
+ */
+export type IdeaGenMode = 'blank_page' | 'vague_notion' | 'explore_space' | 'validate' | 'compare'
+
+/**
+ * Dimensions for varying ideas
+ */
+export type VariationDimension =
+  | 'target_user'
+  | 'tech_stack'
+  | 'features'
+  | 'business_model'
+  | 'platform'
+
+/**
+ * Complexity level for feasibility
+ */
+export type ComplexityLevel = 'low' | 'medium' | 'high'
+
+/**
+ * Competition level
+ */
+export type CompetitionLevel = 'low' | 'medium' | 'high'
+
+/**
+ * Monetization potential
+ */
+export type MonetizationPotential = 'low' | 'medium' | 'high'
+
+/**
+ * Technical feasibility analysis
+ */
+export interface IdeaFeasibility {
+  /** Overall feasibility score (0-100) */
+  feasibilityScore: number
+  /** Complexity level */
+  complexityLevel: ComplexityLevel
+  /** Estimated weeks for each phase */
+  estimatedWeeks: {
+    /** Minimum viable product */
+    mvp: number
+    /** Version 1 with core features */
+    v1: number
+    /** Version 2 with advanced features */
+    v2: number
+  }
+  /** Required technical skills */
+  requiredSkills: string[]
+  /** Risk factors with mitigation strategies */
+  riskFactors: Array<{ risk: string; mitigation: string }>
+  /** Simplified MVP idea if original is too complex */
+  simplifiedMvp?: GeneratedIdea
+}
+
+/**
+ * Market opportunity analysis
+ */
+export interface MarketOpportunity {
+  /** Total addressable market */
+  tam: string
+  /** Serviceable addressable market */
+  sam: string
+  /** Target user count estimate */
+  targetUserCount: string
+  /** Channels for user acquisition */
+  acquisitionChannels: string[]
+  /** Competition level */
+  competition: CompetitionLevel
+  /** Monetization potential */
+  monetizationPotential: MonetizationPotential
+  /** Competitor analysis */
+  competitors: Array<{
+    name: string
+    strengths: string[]
+    weaknesses: string[]
+  }>
+  /** Market gaps and opportunities */
+  gaps: string[]
+}
+
+/**
+ * Validated idea with feasibility and market analysis
+ * Note: The base idea fields are nested under 'base' to match Rust serialization
+ */
+export interface ValidatedIdea {
+  /** The base idea (flattened in JSON via serde flatten, but nested in TS for type clarity) */
+  base: GeneratedIdea
+  /** Technical feasibility analysis */
+  feasibility?: IdeaFeasibility
+  /** Market opportunity analysis */
+  market?: MarketOpportunity
+  /** User score (0-100) based on interests */
+  userScore?: number
+  /** Interest match score (0-100) */
+  interestMatchScore?: number
+}
+
+/**
+ * Idea generation state
+ */
+export interface IdeaGenerationState {
+  /** Current mode */
+  mode: IdeaGenMode
+  /** User's interests */
+  interests: string[]
+  /** Generated ideas */
+  ideas: ValidatedIdea[]
+  /** Currently selected idea ID */
+  selectedIdeaId?: string
+  /** Dimensions to vary */
+  variationDimensions: VariationDimension[]
+  /** Whether ideas are being generated */
+  isGenerating: boolean
+  /** Whether validation is running */
+  isValidating: boolean
+  /** Error message if any */
+  error?: string
+}
