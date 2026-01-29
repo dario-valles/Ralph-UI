@@ -31,6 +31,7 @@ export interface RalphValidationConfig {
   runLint: boolean
   testCommand?: string
   lintCommand?: string
+  useAiForAcceptanceCriteria?: boolean
 }
 
 export interface RalphTemplateConfig {

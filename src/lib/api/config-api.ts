@@ -77,6 +77,7 @@ export const configApi = {
       runLint: config.runLint,
       testCommand: config.testCommand,
       lintCommand: config.lintCommand,
+      useAiForAcceptanceCriteria: config.useAiForAcceptanceCriteria,
     })
   },
 

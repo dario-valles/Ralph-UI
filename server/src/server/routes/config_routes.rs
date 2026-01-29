@@ -107,6 +107,8 @@ pub async fn route_config_command(
             let run_lint: Option<bool> = get_opt_arg(&args, "runLint")?;
             let test_command: Option<String> = get_opt_arg(&args, "testCommand")?;
             let lint_command: Option<String> = get_opt_arg(&args, "lintCommand")?;
+            let use_ai_for_acceptance_criteria: Option<bool> =
+                get_opt_arg(&args, "useAiForAcceptanceCriteria")?;
             route_async!(
                 cmd,
                 commands::config::update_validation_config(
@@ -114,6 +116,7 @@ pub async fn route_config_command(
                     run_lint,
                     test_command,
                     lint_command,
+                    use_ai_for_acceptance_criteria,
                     &state.config_state
                 )
             )

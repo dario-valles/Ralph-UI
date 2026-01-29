@@ -776,8 +776,24 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
                     continue;
                 }
 
-                // Check for acceptance criteria section header
-                if lower.contains("acceptance criteria") {
+                // Check for acceptance criteria section header (multi-language support)
+                if lower.contains("acceptance criteria")
+                    || lower.contains("acceptance:")
+                    || lower.contains("ac:")
+                    // Spanish
+                    || lower.contains("criterios de aceptación")
+                    || lower.contains("criterios de aceptacion")
+                    || lower.contains("criterios:")
+                    // French
+                    || lower.contains("critères d'acceptation")
+                    || lower.contains("criteres d'acceptation")
+                    // German
+                    || lower.contains("akzeptanzkriterien")
+                    || lower.contains("akzeptanz:")
+                    // Portuguese
+                    || lower.contains("critérios de aceitação")
+                    || lower.contains("criterios de aceitacao")
+                {
                     found_acceptance_section = true;
                     j += 1;
                     continue;

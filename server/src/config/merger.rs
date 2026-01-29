@@ -47,6 +47,7 @@ pub struct PartialValidationConfig {
     pub run_lint: Option<bool>,
     pub test_command: Option<String>,
     pub lint_command: Option<String>,
+    pub use_ai_for_acceptance_criteria: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -212,6 +213,7 @@ impl ConfigMerger {
                 .lint_command
                 .clone()
                 .or_else(|| base.lint_command.clone()),
+            use_ai_for_acceptance_criteria: over.use_ai_for_acceptance_criteria,
         }
     }
 
@@ -309,6 +311,9 @@ impl ConfigMerger {
                 .lint_command
                 .clone()
                 .or_else(|| base.lint_command.clone()),
+            use_ai_for_acceptance_criteria: partial
+                .use_ai_for_acceptance_criteria
+                .unwrap_or(base.use_ai_for_acceptance_criteria),
         }
     }
 

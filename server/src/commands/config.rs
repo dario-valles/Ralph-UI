@@ -205,6 +205,7 @@ pub async fn update_validation_config(
     run_lint: Option<bool>,
     test_command: Option<String>,
     lint_command: Option<String>,
+    use_ai_for_acceptance_criteria: Option<bool>,
     config_state: &ConfigState,
 ) -> Result<ValidationConfig, String> {
     let mut config = config_state
@@ -223,6 +224,9 @@ pub async fn update_validation_config(
     }
     if lint_command.is_some() {
         config.validation.lint_command = lint_command;
+    }
+    if let Some(v) = use_ai_for_acceptance_criteria {
+        config.validation.use_ai_for_acceptance_criteria = v;
     }
 
     Ok(config.validation.clone())

@@ -21,7 +21,7 @@ export function ValidationSettings({ config, updateValidationConfig }: Validatio
           <>
             <div className="space-y-4">
               <h4 className="text-sm font-medium">Validation Options</h4>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-3">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="runTests"
@@ -42,6 +42,24 @@ export function ValidationSettings({ config, updateValidationConfig }: Validatio
                     }
                   />
                   <Label htmlFor="runLint">Run linter before completion</Label>
+                </div>
+
+                <div className="flex items-start space-x-2">
+                  <Checkbox
+                    id="useAiForAcceptanceCriteria"
+                    checked={config.validation.useAiForAcceptanceCriteria ?? false}
+                    onCheckedChange={(checked) =>
+                      updateValidationConfig({ useAiForAcceptanceCriteria: checked as boolean })
+                    }
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <Label htmlFor="useAiForAcceptanceCriteria" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Use AI to Extract Acceptance Criteria
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      When pattern matching fails, use AI (Claude Haiku) to intelligently extract acceptance criteria from PRD content. This uses API tokens and may incur costs.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

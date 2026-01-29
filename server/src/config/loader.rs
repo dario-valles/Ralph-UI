@@ -129,6 +129,9 @@ pub struct GitConfig {
 fn default_true() -> bool {
     true
 }
+fn default_false() -> bool {
+    false
+}
 fn default_branch_pattern() -> String {
     "task/{task_id}".to_string()
 }
@@ -158,6 +161,13 @@ pub struct ValidationConfig {
     /// Custom lint command
     #[serde(rename = "lintCommand", alias = "lint_command", default)]
     pub lint_command: Option<String>,
+    /// Use AI to extract acceptance criteria from non-standard formats
+    #[serde(
+        rename = "useAiForAcceptanceCriteria",
+        alias = "use_ai_for_acceptance_criteria",
+        default = "default_false"
+    )]
+    pub use_ai_for_acceptance_criteria: bool,
 }
 
 impl Default for ValidationConfig {
@@ -167,6 +177,7 @@ impl Default for ValidationConfig {
             run_lint: default_true(),
             test_command: None,
             lint_command: None,
+            use_ai_for_acceptance_criteria: default_false(),
         }
     }
 }
