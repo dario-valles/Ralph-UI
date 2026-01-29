@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { useAvailableModels } from '@/hooks/useAvailableModels'
-import { groupModelsByProvider, formatProviderName } from '@/lib/model-api'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
+import { parseAgentWithProvider } from '@/types/agent'
 import type { RalphConfig, RalphExecutionConfig, AgentType } from '@/types'
 
 interface ExecutionSettingsProps {
@@ -11,10 +13,59 @@ interface ExecutionSettingsProps {
   updateExecutionConfig: (updates: Partial<RalphExecutionConfig>) => void
 }
 
-export function ExecutionSettings({ config, updateExecutionConfig }: ExecutionSettingsProps) {
-  // Load available models for the current agent type
-  const currentAgentType = (config?.execution?.agentType || 'claude') as AgentType
-  const { models, loading: modelsLoading, defaultModelId } = useAvailableModels(currentAgentType)
+export function ExecutionSettings({
+  config,
+  updateExecutionConfig,
+}: ExecutionSettingsProps): React.JSX.Element {
+  const {
+    agentOptions,
+    models,
+    modelsLoading,
+    handleAgentOptionChange,
+    setModelId,
+    setAgentType,
+    setProviderId,
+    modelId,
+    currentAgentOptionValue,
+  } = useAgentModelSelector({
+    initialAgent: (config?.execution?.agentType || 'claude') as AgentType,
+    initialModel: config?.execution?.model,
+    initialProvider: config?.execution?.apiProvider,
+  })
+
+  useEffect(() => {
+    if (!config?.execution) return
+
+    const { agentType, apiProvider, model } = config.execution
+    setAgentType(agentType as AgentType)
+    setProviderId(apiProvider)
+    if (model) {
+      setModelId(model)
+    }
+  }, [
+    config?.execution?.agentType,
+    config?.execution?.apiProvider,
+    config?.execution?.model,
+    config?.execution,
+    setAgentType,
+    setProviderId,
+    setModelId,
+  ])
+
+  const handleAgentChange = (value: string): void => {
+    handleAgentOptionChange(value)
+    const { agentType, providerId } = parseAgentWithProvider(value)
+    updateExecutionConfig({
+      agentType,
+      apiProvider: providerId,
+      model: undefined,
+    })
+  }
+
+  const handleModelChange = (id: string): void => {
+    setModelId(id)
+    updateExecutionConfig({ model: id })
+  }
 
   return (
     <Card>
@@ -25,49 +76,18 @@ export function ExecutionSettings({ config, updateExecutionConfig }: ExecutionSe
       <CardContent className="space-y-6">
         {config ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="agentType">Default Agent Type</Label>
-              <Select
-                id="agentType"
-                value={config.execution.agentType}
-                onChange={(e) => {
-                  const newAgentType = e.target.value as AgentType
-                  // Update agent type - model will be updated when models load for new agent type
-                  updateExecutionConfig({
-                    agentType: newAgentType,
-                    model: undefined, // Will be set to default after models load
-                  })
-                }}
-              >
-                <option value="claude">Claude</option>
-                <option value="opencode">OpenCode</option>
-                <option value="cursor">Cursor</option>
-                <option value="codex">Codex</option>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="defaultModel">Default Model</Label>
-              <Select
-                id="defaultModel"
-                value={config.execution.model || defaultModelId || ''}
-                onChange={(e) => updateExecutionConfig({ model: e.target.value })}
-                disabled={modelsLoading}
-              >
-                {modelsLoading ? (
-                  <option>Loading models...</option>
-                ) : (
-                  Object.entries(groupModelsByProvider(models)).map(([provider, providerModels]) => (
-                    <optgroup key={provider} label={formatProviderName(provider)}>
-                      {providerModels.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))
-                )}
-              </Select>
+            <div className="md:col-span-2">
+              <AgentModelSelector
+                agentType={(config.execution.agentType || 'claude') as AgentType}
+                modelId={modelId}
+                onModelChange={handleModelChange}
+                models={models}
+                modelsLoading={modelsLoading}
+                variant="default"
+                agentOptions={agentOptions}
+                currentAgentOptionValue={currentAgentOptionValue}
+                onAgentOptionChange={handleAgentChange}
+              />
             </div>
 
             <div className="space-y-2">
@@ -86,7 +106,9 @@ export function ExecutionSettings({ config, updateExecutionConfig }: ExecutionSe
             </div>
 
             <div
-              className={`space-y-2 ${config.execution.strategy === 'sequential' ? 'opacity-50' : ''}`}
+              className={`space-y-2 ${
+                config.execution.strategy === 'sequential' ? 'opacity-50' : ''
+              }`}
             >
               <Label htmlFor="maxParallel">
                 Max Parallel Agents: {config.execution.maxParallel}

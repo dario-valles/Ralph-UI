@@ -122,7 +122,7 @@ export const createResearchSlice = (
     const ctx = getSessionWithPath(get)
     if (!ctx) return
 
-    const { selectedResearchAgent } = get()
+    const { selectedResearchAgent, currentSession } = get()
     set({
       isResearchRunning: true,
       error: null,
@@ -139,7 +139,10 @@ export const createResearchSlice = (
         ctx.projectPath,
         ctx.session.id,
         context,
-        agentType || selectedResearchAgent || undefined
+        agentType || selectedResearchAgent || undefined,
+        undefined,
+        undefined,
+        currentSession?.prdType
       )
       set({ researchStatus: status })
       // Update phase state

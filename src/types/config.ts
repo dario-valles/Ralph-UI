@@ -49,6 +49,8 @@ export interface RalphFallbackSettings {
   fallbackAgent?: string
   /** Model to use for the fallback agent */
   fallbackModel?: string
+  /** API provider for the fallback agent */
+  fallbackApiProvider?: string
   /** Error handling strategy */
   errorStrategy?: RalphErrorStrategy
   /** Ordered list of fallback agents (advanced mode) */

@@ -96,6 +96,7 @@ pub async fn route_gsd_command(
             let agent_type: Option<String> = get_opt_arg(&args, "agentType")?;
             let model: Option<String> = get_opt_arg(&args, "model")?;
             let research_types: Option<Vec<String>> = get_opt_arg(&args, "researchTypes")?;
+            let prd_type: Option<String> = get_opt_arg(&args, "prdType")?;
             let env_vars = commands::providers::get_provider_env_vars(&state.config_state).ok();
             let result = commands::gsd::start_research(
                 state.broadcaster.clone(),
@@ -106,6 +107,7 @@ pub async fn route_gsd_command(
                 model,
                 research_types,
                 env_vars,
+                prd_type,
             )
             .await?;
             serde_json::to_value(result).map_err(|e| e.to_string())

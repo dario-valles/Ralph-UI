@@ -75,7 +75,8 @@ export const gsdApi = {
     context: string,
     agentType?: string,
     model?: string,
-    researchTypes?: string[]
+    researchTypes?: string[],
+    prdType?: string
   ): Promise<ResearchStatus> => {
     return await invoke('start_research', {
       projectPath,
@@ -84,6 +85,7 @@ export const gsdApi = {
       agentType,
       model,
       researchTypes,
+      prdType,
     })
   },
 

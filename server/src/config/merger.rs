@@ -61,6 +61,7 @@ pub struct PartialFallbackSettings {
     pub base_backoff_ms: Option<u64>,
     pub max_backoff_ms: Option<u64>,
     pub fallback_model: Option<String>,
+    pub fallback_api_provider: Option<String>,
     pub error_strategy: Option<ErrorStrategyConfig>,
     pub fallback_chain: Option<Vec<String>>,
     pub test_primary_recovery: Option<bool>,
@@ -241,6 +242,10 @@ impl ConfigMerger {
                 .fallback_model
                 .clone()
                 .or_else(|| base.fallback_model.clone()),
+            fallback_api_provider: over
+                .fallback_api_provider
+                .clone()
+                .or_else(|| base.fallback_api_provider.clone()),
             error_strategy: over
                 .error_strategy
                 .clone()
@@ -348,6 +353,10 @@ impl ConfigMerger {
                 .fallback_model
                 .clone()
                 .or_else(|| base.fallback_model.clone()),
+            fallback_api_provider: partial
+                .fallback_api_provider
+                .clone()
+                .or_else(|| base.fallback_api_provider.clone()),
             error_strategy: partial
                 .error_strategy
                 .clone()

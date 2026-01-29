@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -5,7 +6,9 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { GripVertical, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
+import { parseAgentWithProvider } from '@/types/agent'
 import type { RalphConfig, RalphFallbackSettings, AgentType } from '@/types'
 
 interface FallbackSettingsProps {
@@ -13,14 +16,59 @@ interface FallbackSettingsProps {
   updateFallbackConfig: (updates: Partial<RalphFallbackSettings>) => void
 }
 
-export function FallbackSettings({ config, updateFallbackConfig }: FallbackSettingsProps) {
-  // Load available models for the fallback agent type
-  const fallbackAgentType = (config?.fallback?.fallbackAgent || 'claude') as AgentType
+export function FallbackSettings({
+  config,
+  updateFallbackConfig,
+}: FallbackSettingsProps): React.JSX.Element {
   const {
+    agentOptions,
     models: fallbackModels,
-    loading: fallbackModelsLoading,
-    defaultModelId: fallbackDefaultModelId,
-  } = useAvailableModels(fallbackAgentType)
+    modelsLoading: fallbackModelsLoading,
+    handleAgentOptionChange: handleFallbackAgentOptionChange,
+    setModelId: setFallbackModelId,
+    setAgentType: setFallbackAgentType,
+    setProviderId: setFallbackProviderId,
+    modelId: fallbackModelId,
+    currentAgentOptionValue: currentFallbackAgentOptionValue,
+  } = useAgentModelSelector({
+    initialAgent: (config?.fallback?.fallbackAgent || 'claude') as AgentType,
+    initialModel: config?.fallback?.fallbackModel,
+    initialProvider: config?.fallback?.fallbackApiProvider,
+  })
+
+  useEffect(() => {
+    if (!config?.fallback) return
+
+    const { fallbackAgent, fallbackApiProvider, fallbackModel } = config.fallback
+    setFallbackAgentType((fallbackAgent || 'claude') as AgentType)
+    setFallbackProviderId(fallbackApiProvider)
+    if (fallbackModel) {
+      setFallbackModelId(fallbackModel)
+    }
+  }, [
+    config?.fallback?.fallbackAgent,
+    config?.fallback?.fallbackApiProvider,
+    config?.fallback?.fallbackModel,
+    config?.fallback,
+    setFallbackAgentType,
+    setFallbackProviderId,
+    setFallbackModelId,
+  ])
+
+  const handleFallbackAgentChange = (value: string): void => {
+    handleFallbackAgentOptionChange(value)
+    const { agentType, providerId } = parseAgentWithProvider(value)
+    updateFallbackConfig({
+      fallbackAgent: agentType,
+      fallbackApiProvider: providerId,
+      fallbackModel: undefined,
+    })
+  }
+
+  const handleFallbackModelChange = (id: string): void => {
+    setFallbackModelId(id)
+    updateFallbackConfig({ fallbackModel: id })
+  }
 
   return (
     <div className="space-y-4">
@@ -424,52 +472,19 @@ export function FallbackSettings({ config, updateFallbackConfig }: FallbackSetti
                   control.
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="fallbackAgent">Fallback Agent (Legacy)</Label>
-                    <Select
-                      id="fallbackAgent"
-                      value={config.fallback.fallbackAgent || ''}
-                      onChange={(e) =>
-                        updateFallbackConfig({
-                          fallbackAgent: e.target.value || undefined,
-                          fallbackModel: undefined,
-                        })
-                      }
+                  <div className="md:col-span-2">
+                    <AgentModelSelector
+                      agentType={(config.fallback.fallbackAgent || 'claude') as AgentType}
+                      modelId={fallbackModelId}
+                      onModelChange={handleFallbackModelChange}
+                      models={fallbackModels}
+                      modelsLoading={fallbackModelsLoading}
                       disabled={!config.fallback.enabled}
-                    >
-                      <option value="">None</option>
-                      <option value="claude">Claude</option>
-                      <option value="opencode">OpenCode</option>
-                      <option value="cursor">Cursor</option>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="fallbackModel">Fallback Model (Legacy)</Label>
-                    <Select
-                      id="fallbackModel"
-                      value={config.fallback.fallbackModel || fallbackDefaultModelId || ''}
-                      onChange={(e) =>
-                        updateFallbackConfig({
-                          fallbackModel: e.target.value || undefined,
-                        })
-                      }
-                      disabled={
-                        !config.fallback.enabled ||
-                        !config.fallback.fallbackAgent ||
-                        fallbackModelsLoading
-                      }
-                    >
-                      {fallbackModelsLoading ? (
-                        <option>Loading models...</option>
-                      ) : (
-                        fallbackModels.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))
-                      )}
-                    </Select>
+                      variant="default"
+                      agentOptions={agentOptions}
+                      currentAgentOptionValue={currentFallbackAgentOptionValue}
+                      onAgentOptionChange={handleFallbackAgentChange}
+                    />
                   </div>
                 </div>
               </div>

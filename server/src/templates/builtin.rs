@@ -1142,11 +1142,21 @@ mod tests {
                 || name == IDEA_VARIATIONS
                 || name == MARKET_ANALYSIS
                 || name == FEASIBILITY_ANALYSIS
-                || name == BRAINSTORM_IDEAS
             {
                 assert!(
                     template.contains("context.") || template.contains("idea."),
                     "Template '{}' should contain context or idea placeholders",
+                    name
+                );
+                continue;
+            }
+            // BRAINSTORM_IDEAS uses its own placeholders (interests, domain, count)
+            if name == BRAINSTORM_IDEAS {
+                assert!(
+                    template.contains("interests")
+                        || template.contains("domain")
+                        || template.contains("count"),
+                    "Template '{}' should contain interests, domain, or count placeholders",
                     name
                 );
                 continue;

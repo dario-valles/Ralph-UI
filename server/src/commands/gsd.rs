@@ -146,13 +146,9 @@ pub async fn start_research(
     model: Option<String>,
     research_types: Option<Vec<String>>,
     env_vars: Option<std::collections::HashMap<String, String>>,
+    prd_type: Option<String>,
 ) -> Result<ResearchStatus, String> {
     let path = as_path(&project_path);
-
-    // Load chat session to get PRD type
-    let prd_type = crate::file_storage::chat_ops::get_chat_session(path, &session_id)
-        .ok()
-        .and_then(|session| session.prd_type);
 
     log::info!(
         "Starting research for session {} with PRD type: {:?}",

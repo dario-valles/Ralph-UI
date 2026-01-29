@@ -124,6 +124,7 @@ pub async fn route_config_command(
             let base_backoff_ms: Option<u64> = get_opt_arg(&args, "baseBackoffMs")?;
             let max_backoff_ms: Option<u64> = get_opt_arg(&args, "maxBackoffMs")?;
             let fallback_model: Option<String> = get_opt_arg(&args, "fallbackModel")?;
+            let fallback_api_provider: Option<String> = get_opt_arg(&args, "fallbackApiProvider")?;
             let error_strategy: Option<serde_json::Value> = get_opt_arg(&args, "errorStrategy")?;
             let fallback_chain: Option<Vec<String>> = get_opt_arg(&args, "fallbackChain")?;
             let test_primary_recovery: Option<bool> = get_opt_arg(&args, "testPrimaryRecovery")?;
@@ -135,6 +136,7 @@ pub async fn route_config_command(
                     base_backoff_ms,
                     max_backoff_ms,
                     fallback_model,
+                    fallback_api_provider,
                     error_strategy,
                     fallback_chain,
                     test_primary_recovery,

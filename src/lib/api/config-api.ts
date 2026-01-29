@@ -92,6 +92,7 @@ export const configApi = {
       maxBackoffMs: config.maxBackoffMs,
       fallbackAgent: config.fallbackAgent,
       fallbackModel: config.fallbackModel,
+      fallbackApiProvider: config.fallbackApiProvider,
       // New advanced fallback settings
       errorStrategy: config.errorStrategy,
       fallbackChain: config.fallbackChain,

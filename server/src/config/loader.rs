@@ -226,6 +226,13 @@ pub struct FallbackSettings {
     /// Fallback model to use (e.g., "claude-sonnet-4-5")
     #[serde(rename = "fallbackModel", alias = "fallback_model", default)]
     pub fallback_model: Option<String>,
+    /// API provider for the fallback agent
+    #[serde(
+        rename = "fallbackApiProvider",
+        alias = "fallback_api_provider",
+        default
+    )]
+    pub fallback_api_provider: Option<String>,
     /// Error handling strategy (retry, skip, abort)
     #[serde(rename = "errorStrategy", alias = "error_strategy", default)]
     pub error_strategy: Option<ErrorStrategyConfig>,
@@ -273,6 +280,7 @@ impl Default for FallbackSettings {
             base_backoff_ms: default_backoff(),
             max_backoff_ms: default_max_backoff(),
             fallback_model: None,
+            fallback_api_provider: None,
             error_strategy: None,
             fallback_chain: None,
             test_primary_recovery: None,
