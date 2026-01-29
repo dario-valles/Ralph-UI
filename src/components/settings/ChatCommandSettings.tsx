@@ -27,6 +27,7 @@ import {
 import { useChatCommandStore } from '@/stores/chatCommandStore'
 import { useProjectStore } from '@/stores/projectStore'
 import type { ChatCommandConfig } from '@/types'
+import { cn } from '@/lib/utils'
 
 export function ChatCommandSettings() {
   const {
@@ -379,13 +380,14 @@ function CommandListItem({
 }: CommandListItemProps) {
   return (
     <div
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+      className={cn(
+        'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors',
         isSelected
           ? 'bg-primary/10 border border-primary'
-          : 'hover:bg-muted border border-transparent'
-      } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
-        !command.enabled ? 'opacity-60' : ''
-      }`}
+          : 'hover:bg-muted border border-transparent',
+        isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+        !command.enabled && 'opacity-60'
+      )}
       onClick={() => !isDisabled && onSelect(command)}
     >
       {/* Enable/Disable Switch */}
@@ -583,21 +585,18 @@ function CommandEditor({
   onReset,
 }: CommandEditorProps) {
   // Get scope icon
-  const scopeIcon =
-    command.scope === 'project' ? (
-      <FolderOpen className="h-3 w-3" />
-    ) : command.scope === 'global' ? (
-      <Globe className="h-3 w-3" />
-    ) : (
-      <Package className="h-3 w-3" />
-    )
+  const ScopeIcon = {
+    project: FolderOpen,
+    global: Globe,
+    builtin: Package,
+  }[command.scope] ?? Package
 
   return (
     <div className="border rounded-lg">
       <div className="p-3 border-b bg-muted/30 flex items-center justify-between">
         <div>
           <h4 className="text-sm font-medium flex items-center gap-2">
-            {scopeIcon}
+            <ScopeIcon className="h-3 w-3" />
             {command.label}
           </h4>
           <p className="text-xs text-muted-foreground">{command.description}</p>

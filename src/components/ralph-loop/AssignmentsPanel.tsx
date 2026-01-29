@@ -43,6 +43,7 @@ import type {
   RalphStory,
 } from '@/types'
 import { FileConflictWarning } from './FileConflictWarning'
+import { cn } from '@/lib/utils'
 
 /** Format a relative time string (e.g., "5 minutes ago") */
 function formatRelativeTime(dateStr: string): string {
@@ -133,9 +134,10 @@ function AssignmentCard({
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div
-        className={`rounded-lg border p-3 ${
+        className={cn(
+          'rounded-lg border p-3',
           hasConflicts ? 'border-yellow-500/50 bg-yellow-500/5' : 'bg-card'
-        }`}
+        )}
       >
         <CollapsibleTrigger asChild>
           <div className="flex items-center justify-between cursor-pointer">
@@ -160,9 +162,10 @@ function AssignmentCard({
                 {formatRelativeTime(assignment.assignedAt)}
               </span>
               <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${
-                  isExpanded ? 'rotate-180' : ''
-                }`}
+                className={cn(
+                  'h-4 w-4 text-muted-foreground transition-transform',
+                  isExpanded && 'rotate-180'
+                )}
               />
             </div>
           </div>
@@ -227,9 +230,10 @@ function AssignmentCard({
                   return (
                     <code
                       key={file}
-                      className={`text-xs font-mono block ${
+                      className={cn(
+                        'text-xs font-mono block',
                         isConflict ? 'text-yellow-600' : 'text-muted-foreground'
-                      }`}
+                      )}
                     >
                       {isConflict && <AlertTriangle className="h-3 w-3 inline mr-1" />}
                       {file}
@@ -455,7 +459,7 @@ export function AssignmentsPanel({
               disabled={loading}
               className="h-8 w-8 p-0"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             </Button>
           </div>
         </div>

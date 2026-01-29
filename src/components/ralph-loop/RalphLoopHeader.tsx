@@ -28,6 +28,7 @@ import { formatTokens } from '@/lib/api'
 import type { ConfigOverrides } from './hooks/useRalphLoopDashboard'
 import type { ModelInfo } from '@/lib/model-api'
 import { WorktreeActions } from './WorktreeActions'
+import { cn } from '@/lib/utils'
 
 export interface RalphLoopHeaderProps {
   prd: RalphPrd
@@ -105,8 +106,14 @@ const STATE_ICONS: Record<string, typeof Circle> = {
 
 function StateIcon({ type, isRunning }: { type: string; isRunning: boolean }): React.JSX.Element {
   const Icon = STATE_ICONS[type] ?? Circle
-  const spinClass = type === 'running' && isRunning ? 'animate-spin' : ''
-  return <Icon className={`mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3 ${spinClass}`} />
+  return (
+    <Icon
+      className={cn(
+        'mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3',
+        type === 'running' && isRunning && 'animate-spin'
+      )}
+    />
+  )
 }
 
 export function RalphLoopHeader({
@@ -203,7 +210,10 @@ export function RalphLoopHeader({
                 </span>
               </span>
               <ChevronDown
-                className={`h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0 transition-transform ${configOpen ? 'rotate-180' : ''}`}
+                className={cn(
+                  'h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0 transition-transform',
+                  configOpen && 'rotate-180'
+                )}
               />
             </Button>
           </CollapsibleTrigger>
@@ -278,7 +288,7 @@ export function RalphLoopHeader({
                     disabled={modelsLoading || isCompleted}
                     className="h-6 w-6 p-0"
                   >
-                    <RefreshCw className={`h-3 w-3 ${modelsLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={cn('h-3 w-3', modelsLoading && 'animate-spin')} />
                   </Button>
                 </div>
                 <ModelSelector
@@ -390,7 +400,7 @@ export function RalphLoopHeader({
             disabled={loading}
             className="h-8 sm:h-9 text-xs sm:text-sm"
           >
-            <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('h-3.5 w-3.5 sm:h-4 sm:w-4', loading && 'animate-spin')} />
             <span className="ml-1.5 sm:ml-2 hidden sm:inline">Refresh</span>
           </Button>
         </div>

@@ -13,6 +13,7 @@ import type { AgentType, AgentStatusInfo } from '@/types'
 import { Bot, Check, X, Loader2, RefreshCw, AlertCircle, Copy, CheckCheck } from 'lucide-react'
 import { toast } from '@/stores/toastStore'
 import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
+import { cn } from '@/lib/utils'
 
 export function AgentsTab() {
   const {
@@ -160,7 +161,7 @@ export function AgentsTab() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadAgents} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
             Re-detect
           </Button>
           <Button variant="outline" size="sm" onClick={handleResetToDetected} disabled={loading}>
@@ -294,11 +295,10 @@ function AgentRow({ agent, checked, onToggle }: AgentRowProps) {
 
   return (
     <div
-      className={`rounded-lg border transition-colors ${
-        agent.available
-          ? 'bg-background hover:bg-muted/50 cursor-pointer'
-          : 'bg-muted/30'
-      }`}
+      className={cn(
+        'rounded-lg border transition-colors',
+        agent.available ? 'bg-background hover:bg-muted/50 cursor-pointer' : 'bg-muted/30'
+      )}
     >
       {/* Main row */}
       <div
@@ -315,9 +315,10 @@ function AgentRow({ agent, checked, onToggle }: AgentRowProps) {
 
         {/* Agent icon */}
         <div
-          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+          className={cn(
+            'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
             agent.available ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-          }`}
+          )}
         >
           <Bot className="h-4 w-4" />
         </div>

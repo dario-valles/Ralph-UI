@@ -14,10 +14,57 @@ import {
   XCircle,
   AlertTriangle,
   ListChecks,
+  type LucideIcon,
 } from 'lucide-react'
 import { type SoundMode, playPreviewSound, resumeAudioContext } from '@/lib/audio'
 import { PushNotificationSettings } from './PushNotificationSettings'
 import type { UISettings } from './hooks/useSettingsState'
+import { cn } from '@/lib/utils'
+
+/** Notification toggle item configuration */
+interface NotificationToggleItem {
+  id: string
+  key: keyof UISettings['notificationToggles']
+  Icon: LucideIcon
+  iconClass: string
+  label: string
+  description: string
+}
+
+const NOTIFICATION_TOGGLES: NotificationToggleItem[] = [
+  {
+    id: 'notify-completion',
+    key: 'completion',
+    Icon: CheckCircle,
+    iconClass: 'text-green-600 dark:text-green-400',
+    label: 'Loop Completion',
+    description: 'When all stories in a Ralph loop pass',
+  },
+  {
+    id: 'notify-error',
+    key: 'error',
+    Icon: XCircle,
+    iconClass: 'text-destructive',
+    label: 'Errors & Failures',
+    description: 'Agent crashes, parse errors, git conflicts, rate limits',
+  },
+  {
+    id: 'notify-max-iterations',
+    key: 'maxIterations',
+    Icon: AlertTriangle,
+    iconClass: 'text-yellow-600 dark:text-yellow-400',
+    label: 'Max Iterations',
+    description: 'When the iteration limit is reached',
+  },
+  {
+    id: 'notify-story-complete',
+    key: 'storyComplete',
+    Icon: ListChecks,
+    iconClass: 'text-blue-600 dark:text-blue-400',
+    label: 'Story Completion',
+    description: 'When individual stories pass (can be frequent)',
+  },
+]
 
 interface NotificationSettingsProps {
   uiSettings: UISettings
@@ -59,133 +106,38 @@ export function NotificationSettings({
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Notification Types</h4>
             <div className="grid gap-3">
-              {/* Completion notifications */}
-              <div
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  !uiSettings.notificationsEnabled ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  <div>
-                    <Label htmlFor="notify-completion" className="font-medium">
-                      Loop Completion
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      When all stories in a Ralph loop pass
-                    </p>
+              {NOTIFICATION_TOGGLES.map(({ id, key, Icon, iconClass, label, description }) => (
+                <div
+                  key={id}
+                  className={cn(
+                    'flex items-center justify-between p-3 rounded-lg border',
+                    !uiSettings.notificationsEnabled && 'opacity-50'
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={cn('h-4 w-4', iconClass)} />
+                    <div>
+                      <Label htmlFor={id} className="font-medium">
+                        {label}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">{description}</p>
+                    </div>
                   </div>
+                  <Switch
+                    id={id}
+                    checked={uiSettings.notificationToggles[key]}
+                    onCheckedChange={(checked) =>
+                      updateUISettingsLocal({
+                        notificationToggles: {
+                          ...uiSettings.notificationToggles,
+                          [key]: checked,
+                        },
+                      })
+                    }
+                    disabled={!uiSettings.notificationsEnabled}
+                  />
                 </div>
-                <Switch
-                  id="notify-completion"
-                  checked={uiSettings.notificationToggles.completion}
-                  onCheckedChange={(checked) =>
-                    updateUISettingsLocal({
-                      notificationToggles: {
-                        ...uiSettings.notificationToggles,
-                        completion: checked,
-                      },
-                    })
-                  }
-                  disabled={!uiSettings.notificationsEnabled}
-                />
-              </div>
-
-              {/* Error notifications */}
-              <div
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  !uiSettings.notificationsEnabled ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <XCircle className="h-4 w-4 text-destructive" />
-                  <div>
-                    <Label htmlFor="notify-error" className="font-medium">
-                      Errors & Failures
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Agent crashes, parse errors, git conflicts, rate limits
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="notify-error"
-                  checked={uiSettings.notificationToggles.error}
-                  onCheckedChange={(checked) =>
-                    updateUISettingsLocal({
-                      notificationToggles: {
-                        ...uiSettings.notificationToggles,
-                        error: checked,
-                      },
-                    })
-                  }
-                  disabled={!uiSettings.notificationsEnabled}
-                />
-              </div>
-
-              {/* Max iterations notifications */}
-              <div
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  !uiSettings.notificationsEnabled ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                  <div>
-                    <Label htmlFor="notify-max-iterations" className="font-medium">
-                      Max Iterations
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      When the iteration limit is reached
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="notify-max-iterations"
-                  checked={uiSettings.notificationToggles.maxIterations}
-                  onCheckedChange={(checked) =>
-                    updateUISettingsLocal({
-                      notificationToggles: {
-                        ...uiSettings.notificationToggles,
-                        maxIterations: checked,
-                      },
-                    })
-                  }
-                  disabled={!uiSettings.notificationsEnabled}
-                />
-              </div>
-
-              {/* Story completion notifications (optional) */}
-              <div
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  !uiSettings.notificationsEnabled ? 'opacity-50' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <ListChecks className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <Label htmlFor="notify-story-complete" className="font-medium">
-                      Story Completion
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      When individual stories pass (can be frequent)
-                    </p>
-                  </div>
-                </div>
-                <Switch
-                  id="notify-story-complete"
-                  checked={uiSettings.notificationToggles.storyComplete}
-                  onCheckedChange={(checked) =>
-                    updateUISettingsLocal({
-                      notificationToggles: {
-                        ...uiSettings.notificationToggles,
-                        storyComplete: checked,
-                      },
-                    })
-                  }
-                  disabled={!uiSettings.notificationsEnabled}
-                />
-              </div>
+              ))}
             </div>
           </div>
         </CardContent>

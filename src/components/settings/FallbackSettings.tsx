@@ -7,6 +7,7 @@ import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { GripVertical, ArrowUp, ArrowDown, X } from 'lucide-react'
 import type { RalphConfig, RalphFallbackSettings, AgentType } from '@/types'
+import { cn } from '@/lib/utils'
 
 interface FallbackSettingsProps {
   config: RalphConfig | null
@@ -34,12 +35,12 @@ export function FallbackSettings({
                 <Label>Error Strategy</Label>
                 <div className="grid gap-3">
                   <div
-                    className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      config.fallback.errorStrategy?.type === 'retry' ||
-                      !config.fallback.errorStrategy
+                    className={cn(
+                      'flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                      config.fallback.errorStrategy?.type === 'retry' || !config.fallback.errorStrategy
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-muted-foreground/50'
-                    }`}
+                    )}
                     onClick={() =>
                       updateFallbackConfig({
                         errorStrategy: {
@@ -141,11 +142,12 @@ export function FallbackSettings({
                   </div>
 
                   <div
-                    className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={cn(
+                      'flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors',
                       config.fallback.errorStrategy?.type === 'skip'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-muted-foreground/50'
-                    }`}
+                    )}
                     onClick={() => updateFallbackConfig({ errorStrategy: { type: 'skip' } })}
                   >
                     <input
@@ -163,11 +165,12 @@ export function FallbackSettings({
                   </div>
 
                   <div
-                    className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={cn(
+                      'flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors',
                       config.fallback.errorStrategy?.type === 'abort'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-muted-foreground/50'
-                    }`}
+                    )}
                     onClick={() => updateFallbackConfig({ errorStrategy: { type: 'abort' } })}
                   >
                     <input
