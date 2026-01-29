@@ -1878,7 +1878,7 @@ mod tests {
     #[test]
     fn test_prd_execution_serialization() {
         let mut exec = PrdExecution::new("exec-123", AgentType::Claude);
-        exec.model = Some("claude-3-5-sonnet".to_string());
+        exec.model = Some("claude-sonnet-4-5".to_string());
         exec.mark_completed(3, 2);
 
         let json = serde_json::to_string_pretty(&exec).unwrap();

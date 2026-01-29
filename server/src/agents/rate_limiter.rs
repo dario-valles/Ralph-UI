@@ -303,7 +303,7 @@ mod tests {
     fn test_detects_claude_rate_limit() {
         let detector = RateLimitDetector::new();
 
-        let stderr = "Anthropic: rate limit reached for claude-3-opus";
+        let stderr = "Anthropic: rate limit reached for claude-opus-4-5";
         let result = detector.detect_in_stderr(stderr);
 
         assert!(result.is_some());
