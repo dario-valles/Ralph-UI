@@ -52,6 +52,24 @@ vi.mock('@/lib/events-client', () => ({
   subscribeEvent: vi.fn(() => Promise.resolve(() => {})),
 }))
 
+// Mock chatCommandStore to prevent API calls from SlashCommandMenu
+const mockChatCommandStoreState = {
+  commands: [
+    { id: 'epic', label: 'Epic', description: 'Insert epic template', template: '', scope: 'builtin', enabled: true, favorite: false },
+    { id: 'story', label: 'Story', description: 'Insert story template', template: '', scope: 'builtin', enabled: true, favorite: false },
+  ],
+  loading: false,
+  error: null,
+  loadCommands: vi.fn(),
+  enabledCommands: () => [],
+  favoriteCommands: () => [],
+}
+
+vi.mock('@/stores/chatCommandStore', () => ({
+  useChatCommandStore: (selector?: (state: typeof mockChatCommandStoreState) => unknown) =>
+    selector ? selector(mockChatCommandStoreState) : mockChatCommandStoreState,
+}))
+
 // Mock the useAgentModelSelector hook
 const mockHandleAgentOptionChange = vi.fn()
 

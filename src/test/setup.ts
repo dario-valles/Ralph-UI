@@ -5,6 +5,40 @@ import { expect, vi } from 'vitest'
 // Extend Vitest's expect with jest-axe matchers
 expect.extend(toHaveNoViolations)
 
+// Mock the invoke module globally to prevent API calls during tests
+// Returns appropriate defaults based on command name patterns
+const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
+  // Chat commands - return builtin commands to prevent infinite loops in SlashCommandMenu
+  if (cmd === 'list_chat_commands') {
+    return Promise.resolve([
+      { id: 'epic', label: 'Epic', description: 'Insert epic template', template: '', scope: 'builtin', enabled: true, favorite: false },
+      { id: 'story', label: 'Story', description: 'Insert story template', template: '', scope: 'builtin', enabled: true, favorite: false },
+    ])
+  }
+  // Commands that return arrays
+  if (cmd.startsWith('list_') || cmd.startsWith('get_all') ||
+      cmd.includes('_list') || cmd === 'get_api_providers' ||
+      cmd === 'get_available_agents' || cmd === 'get_available_models') {
+    return Promise.resolve([])
+  }
+  // Commands that return strings
+  if (cmd === 'get_active_provider') {
+    return Promise.resolve('anthropic')
+  }
+  // Default: return undefined (for void commands or objects)
+  return Promise.resolve(undefined)
+})
+
+vi.mock('@/lib/invoke', () => ({
+  invoke: mockInvoke,
+  getServerConfig: vi.fn().mockReturnValue({ url: 'http://test', token: 'test-token' }),
+  setServerConfig: vi.fn(),
+  clearServerConfig: vi.fn(),
+  isBrowserMode: vi.fn().mockReturnValue(true),
+  syncQueuedActions: vi.fn().mockResolvedValue({ synced: 0, failed: 0 }),
+  retryFailedAction: vi.fn().mockResolvedValue(true),
+}))
+
 // Mock ResizeObserver for Radix UI components
 class ResizeObserverMock {
   observe = vi.fn()
