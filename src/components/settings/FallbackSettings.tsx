@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -368,43 +369,96 @@ export function FallbackSettings({
                 </div>
               </div>
 
+              {/* Fallback Agent Override Settings */}
+              <div className="space-y-4 pt-4 border-t">
+                <h4 className="text-sm font-medium">Fallback Agent Configuration</h4>
+                <p className="text-xs text-muted-foreground">
+                  Override the model and API provider used when falling back to secondary agents.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="fallbackModel">Fallback Model (Optional)</Label>
+                    <Input
+                      id="fallbackModel"
+                      value={config.fallback.fallbackModel || ''}
+                      onChange={(e) =>
+                        updateFallbackConfig({
+                          fallbackModel: e.target.value || undefined,
+                        })
+                      }
+                      placeholder="e.g., claude-sonnet-4-5"
+                      disabled={!config.fallback.enabled}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Model to use for fallback agents. Leave empty to use the same as primary.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fallbackApiProvider">Fallback API Provider (Optional)</Label>
+                    <Select
+                      id="fallbackApiProvider"
+                      value={config.fallback.fallbackApiProvider || ''}
+                      onChange={(e) =>
+                        updateFallbackConfig({
+                          fallbackApiProvider: e.target.value || undefined,
+                        })
+                      }
+                      disabled={!config.fallback.enabled}
+                    >
+                      <option value="">Same as primary</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="zai">z.ai</option>
+                      <option value="minimax">MiniMax</option>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      API provider for fallback agents. Useful for switching providers during rate
+                      limits.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Backoff Settings */}
               <div className="space-y-4 pt-4 border-t">
                 <h4 className="text-sm font-medium">Backoff Settings</h4>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="baseBackoffMs">
-                      Base Backoff: {config.fallback.baseBackoffMs}ms
+                      Base Backoff: {(config.fallback.baseBackoffMs / 1000).toFixed(1)}s
                     </Label>
                     <Slider
                       id="baseBackoffMs"
-                      min={100}
-                      max={5000}
-                      step={100}
+                      min={1000}
+                      max={30000}
+                      step={1000}
                       value={[config.fallback.baseBackoffMs]}
                       onValueChange={([v]) => updateFallbackConfig({ baseBackoffMs: v })}
                       disabled={!config.fallback.enabled}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Initial backoff delay before retrying.
+                      Initial backoff delay before retrying (1-30 seconds).
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="maxBackoffMs">
-                      Max Backoff: {config.fallback.maxBackoffMs}ms
+                      Max Backoff:{' '}
+                      {config.fallback.maxBackoffMs >= 60000
+                        ? `${(config.fallback.maxBackoffMs / 60000).toFixed(1)} min`
+                        : `${(config.fallback.maxBackoffMs / 1000).toFixed(0)}s`}
                     </Label>
                     <Slider
                       id="maxBackoffMs"
-                      min={1000}
-                      max={60000}
-                      step={1000}
+                      min={10000}
+                      max={600000}
+                      step={10000}
                       value={[config.fallback.maxBackoffMs]}
                       onValueChange={([v]) => updateFallbackConfig({ maxBackoffMs: v })}
                       disabled={!config.fallback.enabled}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Maximum backoff delay for exponential backoff.
+                      Maximum backoff delay for exponential backoff (10 seconds - 10 minutes).
                     </p>
                   </div>
                 </div>

@@ -16,6 +16,8 @@ export interface RalphExecutionConfig {
   model?: string
   /** API provider for Claude (e.g., "anthropic", "zai", "minimax") */
   apiProvider?: string
+  /** Dry-run mode: preview execution without actually spawning agents */
+  dryRun?: boolean
 }
 
 export interface RalphGitConfig {

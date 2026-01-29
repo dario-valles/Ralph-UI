@@ -132,29 +132,48 @@ export function TemplateSettings({
         <CardContent>
           {config ? (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="default-template">Default Template</Label>
-                <Select
-                  id="default-template"
-                  value={config.templates.defaultTemplate || ''}
-                  onChange={(e) =>
-                    updateTemplatesConfig({
-                      defaultTemplate: e.target.value || undefined,
-                    })
-                  }
-                  disabled={templatesLoading}
-                  data-testid="default-template-select"
-                >
-                  <option value="">Use first available template</option>
-                  {templates.map((t) => (
-                    <option key={`${t.source}-${t.name}`} value={t.name}>
-                      {t.name} ({t.source})
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  The template to use by default when starting new Ralph Loop executions.
-                </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="default-template">Default Template</Label>
+                  <Select
+                    id="default-template"
+                    value={config.templates.defaultTemplate || ''}
+                    onChange={(e) =>
+                      updateTemplatesConfig({
+                        defaultTemplate: e.target.value || undefined,
+                      })
+                    }
+                    disabled={templatesLoading}
+                    data-testid="default-template-select"
+                  >
+                    <option value="">Use first available template</option>
+                    {templates.map((t) => (
+                      <option key={`${t.source}-${t.name}`} value={t.name}>
+                        {t.name} ({t.source})
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The template to use by default when starting new Ralph Loop executions.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="templates-dir">Custom Templates Directory</Label>
+                  <Input
+                    id="templates-dir"
+                    value={config.templates.templatesDir || ''}
+                    onChange={(e) =>
+                      updateTemplatesConfig({
+                        templatesDir: e.target.value || undefined,
+                      })
+                    }
+                    placeholder="~/.ralph-ui/templates"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Custom directory for global templates. Leave empty for default location.
+                  </p>
+                </div>
               </div>
             </div>
           ) : (

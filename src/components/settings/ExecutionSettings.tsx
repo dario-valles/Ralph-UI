@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -153,6 +154,27 @@ export function ExecutionSettings({
                 value={[config.execution.maxRetries]}
                 onValueChange={([v]) => updateExecutionConfig({ maxRetries: v })}
               />
+            </div>
+
+            <div className="md:col-span-2 pt-4 border-t">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="dryRun"
+                  checked={config.execution.dryRun ?? false}
+                  onCheckedChange={(checked) =>
+                    updateExecutionConfig({ dryRun: checked as boolean })
+                  }
+                />
+                <div>
+                  <Label htmlFor="dryRun" className="cursor-pointer">
+                    Dry Run Mode
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Preview execution without actually spawning agents. Useful for testing
+                    configurations.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
