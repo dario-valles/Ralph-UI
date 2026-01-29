@@ -25,8 +25,8 @@ export { missionControlApi } from './mission-control-api'
 // Ralph Loop API
 export { ralphLoopApi } from './ralph-loop-api'
 
-// GSD Workflow API
-export { gsdApi } from './gsd-api'
+// PRD Workflow API
+export { prdWorkflowApi } from './prd-workflow-api'
 
 // Template API (from backend-api.ts)
 export { templateApi } from './template-api'

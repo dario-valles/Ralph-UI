@@ -1,5 +1,4 @@
 // Core domain types - re-exported from domain-specific files
-// This file maintains backward compatibility with existing imports
 
 // ============================================================================
 // Common Types
@@ -8,6 +7,7 @@
 export type {
   Project,
   ProjectFolder,
+  DirectoryEntry,
   RateLimitType,
   RateLimitEvent,
   StaleLockInfo,
@@ -134,6 +134,7 @@ export type {
 // ============================================================================
 
 export type {
+  RalphExecutionMode,
   RalphStory,
   RalphPrdMetadata,
   RalphPrd,
@@ -141,6 +142,9 @@ export type {
   RalphLoopState,
   RalphIterationMetrics,
   RalphLoopMetrics,
+  ParallelAgentStatus,
+  RalphLoopParallelSnapshot,
+  MergeConflict,
   RalphLoopSnapshot,
   RalphLoopStatusEvent,
   RalphLoopCompletedPayload,
@@ -189,36 +193,8 @@ export type {
 } from './terminal'
 
 // ============================================================================
-// GSD (Get Stuff Done) Types - Re-export from dedicated files
+// Planning Types (used by PRD Workflow)
 // ============================================================================
-
-export type {
-  GsdPhase,
-  GsdPhaseInfo,
-  QuestioningContext,
-  AgentResearchStatus,
-  ResearchStatus,
-  GsdDecision,
-  GsdWorkflowState,
-  ResearchResult,
-  ResearchSynthesis,
-  GsdConfig,
-  PlanningSessionInfo,
-  ResearchSessionInfo,
-  CloneSessionOptions,
-} from './gsd'
-
-export {
-  GSD_PHASES,
-  getPhaseInfo,
-  getNextPhase,
-  getPreviousPhase,
-  isQuestioningComplete,
-  getMissingContextItems,
-  isResearchComplete,
-  getResearchCompletionPercentage,
-  getWorkflowCompletionPercentage,
-} from './gsd'
 
 export type {
   RequirementCategory,
@@ -251,3 +227,52 @@ export {
   hasAnyExecutionConfigFields,
   validateExecutionConfig,
 } from './planning'
+
+// ============================================================================
+// PRD Workflow Types (New centralized workflow system)
+// ============================================================================
+
+export type {
+  WorkflowPhase,
+  WorkflowPhaseInfo,
+  PhaseStatus,
+  WorkflowMode,
+  ExecutionMode,
+  ProjectContext,
+  StateDescription,
+  SpecState,
+  ScopeLevel as PrdWorkflowScopeLevel,
+  RequirementCategory as PrdWorkflowCategory,
+  RequirementStatus,
+  Requirement as PrdWorkflowRequirement,
+  ResearchAgentConfig,
+  ResearchConfig,
+  ResearchAgentStatus,
+  ResearchStatus as PrdWorkflowResearchStatus,
+  DependencyStats,
+  PrdWorkflowState,
+  WorkflowInfo,
+  PhaseAction,
+  AddRequirementResult,
+  ScopeSelection as PrdWorkflowScopeSelection,
+  DependencyValidationResult,
+  ExportResult as PrdWorkflowExportResult,
+  IdeasAnalysisResult,
+  AcceptanceCriteriaResult,
+  SpecStateAnalysisResult,
+} from './prd-workflow'
+
+export {
+  WORKFLOW_PHASES,
+  getPhaseInfo as getPrdWorkflowPhaseInfo,
+  getNextPhase as getPrdWorkflowNextPhase,
+  getPreviousPhase as getPrdWorkflowPreviousPhase,
+  isContextComplete,
+  getMissingContextItems as getPrdWorkflowMissingContextItems,
+  calculateWorkflowCompletion,
+  getRequirementsByScope as getPrdWorkflowRequirementsByScope,
+  getReadyRequirements,
+  getCategoryInfo,
+  getScopeInfo,
+  getStatusInfo,
+} from './prd-workflow'
