@@ -52,8 +52,8 @@ pub async fn start_prd_chat_session(
         id: session_id.clone(),
         agent_type: request.agent_type,
         project_path: request.project_path.clone(),
-        prd_id: request.prd_id,
-        title: default_title,
+        prd_id: None, // Will be set after computing/creating the PRD file
+        title: default_title.clone(),
         prd_type: request.prd_type,
         guided_mode,
         quality_score: None,
@@ -71,6 +71,34 @@ pub async fn start_prd_chat_session(
     let project_path_obj = as_path(project_path);
     crate::file_storage::init_ralph_ui_dir(project_path_obj)
         .map_err(|e| format!("Failed to initialize .ralph-ui directory: {}", e))?;
+
+    // Generate PRD filename and create empty file upfront (if not already specified)
+    // This ensures the UI knows the exact filename from the start
+    let prd_id = if request.prd_id.is_some() {
+        request.prd_id.clone()
+    } else {
+        // Compute filename from title or default "prd"
+        let title_for_filename = default_title.as_deref().unwrap_or("prd");
+        let prd_filename = crate::ralph_loop::make_prd_filename(title_for_filename, &session_id);
+
+        // Create empty PRD file so the chat knows filename upfront
+        let prds_dir = project_path_obj.join(".ralph-ui").join("prds");
+        std::fs::create_dir_all(&prds_dir)
+            .map_err(|e| format!("Failed to create prds directory: {}", e))?;
+
+        let prd_path = prds_dir.join(format!("{}.md", prd_filename));
+
+        if !prd_path.exists() {
+            let initial_content = "# PRD\n\n<!-- This file will be populated by the AI agent -->\n";
+            std::fs::write(&prd_path, initial_content)
+                .map_err(|e| format!("Failed to create PRD file: {}", e))?;
+        }
+
+        Some(format!("file:{}", prd_filename))
+    };
+
+    // Update session with the computed prd_id
+    session.prd_id = prd_id;
 
     chat_ops::create_chat_session(project_path_obj, &session)
         .map_err(|e| format!("Failed to create chat session: {}", e))?;
