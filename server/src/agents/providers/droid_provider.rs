@@ -47,6 +47,15 @@ impl AgentPlugin for DroidProvider {
 
         let mut cmd = Command::new(&droid_path);
 
+        // Inject environment variables if provided
+        if let Some(ref env_vars) = config.env_vars {
+            log::info!(
+                "[DroidProvider] Injecting {} environment variables",
+                env_vars.len()
+            );
+            cmd.envs(env_vars);
+        }
+
         // Droid uses "exec" subcommand
         cmd.arg("exec");
 

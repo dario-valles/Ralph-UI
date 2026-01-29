@@ -53,6 +53,15 @@ impl AgentPlugin for CursorProvider {
 
         let mut cmd = Command::new(&cursor_path);
 
+        // Inject environment variables if provided
+        if let Some(ref env_vars) = config.env_vars {
+            log::info!(
+                "[CursorProvider] Injecting {} environment variables",
+                env_vars.len()
+            );
+            cmd.envs(env_vars);
+        }
+
         // Set working directory
         let worktree = Path::new(&config.worktree_path);
         if worktree.exists() {

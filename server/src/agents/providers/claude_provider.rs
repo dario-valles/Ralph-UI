@@ -86,6 +86,19 @@ impl AgentPlugin for ClaudeProvider {
 
         let mut cmd = Command::new(&claude_path);
 
+        // 🆕 Inject provider-specific environment variables (Z.AI, MiniMax, etc.)
+        if let Some(ref env_vars) = config.env_vars {
+            log::info!(
+                "[ClaudeProvider] Injecting {} environment variables",
+                env_vars.len()
+            );
+            cmd.envs(env_vars);
+        } else {
+            log::info!(
+                "[ClaudeProvider] No custom environment variables (using default Anthropic)"
+            );
+        }
+
         // Set working directory - check if it exists first
         let worktree = Path::new(&config.worktree_path);
         if worktree.exists() {
