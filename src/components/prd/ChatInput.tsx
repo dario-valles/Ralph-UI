@@ -355,7 +355,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     <div className="space-y-2 relative">
       {/* Error message */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in-0 slide-in-from-top-1 duration-200"
+        >
           <span className="flex-1 min-w-0 break-words">{error}</span>
           <Button
             variant="ghost"

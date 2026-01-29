@@ -66,7 +66,7 @@ export function Breadcrumb({ items, className, showHomeIcon = true }: Breadcrumb
               {item.href && !isLast ? (
                 <Link
                   to={item.href}
-                  className="flex items-center gap-1 hover:text-foreground transition-colors p-1 -m-1 rounded focus-ring truncate max-w-[200px]"
+                  className="flex items-center gap-1 hover:text-foreground transition-colors p-1 -m-1 rounded focus-ring truncate max-w-48"
                   title={item.label}
                 >
                   {item.icon}
@@ -75,7 +75,7 @@ export function Breadcrumb({ items, className, showHomeIcon = true }: Breadcrumb
               ) : (
                 <span
                   className={cn(
-                    'flex items-center gap-1 truncate max-w-[200px]',
+                    'flex items-center gap-1 truncate max-w-48',
                     isLast && 'text-foreground font-medium'
                   )}
                   aria-current={isLast ? 'page' : undefined}

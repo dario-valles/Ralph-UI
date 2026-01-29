@@ -45,12 +45,12 @@ export function Sidebar({ className }: SidebarProps) {
               <div className="relative">
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 {showProcessingBadge && (
-                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-500 dark:bg-amber-400 animate-pulse" />
                 )}
               </div>
               <span>{item.name}</span>
               {showProcessingBadge && (
-                <span className="ml-auto text-xs text-yellow-500 animate-pulse">●</span>
+                <span className="ml-auto text-xs text-amber-600 dark:text-amber-400 animate-pulse">●</span>
               )}
             </NavLink>
           )

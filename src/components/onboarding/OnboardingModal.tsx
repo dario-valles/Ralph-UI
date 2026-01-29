@@ -36,7 +36,7 @@ export function OnboardingModal() {
     {
       title: 'Welcome to Terminal Key Bar',
       description: 'Quick shortcuts for mobile terminal control',
-      icon: <Zap className="w-12 h-12 text-blue-500" />,
+      icon: <Zap className="w-12 h-12 text-blue-600 dark:text-blue-400" />,
       content: (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -44,15 +44,15 @@ export function OnboardingModal() {
           </p>
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-blue-500 font-bold">→</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">→</span>
               <span>Tap keys to send input to your terminal</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-blue-500 font-bold">→</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">→</span>
               <span>Customize the key bar layout to your needs</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-blue-500 font-bold">→</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">→</span>
               <span>Save frequently used commands</span>
             </div>
           </div>
@@ -62,7 +62,7 @@ export function OnboardingModal() {
     {
       title: 'Modifier Keys',
       description: 'Use CTRL and ALT keys with terminal shortcuts',
-      icon: <Hand className="w-12 h-12 text-amber-500" />,
+      icon: <Hand className="w-12 h-12 text-amber-600 dark:text-amber-400" />,
       content: (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -94,7 +94,7 @@ export function OnboardingModal() {
     {
       title: 'Gesture Controls',
       description: 'Swipe and pinch to control the terminal',
-      icon: <Hand className="w-12 h-12 text-purple-500" />,
+      icon: <Hand className="w-12 h-12 text-purple-600 dark:text-purple-400" />,
       content: (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -102,19 +102,19 @@ export function OnboardingModal() {
           </p>
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-purple-500 font-bold">↑↓</span>
+              <span className="text-purple-600 dark:text-purple-400 font-bold">↑↓</span>
               <span>Swipe up/down on terminal for command history</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-purple-500 font-bold">←→</span>
+              <span className="text-purple-600 dark:text-purple-400 font-bold">←→</span>
               <span>Swipe left/right to move cursor (fast swipe moves by word)</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-purple-500 font-bold">✌️</span>
+              <span className="text-purple-600 dark:text-purple-400 font-bold">✌️</span>
               <span>Two-finger swipe for Page Up/Down scrolling</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-purple-500 font-bold">🤌</span>
+              <span className="text-purple-600 dark:text-purple-400 font-bold">🤌</span>
               <span>Pinch in/out to adjust terminal font size</span>
             </div>
           </div>
@@ -127,7 +127,7 @@ export function OnboardingModal() {
     {
       title: 'Customization',
       description: 'Tailor the key bar to your workflow',
-      icon: <Settings className="w-12 h-12 text-green-500" />,
+      icon: <Settings className="w-12 h-12 text-green-600 dark:text-green-400" />,
       content: (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -135,19 +135,19 @@ export function OnboardingModal() {
           </p>
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-green-500 font-bold">📐</span>
+              <span className="text-green-600 dark:text-green-400 font-bold">📐</span>
               <span>Rearrange, add, or remove keys</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-green-500 font-bold">💾</span>
+              <span className="text-green-600 dark:text-green-400 font-bold">💾</span>
               <span>Save custom layouts as presets</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-green-500 font-bold">⚙️</span>
+              <span className="text-green-600 dark:text-green-400 font-bold">⚙️</span>
               <span>Save frequently used commands with one tap</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-green-500 font-bold">🎚️</span>
+              <span className="text-green-600 dark:text-green-400 font-bold">🎚️</span>
               <span>Configure gesture sensitivity to your preference</span>
             </div>
           </div>
@@ -157,7 +157,7 @@ export function OnboardingModal() {
     {
       title: 'Getting Help',
       description: 'Learn more about any feature',
-      icon: <HelpCircle className="w-12 h-12 text-cyan-500" />,
+      icon: <HelpCircle className="w-12 h-12 text-cyan-600 dark:text-cyan-400" />,
       content: (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -165,15 +165,15 @@ export function OnboardingModal() {
           </p>
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-cyan-500 font-bold">?</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">?</span>
               <span>Look for help icons next to settings for explanations</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-cyan-500 font-bold">ℹ️</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">ℹ️</span>
               <span>Visit Settings → Gesture Controls for comprehensive documentation</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-cyan-500 font-bold">💡</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">💡</span>
               <span>First-time hints appear when you use new features</span>
             </div>
           </div>

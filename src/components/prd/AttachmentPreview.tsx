@@ -63,7 +63,7 @@ function AttachmentChip({ attachment, onRemove, disabled }: AttachmentChipProps)
 
       {/* Info */}
       <div className="flex flex-col min-w-0">
-        <span className="text-[11px] sm:text-xs font-medium truncate max-w-[80px] sm:max-w-[100px]">
+        <span className="text-[11px] sm:text-xs font-medium truncate max-w-20 sm:max-w-24">
           {attachment.filename || 'Image'}
         </span>
         <span className="text-[9px] sm:text-[10px] text-muted-foreground">
@@ -132,7 +132,7 @@ function AttachmentImage({ attachment }: AttachmentImageProps) {
       className={cn(
         'relative block overflow-hidden rounded-lg border',
         'hover:ring-2 hover:ring-primary/50 transition-all',
-        'max-w-[200px] sm:max-w-sm'
+        'max-w-48 sm:max-w-sm'
       )}
     >
       <img

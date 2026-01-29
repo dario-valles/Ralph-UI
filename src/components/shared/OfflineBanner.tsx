@@ -33,7 +33,7 @@ export function OfflineBanner({ className }: OfflineBannerProps) {
   return (
     <div
       className={cn(
-        'flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 text-white text-sm',
+        'flex items-center justify-center gap-2 px-4 py-2 bg-muted text-foreground dark:bg-muted/80 text-sm',
         className
       )}
       role="alert"
@@ -43,7 +43,7 @@ export function OfflineBanner({ className }: OfflineBannerProps) {
       <span>You are offline. Changes will sync when you reconnect.</span>
       <button
         onClick={handleRetry}
-        className="ml-2 flex items-center gap-1 px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors text-xs font-medium"
+        className="ml-2 flex items-center gap-1 px-2 py-1 rounded bg-muted-foreground/20 hover:bg-muted-foreground/30 transition-colors text-xs font-medium"
         aria-label="Check connection"
       >
         <RefreshCw className="h-3 w-3" />
@@ -69,7 +69,7 @@ export function OfflineIndicator({ className }: OfflineBannerProps) {
       className={cn(
         'fixed bottom-4 left-1/2 -translate-x-1/2 z-50',
         'flex items-center gap-2 px-4 py-2 rounded-full shadow-lg',
-        'bg-gray-800 text-white text-sm',
+        'bg-muted text-foreground dark:bg-muted/80 text-sm border border-border/50',
         'animate-in slide-in-from-bottom-4 fade-in duration-300',
         className
       )}

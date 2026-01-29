@@ -65,7 +65,7 @@ export function ProgressIndicator({
           </Badge>
         )}
         {progress?.currentFile && (
-          <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+          <span className="text-xs text-muted-foreground truncate max-w-36">
             {progress.currentFile}
           </span>
         )}

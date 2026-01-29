@@ -123,7 +123,7 @@ function StoryNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'px-3 py-2 rounded-lg border-2 min-w-[160px] max-w-[200px] transition-all',
+        'px-3 py-2 rounded-lg border-2 min-w-40 max-w-48 transition-all',
         colors.bg,
         colors.border,
         selected && 'ring-2 ring-primary ring-offset-2',

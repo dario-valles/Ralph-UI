@@ -48,18 +48,18 @@ export function TerminalTabs({ className }: TerminalTabsProps) {
             'flex items-center gap-1.5 px-2 py-1 text-xs rounded-t cursor-pointer',
             'transition-colors group min-w-0',
             terminal.id === activeTerminalId
-              ? 'bg-[#1a1a1a] text-[#e0e0e0]'
+              ? 'bg-primary text-primary-foreground'
               : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
           {/* Agent indicator */}
           {terminal.terminalType === 'agent' && (
-            <Bot className="h-3 w-3 flex-shrink-0 text-blue-400" />
+            <Bot className="h-3 w-3 flex-shrink-0 text-blue-500 dark:text-blue-400" />
           )}
-          <span className="truncate max-w-[120px]">{terminal.title}</span>
+          <span className="truncate max-w-28">{terminal.title}</span>
           {/* Exited status indicator for agent terminals */}
           {terminal.terminalType === 'agent' && terminal.agentStatus === 'exited' && (
-            <span className="text-[10px] text-gray-500">(exited)</span>
+            <span className="text-[10px] text-muted-foreground">(exited)</span>
           )}
           <button
             onClick={(e) => handleCloseTerminal(e, terminal.id, terminal.terminalType === 'agent')}

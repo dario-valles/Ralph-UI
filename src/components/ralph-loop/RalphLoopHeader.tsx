@@ -157,7 +157,7 @@ export function RalphLoopHeader({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-start sm:items-center gap-2 flex-wrap">
-              <CardTitle className="text-sm sm:text-base truncate max-w-[200px] sm:max-w-none">
+              <CardTitle className="text-sm sm:text-base truncate max-w-48 sm:max-w-none">
                 {prd.title}
               </CardTitle>
               <Badge

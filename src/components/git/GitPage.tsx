@@ -175,9 +175,14 @@ export const GitPage: React.FC = () => {
       )}
 
       {!activeRepoPath && (
-        <div className="flex flex-col items-center justify-center py-12 md:py-16 text-center">
-          <GitBranch className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground mb-3" />
-          <p className="text-base md:text-lg text-muted-foreground">Enter a repository path above to get started</p>
+        <div className="flex flex-col items-center justify-center py-6 sm:py-8 md:py-12 px-4 text-center border border-dashed rounded-lg">
+          <div className="mb-3 text-muted-foreground">
+            <GitBranch className="h-10 w-10 md:h-12 md:w-12" />
+          </div>
+          <h3 className="font-medium mb-1 text-base md:text-lg">No Repository Selected</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Enter a repository path above to view branches, commits, diffs, and worktrees.
+          </p>
         </div>
       )}
     </div>

@@ -80,15 +80,17 @@ export function SettingsPage() {
   // Show loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-muted-foreground">Loading settings...</span>
+      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Loading settings...</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>

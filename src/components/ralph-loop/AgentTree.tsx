@@ -262,13 +262,13 @@ function AgentTreeNode({
             className={cn(
               'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
               'hover:bg-muted/50 transition-colors',
-              node.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20',
+              node.status === 'running' && 'bg-blue-500/5 dark:bg-blue-500/10',
               // Selected state
               isSelected && 'ring-2 ring-primary bg-primary/5',
               // New node highlight animation
               isNew &&
                 !isSelected &&
-                'animate-highlight-fade ring-2 ring-blue-400/50 bg-blue-100/50 dark:bg-blue-900/30'
+                'animate-highlight-fade ring-2 ring-blue-500/50 bg-blue-500/10 dark:bg-blue-500/20'
             )}
             style={{ paddingLeft: `${depth * 16 + 8}px` }}
             data-new-node={isNew ? 'true' : undefined}
@@ -469,11 +469,11 @@ function SubagentDetailPanel({ node }: SubagentDetailPanelProps): React.JSX.Elem
 function StatusIndicator({ status }: { status: SubagentStatus }): React.JSX.Element {
   switch (status) {
     case 'running':
-      return <Loader2 className="h-4 w-4 flex-shrink-0 text-blue-500 animate-spin" />
+      return <Loader2 className="h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400 animate-spin" />
     case 'completed':
-      return <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-500" />
+      return <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600 dark:text-green-400" />
     case 'failed':
-      return <XCircle className="h-4 w-4 flex-shrink-0 text-red-500" />
+      return <XCircle className="h-4 w-4 flex-shrink-0 text-destructive" />
     default:
       return <Loader2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
   }

@@ -60,7 +60,7 @@ export function RalphLoopPage(): React.JSX.Element {
   // No project selected
   if (!selectedProjectPath) {
     return (
-      <div className="px-3 py-2">
+      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Ralph Wiggum Loop</h1>
           <p className="text-muted-foreground">
@@ -70,18 +70,18 @@ export function RalphLoopPage(): React.JSX.Element {
 
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-              <FolderOpen className="h-12 w-12 text-muted-foreground" />
+            <div className="flex flex-col items-center justify-center gap-4 py-6 sm:py-8 md:py-12 text-center">
+              <FolderOpen className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground" />
               <div>
-                <h3 className="text-lg font-semibold">Select a Project</h3>
-                <p className="text-sm text-muted-foreground mt-1">
+                <h3 className="text-base md:text-lg font-semibold">Select a Project</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm">
                   Choose a project to view or start a Ralph Loop execution
                 </p>
               </div>
 
               {projects.length > 0 ? (
                 <Select
-                  className="w-[300px]"
+                  className="w-full max-w-xs sm:max-w-sm"
                   value=""
                   onChange={(e) => handleProjectChange(e.target.value)}
                 >
@@ -112,7 +112,7 @@ export function RalphLoopPage(): React.JSX.Element {
       projects.find((p) => p.path === selectedProjectPath)?.name || selectedProjectPath
 
     return (
-      <div className="px-3 py-2">
+      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8">
         <div className="mb-6 flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -126,11 +126,11 @@ export function RalphLoopPage(): React.JSX.Element {
 
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-              <AlertCircle className="h-12 w-12 text-muted-foreground" />
+            <div className="flex flex-col items-center justify-center gap-4 py-6 sm:py-8 md:py-12 text-center">
+              <AlertCircle className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground" />
               <div>
-                <h3 className="text-lg font-semibold">No Ralph PRD Found</h3>
-                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                <h3 className="text-base md:text-lg font-semibold">No Ralph PRD Found</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm">
                   This project doesn't have a Ralph PRD yet. Create one by using PRD Chat or from
                   the PRD list. PRDs are stored in{' '}
                   <code className="text-xs bg-muted px-1 py-0.5 rounded">.ralph-ui/prds/</code>
@@ -157,7 +157,7 @@ export function RalphLoopPage(): React.JSX.Element {
   // If we have PRDs but none selected, show the selection list
   if (!selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 0) {
     return (
-      <div className="px-3 py-2">
+      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setSelectedProjectPath(null)}>
@@ -210,7 +210,7 @@ export function RalphLoopPage(): React.JSX.Element {
   }
 
   return (
-    <div className="px-3 py-2 h-full flex flex-col min-h-0">
+    <div className="container mx-auto max-w-6xl px-4 md:px-6 py-4 md:py-8 h-full flex flex-col min-h-0">
       <div className="mb-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button
@@ -238,7 +238,7 @@ export function RalphLoopPage(): React.JSX.Element {
         {/* PRD selector (if multiple PRDs exist) */}
         {selectedPrdName && ralphFiles && ralphFiles.prdNames.length > 1 && (
           <Select
-            className="w-[200px]"
+            className="w-48 sm:w-56"
             value={selectedPrdName}
             onChange={(e) => handlePrdChange(e.target.value)}
           >

@@ -80,7 +80,7 @@ export function FolderPicker({
           <Button
             variant="outline"
             size="sm"
-            className="justify-start gap-2 flex-1 max-w-[200px]"
+            className="justify-start gap-2 flex-1 max-w-48"
             disabled={disabled}
           >
             {selectedFolder ? (

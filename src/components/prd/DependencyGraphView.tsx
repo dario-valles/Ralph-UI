@@ -135,7 +135,7 @@ function RequirementNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        'px-3 py-2 rounded-lg border-2 min-w-[180px] max-w-[220px] transition-all',
+        'px-3 py-2 rounded-lg border-2 min-w-44 max-w-52 transition-all',
         colors.bg,
         colors.border,
         selected && 'ring-2 ring-emerald-500 ring-offset-2',
