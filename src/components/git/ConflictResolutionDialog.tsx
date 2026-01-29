@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { Loader2, GitMerge, CheckCircle2, XCircle, AlertTriangle, Bot } from 'lucide-react'
-import { gitApi, ConflictInfo, MergeResolutionResult, ConflictResolverAgent } from '@/lib/git-api'
+import { gitApi, ConflictInfo, MergeResolutionResult, ConflictResolverAgent } from '@/lib/api/git-api'
 
 interface ConflictResolutionDialogProps {
   repoPath: string

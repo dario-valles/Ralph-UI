@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BranchInfo, gitApi } from '../../lib/git-api'
+import { BranchInfo, gitApi } from '../../lib/api/git-api'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'

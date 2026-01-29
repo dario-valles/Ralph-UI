@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { CommitInfo } from '../../lib/git-api'
+import { CommitInfo } from '../../lib/api/git-api'
 import { BranchManager } from './BranchManager'
 import { CommitHistory } from './CommitHistory'
 import { DiffViewer } from './DiffViewer'
