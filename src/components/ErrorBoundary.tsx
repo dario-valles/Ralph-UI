@@ -29,7 +29,11 @@ export class ErrorBoundary extends Component<Props, State> {
     // Log error to console for debugging
     console.error('[ErrorBoundary] Caught an error:', error)
     console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack)
-    console.error('[ErrorBoundary] Error digest:', errorInfo.digest)
+    // Note: digest is available in React 19 but not in all TypeScript versions
+    const digest = (errorInfo as React.ErrorInfo & { digest?: string }).digest
+    if (digest) {
+      console.error('[ErrorBoundary] Error digest:', digest)
+    }
   }
 
   handleReload = (): void => {
