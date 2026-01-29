@@ -72,8 +72,16 @@ export const createChatSessionSlice = (
     const ctx = getSessionWithPath(get)
     if (!ctx) return
 
+    // Log provider selection
+    console.log('🔄 [PRD Chat] Updating agent configuration:')
+    console.log('  Agent Type:', agentType)
+    console.log('  Provider ID:', providerId || '(default)')
+    console.log('  Session ID:', ctx.session.id)
+
     try {
       await prdChatApi.updateSessionAgent(ctx.session.id, ctx.projectPath, agentType, providerId)
+
+      console.log('✓ [PRD Chat] Agent configuration updated successfully')
 
       set((state) => ({
         currentSession: state.currentSession ? { ...state.currentSession, agentType, providerId } : null,
@@ -82,6 +90,7 @@ export const createChatSessionSlice = (
         ),
       }))
     } catch (error) {
+      console.error('✗ [PRD Chat] Failed to update agent configuration:', error)
       set({ error: errorToString(error) })
     }
   },
@@ -114,17 +123,9 @@ export const createChatSessionSlice = (
     }
 
     // Check if session has a pending operation that may still be running (page reload recovery)
-    let shouldRestoreStreaming = false
-    if (session?.pendingOperationStartedAt) {
-      const startedAt = new Date(session.pendingOperationStartedAt)
-      const elapsedMs = Date.now() - startedAt.getTime()
-      const timeoutMs = 25 * 60 * 1000 // 25 minutes (AGENT_TIMEOUT_SECS from backend)
-
-      if (elapsedMs < timeoutMs) {
-        // Operation may still be running - restore streaming state
-        shouldRestoreStreaming = true
-      }
-    }
+    const shouldRestoreStreaming = session?.pendingOperationStartedAt
+      ? Date.now() - new Date(session.pendingOperationStartedAt).getTime() < 25 * 60 * 1000 // 25 minutes
+      : false
 
     set({
       currentSession: session,
@@ -134,7 +135,7 @@ export const createChatSessionSlice = (
             streaming: true,
             processingSessionId: session.id,
           }
-        : {}), // Don't reset streaming state if not restoring - leave it as-is
+        : {}),
     })
   },
 

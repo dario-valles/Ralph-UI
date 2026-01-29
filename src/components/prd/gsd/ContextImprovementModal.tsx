@@ -48,9 +48,7 @@ export function ContextImprovementModal({
   }
 
   const hasImprovements = contextFields.some(
-    (field) =>
-      improvedContext[field.key] &&
-      improvedContext[field.key] !== originalContext[field.key]
+    (field) => improvedContext[field.key] && improvedContext[field.key] !== originalContext[field.key]
   )
 
   return (

@@ -38,11 +38,7 @@ export function IdeaStarterModal({
     setIsLoading(true)
     setError(null)
     try {
-      const result = await retryWithBackoff(
-        () => gsdApi.generateIdeaStarters(projectType, currentContext),
-        3, // max retries
-        1000 // base delay
-      )
+      const result = await retryWithBackoff(() => gsdApi.generateIdeaStarters(projectType, currentContext))
       setIdeas(result)
       setHasLoaded(true)
     } catch (err) {
@@ -57,13 +53,6 @@ export function IdeaStarterModal({
   // Generate on open if not loaded
   if (open && !hasLoaded && !isLoading && !error) {
     generateIdeas()
-  }
-
-  const handleKeyDown = (idea: GeneratedIdea, e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSelect(idea)
-    }
   }
 
   return (
@@ -109,7 +98,12 @@ export function IdeaStarterModal({
                   key={idea.id}
                   className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => onSelect(idea)}
-                  onKeyDown={(e) => handleKeyDown(idea, e)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelect(idea)
+                    }
+                  }}
                   tabIndex={0}
                   role="option"
                   aria-label={`Idea: ${idea.title}. ${idea.summary}`}

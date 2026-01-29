@@ -14,7 +14,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChatInput } from './ChatInput'
 import { ChatMessageItem } from './ChatMessageItem'
 import { QuestioningGuide } from './gsd/QuestioningGuide'
-import { IdeaStarterModal } from './gsd/IdeaStarterModal'
+// import { IdeaStarterModal } from './gsd/IdeaStarterModal' // Legacy, replaced by IdeaGenerationModal
+import { IdeaGenerationModal } from './gsd/idea-generation/IdeaGenerationModal'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useProjectStore } from '@/stores/projectStore'
 import type { QuestioningContext, ProjectType, GeneratedIdea } from '@/types/gsd'
@@ -101,7 +102,7 @@ export function DeepQuestioning({
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([SYSTEM_WELCOME])
   const [projectType, setProjectType] = useState<ProjectType | undefined>()
   const [isDetectingType, setIsDetectingType] = useState(false)
-  const [showIdeaStarter, setShowIdeaStarter] = useState(false)
+  const [showIdeaGeneration, setShowIdeaGeneration] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Get project context
@@ -137,16 +138,16 @@ export function DeepQuestioning({
       setIsDetectingType(true)
       try {
         const result = await gsdApi.detectProjectType(projectPath)
-        // Check if component is still mounted before updating state
         if (!abortController.signal.aborted) {
           setProjectType(result.detectedType)
 
           // Update welcome message if we have a specific type and haven't started chatting
-          if (
+          const shouldUpdateWelcome =
             result.detectedType !== 'other' &&
             storeMessages.length === 0 &&
             localMessages.length === 1
-          ) {
+
+          if (shouldUpdateWelcome) {
             setLocalMessages([
               {
                 ...SYSTEM_WELCOME,
@@ -168,7 +169,6 @@ export function DeepQuestioning({
 
     detect()
 
-    // Cleanup function to abort on unmount
     return () => {
       abortController.abort()
     }
@@ -216,14 +216,21 @@ export function DeepQuestioning({
       setLocalMessages((prev) => [...prev, userMessage])
 
       try {
-        // Send through the chat system if connected
         if (currentSession) {
           await sendMessage(content.trim(), attachments)
         } else {
-          // Fallback: just add the message locally and use it as a note
+          // Fallback: add message locally as a note
+          const existingNotes = context.notes || []
           onContextUpdate({
-            notes: [...(context.notes || []), content.trim()],
+            notes: [...existingNotes, content.trim()],
           })
+
+          // Build follow-up questions based on missing context
+          const missingContextItems = []
+          if (!hasWhat) missingContextItems.push('\n- **What** specifically are you building?')
+          if (!hasWhy) missingContextItems.push('\n- **Why** does this need to exist? What problem does it solve?')
+          if (!hasWho) missingContextItems.push('\n- **Who** will use this?')
+          if (!hasDone) missingContextItems.push('\n- **What does "done" look like?** How will you know it\'s complete?')
 
           // Add a simulated assistant response
           const assistantMessage: ChatMessage = {
@@ -232,11 +239,7 @@ export function DeepQuestioning({
             role: 'assistant',
             content: `Thanks for sharing! I've added that to your project context.
 
-Based on what you've told me so far, could you tell me more about:
-${!hasWhat ? '\n- **What** specifically are you building?' : ''}
-${!hasWhy ? '\n- **Why** does this need to exist? What problem does it solve?' : ''}
-${!hasWho ? '\n- **Who** will use this?' : ''}
-${!hasDone ? '\n- **What does "done" look like?** How will you know it\'s complete?' : ''}
+Based on what you've told me so far, could you tell me more about:${missingContextItems.join('')}
 
 Feel free to elaborate on any of these, or continue describing your idea.`,
             createdAt: new Date().toISOString(),
@@ -266,7 +269,7 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
 
   const handleIdeaSelect = (idea: GeneratedIdea) => {
     onContextUpdate(idea.context)
-    setShowIdeaStarter(false)
+    setShowIdeaGeneration(false)
     // Add a message about adopting the idea
     setLocalMessages((prev) => [
       ...prev,
@@ -298,10 +301,10 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
                 variant="outline"
                 size="sm"
                 className="gap-1.5 h-8"
-                onClick={() => setShowIdeaStarter(true)}
+                onClick={() => setShowIdeaGeneration(true)}
               >
                 <Sparkles className="h-3.5 w-3.5 text-yellow-500" />
-                Help me brainstorm
+                AI Idea Generation
               </Button>
             )}
           </div>
@@ -312,14 +315,14 @@ Feel free to elaborate on any of these, or continue describing your idea.`,
         </CardHeader>
       </Card>
 
-      {/* Idea Starter Modal */}
+      {/* New AI-Powered Idea Generation Modal */}
       {projectType && (
-        <IdeaStarterModal
-          open={showIdeaStarter}
-          onOpenChange={setShowIdeaStarter}
+        <IdeaGenerationModal
+          open={showIdeaGeneration}
+          onOpenChange={setShowIdeaGeneration}
+          onSelectIdea={handleIdeaSelect}
           projectType={projectType}
           currentContext={context}
-          onSelect={handleIdeaSelect}
         />
       )}
 

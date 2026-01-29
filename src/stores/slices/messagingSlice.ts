@@ -47,10 +47,19 @@ export const createMessagingSlice = (
     const sessionId = currentSession.id
     const projectPath = currentSession.projectPath
 
+    // Log agent configuration being used
+    const agentType = currentSession.agentType || 'claude'
+    const providerId = currentSession.providerId
+    console.log('📤 [PRD Chat] Sending message:')
+    console.log('  Agent:', agentType)
+    console.log('  Provider:', providerId || '(default)')
+    console.log('  Session:', sessionId)
+    console.log('  Message preview:', content.substring(0, 100) + (content.length > 100 ? '...' : ''))
+
     // Create optimistic user message with UUID to prevent collision
     const optimisticMessage: ChatMessage = {
       id: `temp-${generateUUID()}`,
-      sessionId: sessionId,
+      sessionId,
       role: 'user',
       content,
       createdAt: new Date().toISOString(),
@@ -129,14 +138,13 @@ export const createMessagingSlice = (
   // Load message history for a session
   // projectPath can be passed explicitly for robustness (e.g., during reconnection)
   loadHistory: async (sessionId: string, projectPath?: string) => {
-    // Try explicit param first, then currentSession, then find from sessions list
+    // Resolve project path: explicit param > currentSession > sessions list
     let resolvedPath = projectPath
     if (!resolvedPath) {
       const ctx = getSessionWithPath(get)
       resolvedPath = ctx?.projectPath
     }
     if (!resolvedPath) {
-      // Fallback: find session in sessions list and get its projectPath
       const { sessions } = get()
       const session = sessions.find((s) => s.id === sessionId)
       resolvedPath = session?.projectPath
@@ -145,6 +153,7 @@ export const createMessagingSlice = (
       set({ error: 'No project path available' })
       return
     }
+
     await asyncAction(set, async () => {
       const messages = await prdChatApi.getHistory(sessionId, resolvedPath!)
 

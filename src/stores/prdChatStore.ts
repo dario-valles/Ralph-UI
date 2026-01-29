@@ -22,6 +22,7 @@ import {
   createFileWatchSlice,
   createResearchSlice,
   createGsdSlice,
+  createIdeaGenerationSlice,
 } from './slices'
 
 // Re-export types for backward compatibility
@@ -33,17 +34,15 @@ export type { HybridPhaseState, StartSessionOptions }
  * Combines all slices into a single store with unified state management.
  */
 export const usePRDChatStore = create<PRDChatStore>((set, get) => {
-  // Create all slices
   const chatSessionSlice = createChatSessionSlice(set, get)
   const messagingSlice = createMessagingSlice(set, get)
   const fileWatchSlice = createFileWatchSlice(set, get)
   const researchSlice = createResearchSlice(set, get)
   const gsdSlice = createGsdSlice(set, get)
+  const ideaGenSlice = createIdeaGenerationSlice(set, get)
 
   return {
-    // =========================================================================
     // Core State (ChatCoreState)
-    // =========================================================================
     sessions: [],
     currentSession: null,
     messages: [],
@@ -52,23 +51,17 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     error: null,
     processingSessionId: null,
 
-    // =========================================================================
     // Messaging State
-    // =========================================================================
     qualityAssessment: messagingSlice.qualityAssessment,
     guidedQuestions: messagingSlice.guidedQuestions,
     extractedContent: messagingSlice.extractedContent,
 
-    // =========================================================================
     // File Watch State
-    // =========================================================================
     watchedPlanContent: fileWatchSlice.watchedPlanContent,
     watchedPlanPath: fileWatchSlice.watchedPlanPath,
     isWatchingPlan: fileWatchSlice.isWatchingPlan,
 
-    // =========================================================================
     // Research State (Hybrid GSD)
-    // =========================================================================
     researchStatus: researchSlice.researchStatus,
     researchResults: researchSlice.researchResults,
     researchSynthesis: researchSlice.researchSynthesis,
@@ -77,9 +70,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     isResearchRunning: researchSlice.isResearchRunning,
     isSynthesizing: researchSlice.isSynthesizing,
 
-    // =========================================================================
     // GSD Workflow State
-    // =========================================================================
     requirementsDoc: gsdSlice.requirementsDoc,
     roadmapDoc: gsdSlice.roadmapDoc,
     phaseState: gsdSlice.phaseState,
@@ -92,9 +83,10 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     contextSuggestions: gsdSlice.contextSuggestions,
     isLoadingSuggestions: gsdSlice.isLoadingSuggestions,
 
-    // =========================================================================
+    // Idea Generation State
+    ideaGeneration: ideaGenSlice.ideaGeneration,
+
     // Chat Session Actions
-    // =========================================================================
     startSession: chatSessionSlice.startSession,
     updateSessionAgent: chatSessionSlice.updateSessionAgent,
     loadSessions: chatSessionSlice.loadSessions,
@@ -102,9 +94,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     deleteSession: chatSessionSlice.deleteSession,
     clearError: chatSessionSlice.clearError,
 
-    // =========================================================================
     // Messaging Actions
-    // =========================================================================
     sendMessage: messagingSlice.sendMessage,
     loadHistory: messagingSlice.loadHistory,
     assessQuality: messagingSlice.assessQuality,
@@ -113,16 +103,12 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     setStructuredMode: messagingSlice.setStructuredMode,
     clearExtractedStructure: messagingSlice.clearExtractedStructure,
 
-    // =========================================================================
     // File Watch Actions
-    // =========================================================================
     startWatchingPlanFile: fileWatchSlice.startWatchingPlanFile,
     stopWatchingPlanFile: fileWatchSlice.stopWatchingPlanFile,
     updatePlanContent: fileWatchSlice.updatePlanContent,
 
-    // =========================================================================
     // Research Actions (Hybrid GSD)
-    // =========================================================================
     loadAvailableAgents: researchSlice.loadAvailableAgents,
     setSelectedResearchAgent: researchSlice.setSelectedResearchAgent,
     setResearchStatus: researchSlice.setResearchStatus,
@@ -131,9 +117,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     startResearch: researchSlice.startResearch,
     synthesizeResearch: researchSlice.synthesizeResearch,
 
-    // =========================================================================
     // GSD Workflow Actions
-    // =========================================================================
     generateRequirements: gsdSlice.generateRequirements,
     loadRequirements: gsdSlice.loadRequirements,
     applyScopeSelection: gsdSlice.applyScopeSelection,
@@ -146,5 +130,17 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     analyzeContextQuality: gsdSlice.analyzeContextQuality,
     generateContextSuggestions: gsdSlice.generateContextSuggestions,
     setProjectType: gsdSlice.setProjectType,
+
+    // Idea Generation Actions
+    setIdeaGenMode: ideaGenSlice.setIdeaGenMode,
+    setInterests: ideaGenSlice.setInterests,
+    setVariationDimensions: ideaGenSlice.setVariationDimensions,
+    generateIdeas: ideaGenSlice.generateIdeas,
+    generateVariations: ideaGenSlice.generateVariations,
+    exploreSpace: ideaGenSlice.exploreSpace,
+    validateIdea: ideaGenSlice.validateIdea,
+    analyzeMarket: ideaGenSlice.analyzeMarket,
+    selectIdea: ideaGenSlice.selectIdea,
+    clearIdeaGeneration: ideaGenSlice.clearIdeaGeneration,
   }
 })

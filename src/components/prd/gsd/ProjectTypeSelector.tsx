@@ -99,13 +99,6 @@ export function ProjectTypeSelector({
   detectedType,
   className,
 }: ProjectTypeSelectorProps) {
-  const handleKeyDown = (type: ProjectType, e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSelect(type)
-    }
-  }
-
   return (
     <div
       className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4', className)}
@@ -125,7 +118,12 @@ export function ProjectTypeSelector({
               isDetected && !isSelected && 'border-blue-500/50 bg-blue-500/5'
             )}
             onClick={() => onSelect(option.type)}
-            onKeyDown={(e) => handleKeyDown(option.type, e)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onSelect(option.type)
+              }
+            }}
             tabIndex={0}
             role="option"
             aria-selected={isSelected}

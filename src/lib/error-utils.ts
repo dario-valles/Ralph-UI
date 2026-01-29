@@ -21,91 +21,77 @@ export interface ErrorInfo {
 }
 
 /**
+ * Helper to append context to error message
+ */
+function appendContext(message: string, context?: string): string {
+  return context ? `${message} (${context})` : message
+}
+
+/**
  * Get user-friendly error information based on error type
  */
 export function getErrorInfo(error: unknown, context?: string): ErrorInfo {
-  // Check if it's a network error
   if (isNetworkError(error)) {
     return {
       type: ErrorType.NETWORK_ERROR,
       title: 'Connection Error',
-      message: `Having trouble connecting. Please check your internet connection.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext('Having trouble connecting. Please check your internet connection.', context),
       canRetry: true,
       retryDelay: 2000,
     }
   }
 
-  // Check if it's a timeout error
   if (isTimeoutError(error)) {
     return {
       type: ErrorType.TIMEOUT,
       title: 'Request Timed Out',
-      message: `The request took too long to complete. Please try again.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext('The request took too long to complete. Please try again.', context),
       canRetry: true,
       retryDelay: 1000,
     }
   }
 
-  // Check if it's an API limit error
   if (isApiLimitError(error)) {
     return {
       type: ErrorType.API_LIMIT,
       title: 'Too Many Requests',
-      message: `You've hit the rate limit. Please wait a moment and try again.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext("You've hit the rate limit. Please wait a moment and try again.", context),
       canRetry: true,
       retryDelay: 5000,
     }
   }
 
-  // Check if it's a permission error
   if (isPermissionError(error)) {
     return {
       type: ErrorType.PERMISSION_DENIED,
       title: 'Permission Denied',
-      message: `You don't have permission to perform this action.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext("You don't have permission to perform this action.", context),
       canRetry: false,
     }
   }
 
-  // Check if it's a validation error
   if (isValidationError(error)) {
     return {
       type: ErrorType.VALIDATION_ERROR,
       title: 'Invalid Input',
-      message: `Please check your input and try again.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext('Please check your input and try again.', context),
       canRetry: false,
     }
   }
 
-  // Check if it's a not found error
   if (isNotFoundError(error)) {
     return {
       type: ErrorType.NOT_FOUND,
       title: 'Not Found',
-      message: `The requested resource was not found.${
-        context ? ` (${context})` : ''
-      }`,
+      message: appendContext('The requested resource was not found.', context),
       canRetry: false,
     }
   }
 
-  // Default unknown error
   return {
     type: ErrorType.UNKNOWN,
     title: 'Something Went Wrong',
-    message: `An unexpected error occurred. Please try again.${
-      context ? ` (${context})` : ''
-    }`,
+    message: appendContext('An unexpected error occurred. Please try again.', context),
     canRetry: true,
     retryDelay: 2000,
   }

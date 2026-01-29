@@ -58,8 +58,13 @@ export function GSDOnboardingTour({ onComplete, onSkip }: GSDOnboardingTourProps
     }
   }
 
+  const handlePrevious = () => {
+    setCurrentStep(Math.max(0, currentStep - 1))
+  }
+
   const step = STEPS[currentStep]
   const isLastStep = currentStep === STEPS.length - 1
+  const isFirstStep = currentStep === 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
@@ -106,11 +111,8 @@ export function GSDOnboardingTour({ onComplete, onSkip }: GSDOnboardingTourProps
                 <div className="text-left mt-6 max-h-[50vh] min-h-[300px] overflow-y-auto pr-2 border rounded-lg p-2 bg-muted/30">
                   <ProjectTypeSelector
                     selectedType={selectedType}
-                    onSelect={(type) => {
-                      setSelectedType(type)
-                      // Optional: auto-advance on selection? No, let them confirm.
-                    }}
-                    className="grid-cols-1 md:grid-cols-2" // 2 columns for compact view
+                    onSelect={setSelectedType}
+                    className="grid-cols-1 md:grid-cols-2"
                   />
                 </div>
               )}
@@ -119,11 +121,7 @@ export function GSDOnboardingTour({ onComplete, onSkip }: GSDOnboardingTourProps
         </AnimatePresence>
 
         <CardFooter className="flex justify-between p-6 bg-muted/30 border-t">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-            disabled={currentStep === 0}
-          >
+          <Button variant="outline" onClick={handlePrevious} disabled={isFirstStep}>
             Back
           </Button>
           <Button onClick={handleNext} size="lg" className="gap-2">

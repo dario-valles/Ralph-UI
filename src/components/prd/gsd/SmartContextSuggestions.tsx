@@ -27,8 +27,6 @@ export function SmartContextSuggestions({
     setIsLoading(true)
     setError(null)
     try {
-      // In a real app, we might want to cache this or pass it down
-      // For now, we fetch fresh suggestions
       const result = await gsdApi.generateContextSuggestions(projectType, context)
       setSuggestions(result[missingItem] || [])
       setHasLoaded(true)
@@ -41,19 +39,11 @@ export function SmartContextSuggestions({
     }
   }, [projectType, context, missingItem])
 
-  // Load on mount if not loaded
   useEffect(() => {
     if (!hasLoaded && !isLoading) {
       loadSuggestions()
     }
-  }, [projectType, missingItem, hasLoaded, isLoading, loadSuggestions]) // Re-load if type/item changes
-
-  const handleKeyDown = (suggestion: string, e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onAdopt(suggestion)
-    }
-  }
+  }, [projectType, missingItem, hasLoaded, isLoading, loadSuggestions])
 
   if (isLoading) {
     return (
@@ -103,7 +93,12 @@ export function SmartContextSuggestions({
           <button
             key={i}
             onClick={() => onAdopt(suggestion)}
-            onKeyDown={(e) => handleKeyDown(suggestion, e)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onAdopt(suggestion)
+              }
+            }}
             className="text-left text-xs p-2 rounded-md bg-muted/50 hover:bg-muted border border-transparent hover:border-primary/20 transition-all group flex items-start gap-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             role="option"
             aria-label={`Suggestion ${i + 1}: ${suggestion}`}
