@@ -25,14 +25,14 @@
     - [x] Sub-task: Verify the generated PRD content matches the project standards.
 - [x] Task: Conductor - User Manual Verification 'PRD Flow Implementation' (Protocol in workflow.md)
 
-## Phase 3: System Stability & Polish
+## Phase 3: System Stability & Polish [checkpoint: e6622b3]
 - [x] Task: Review and fix high-priority bugs.
     - [x] Sub-task: Check `README.md` or issue tracker for list of known bugs.
     - [x] Sub-task: Implement fixes for top 3 critical stability issues.
 - [x] Task: Performance Tuning.
     - [x] Sub-task: Profile backend resource usage (memory/CPU) during agent execution.
     - [x] Sub-task: Optimize frontend re-renders in the Mission Control view.
-- [ ] Task: Conductor - User Manual Verification 'System Stability & Polish' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'System Stability & Polish' (Protocol in workflow.md)
 
 ## Phase 4: Documentation & Wrap-up
 - [ ] Task: Update Documentation.
