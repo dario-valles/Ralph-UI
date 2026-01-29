@@ -110,7 +110,7 @@ WebSocket connections pass token as query parameter: `/ws/events?token=YOUR_TOKE
 
 ### Frontend (src/)
 - **React 19 + TypeScript** with Vite bundler
-- **Zustand stores** (`src/stores/`): 8 feature-isolated stores (session, task, agent, prd, prdChat, gsd, project, ui, toast, ralphLoop)
+- **Zustand stores** (`src/stores/`): Feature-isolated stores (prdChat, prdWorkflow, project, ui, toast, ralphLoop, connection, onboarding, terminal, toolCall)
 - **API wrappers** (`src/lib/`): Centralized HTTP/WebSocket calls to backend
 - **shadcn/ui components** (`src/components/ui/`): Radix UI + Tailwind CSS
 - **Feature components** (`src/components/`): mission-control, tasks, agents, git, prd, dashboard, parallel, etc.
@@ -289,7 +289,7 @@ You are working on: {{ task.title }}
 {% endif %}
 ```
 
-**GSD/Chat Prompts:** Currently use `GsdCustomPrompts` in config (`server/src/gsd/config.rs`) with fields for `deep_questioning`, `architecture`, `codebase`, `best_practices`, `risks`. These should eventually migrate to the template system.
+**PRD Type Guidance:** Type-specific onboarding content is defined in `src/config/prdTypeGuidance.ts` with workflow steps, sample prompts, and quick commands for each PRD type (bug_fix, refactoring, api_integration, new_feature, full_new_app, general).
 
 ### Navigation Context Pattern
 **IMPORTANT**: When navigating between pages, always set the appropriate Zustand store context before navigating. Many pages require `currentSession` or `activeProject` to be set:
@@ -350,22 +350,30 @@ PRD Chat uses native CLI session resumption to avoid resending full conversation
 | 10 | 55 exchanges | 10 exchanges | 82% |
 | 20 | 210 exchanges | 20 exchanges | 90% |
 
-## GSD Workflow
+## PRD Workflow
 
-The GSD (Get Stuff Done) workflow provides guided PRD creation through 8 phases:
-1. **Questioning** - Chat-based context gathering (what/why/who/done)
-2. **Research** - Parallel AI agent research on requirements
-3. **Requirements** - Auto-generated requirements from research
-4. **Scoping** - Kanban drag-and-drop for V1/V2/Out of Scope categorization
-5. **Roadmap** - Visual feature version planning
-6. **Verification** - Requirements coverage validation
-7. **Export** - Convert to Ralph PRD format
-8. **Complete** - Workflow completion
+The PRD workflow provides guided PRD creation with AI assistance:
+
+**PRD Types:**
+- **Quick PRD** - Bug Fix, Refactoring, API Integration (faster, simpler workflow)
+- **Full Project Plan** - New Feature, Full New App (comprehensive planning)
+- **General** - Other product requirements
+
+**Key Features:**
+- Type-specific onboarding guidance with workflow steps and sample prompts
+- AI-powered chat interface for requirement gathering
+- Slash commands for quick template insertion (`/epic`, `/story`, `/task`, `/critique`)
+- Dependency graph visualization for requirements
+- Sequential or parallel execution modes
 
 Key files:
-- `src/stores/gsdStore.ts` - Workflow state management
-- `server/src/commands/gsd.rs` - Backend commands
-- `src/types/gsd.ts` - Type definitions
+- `src/stores/prdChatStore.ts` - Chat session state management
+- `src/stores/prdWorkflowStore.ts` - Workflow state management
+- `server/src/commands/prd_chat/` - Backend chat commands
+- `server/src/commands/prd_workflow.rs` - Workflow commands
+- `src/config/prdTypeGuidance.ts` - Type-specific guidance content
+- `src/components/prd/PRDGuidancePanel.tsx` - Onboarding guidance UI
+- `src/types/prd-workflow.ts` - Type definitions
 
 ## Data Storage
 
@@ -377,11 +385,7 @@ Data is stored in `.ralph-ui/` directories within each project for git-trackable
 ├── sessions/{id}.json     # Session state with embedded tasks
 ├── prds/{name}.json       # PRD documents with stories/progress
 ├── chat/{id}.json         # Chat sessions with embedded messages
-├── planning/{id}/         # GSD planning sessions
-│   ├── PROJECT.md         # Generated project context
-│   ├── SUMMARY.md         # Research synthesis
-│   ├── REQUIREMENTS.md    # Generated requirements
-│   └── ROADMAP.md         # Feature roadmap
+├── workflows/{id}.json    # PRD workflow state
 └── .gitignore             # Excludes runtime files (agents/, *.lock)
 ```
 
@@ -408,7 +412,7 @@ E2E tests are written in markdown format and executed via the `/e2e` Claude Code
 
 Test files are organized in:
 - `e2e/functional/` - Core feature tests (sessions, tasks, agents, git)
-- `e2e/workflow/` - End-to-end workflow tests (GSD, Ralph Loop, PRD)
+- `e2e/workflow/` - End-to-end workflow tests (PRD workflow, Ralph Loop)
 - `e2e/responsive/` - Viewport-specific tests (mobile, tablet, desktop)
 
 See `e2e/README.md` for test format and writing guidelines.

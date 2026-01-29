@@ -23,10 +23,10 @@ e2e/
 │   ├── 04-agent-workflows.md        # Agent lifecycle, monitoring
 │   └── 05-git-operations.md         # Git workflows
 ├── workflow/                         # End-to-end workflow tests
-│   ├── 01-gsd-workflow.md           # GSD 8-phase workflow
+│   ├── 01-prd-workflow.md           # PRD workflow tests
 │   ├── 02-session-lifecycle.md      # Full session lifecycle
 │   ├── 03-ralph-loop-workflow.md    # Ralph Loop execution
-│   └── 04-prd-creation-workflow.md  # PRD creation workflow
+│   └── 04-prd-creation-workflow.md  # PRD chat workflow
 └── responsive/                       # Responsive design tests
     ├── 01-mobile-layout.md          # Mobile viewport (375x667)
     ├── 02-tablet-layout.md          # Tablet viewport (768x1024)
@@ -62,7 +62,7 @@ e2e/
 
 # Run a specific test file
 /e2e functional/01-app-basics.md
-/e2e workflow/01-gsd-workflow.md
+/e2e workflow/01-prd-workflow.md
 ```
 
 ## Test File Format

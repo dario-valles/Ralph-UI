@@ -197,11 +197,11 @@ Markdown-based E2E tests executed via Claude Code skill with browser automation.
 bun run cargo:test
 ```
 
-Runs 670+ backend tests covering:
+Runs 650+ backend tests covering:
 - File storage operations
 - Git operations
 - Agent management
-- GSD workflow
+- PRD workflow
 - Ralph Loop execution
 - Template rendering
 - Signal handling
@@ -215,7 +215,7 @@ Ralph-UI/
 ├── src/                    # Frontend (React + TypeScript)
 │   ├── components/         # UI components
 │   │   ├── ui/             # shadcn/ui base components
-│   │   ├── prd/            # PRD management and GSD workflow
+│   │   ├── prd/            # PRD management and AI chat
 │   │   └── git/            # Git operations
 │   ├── stores/             # Zustand state management
 │   ├── lib/                # Utilities and API wrappers
@@ -226,7 +226,7 @@ Ralph-UI/
 │   │   ├── file_storage/   # JSON file storage
 │   │   ├── git/            # Git operations (git2-rs)
 │   │   ├── agents/         # Agent process management
-│   │   ├── gsd/            # GSD workflow
+│   │   ├── prd_workflow/   # PRD workflow
 │   │   ├── ralph_loop/     # Ralph Loop execution
 │   │   └── server/         # HTTP/WebSocket server
 │   └── Cargo.toml          # Rust dependencies

@@ -11,7 +11,7 @@ Ralph-UI/
 │   │   ├── ui/                 # shadcn/ui base components
 │   │   ├── layout/             # Layout (AppLayout, Sidebar, TitleBar)
 │   │   ├── dashboard/          # Dashboard pages
-│   │   ├── prd/                # PRD management, GSD workflow, AI chat
+│   │   ├── prd/                # PRD management, AI chat, guidance panel
 │   │   ├── git/                # Git operations (BranchManager, DiffViewer, etc.)
 │   │   ├── projects/           # Project management (ProjectPicker, ProjectSwitcher)
 │   │   ├── mission-control/    # Mission Control dashboard
@@ -40,7 +40,7 @@ Ralph-UI/
 │   │   ├── models/             # Data models
 │   │   ├── git/                # Git operations (git2-rs)
 │   │   ├── agents/             # Agent process management
-│   │   ├── gsd/                # GSD workflow system
+│   │   ├── prd_workflow/       # PRD workflow system
 │   │   ├── ralph_loop/         # Ralph Loop execution
 │   │   ├── server/             # HTTP/WebSocket server mode
 │   │   ├── session/            # Session management
@@ -81,7 +81,7 @@ Ralph-UI/
 - `tasks/` - TaskList, TaskDetail, DependencyGraph, PRDImport
 - `agents/` - AgentList, AgentDetail, AgentLogViewer, SubagentTree
 - `git/` - BranchManager, WorktreeManager, CommitHistory, DiffViewer
-- `prd/` - PRDEditor, PRDList, PRDChatPanel, PRDTemplateSelector, PRDExecutionDialog
+- `prd/` - PRDChatPanel, PRDGuidancePanel, ChatInput, DependencyGraphView, PRDExecutionDialog
 - `parallel/` - ParallelExecutionPage, AgentComparison, ConflictResolution
 - `projects/` - ProjectPicker, ProjectSwitcher
 - `mission-control/` - MissionControlPage, ProjectStatusCard, ActiveAgentsGrid, ActivityTimeline
@@ -90,18 +90,20 @@ Ralph-UI/
 
 ### State Management (`src/stores/`)
 
-Eight Zustand stores:
+Zustand stores for state management:
 
 | Store | Purpose |
 |-------|---------|
-| `gsdStore.ts` | GSD workflow state management |
 | `prdChatStore.ts` | AI chat state for PRD creation |
+| `prdWorkflowStore.ts` | PRD workflow state management |
 | `projectStore.ts` | Multi-project management |
 | `ralphLoopStore.ts` | Ralph Loop execution state |
 | `terminalStore.ts` | Terminal/agent output management |
 | `toastStore.ts` | Toast notifications |
 | `toolCallStore.ts` | Tool call tracking for agents |
 | `uiStore.ts` | UI state (sidebars, modals) |
+| `connectionStore.ts` | Server connection state |
+| `onboardingStore.ts` | Onboarding state |
 
 ### Hooks (`src/hooks/`)
 
@@ -109,11 +111,13 @@ Eight Zustand stores:
 
 ### API Layer (`src/lib/`)
 
-- `tauri-api.ts` - Main Tauri command wrappers
-- `agent-api.ts` - Agent-specific API calls
-- `git-api.ts` - Git operation wrappers
-- `parallel-api.ts` - Parallel execution API
-- `config-api.ts` - Configuration API
+- `invoke.ts` - Unified invoke for server/browser
+- `backend-api.ts` - Main API wrapper exports
+- `api/agent-api.ts` - Agent-specific API calls
+- `api/config-api.ts` - Configuration API
+- `api/prd-workflow-api.ts` - PRD workflow API
+- `api/project-api.ts` - Project management API
+- `events-client.ts` - WebSocket event handling
 - `utils.ts` - Common utilities
 
 ### Type System (`src/types/`)
@@ -132,7 +136,7 @@ Centralized TypeScript definitions:
 | `config.rs` | Configuration management |
 | `git.rs` | Branch, worktree, commit operations |
 | `github.rs` | GitHub API (PRs, Issues) |
-| `gsd.rs` | GSD workflow commands |
+| `prd_workflow.rs` | PRD workflow commands |
 | `prd.rs` | PRD CRUD, templates, execution |
 | `prd_chat.rs` | AI chat for PRD creation |
 | `projects.rs` | Project management |
@@ -187,7 +191,7 @@ Multi-agent orchestration:
 
 ### Other Backend Modules
 
-- `gsd/` - GSD workflow (questioning, research, requirements, verification)
+- `prd_workflow/` - PRD workflow (execution modes, dependency tracking)
 - `ralph_loop/` - Ralph Loop execution engine
 - `server/` - HTTP/WebSocket server for browser mode
 - `parsers/` - PRD parsers (JSON, YAML, Markdown)
@@ -229,10 +233,10 @@ Located in `e2e/`, these markdown tests are executed by the `/e2e` Claude Code s
 - `05-git-operations.md` - Git workflow tests
 
 **Workflow (`e2e/workflow/`):**
-- `01-gsd-workflow.md` - GSD 8-phase workflow
+- `01-prd-workflow.md` - PRD creation workflow
 - `02-session-lifecycle.md` - Full session lifecycle
 - `03-ralph-loop-workflow.md` - Ralph Loop execution
-- `04-prd-creation-workflow.md` - PRD creation workflow
+- `04-prd-creation-workflow.md` - PRD chat workflow
 
 **Responsive (`e2e/responsive/`):**
 - `01-mobile-layout.md` - Mobile viewport (375x667)

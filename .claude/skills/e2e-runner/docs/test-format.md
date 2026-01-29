@@ -14,7 +14,7 @@ e2e/
 │   ├── 04-agent-workflows.md
 │   └── 05-git-operations.md
 ├── workflow/                    # End-to-end workflow tests
-│   ├── 01-gsd-workflow.md
+│   ├── 01-prd-workflow.md
 │   ├── 02-session-lifecycle.md
 │   ├── 03-ralph-loop-workflow.md
 │   └── 04-prd-creation-workflow.md

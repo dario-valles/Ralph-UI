@@ -139,29 +139,29 @@ Verify modal sizing on tablet.
 
 ---
 
-## Test: Tablet GSD Kanban
+## Test: Tablet PRD Chat
 
 ### Description
-Verify Kanban layout on tablet.
+Verify PRD Chat layout on tablet.
 
 ### Steps
 1. **Set** viewport to 768x1024
    - Expected: Tablet layout
 
-2. **Navigate** to GSD scoping phase
-   - Expected: Kanban loads
+2. **Navigate** to PRD Chat
+   - Expected: Chat loads
 
-3. **Verify** all columns visible
-   - Expected: V1, V2, Out of Scope visible
+3. **Verify** session sidebar visible
+   - Expected: Sessions list on left
 
-4. **Verify** columns properly sized
-   - Expected: Columns fit viewport
+4. **Verify** chat area properly sized
+   - Expected: Chat fills remaining width
 
-5. **Drag** card between columns
-   - Expected: Drag-drop works
+5. **Verify** guidance panel layout
+   - Expected: Guidance displays appropriately
 
 ### Expected Outcome
-- Kanban fully usable on tablet
+- PRD Chat fully usable on tablet
 
 ---
 

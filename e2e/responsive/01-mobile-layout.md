@@ -232,32 +232,32 @@ Verify agent status display on mobile.
 
 ---
 
-## Test: Mobile GSD Kanban
+## Test: Mobile PRD Chat
 
 ### Description
-Verify GSD Kanban on mobile viewport.
+Verify PRD Chat on mobile viewport.
 
 ### Steps
 1. **Set** viewport to 375x667
    - Expected: Mobile layout
 
-2. **Navigate** to GSD scoping phase
-   - Expected: Kanban loads
+2. **Navigate** to PRD Chat
+   - Expected: Chat loads
 
-3. **Verify** columns stack or scroll
-   - Expected: Kanban usable layout
+3. **Verify** chat input accessible
+   - Expected: Input field visible
 
-4. **Verify** cards visible
-   - Expected: Requirement cards shown
+4. **Verify** guidance panel fits
+   - Expected: Guidance stacks vertically
 
-5. **Drag** card (if supported on touch)
-   - Expected: Drag works or alternative
+5. **Tap** sample prompt
+   - Expected: Prompt inserted into input
 
-6. **Verify** column labels visible
-   - Expected: V1/V2/Out visible
+6. **Verify** send button accessible
+   - Expected: Can send messages
 
 ### Expected Outcome
-- Kanban is usable on mobile
+- PRD Chat is usable on mobile
 
 ---
 

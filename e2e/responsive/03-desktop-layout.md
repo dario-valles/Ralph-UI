@@ -139,29 +139,29 @@ Verify split pane views on desktop.
 
 ---
 
-## Test: Desktop GSD Workflow
+## Test: Desktop PRD Workflow
 
 ### Description
-Verify GSD workflow on desktop.
+Verify PRD workflow on desktop.
 
 ### Steps
 1. **Set** viewport to 1920x1080
    - Expected: Desktop layout
 
-2. **Navigate** to GSD session
-   - Expected: GSD loads
+2. **Navigate** to PRD Chat
+   - Expected: PRD Chat loads
 
-3. **Verify** phase navigation visible
-   - Expected: All phases accessible
+3. **Verify** session sidebar visible
+   - Expected: Sessions list on left side
 
-4. **Navigate** through phases
-   - Expected: Each phase displays well
+4. **Verify** chat area spacious
+   - Expected: Chat messages have room
 
-5. **Verify** Kanban columns
-   - Expected: All columns visible simultaneously
+5. **Verify** plan sidebar (if visible)
+   - Expected: Plan sidebar on right side
 
 ### Expected Outcome
-- GSD workflow fully usable on desktop
+- PRD workflow fully usable on desktop
 
 ---
 
