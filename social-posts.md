@@ -41,7 +41,7 @@ Advanced PRD Chat - From Vague Idea to Production Specs
 - AI-powered deep questioning uncovers hidden requirements
 - Auto-extracts user stories with acceptance criteria
 - Transforms conversations into structured PRDs
-- 8-phase GSD workflow: questioning → research → roadmap → export
+- PRD workflow with type-specific guidance and slash commands
 - Quality scoring catches missing requirements before execution
 
 No more "I'll figure it out later" - the AI won't let you skip edge cases
@@ -170,7 +170,7 @@ Here's what 6 months got me:
 
 1/ Ralph Wiggum Loop - Agents run continuously, progress persists in git, fresh agents spawn when context fills. Zero human intervention.
 
-2/ Advanced Chat Requirements - AI extracts user stories + acceptance criteria from conversations. 8-phase GSD workflow.
+2/ Advanced Chat Requirements - AI extracts user stories + acceptance criteria from conversations. Type-specific PRD workflow with slash commands.
 
 3/ 7 AI Agents - Claude, Cursor, Codex, OpenCode, Qwen, Droid, gemini-cli. 67-90% token savings via session resumption.
 
@@ -224,7 +224,7 @@ Transform vague ideas into production-ready specs:
 
 - AI-powered deep questioning uncovers hidden requirements
 - Auto-extracts user stories with acceptance criteria
-- 8-phase GSD workflow: questioning, research, requirements, scoping, roadmap, verification, export, completion
+- PRD workflow with type-specific guidance (/epic, /story, /task, /critique commands)
 - Quality scoring catches gaps before execution
 
 **7 AI Agents Supported**
