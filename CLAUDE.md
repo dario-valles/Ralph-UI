@@ -259,6 +259,18 @@ Use these consistent design tokens across all components:
 - **Global templates**: `~/.ralph-ui/templates/{name}.tera` (user-wide overrides)
 - **Resolution order**: Project → Global → Builtin (first found wins)
 
+**PRD Chat & Slash Commands:**
+The PRD Chat uses a **Technical Product Manager** persona to guide users through requirement gathering. It supports **Slash Commands** for quick insertion of standard PRD sections:
+- `/epic` - Insert Epic template
+- `/story` - Insert User Story template (supports h4 markdown headers)
+- `/task` - Insert Task template
+- `/critique` - Request AI critique of current requirements
+
+**Key files:**
+- `server/src/templates/builtin.rs` - `PRD_CHAT_SYSTEM` template
+- `src/components/prd/ChatInput.tsx` - Slash command logic
+- `src/lib/prd-chat-commands.tsx` - Command definitions
+
 **Adding a New Prompt Template:**
 1. Add the default template to `server/src/templates/builtin.rs`
 2. Register it in the `BUILTIN_TEMPLATES` array
