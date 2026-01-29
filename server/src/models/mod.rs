@@ -1,8 +1,14 @@
 // Data models matching the frontend TypeScript types
 
+pub mod chat_commands;
 pub mod prd_chat;
 pub mod state_machine;
 
+pub use chat_commands::{
+    ChatCommandConfig, ChatCommandPreference, ChatCommandScope, ChatCommandsFile,
+    ChatCommandsResponse, CreateChatCommandRequest, DeleteChatCommandRequest,
+    ResetChatCommandRequest, UpdateChatCommandRequest,
+};
 pub use prd_chat::{
     attachment_limits, AttachmentMimeType, ChatAttachment, ChatMessage, ChatSession,
     ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,

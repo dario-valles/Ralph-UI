@@ -101,6 +101,20 @@ export type {
 export { ATTACHMENT_LIMITS } from './chat'
 
 // ============================================================================
+// Chat Command Types
+// ============================================================================
+
+export type {
+  ChatCommandScope,
+  ChatCommandConfig,
+  ChatCommandsResponse,
+  UpdateChatCommandRequest,
+  CreateChatCommandRequest,
+  DeleteChatCommandRequest,
+  ResetChatCommandRequest,
+} from './chat-commands'
+
+// ============================================================================
 // Configuration Types
 // ============================================================================
 

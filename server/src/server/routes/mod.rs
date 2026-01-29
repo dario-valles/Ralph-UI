@@ -12,6 +12,7 @@
 //! - parallel_routes: Parallel execution commands (reserved for future use)
 
 pub mod agent_routes;
+pub mod chat_command_routes;
 pub mod config_routes;
 pub mod git_routes;
 pub mod parallel_routes;
@@ -156,6 +157,10 @@ pub async fn route_command(
 
     if parallel_routes::is_parallel_command(cmd) {
         return parallel_routes::route_parallel_command(cmd, args, state).await;
+    }
+
+    if chat_command_routes::is_chat_command_route(cmd) {
+        return chat_command_routes::route_chat_command(cmd, args, state).await;
     }
 
     Err(format!("Unknown command: {}", cmd))

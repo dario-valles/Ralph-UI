@@ -5,6 +5,7 @@ import {
   useCallback,
   useImperativeHandle,
   forwardRef,
+  useMemo,
   KeyboardEvent,
   DragEvent,
 } from 'react'
@@ -22,9 +23,11 @@ import { SlashCommandMenu } from './SlashCommandMenu'
 import {
   SLASH_COMMANDS,
   isActionCommand,
+  configsToSlashCommands,
   type SlashCommand,
   type SlashCommandResult,
 } from '@/lib/prd-chat-commands'
+import { useChatCommandStore } from '@/stores/chatCommandStore'
 
 export interface ChatInputHandle {
   /** Insert text at current cursor position or replace selection */
@@ -58,6 +61,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
+
+  // Get commands from store for keyboard navigation
+  const storeCommands = useChatCommandStore((state) => state.commands)
+
+  // Convert store commands to SlashCommands for navigation, or fall back to SLASH_COMMANDS
+  const availableCommands = useMemo(() => {
+    if (storeCommands.length > 0) {
+      const enabledConfigs = storeCommands.filter((c) => c.enabled)
+      return configsToSlashCommands(enabledConfigs)
+    }
+    return SLASH_COMMANDS
+  }, [storeCommands])
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -157,18 +172,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle slash menu navigation
     if (slashMenuOpen) {
-      const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
+      const filteredCommands = availableCommands.filter((cmd) =>
         cmd.label.toLowerCase().includes(slashQuery.toLowerCase())
       )
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setSlashIndex((prev) => (prev + 1) % filteredCommands.length)
+        setSlashIndex((prev) => (prev + 1) % Math.max(filteredCommands.length, 1))
         return
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setSlashIndex((prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length)
+        setSlashIndex((prev) => (prev - 1 + filteredCommands.length) % Math.max(filteredCommands.length, 1))
         return
       }
       if (e.key === 'Enter') {

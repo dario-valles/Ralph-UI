@@ -9,7 +9,9 @@ import {
   ListChecks,
   GitCompare,
   GitBranch,
+  MessageSquare,
 } from 'lucide-react'
+import type { ChatCommandConfig } from '@/types'
 
 /**
  * Slash command action types
@@ -309,4 +311,54 @@ export function getAvailableCommands(options: {
     if (cmd.requiresCodebase && !options.hasCodebase) return false
     return true
   })
+}
+
+/**
+ * Icon mapping for command IDs
+ * Used to display icons for both builtin and custom commands
+ */
+export const COMMAND_ICONS: Record<string, React.ReactNode> = {
+  ideas: <Lightbulb className="h-4 w-4 mr-2" />,
+  research: <Search className="h-4 w-4 mr-2" />,
+  agents: <FileCode className="h-4 w-4 mr-2" />,
+  criteria: <ListChecks className="h-4 w-4 mr-2" />,
+  spec: <GitCompare className="h-4 w-4 mr-2" />,
+  critique: <Sparkles className="h-4 w-4 mr-2" />,
+  epic: <Layers className="h-4 w-4 mr-2" />,
+  story: <FileText className="h-4 w-4 mr-2" />,
+  'story-dep': <GitBranch className="h-4 w-4 mr-2" />,
+  task: <CheckSquare className="h-4 w-4 mr-2" />,
+}
+
+/**
+ * Default icon for custom commands
+ */
+const DEFAULT_COMMAND_ICON = <MessageSquare className="h-4 w-4 mr-2" />
+
+/**
+ * Get icon for a command by ID
+ */
+export function getCommandIcon(commandId: string): React.ReactNode {
+  return COMMAND_ICONS[commandId] ?? DEFAULT_COMMAND_ICON
+}
+
+/**
+ * Convert a ChatCommandConfig (from backend) to a SlashCommand (for UI)
+ */
+export function configToSlashCommand(config: ChatCommandConfig): SlashCommand {
+  return {
+    id: config.id,
+    label: config.label,
+    description: config.description,
+    icon: getCommandIcon(config.id),
+    type: 'template',
+    template: config.template,
+  }
+}
+
+/**
+ * Convert multiple ChatCommandConfigs to SlashCommands
+ */
+export function configsToSlashCommands(configs: ChatCommandConfig[]): SlashCommand[] {
+  return configs.map(configToSlashCommand)
 }

@@ -21,6 +21,7 @@
 pub mod agents;
 pub mod attachments;
 pub mod chat;
+pub mod chat_command_ops;
 pub mod chat_ops;
 pub mod index;
 pub mod iterations;

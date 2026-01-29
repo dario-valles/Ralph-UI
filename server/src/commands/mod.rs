@@ -1,6 +1,7 @@
 // Backend command handlers for IPC communication
 
 pub mod agents;
+pub mod chat_commands;
 pub mod config;
 pub mod git;
 pub mod github;
@@ -22,6 +23,7 @@ pub mod traces;
 
 // Re-export all commands for easy registration
 pub use agents::*;
+pub use chat_commands::*;
 pub use config::*;
 pub use git::*;
 pub use github::*;

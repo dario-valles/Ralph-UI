@@ -12,6 +12,7 @@ import { TemplateSettings } from './TemplateSettings'
 import { UISettings } from './UISettings'
 import { ApiProviderSettings } from './ApiProviderSettings'
 import { AgentsTab } from './AgentsTab'
+import { ChatCommandSettings } from './ChatCommandSettings'
 
 export function SettingsPage() {
   const {
@@ -160,6 +161,9 @@ export function SettingsPage() {
           <TabsTrigger value="templates" className="text-xs sm:text-sm">
             Templates
           </TabsTrigger>
+          <TabsTrigger value="chat-commands" className="text-xs sm:text-sm">
+            Chat Commands
+          </TabsTrigger>
           <TabsTrigger value="providers" className="text-xs sm:text-sm">
             Providers
           </TabsTrigger>
@@ -236,6 +240,11 @@ export function SettingsPage() {
             handleCancelEdit={handleCancelEdit}
             handlePreviewTemplate={handlePreviewTemplate}
           />
+        </TabsContent>
+
+        {/* Chat Command Settings */}
+        <TabsContent value="chat-commands" className="space-y-4">
+          <ChatCommandSettings />
         </TabsContent>
 
         {/* API Provider Settings */}
