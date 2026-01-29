@@ -5,8 +5,8 @@ use crate::file_storage::iterations as iteration_storage;
 use crate::models::AgentType;
 use crate::ralph_loop::{
     ErrorStrategy, ExecutionSnapshot, ExecutionStateSnapshot, FallbackChainConfig, IterationRecord,
-    PrdExecutor, PrdMetadata, RalphLoopConfig, RalphLoopMetrics, RalphLoopOrchestrator,
-    RalphLoopState as RalphLoopExecutionState, RetryConfig,
+    ParallelOrchestrator, PrdExecutor, PrdMetadata, RalphLoopConfig, RalphLoopMetrics,
+    RalphLoopOrchestrator, RalphLoopState as RalphLoopExecutionState, RetryConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -18,6 +18,17 @@ use super::notifications::{send_error_notification, send_loop_completion_notific
 // ============================================================================
 // Request/Response Types
 // ============================================================================
+
+/// Execution mode for Ralph Loop
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RalphExecutionMode {
+    /// Sequential execution (default) - one story at a time
+    #[default]
+    Sequential,
+    /// Parallel execution (Beta) - multiple independent stories simultaneously
+    Parallel,
+}
 
 /// Request to start a Ralph loop execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +66,10 @@ pub struct StartRalphLoopRequest {
     pub test_command: Option<String>,
     /// Custom lint command (e.g., "npm run lint", "cargo clippy")
     pub lint_command: Option<String>,
+    /// Execution mode: sequential (default) or parallel (Beta)
+    pub execution_mode: Option<RalphExecutionMode>,
+    /// Maximum parallel agents when using parallel execution mode (default: 3)
+    pub max_parallel: Option<u32>,
 }
 
 /// Response from starting a Ralph loop
@@ -243,8 +258,6 @@ pub async fn start_ralph_loop(
 
     let fallback_config = user_config.as_ref().and_then(|config| {
         if config.fallback.enabled {
-            // Use fallback_chain from config if available, otherwise build from legacy fallback_agent
-            #[allow(deprecated)]
             let fallback_chain = config
                 .fallback
                 .fallback_chain
@@ -262,35 +275,10 @@ pub async fn start_ralph_loop(
                         })
                         .collect::<Vec<_>>()
                 })
-                .unwrap_or_else(|| {
-                    // Legacy behavior: build chain from primary + deprecated fallback_agent field
-                    let mut chain = vec![agent_type];
-                    #[allow(deprecated)]
-                    if let Some(ref fallback_str) = config.fallback.fallback_agent {
-                        log::warn!(
-                            "[start_ralph_loop] DEPRECATED: Config uses 'fallback_agent' field. \
-                             Migrating to 'fallback_chain'. Please update your config to use \
-                             'fallback_chain' instead."
-                        );
-                        let legacy_fallback = match fallback_str.to_lowercase().as_str() {
-                            "claude" => Some(AgentType::Claude),
-                            "opencode" => Some(AgentType::Opencode),
-                            "cursor" => Some(AgentType::Cursor),
-                            "codex" => Some(AgentType::Codex),
-                            _ => None,
-                        };
-                        if let Some(agent) = legacy_fallback {
-                            if agent != agent_type {
-                                chain.push(agent);
-                            }
-                        }
-                    }
-                    chain
-                });
+                .unwrap_or_else(|| vec![agent_type]);
 
             Some(FallbackChainConfig {
                 fallback_chain,
-                // Use config values instead of hardcoding!
                 test_primary_recovery: config.fallback.test_primary_recovery.unwrap_or(true),
                 recovery_test_interval: config.fallback.recovery_test_interval.unwrap_or(5),
                 base_backoff_ms: config.fallback.base_backoff_ms,
@@ -351,8 +339,46 @@ pub async fn start_ralph_loop(
         test_command: resolved_test_command,
         lint_command: resolved_lint_command,
         env_vars,
+        execution_mode: request.execution_mode.unwrap_or_default(),
+        max_parallel: request.max_parallel.unwrap_or(3),
     };
 
+    // Check if parallel mode is requested
+    log::info!(
+        "[start_ralph_loop] Request execution_mode: {:?}, config.execution_mode: {:?}",
+        request.execution_mode,
+        config.execution_mode
+    );
+    let is_parallel_mode = matches!(config.execution_mode, RalphExecutionMode::Parallel);
+    log::info!(
+        "[start_ralph_loop] is_parallel_mode: {}, will use {} path",
+        is_parallel_mode,
+        if is_parallel_mode {
+            "PARALLEL"
+        } else {
+            "SEQUENTIAL"
+        }
+    );
+    if is_parallel_mode {
+        log::info!(
+            "[start_ralph_loop] Parallel execution mode enabled with max {} agents",
+            config.max_parallel
+        );
+
+        // === PARALLEL EXECUTION PATH ===
+        return start_parallel_ralph_loop(
+            config,
+            prd,
+            request.project_path,
+            request.prd_name,
+            ralph_state,
+            agent_manager_state,
+            app_handle,
+        )
+        .await;
+    }
+
+    // === SEQUENTIAL EXECUTION PATH ===
     // Create orchestrator
     let mut orchestrator = RalphLoopOrchestrator::new(config.clone());
     let execution_id = orchestrator.execution_id().to_string();
@@ -666,6 +692,248 @@ pub async fn start_ralph_loop(
                 );
             }
         }
+    });
+
+    Ok(execution_id)
+}
+
+/// Start a Ralph loop in parallel execution mode
+///
+/// This creates a ParallelOrchestrator that can run multiple agents simultaneously
+/// on independent stories, using separate git worktrees for isolation.
+async fn start_parallel_ralph_loop(
+    config: RalphLoopConfig,
+    mut prd: crate::ralph_loop::RalphPrd,
+    project_path: String,
+    prd_name: String,
+    ralph_state: &RalphLoopManagerState,
+    agent_manager_state: &crate::AgentManagerState,
+    app_handle: std::sync::Arc<crate::server::EventBroadcaster>,
+) -> Result<String, String> {
+    let project_path_buf = PathBuf::from(&project_path);
+    let max_parallel = config.max_parallel as usize;
+
+    // Create parallel orchestrator
+    let mut orchestrator = ParallelOrchestrator::new(config.clone(), max_parallel);
+    let execution_id = orchestrator.execution_id().to_string();
+
+    log::info!(
+        "[start_parallel_ralph_loop] Created ParallelOrchestrator {} with max {} agents",
+        execution_id,
+        max_parallel
+    );
+
+    // Get shared snapshots Arc for state updates
+    let snapshots_arc = ralph_state.snapshots_arc();
+
+    // Initialize snapshot with idle state
+    {
+        let mut snapshots = snapshots_arc
+            .lock()
+            .map_err(|e| format!("Snapshot lock error: {}", e))?;
+        snapshots.insert(
+            execution_id.clone(),
+            ExecutionSnapshot {
+                state: Some(RalphLoopExecutionState::Idle),
+                metrics: None,
+                current_agent_id: None,
+                worktree_path: None,
+                project_path: Some(project_path.clone()),
+            },
+        );
+    }
+
+    // Update PRD metadata with current execution ID
+    if let Some(ref mut meta) = prd.metadata {
+        meta.last_execution_id = Some(execution_id.clone());
+        meta.updated_at = Some(chrono::Utc::now().to_rfc3339());
+    } else {
+        prd.metadata = Some(PrdMetadata {
+            last_execution_id: Some(execution_id.clone()),
+            created_at: Some(chrono::Utc::now().to_rfc3339()),
+            updated_at: None,
+            source_chat_id: None,
+            total_iterations: 0,
+            last_worktree_path: None,
+        });
+    }
+
+    // Save PRD with updated metadata
+    let executor = PrdExecutor::new(&project_path_buf, &prd_name);
+    executor
+        .write_prd(&prd)
+        .map_err(|e| format!("Failed to save PRD: {}", e))?;
+
+    // Save initial execution state for crash recovery
+    {
+        let initial_state = ExecutionStateSnapshot {
+            execution_id: execution_id.clone(),
+            state: serde_json::to_string(&RalphLoopExecutionState::Idle).unwrap_or_default(),
+            last_heartbeat: chrono::Utc::now().to_rfc3339(),
+        };
+        iteration_storage::save_execution_state(&project_path_buf, &initial_state)
+            .map_err(|e| format!("Failed to save initial execution state: {}", e))?;
+    }
+
+    // Get cancel handle before moving orchestrator
+    let cancel_handle = orchestrator.get_cancel_handle();
+
+    // Store cancel handle for parallel orchestrators (separate from sequential executions)
+    // Note: For now, we track parallel orchestrators separately
+    // TODO: Unify orchestrator storage with an enum wrapper
+
+    // Clone agent manager for spawned task
+    let agent_manager_arc = agent_manager_state.clone_manager();
+
+    // Clone for task
+    let execution_id_for_loop = execution_id.clone();
+    let project_path_for_loop = project_path_buf.clone();
+    let prd_name_for_loop = prd_name.clone();
+    let app_handle_for_loop = app_handle.clone();
+    let snapshots_arc_for_loop = snapshots_arc.clone();
+
+    // Spawn parallel execution task
+    tokio::spawn(async move {
+        log::info!(
+            "[ParallelRalphLoop] Background task started for {}",
+            execution_id_for_loop
+        );
+
+        // Update snapshot to running state
+        {
+            if let Ok(mut snapshots) = snapshots_arc_for_loop.lock() {
+                if let Some(snapshot) = snapshots.get_mut(&execution_id_for_loop) {
+                    snapshot.state = Some(RalphLoopExecutionState::Running { iteration: 1 });
+                }
+            }
+        }
+
+        // Run the parallel orchestrator
+        let result = orchestrator.run(agent_manager_arc).await;
+
+        // Clean up execution state
+        if let Err(e) = iteration_storage::delete_execution_state(
+            &project_path_for_loop,
+            &execution_id_for_loop,
+        ) {
+            log::warn!(
+                "[ParallelRalphLoop] Failed to delete execution state for {}: {}",
+                execution_id_for_loop,
+                e
+            );
+        }
+
+        match result {
+            Ok(metrics) => {
+                log::info!(
+                    "[ParallelRalphLoop] Loop {} completed: {} iterations, ${:.2} total cost",
+                    execution_id_for_loop,
+                    metrics.total_iterations,
+                    metrics.total_cost
+                );
+
+                let final_state = orchestrator.state().clone();
+
+                // Update final snapshot
+                {
+                    if let Ok(mut snapshots) = snapshots_arc_for_loop.lock() {
+                        if let Some(snapshot) = snapshots.get_mut(&execution_id_for_loop) {
+                            snapshot.state = Some(final_state.clone());
+                            snapshot.metrics = Some(metrics.clone());
+                        }
+                    }
+                }
+
+                match &final_state {
+                    RalphLoopExecutionState::Completed { .. } => {
+                        // Emit completion event
+                        let payload = crate::events::RalphLoopCompletedPayload {
+                            execution_id: execution_id_for_loop.clone(),
+                            prd_name: prd_name_for_loop.clone(),
+                            total_iterations: metrics.total_iterations,
+                            completed_stories: metrics.stories_completed,
+                            total_stories: metrics.stories_completed + metrics.stories_remaining,
+                            duration_secs: metrics.total_duration_secs,
+                            total_cost: metrics.total_cost,
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                        };
+
+                        app_handle_for_loop.broadcast(
+                            "ralph:loop_completed",
+                            serde_json::to_value(&payload).unwrap_or_default(),
+                        );
+
+                        send_loop_completion_notification(
+                            &app_handle_for_loop,
+                            &prd_name_for_loop,
+                            metrics.total_iterations,
+                            metrics.stories_completed,
+                            metrics.total_duration_secs,
+                        );
+                    }
+                    RalphLoopExecutionState::Failed { iteration, reason } => {
+                        let error_type = if reason.contains("Max iterations") {
+                            crate::events::RalphLoopErrorType::MaxIterations
+                        } else if reason.contains("Max cost") {
+                            crate::events::RalphLoopErrorType::MaxCost
+                        } else {
+                            crate::events::RalphLoopErrorType::Unknown
+                        };
+
+                        send_error_notification(
+                            &app_handle_for_loop,
+                            &execution_id_for_loop,
+                            &prd_name_for_loop,
+                            error_type,
+                            reason,
+                            *iteration,
+                            Some(metrics.stories_remaining),
+                            Some(metrics.stories_completed + metrics.stories_remaining),
+                        );
+                    }
+                    _ => {
+                        log::warn!(
+                            "[ParallelRalphLoop] Loop {} ended with unexpected state: {:?}",
+                            execution_id_for_loop,
+                            final_state
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!(
+                    "[ParallelRalphLoop] Loop {} failed: {}",
+                    execution_id_for_loop,
+                    e
+                );
+
+                // Update snapshot with failure
+                {
+                    if let Ok(mut snapshots) = snapshots_arc_for_loop.lock() {
+                        if let Some(snapshot) = snapshots.get_mut(&execution_id_for_loop) {
+                            snapshot.state = Some(RalphLoopExecutionState::Failed {
+                                iteration: 0,
+                                reason: e.clone(),
+                            });
+                        }
+                    }
+                }
+
+                send_error_notification(
+                    &app_handle_for_loop,
+                    &execution_id_for_loop,
+                    &prd_name_for_loop,
+                    crate::events::RalphLoopErrorType::Unknown,
+                    &e,
+                    0,
+                    None,
+                    None,
+                );
+            }
+        }
+
+        // Drop the cancel handle reference
+        drop(cancel_handle);
     });
 
     Ok(execution_id)

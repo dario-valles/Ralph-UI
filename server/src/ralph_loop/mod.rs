@@ -14,11 +14,14 @@ mod completion;
 mod config;
 pub mod fallback_orchestrator;
 mod learnings_manager;
+pub mod merge_coordinator;
+pub mod parallel_orchestrator;
 mod prd_executor;
 mod progress_tracker;
 mod prompt_builder;
 pub mod retry;
 mod types;
+pub mod worktree_pool;
 
 pub use assignments_manager::*;
 pub use brief_builder::*;
@@ -26,11 +29,14 @@ pub use completion::*;
 pub use config::*;
 pub use fallback_orchestrator::{FallbackOrchestrator, FallbackStats};
 pub use learnings_manager::*;
+pub use merge_coordinator::{CompletedWork, ConflictInfo, MergeCoordinator, MergeResult};
+pub use parallel_orchestrator::{ParallelAgentState, ParallelAgentStatus, ParallelOrchestrator};
 pub use prd_executor::*;
 pub use progress_tracker::*;
 pub use prompt_builder::*;
 pub use retry::{is_retryable_error, RetryConfig, RetryResult};
 pub use types::*;
+pub use worktree_pool::{WorktreeAllocation, WorktreePool};
 
 use crate::agents::manager::AgentManager;
 use crate::agents::{AgentSpawnConfig, AgentSpawnMode};
@@ -103,6 +109,11 @@ pub struct RalphLoopConfig {
     /// Environment variables to inject when spawning the agent
     /// Used for alternative API providers (z.ai, MiniMax)
     pub env_vars: Option<std::collections::HashMap<String, String>>,
+    /// Execution mode: sequential (default) or parallel (Beta)
+    /// Sequential runs one story at a time, parallel runs multiple independent stories
+    pub execution_mode: crate::commands::ralph_loop::RalphExecutionMode,
+    /// Maximum parallel agents when using parallel execution mode (default: 3)
+    pub max_parallel: u32,
 }
 
 impl Default for RalphLoopConfig {
@@ -127,6 +138,8 @@ impl Default for RalphLoopConfig {
             test_command: None,    // Auto-detect based on project type
             lint_command: None,    // Auto-detect based on project type
             env_vars: None,        // No extra env vars by default
+            execution_mode: crate::commands::ralph_loop::RalphExecutionMode::Sequential,
+            max_parallel: 3, // Default to 3 parallel agents
         }
     }
 }
