@@ -213,22 +213,9 @@ export function StreamingIndicator({
           <Bot className="h-4 w-4" />
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            <span
-              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
-              style={{ animationDelay: '0ms' }}
-            />
-            <span
-              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
-              style={{ animationDelay: '150ms' }}
-            />
-            <span
-              className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce"
-              style={{ animationDelay: '300ms' }}
-            />
-          </div>
+          <GridSpinner className="text-sm text-muted-foreground" />
           <span className="text-xs text-muted-foreground ml-2">
-            {formatElapsed(elapsedSeconds)}
+            Taking longer than usual ({formatElapsed(elapsedSeconds)})...
           </span>
         </div>
       </div>
@@ -267,7 +254,7 @@ export function StreamingIndicator({
           )}
           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
             <GridSpinner className="text-sm" />
-            <span>{hasToolCalls ? 'Working...' : 'Streaming...'}</span>
+            <span>{hasToolCalls ? 'Running tools...' : 'Typing...'}</span>
           </div>
         </div>
       ) : (

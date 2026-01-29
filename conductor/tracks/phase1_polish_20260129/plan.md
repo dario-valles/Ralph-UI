@@ -13,16 +13,16 @@
 - [x] Task: Conductor - User Manual Verification 'Analysis & PRD Flow Audit' (Protocol in workflow.md)
 
 ## Phase 2: PRD Flow Implementation
-- [ ] Task: Implement improved system prompts.
-    - [ ] Sub-task: Update backend prompt templates.
-    - [ ] Sub-task: Write tests to verify prompt outputs against expected PRD structure.
-- [ ] Task: Enhance Chat UI.
-    - [ ] Sub-task: Implement "Typing" indicators and better state visualization.
-    - [ ] Sub-task: Add "slash commands" or quick actions for common PRD sections if applicable.
-    - [ ] Sub-task: Refine the display of the generated PRD (markdown rendering).
-- [ ] Task: Validate PRD Flow.
-    - [ ] Sub-task: Run an end-to-end test generating a sample PRD.
-    - [ ] Sub-task: Verify the generated PRD content matches the project standards.
+- [x] Task: Implement improved system prompts.
+    - [x] Sub-task: Update backend prompt templates.
+    - [x] Sub-task: Write tests to verify prompt outputs against expected PRD structure.
+- [x] Task: Enhance Chat UI.
+    - [x] Sub-task: Implement "Typing" indicators and better state visualization.
+    - [x] Sub-task: Add "slash commands" or quick actions for common PRD sections if applicable.
+    - [x] Sub-task: Refine the display of the generated PRD (markdown rendering).
+- [x] Task: Validate PRD Flow.
+    - [x] Sub-task: Run an end-to-end test generating a sample PRD.
+    - [x] Sub-task: Verify the generated PRD content matches the project standards.
 - [ ] Task: Conductor - User Manual Verification 'PRD Flow Implementation' (Protocol in workflow.md)
 
 ## Phase 3: System Stability & Polish

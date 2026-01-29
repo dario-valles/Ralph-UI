@@ -9,6 +9,8 @@ import { useClipboardPaste, extractImagesFromDataTransfer } from '@/hooks/useCli
 import { fileToAttachment, validateAttachments, combinePasteBlocksWithText } from '@/lib/chat-utils'
 import { AttachmentPreview } from './AttachmentPreview'
 import { PastedTextPreviewList } from './PastedTextPreview'
+import { SlashCommandMenu } from './SlashCommandMenu'
+import { SLASH_COMMANDS, type SlashCommand } from '@/lib/prd-chat-commands'
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: ChatAttachment[]) => void
@@ -25,6 +27,11 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
   const [pasteBlocks, setPasteBlocks] = useState<PastedTextBlock[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
+
+  // Slash command state
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false)
+  const [slashQuery, setSlashQuery] = useState('')
+  const [slashIndex, setSlashIndex] = useState(0)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -65,13 +72,89 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
     setValue('')
     setPasteBlocks([])
     setAttachments([])
+    setSlashMenuOpen(false)
   }, [value, pasteBlocks, attachments, onSend])
 
+  const handleCommandSelect = (command: SlashCommand) => {
+    // Replace the slash command with the template
+    const lastSlashIndex = value.lastIndexOf('/')
+    if (lastSlashIndex !== -1) {
+      const newValue = value.substring(0, lastSlashIndex) + command.template
+      setValue(newValue)
+      
+      // Reset slash menu
+      setSlashMenuOpen(false)
+      setSlashQuery('')
+      
+      // Focus back on textarea
+      textareaRef.current?.focus()
+    }
+  }
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle slash menu navigation
+    if (slashMenuOpen) {
+      const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
+        cmd.label.toLowerCase().includes(slashQuery.toLowerCase())
+      )
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSlashIndex((prev) => (prev + 1) % filteredCommands.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSlashIndex((prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length)
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (filteredCommands.length > 0) {
+          handleCommandSelect(filteredCommands[slashIndex])
+        }
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSlashMenuOpen(false)
+        return
+      }
+    }
+
     // Enter to send, Shift+Enter for newline
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !slashMenuOpen) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value
+    setValue(newValue)
+
+    // Check if we are typing a slash command
+    const lastSlashIndex = newValue.lastIndexOf('/')
+    if (lastSlashIndex !== -1) {
+      // Check if slash is at start or preceded by space/newline
+      const isStart = lastSlashIndex === 0 || /\s/.test(newValue[lastSlashIndex - 1])
+      
+      if (isStart) {
+        // Get text after slash
+        const query = newValue.slice(lastSlashIndex + 1)
+        // If query contains space, close menu (command ended)
+        if (query.includes(' ')) {
+          setSlashMenuOpen(false)
+        } else {
+          setSlashMenuOpen(true)
+          setSlashQuery(query)
+          setSlashIndex(0) // Reset index on query change
+        }
+      } else {
+        setSlashMenuOpen(false)
+      }
+    } else {
+      setSlashMenuOpen(false)
     }
   }
 
@@ -191,7 +274,7 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
   const canSend = !disabled && (value.trim() !== '' || attachments.length > 0 || pasteBlocks.length > 0)
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 relative">
       {/* Error message */}
       {error && (
         <div className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in-0 slide-in-from-top-1 duration-200">
@@ -206,6 +289,13 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
           </Button>
         </div>
       )}
+
+      {/* Slash Command Menu */}
+      <SlashCommandMenu
+        isOpen={slashMenuOpen}
+        query={slashQuery}
+        onSelect={handleCommandSelect}
+      />
 
       {/* Pasted text preview chips */}
       <PastedTextPreviewList blocks={pasteBlocks} onRemove={removePasteBlock} disabled={disabled} />
@@ -286,12 +376,16 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
           <Textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste as React.ClipboardEventHandler}
             onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            placeholder={placeholder || 'Type your message...'}
+            onBlur={() => {
+              setIsFocused(false)
+              // Delay closing menu to allow click events to register
+              setTimeout(() => setSlashMenuOpen(false), 200)
+            }}
+            placeholder={placeholder || 'Type your message... (Try / for commands)'}
             disabled={disabled}
             aria-label="Message input"
             className={cn(
@@ -327,7 +421,7 @@ export function ChatInput({ onSend, disabled, placeholder, leftActions }: ChatIn
       <div className="hidden sm:flex items-center justify-between px-1 text-[11px] text-muted-foreground/60">
         <div className="flex items-center gap-1">
           <Sparkles className="h-3 w-3" />
-          <span>AI-powered PRD assistant</span>
+          <span>AI-powered PRD assistant &middot; Type / for commands</span>
         </div>
         <span>Enter to send &middot; Shift+Enter for new line</span>
       </div>

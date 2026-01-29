@@ -6,6 +6,7 @@ use crate::models::{Session, Task};
 use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde::Serialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -26,7 +27,7 @@ pub struct TemplateContext {
     /// PRD content (if any)
     pub prd_content: Option<String>,
     /// Custom variables
-    pub custom: HashMap<String, String>,
+    pub custom: HashMap<String, Value>,
 
     // --- Rich Context Variables (US-011) ---
     /// Last N entries from progress file
@@ -168,10 +169,19 @@ impl TemplateContext {
         self
     }
 
-    /// Add custom variable
+    /// Add custom variable (string)
     pub fn with_custom(mut self, key: &str, value: &str) -> Self {
-        self.custom.insert(key.to_string(), value.to_string());
+        self.custom
+            .insert(key.to_string(), Value::String(value.to_string()));
         self
+    }
+
+    /// Add custom variable (JSON value) - modifies in place
+    pub fn add_custom_json<T: Serialize>(&mut self, key: &str, value: T) -> Result<()> {
+        let json_value = serde_json::to_value(value)
+            .map_err(|e| anyhow!("Failed to serialize custom value for key '{}': {}", key, e))?;
+        self.custom.insert(key.to_string(), json_value);
+        Ok(())
     }
 
     // --- Rich Context Variable Builders (US-011) ---

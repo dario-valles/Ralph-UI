@@ -105,7 +105,10 @@ pub async fn render_template(request: RenderRequest) -> Result<String, String> {
     }
 
     if let Some(vars) = request.custom_vars {
-        context.custom = vars;
+        context.custom = vars
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::Value::String(v)))
+            .collect();
     }
 
     // Get template content

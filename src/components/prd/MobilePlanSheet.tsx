@@ -85,6 +85,9 @@ export function MobilePlanSheet({ open, onOpenChange, content }: MobilePlanSheet
                     h3: ({ children }) => (
                       <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
                     ),
+                    h4: ({ children }) => (
+                      <h4 className="text-sm font-semibold mt-2 mb-1 text-primary/90">{children}</h4>
+                    ),
                     p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
                     blockquote: ({ children }) => (
                       <blockquote className="border-l-2 border-primary/50 pl-3 my-2 italic text-muted-foreground">

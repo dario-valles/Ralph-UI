@@ -58,6 +58,7 @@ function MarkdownContent({ content, className }: { content: string; className?: 
           ),
           h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2>,
           h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
+          h4: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1 text-primary/90">{children}</h4>,
           // Style paragraphs
           p: ({ children }) => <p className="my-1.5 text-sm">{children}</p>,
           // Style tables

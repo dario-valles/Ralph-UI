@@ -5,7 +5,10 @@ use crate::gsd::planning_storage::{read_planning_file, PlanningFile};
 use crate::gsd::state::{GsdPhase, GsdWorkflowState, QuestioningContext};
 use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
 use crate::parsers::structured_output;
+use crate::templates::builtin::{get_builtin_template, PRD_CHAT_SYSTEM};
+use crate::templates::engine::{TemplateContext, TemplateEngine};
 use crate::utils::as_path;
+use serde_json;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -491,11 +494,7 @@ fn inject_planning_context(prompt: &mut String, ctx: Option<&PlanningContext>) {
     }
 }
 
-/// Build the prompt for PRD chat
-///
-/// When `has_external_session` is true, conversation history is omitted because
-/// the CLI agent maintains its own context through native session resumption.
-/// This significantly reduces token usage for multi-turn conversations.
+/// Build the prompt for PRD chat using the PRD_CHAT_SYSTEM template
 fn build_prd_chat_prompt(
     session: &ChatSession,
     history: &[ChatMessage],
@@ -504,146 +503,95 @@ fn build_prd_chat_prompt(
     has_external_session: bool,
     planning_context: Option<&PlanningContext>,
 ) -> String {
-    let mut prompt = String::new();
-
-    // System context for PRD creation
-    prompt.push_str("You are an expert product manager helping to create a Product Requirements Document (PRD). ");
-    prompt.push_str(
-        "Your goal is to help the user articulate their product requirements clearly and comprehensively.\n\n",
-    );
-
-    prompt.push_str("Focus on:\n");
-    prompt.push_str("- Understanding the problem being solved\n");
-    prompt.push_str("- Defining clear user stories and acceptance criteria\n");
-    prompt.push_str("- Breaking down features into actionable tasks\n");
-    prompt.push_str("- Identifying technical requirements and constraints\n");
-    prompt.push_str("- Suggesting success metrics and validation criteria\n\n");
-
-    prompt.push_str("When defining user stories for a feature, you MUST use this 5-point recipe to ensure completeness:\n");
-    prompt.push_str("1. **Core Implementation**: The main happy-path functionality.\n");
-    prompt.push_str(
-        "2. **Input Validation & Error Handling**: How invalid inputs and error states are handled.\n",
-    );
-    prompt.push_str("3. **Observability**: Logging, metrics, and how success is tracked.\n");
-    prompt.push_str(
-        "4. **Edge Cases**: Robustness against system limits, concurrency, network issues, etc.\n",
-    );
-    prompt.push_str("5. **Documentation**: User guides, tooltips, or API documentation.\n\n");
-
-    // Add structured output instructions if enabled
-    if session.structured_mode {
-        prompt.push_str("=== STRUCTURED OUTPUT MODE ===\n\n");
-        prompt.push_str("When defining PRD items, output them as JSON code blocks. This enables real-time tracking and organization.\n\n");
-        prompt.push_str("Output format examples:\n\n");
-        prompt.push_str("For epics:\n");
-        prompt.push_str("```json\n");
-        prompt.push_str("{\n");
-        prompt.push_str("  \"type\": \"epic\",\n");
-        prompt.push_str("  \"id\": \"EP-1\",\n");
-        prompt.push_str("  \"title\": \"User Authentication System\",\n");
-        prompt.push_str("  \"description\": \"Complete authentication flow with login, signup, and password reset\"\n");
-        prompt.push_str("}\n");
-        prompt.push_str("```\n\n");
-        prompt.push_str("For user stories:\n");
-        prompt.push_str("```json\n");
-        prompt.push_str("{\n");
-        prompt.push_str("  \"type\": \"user_story\",\n");
-        prompt.push_str("  \"id\": \"US-1.1\",\n");
-        prompt.push_str("  \"parentId\": \"EP-1\",\n");
-        prompt.push_str("  \"title\": \"User Login\",\n");
-        prompt.push_str("  \"description\": \"As a user, I want to log in with email and password so that I can access my account\",\n");
-        prompt.push_str("  \"acceptanceCriteria\": [\n");
-        prompt.push_str("    \"User can enter email and password\",\n");
-        prompt.push_str("    \"Invalid credentials show error message\",\n");
-        prompt.push_str("    \"Successful login redirects to dashboard\"\n");
-        prompt.push_str("  ],\n");
-        prompt.push_str("  \"priority\": 1,\n");
-        prompt.push_str("  \"estimatedEffort\": \"medium\"\n");
-        prompt.push_str("}\n");
-        prompt.push_str("```\n\n");
-        prompt.push_str("For tasks:\n");
-        prompt.push_str("```json\n");
-        prompt.push_str("{\n");
-        prompt.push_str("  \"type\": \"task\",\n");
-        prompt.push_str("  \"id\": \"T-1.1.1\",\n");
-        prompt.push_str("  \"parentId\": \"US-1.1\",\n");
-        prompt.push_str("  \"title\": \"Create login form component\",\n");
-        prompt.push_str("  \"description\": \"Build React component with email/password inputs and validation\",\n");
-        prompt.push_str("  \"estimatedEffort\": \"small\"\n");
-        prompt.push_str("}\n");
-        prompt.push_str("```\n\n");
-        prompt.push_str("Guidelines:\n");
-        prompt.push_str("- Use sequential IDs: EP-1, EP-2 for epics; US-1.1, US-1.2 for stories under EP-1; T-1.1.1 for tasks under US-1.1\n");
-        prompt.push_str("- Link items using parentId to maintain hierarchy\n");
-        prompt.push_str("- Priority is 1-5 (1 = highest priority)\n");
-        prompt.push_str("- estimatedEffort is 'small', 'medium', or 'large'\n");
-        prompt.push_str(
-            "- Continue conversation naturally, outputting JSON blocks when defining new PRD items\n\n",
-        );
-        prompt.push_str("=== END STRUCTURED OUTPUT MODE ===\n\n");
+    // 1. Initialize Template Engine
+    let engine = TemplateEngine::new();
+    if let Some(template_str) = get_builtin_template(PRD_CHAT_SYSTEM) {
+        if let Err(e) = engine.add_template(PRD_CHAT_SYSTEM, template_str) {
+            log::error!("Failed to add PRD_CHAT_SYSTEM template: {}", e);
+            return format!("Error: Failed to load system prompt template. {}", e);
+        }
+    } else {
+        log::error!("PRD_CHAT_SYSTEM template not found in builtin templates");
+        return "Error: System prompt template not found.".to_string();
     }
 
-    // Include project context if available
-    if let Some(ref project_path) = session.project_path {
-        prompt.push_str(&format!("Project path: {}\n\n", project_path));
+    // 2. Prepare Context Variables
+    let mut context = TemplateContext::new();
 
-        // Add plan file instruction
-        let plan_file_instruction = get_prd_plan_instruction(
+    // Structured Mode
+    if let Err(e) = context.add_custom_json("structured_mode", session.structured_mode) {
+        log::error!("Failed to add structured_mode to context: {}", e);
+    }
+
+    // Project Path & Plan File Instruction
+    if let Some(ref project_path) = session.project_path {
+        context = context.with_custom("project_path", project_path);
+
+        let instruction = get_prd_plan_instruction(
             project_path,
             &session.id,
             session.title.as_deref(),
             session.prd_id.as_deref(),
         );
-        prompt.push_str(&plan_file_instruction);
-    }
+        context = context.with_custom("plan_file_instruction", &instruction);
 
-    // Include conversation history only if we don't have an active external session
-    // When resuming an external session, the CLI agent maintains its own context,
-    // so we skip history to save tokens (67-90% savings depending on conversation length)
-    if !has_external_session && !history.is_empty() {
-        prompt.push_str("=== Conversation History ===\n\n");
-        for msg in history {
-            let role_label = match msg.role {
-                MessageRole::User => "User",
-                MessageRole::Assistant => "Assistant",
-                MessageRole::System => "System",
-            };
-            prompt.push_str(&format!("{}: {}\n\n", role_label, msg.content));
-        }
-        prompt.push_str("=== End History ===\n\n");
-    }
-
-    // Add attachment references if present
-    if !attachment_paths.is_empty() {
-        prompt.push_str("\n=== Attached Images ===\n");
-        prompt.push_str(
-            "The user has attached the following images. You can view them using the Read tool:\n",
-        );
-        for path in attachment_paths {
-            prompt.push_str(&format!("- {}\n", path));
-        }
-        prompt.push_str("=== End Attached Images ===\n\n");
-    }
-
-    // Include planning documents if available (persists across session resumption)
-    inject_planning_context(&mut prompt, planning_context);
-
-    // Add path reminder at the end (LLMs pay more attention to the end of prompts)
-    // This reinforces the plan file instruction even when session resumption is active
-    if let Some(ref project_path) = session.project_path {
         let path_reminder = get_prd_path_reminder(
             project_path,
             &session.id,
             session.title.as_deref(),
             session.prd_id.as_deref(),
         );
-        prompt.push_str(&path_reminder);
+        context = context.with_custom("path_reminder", &path_reminder);
     }
 
-    // Current user message
-    prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
+    // History (Skip if resuming external session)
+    if !has_external_session && !history.is_empty() {
+        // We only need role and content for the template
+        let history_data: Vec<serde_json::Value> = history
+            .iter()
+            .map(|msg| {
+                serde_json::json!({
+                    "role": match msg.role {
+                        MessageRole::User => "User",
+                        MessageRole::Assistant => "Assistant",
+                        MessageRole::System => "System",
+                    },
+                    "content": msg.content
+                })
+            })
+            .collect();
+        if let Err(e) = context.add_custom_json("history", history_data) {
+            log::error!("Failed to add history to context: {}", e);
+        }
+    }
 
-    prompt
+    // Attachments
+    if !attachment_paths.is_empty() {
+        if let Err(e) = context.add_custom_json("attachments", attachment_paths) {
+            log::error!("Failed to add attachments to context: {}", e);
+        }
+    }
+
+    // Planning Context
+    if let Some(ctx) = planning_context {
+        let mut planning_str = String::new();
+        inject_planning_context(&mut planning_str, Some(ctx));
+        if !planning_str.is_empty() {
+            context = context.with_custom("planning_context", &planning_str);
+        }
+    }
+
+    // Current Message
+    context = context.with_custom("current_message", current_message);
+
+    // 3. Render Template
+    match engine.render(PRD_CHAT_SYSTEM, &context) {
+        Ok(rendered) => rendered,
+        Err(e) => {
+            log::error!("Failed to render PRD chat prompt: {}", e);
+            format!("Error generating prompt: {}", e)
+        }
+    }
 }
 
 /// Generate a short, direct path reminder to be placed at the end of prompts.
@@ -760,7 +708,7 @@ mod tests {
             None,
         );
 
-        assert!(prompt.contains("expert product manager"));
+        assert!(prompt.contains("Technical Product Manager"));
         assert!(prompt.contains("Create a PRD for a todo app"));
         assert!(!prompt.contains("Conversation History"));
     }
@@ -798,7 +746,7 @@ mod tests {
             None,
         );
 
-        assert!(prompt.contains("Project path: /my/project"));
+        assert!(prompt.contains("Project Path: /my/project"));
         assert!(prompt.contains("Conversation History"));
         assert!(prompt.contains("I want to build a todo app"));
         assert!(prompt.contains("Let me help you define"));
@@ -839,7 +787,7 @@ mod tests {
             None,
         );
 
-        assert!(prompt.contains("Project path: /my/project"));
+        assert!(prompt.contains("Project Path: /my/project"));
         // History should NOT be included when resuming external session
         assert!(!prompt.contains("Conversation History"));
         assert!(!prompt.contains("I want to build a todo app"));
