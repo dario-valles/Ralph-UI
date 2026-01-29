@@ -1,6 +1,6 @@
 import { GitCommit } from 'lucide-react'
 import { CommitCard } from './CommitCard'
-import type { CommitInfo } from '@/lib/git-api'
+import type { CommitInfo } from '@/lib/api/git-api'
 
 export interface GitPanelProps {
   commits: CommitInfo[]

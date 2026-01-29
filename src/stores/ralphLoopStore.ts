@@ -1,7 +1,7 @@
 // Ralph Wiggum Loop State Management Store
 import { create } from 'zustand'
 import { ralphLoopApi } from '@/lib/backend-api'
-import { gitApi, type CommitInfo } from '@/lib/git-api'
+import { gitApi, type CommitInfo } from '@/lib/api/git-api'
 import { asyncAction, type AsyncState } from '@/lib/store-utils'
 import type {
   RalphPrd,
@@ -15,6 +15,9 @@ import type {
   RalphStoryInput,
   StartRalphLoopRequest,
   IterationRecord,
+  ParallelAgentStatus,
+  MergeConflict,
+  RalphExecutionMode,
 } from '@/types'
 
 interface RalphLoopStore extends AsyncState {
@@ -39,6 +42,12 @@ interface RalphLoopStore extends AsyncState {
   worktreePath: string | null
   executionBranch: string | null
   iterationHistory: IterationRecord[]
+
+  // Parallel execution state (Beta)
+  executionMode: RalphExecutionMode
+  maxParallel: number
+  parallelAgents: ParallelAgentStatus[]
+  mergeConflicts: MergeConflict[]
 
   // Actions - PRD Management
   setProjectPath: (path: string | null, prdName: string | null) => void
@@ -132,6 +141,13 @@ export const useRalphLoopStore = create<RalphLoopStore>((set, get) => ({
   worktreePath: null,
   executionBranch: null,
   iterationHistory: [],
+
+  // Parallel execution state (Beta)
+  executionMode: 'sequential' as RalphExecutionMode,
+  maxParallel: 3,
+  parallelAgents: [],
+  mergeConflicts: [],
+
   loading: false,
   error: null,
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRalphLoopStore } from '@/stores/ralphLoopStore'
-import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/git-api'
+import { gitApi, type DiffInfo, type ConflictInfo } from '@/lib/api/git-api'
 import { toast } from '@/stores/toastStore'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useAvailableModels } from '@/hooks/useAvailableModels'

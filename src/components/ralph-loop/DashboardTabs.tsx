@@ -15,7 +15,7 @@ import {
   Lightbulb,
 } from 'lucide-react'
 import type { RalphPrd, RalphPrdStatus, RalphProgressSummary, RalphStory, IterationRecord } from '@/types'
-import type { CommitInfo } from '@/lib/git-api'
+import type { CommitInfo } from '@/lib/api/git-api'
 import { StoriesPanel } from './StoriesPanel'
 import { ProgressPanel } from './ProgressPanel'
 import { TerminalPanel } from './TerminalPanel'

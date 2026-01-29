@@ -96,6 +96,54 @@ export interface RalphLoopMetrics {
   iterations: RalphIterationMetrics[]
 }
 
+/** Status of a parallel agent (for parallel execution mode) */
+export interface ParallelAgentStatus {
+  /** Agent ID */
+  agentId: string
+  /** Story ID being worked on */
+  storyId: string
+  /** Story title */
+  storyTitle: string
+  /** Agent status */
+  status: 'running' | 'completed' | 'failed' | 'merging'
+  /** Worktree path for this agent */
+  worktreePath: string
+  /** Branch name */
+  branchName: string
+  /** Start time */
+  startTime: string
+  /** End time (if completed) */
+  endTime?: string
+  /** Error message (if failed) */
+  error?: string
+}
+
+/** Extended snapshot for parallel execution */
+export interface RalphLoopParallelSnapshot extends RalphLoopSnapshot {
+  /** Parallel execution mode enabled */
+  parallelMode: boolean
+  /** Maximum parallel agents configured */
+  maxParallel?: number
+  /** Status of all active parallel agents */
+  activeAgents: ParallelAgentStatus[]
+  /** Merge queue - stories waiting to be merged */
+  mergeQueue: string[]
+  /** Conflicts detected during merge */
+  conflicts: MergeConflict[]
+}
+
+/** Information about a merge conflict */
+export interface MergeConflict {
+  /** Story ID that caused the conflict */
+  storyId: string
+  /** Branch that conflicted */
+  branchName: string
+  /** Files with conflicts */
+  conflictingFiles: string[]
+  /** Timestamp of conflict detection */
+  detectedAt: string
+}
+
 /** Consolidated snapshot for efficient polling
  * Combines multiple data sources in a single IPC call
  */
@@ -269,6 +317,9 @@ export interface RalphStoryInput {
   effort?: string
 }
 
+/** Execution mode for Ralph Loop */
+export type RalphExecutionMode = 'sequential' | 'parallel'
+
 /** Request to start a Ralph loop */
 export interface StartRalphLoopRequest {
   projectPath: string
@@ -297,6 +348,10 @@ export interface StartRalphLoopRequest {
   testCommand?: string
   /** Custom lint command (e.g., "npm run lint", "cargo clippy") */
   lintCommand?: string
+  /** Execution mode: sequential (default) or parallel (Beta) */
+  executionMode?: RalphExecutionMode
+  /** Maximum parallel agents when using parallel execution mode (default: 3) */
+  maxParallel?: number
 }
 
 /** Request to convert a database PRD to Ralph format */

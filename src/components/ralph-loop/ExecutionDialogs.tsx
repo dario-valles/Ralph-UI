@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Sparkles } from 'lucide-react'
 import { ConflictResolutionDialog } from '@/components/git/ConflictResolutionDialog'
-import type { DiffInfo, ConflictInfo } from '@/lib/git-api'
+import type { DiffInfo, ConflictInfo } from '@/lib/api/git-api'
 
 export interface ExecutionDialogsProps {
   // Regenerate dialog

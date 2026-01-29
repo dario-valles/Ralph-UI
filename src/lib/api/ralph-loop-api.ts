@@ -165,6 +165,8 @@ export const ralphLoopApi = {
     runLint?: boolean
     useWorktree?: boolean
     templateName?: string // US-014: Template selection in execution
+    executionMode?: 'sequential' | 'parallel' // Execution mode (parallel is Beta)
+    maxParallel?: number // Max parallel agents when using parallel mode
   }): Promise<RalphPrd> => {
     return await invoke('convert_prd_file_to_ralph', { request })
   },

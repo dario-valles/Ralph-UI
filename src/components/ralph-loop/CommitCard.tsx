@@ -1,6 +1,6 @@
 import { GitCommit } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { CommitInfo } from '@/lib/git-api'
+import type { CommitInfo } from '@/lib/api/git-api'
 
 export interface CommitCardProps {
   commit: CommitInfo
