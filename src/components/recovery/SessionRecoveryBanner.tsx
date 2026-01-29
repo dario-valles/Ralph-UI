@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { recoveryApi } from '@/lib/config-api'
+import { recoveryApi } from '@/lib/api/config-api'
 import type { StaleLockInfo, RecoveryResult } from '@/types'
 import { AlertTriangle, RefreshCw, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react'
 

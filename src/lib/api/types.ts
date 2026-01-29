@@ -1,5 +1,4 @@
 // Shared types for API modules
-// Re-exported from backend-api.ts for backwards compatibility
 
 export interface AgentAvailabilityResult {
   available: boolean

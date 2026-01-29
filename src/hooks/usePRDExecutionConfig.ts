@@ -1,7 +1,7 @@
 // Hook for managing PRD execution configuration state
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { configApi } from '@/lib/config-api'
+import { configApi } from '@/lib/api/config-api'
 import type { ExecutionConfig, AgentType, SchedulingStrategy, RalphConfig } from '@/types'
 
 /** Default execution config values */

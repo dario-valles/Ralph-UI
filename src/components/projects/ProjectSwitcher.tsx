@@ -42,7 +42,6 @@ export function ProjectSwitcher({
 
   const {
     projects,
-    folders,
     activeProjectId,
     setActiveProject,
     registerProject,
@@ -51,9 +50,6 @@ export function ProjectSwitcher({
     deleteProject,
     getRecentProjects,
     getFavoriteProjects,
-    createFolder,
-    assignProjectToFolder,
-    loadFolders,
   } = useProjectStore()
 
   const activeProject = projects.find((p) => p.id === activeProjectId)
@@ -75,35 +71,20 @@ export function ProjectSwitcher({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
-  // Load folders when component mounts or dropdown opens
-  useEffect(() => {
-    if (isOpen) {
-      loadFolders().catch(console.error)
-    }
-  }, [isOpen, loadFolders])
-
   const handleSelectFolder = async () => {
     // Show folder browser
     setShowBrowser(true)
   }
 
-  const handleBrowserSelect = async (path: string, folderId?: string | null) => {
+  const handleBrowserSelect = async (path: string) => {
     try {
       const project = await registerProject(path)
-      // If a folder was selected, assign the project to it
-      if (folderId) {
-        await assignProjectToFolder(project.id, folderId)
-      }
       setActiveProject(project.id)
       setShowBrowser(false)
       setIsOpen(false)
     } catch (error) {
       console.error('Failed to register project:', error)
     }
-  }
-
-  const handleCreateFolder = async (name: string) => {
-    return await createFolder(name)
   }
 
   const handleBrowserCancel = () => {
@@ -227,9 +208,6 @@ export function ProjectSwitcher({
               <RemoteFolderBrowser
                 onSelect={handleBrowserSelect}
                 onCancel={handleBrowserCancel}
-                folders={folders}
-                onCreateFolder={handleCreateFolder}
-                showFolderSelector
               />
             </div>
           </div>,
@@ -249,9 +227,6 @@ export function ProjectSwitcher({
             <RemoteFolderBrowser
               onSelect={handleBrowserSelect}
               onCancel={handleBrowserCancel}
-              folders={folders}
-              onCreateFolder={handleCreateFolder}
-              showFolderSelector
             />
           ) : (
             <button

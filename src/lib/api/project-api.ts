@@ -1,6 +1,6 @@
 // Project API wrappers
 
-import type { Project, ProjectFolder } from '@/types'
+import type { Project, ProjectFolder, DirectoryEntry } from '@/types'
 import { invoke } from '../invoke'
 
 export const projectApi = {
@@ -72,5 +72,10 @@ export const projectApi = {
   /** Assign a project to a folder (or unassign with null) */
   assignToFolder: async (projectId: string, folderId: string | null): Promise<void> => {
     return await invoke('assign_project_to_folder', { projectId, folderId })
+  },
+
+  /** Create a new filesystem directory (not a project folder category) */
+  createFilesystemDirectory: async (path: string): Promise<DirectoryEntry> => {
+    return await invoke('create_filesystem_directory', { path })
   },
 }

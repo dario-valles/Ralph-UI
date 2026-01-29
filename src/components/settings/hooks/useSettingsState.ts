@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { configApi } from '@/lib/config-api'
+import { configApi } from '@/lib/api/config-api'
 import { templateApi } from '@/lib/backend-api'
 import { useProjectStore } from '@/stores/projectStore'
 import type {

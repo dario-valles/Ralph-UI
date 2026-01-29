@@ -3,7 +3,7 @@
 import type { Agent, AgentStatus, AgentStatusInfo, LogEntry } from '@/types'
 import { invoke } from '../invoke'
 
-// Re-export types for backwards compatibility
+// Re-export types
 export type { Agent, AgentStatus, AgentStatusInfo, LogEntry }
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug'
 

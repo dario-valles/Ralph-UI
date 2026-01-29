@@ -25,7 +25,7 @@ import {
   Copy,
   Trash2,
 } from 'lucide-react'
-import { getAgentPtyHistory } from '@/lib/agent-api'
+import { getAgentPtyHistory } from '@/lib/api/agent-api'
 import { decodeTerminalData } from '@/lib/terminal-api'
 import type { ToolCall, ToolCallStartedPayload, ToolCallCompletedPayload } from '@/types'
 import { cn } from '@/lib/utils'

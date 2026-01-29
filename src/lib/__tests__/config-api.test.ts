@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { configApi, templateApi, recoveryApi, traceApi } from '../config-api'
+import { configApi, recoveryApi, traceApi } from '../api/config-api'
+import { templateApi } from '../api/template-api'
 
 // Note: These tests verify the API structure and exports.
 // Actual server command integration is tested via E2E tests.

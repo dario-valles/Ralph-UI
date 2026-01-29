@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -6,9 +5,6 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { GripVertical, ArrowUp, ArrowDown, X } from 'lucide-react'
-import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
-import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
-import { parseAgentWithProvider } from '@/types/agent'
 import type { RalphConfig, RalphFallbackSettings, AgentType } from '@/types'
 
 interface FallbackSettingsProps {
@@ -20,56 +16,6 @@ export function FallbackSettings({
   config,
   updateFallbackConfig,
 }: FallbackSettingsProps): React.JSX.Element {
-  const {
-    agentOptions,
-    models: fallbackModels,
-    modelsLoading: fallbackModelsLoading,
-    handleAgentOptionChange: handleFallbackAgentOptionChange,
-    setModelId: setFallbackModelId,
-    setAgentType: setFallbackAgentType,
-    setProviderId: setFallbackProviderId,
-    modelId: fallbackModelId,
-    currentAgentOptionValue: currentFallbackAgentOptionValue,
-  } = useAgentModelSelector({
-    initialAgent: (config?.fallback?.fallbackAgent || 'claude') as AgentType,
-    initialModel: config?.fallback?.fallbackModel,
-    initialProvider: config?.fallback?.fallbackApiProvider,
-  })
-
-  useEffect(() => {
-    if (!config?.fallback) return
-
-    const { fallbackAgent, fallbackApiProvider, fallbackModel } = config.fallback
-    setFallbackAgentType((fallbackAgent || 'claude') as AgentType)
-    setFallbackProviderId(fallbackApiProvider)
-    if (fallbackModel) {
-      setFallbackModelId(fallbackModel)
-    }
-  }, [
-    config?.fallback?.fallbackAgent,
-    config?.fallback?.fallbackApiProvider,
-    config?.fallback?.fallbackModel,
-    config?.fallback,
-    setFallbackAgentType,
-    setFallbackProviderId,
-    setFallbackModelId,
-  ])
-
-  const handleFallbackAgentChange = (value: string): void => {
-    handleFallbackAgentOptionChange(value)
-    const { agentType, providerId } = parseAgentWithProvider(value)
-    updateFallbackConfig({
-      fallbackAgent: agentType,
-      fallbackApiProvider: providerId,
-      fallbackModel: undefined,
-    })
-  }
-
-  const handleFallbackModelChange = (id: string): void => {
-    setFallbackModelId(id)
-    updateFallbackConfig({ fallbackModel: id })
-  }
-
   return (
     <div className="space-y-4">
       {/* Error Strategy Card */}
@@ -464,30 +410,6 @@ export function FallbackSettings({
                 </div>
               </div>
 
-              {/* Legacy Single Fallback (for backward compatibility) */}
-              <div className="space-y-4 pt-4 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground">Legacy Settings</h4>
-                <p className="text-xs text-muted-foreground">
-                  These settings are for backward compatibility. Use the Agent Chain above for more
-                  control.
-                </p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <AgentModelSelector
-                      agentType={(config.fallback.fallbackAgent || 'claude') as AgentType}
-                      modelId={fallbackModelId}
-                      onModelChange={handleFallbackModelChange}
-                      models={fallbackModels}
-                      modelsLoading={fallbackModelsLoading}
-                      disabled={!config.fallback.enabled}
-                      variant="default"
-                      agentOptions={agentOptions}
-                      currentAgentOptionValue={currentFallbackAgentOptionValue}
-                      onAgentOptionChange={handleFallbackAgentChange}
-                    />
-                  </div>
-                </div>
-              </div>
             </>
           ) : (
             <p className="text-muted-foreground">

@@ -46,14 +46,13 @@ export interface RalphFallbackSettings {
   enabled: boolean
   baseBackoffMs: number
   maxBackoffMs: number
-  fallbackAgent?: string
   /** Model to use for the fallback agent */
   fallbackModel?: string
   /** API provider for the fallback agent */
   fallbackApiProvider?: string
   /** Error handling strategy */
   errorStrategy?: RalphErrorStrategy
-  /** Ordered list of fallback agents (advanced mode) */
+  /** Ordered list of fallback agents */
   fallbackChain?: AgentType[]
   /** Whether to test if primary agent has recovered */
   testPrimaryRecovery?: boolean
@@ -178,7 +177,7 @@ export interface IterationStats {
   totalDurationSecs: number
 }
 
-// Legacy error strategy types (for backward compatibility)
+// Error strategy types
 export type ErrorStrategy =
   | { retry: { maxAttempts: number; backoffMs: number } }
   | { skip: Record<string, never> }

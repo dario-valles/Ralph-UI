@@ -21,6 +21,14 @@ export interface ProjectFolder {
   projectCount?: number  // Computed, not stored
 }
 
+/** Directory entry for filesystem browsing */
+export interface DirectoryEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  isHidden: boolean
+}
+
 // ============================================================================
 // Rate Limiting Types
 // ============================================================================

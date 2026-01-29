@@ -12,7 +12,7 @@ import {
   getAgentPtyHistory,
   processAgentPtyData,
   notifyAgentPtyExit,
-} from '@/lib/agent-api'
+} from '@/lib/api/agent-api'
 import { writeToTerminal, resizeTerminal, decodeTerminalData, getPty } from '@/lib/terminal-api'
 import { useTerminalStore } from '@/stores/terminalStore'
 import { useGestureStore } from '@/stores/gestureStore'

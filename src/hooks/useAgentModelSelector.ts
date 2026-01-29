@@ -55,7 +55,7 @@ interface UseAgentModelSelectorReturn {
   modelsLoading: boolean
   /** Default model ID for the current agent */
   defaultModelId: string
-  /** Available agent types (for backward compatibility) */
+  /** Available agent types */
   availableAgents: AgentType[]
   /** Available agent options (including provider variants for Claude) */
   agentOptions: AgentOption[]

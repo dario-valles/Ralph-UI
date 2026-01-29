@@ -1,5 +1,5 @@
-// Planning types for GSD workflow
-// These types must match the Rust structs in server/src/gsd/
+// Planning types for PRD workflow
+// These types must match the Rust structs in server/src/prd_workflow/
 
 /**
  * Requirement category

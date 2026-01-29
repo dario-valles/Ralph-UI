@@ -1,36 +1,44 @@
 /**
- * Hook for loading available AI agents dynamically
+ * Hook for available AI agents
  *
- * Fetches the list of available AI coding agents from the backend.
- * Falls back to ['claude'] if the API call fails.
+ * Returns the list of supported AI coding agents.
+ * This is a static list based on the AgentType union.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import type { AgentType } from '@/types/agent'
-import { gsdApi } from '@/lib/api/gsd-api'
+
+/** All supported agent types */
+const SUPPORTED_AGENTS: AgentType[] = [
+  'claude',
+  'opencode',
+  'cursor',
+  'codex',
+  'qwen',
+  'droid',
+  'gemini',
+]
 
 interface UseAvailableAgentsReturn {
   /** Array of available agent types */
   agents: AgentType[]
-  /** Whether agents are currently loading */
+  /** Whether agents are currently loading (always false - static list) */
   loading: boolean
-  /** Error message if loading failed */
+  /** Error message if loading failed (always null - static list) */
   error: string | null
-  /** Refresh agents from backend */
+  /** Refresh agents (no-op for static list) */
   refresh: () => Promise<void>
 }
 
 /**
- * Hook to load available AI agents
+ * Hook to get available AI agents
  *
  * @returns Object with agents array, loading state, error state, and refresh function
  *
  * @example
  * ```tsx
  * function AgentSelector() {
- *   const { agents, loading, error } = useAvailableAgents()
- *
- *   if (loading) return <LoadingSpinner />
+ *   const { agents } = useAvailableAgents()
  *
  *   return (
  *     <Select>
@@ -43,63 +51,14 @@ interface UseAvailableAgentsReturn {
  * ```
  */
 export function useAvailableAgents(): UseAvailableAgentsReturn {
-  const [agents, setAgents] = useState<AgentType[]>(['claude'])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadAgents = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      const result = await gsdApi.getAvailableAgents()
-      setAgents(result.length > 0 ? result : ['claude'])
-    } catch (err) {
-      console.error('Failed to load available agents:', err)
-      setError(err instanceof Error ? err.message : String(err))
-      setAgents(['claude'])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Load agents on mount
-  useEffect(() => {
-    let cancelled = false
-
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const result = await gsdApi.getAvailableAgents()
-        if (!cancelled) {
-          setAgents(result.length > 0 ? result : ['claude'])
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Failed to load available agents:', err)
-          setError(err instanceof Error ? err.message : String(err))
-          setAgents(['claude'])
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    load()
-
-    return () => {
-      cancelled = true
-    }
+  const refresh = useCallback(async () => {
+    // No-op - agents are static
   }, [])
 
   return {
-    agents,
-    loading,
-    error,
-    refresh: loadAgents,
+    agents: SUPPORTED_AGENTS,
+    loading: false,
+    error: null,
+    refresh,
   }
 }

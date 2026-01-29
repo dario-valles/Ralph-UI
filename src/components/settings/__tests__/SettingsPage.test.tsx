@@ -24,7 +24,7 @@ const mockListBuiltin = vi.fn()
 const mockPreviewTemplate = vi.fn()
 
 // Mock the config API
-vi.mock('@/lib/config-api', () => ({
+vi.mock('@/lib/api/config-api', () => ({
   configApi: {
     get: () => mockGet(),
     updateExecution: (config: unknown) => mockUpdateExecution(config),

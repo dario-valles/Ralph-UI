@@ -1,8 +1,7 @@
 // Backend API wrappers
 // All commands are proxied through HTTP to the Rust/Axum backend server.
 //
-// This file re-exports from domain-specific API modules in src/lib/api/
-// for backwards compatibility. New code should import directly from the modules.
+// This file re-exports from domain-specific API modules in src/lib/api/.
 
 // Re-export all API modules
 export {
@@ -12,11 +11,11 @@ export {
   prdChatApi,
   missionControlApi,
   ralphLoopApi,
-  gsdApi,
+  prdWorkflowApi,
   templateApi,
 } from './api'
 
-// Re-export types for backwards compatibility
+// Re-export types
 export type {
   AgentAvailabilityResult,
   WatchFileResponse,

@@ -4,8 +4,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { invoke } from '@/lib/invoke'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Folder,
   FolderOpen,
+  FolderPlus,
   ChevronRight,
   ChevronUp,
   Home,
@@ -14,33 +22,21 @@ import {
   X,
   Eye,
   EyeOff,
+  Search,
 } from 'lucide-react'
-import { FolderPicker } from './FolderPicker'
-import type { ProjectFolder } from '@/types'
-
-interface DirectoryEntry {
-  name: string
-  path: string
-  isDirectory: boolean
-  isHidden: boolean
-}
+import { projectApi } from '@/lib/api/project-api'
+import type { DirectoryEntry } from '@/types'
 
 interface RemoteFolderBrowserProps {
-  onSelect: (path: string, folderId?: string | null) => void
+  onSelect: (path: string) => void
   onCancel: () => void
   initialPath?: string
-  folders?: ProjectFolder[]
-  onCreateFolder?: (name: string) => Promise<ProjectFolder>
-  showFolderSelector?: boolean
 }
 
 export function RemoteFolderBrowser({
   onSelect,
   onCancel,
   initialPath,
-  folders = [],
-  onCreateFolder,
-  showFolderSelector = false,
 }: RemoteFolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState(initialPath || '')
   const [entries, setEntries] = useState<DirectoryEntry[]>([])
@@ -48,12 +44,21 @@ export function RemoteFolderBrowser({
   const [error, setError] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   const [pathInput, setPathInput] = useState('')
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+
+  // Filter state
+  const [filterQuery, setFilterQuery] = useState('')
+
+  // Create folder dialog state
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   // Load directory contents
   const loadDirectory = async (path?: string) => {
     setLoading(true)
     setError(null)
+    setFilterQuery('') // Clear filter when navigating
     try {
       const result = await invoke<DirectoryEntry[]>('list_directory', { path: path || null })
       setEntries(result)
@@ -104,21 +109,92 @@ export function RemoteFolderBrowser({
 
   // Handle select button click
   const handleSelect = () => {
-    if (showFolderSelector) {
-      onSelect(currentPath, selectedFolderId)
-    } else {
-      onSelect(currentPath)
+    onSelect(currentPath)
+  }
+
+  // Handle create folder
+  const handleCreateFolder = async () => {
+    const trimmedName = newFolderName.trim()
+    if (!trimmedName) {
+      setCreateError('Folder name cannot be empty')
+      return
+    }
+
+    // Validate no path separators
+    if (trimmedName.includes('/') || trimmedName.includes('\\')) {
+      setCreateError('Folder name cannot contain / or \\')
+      return
+    }
+
+    // Check for existing folder with same name
+    const existingFolder = entries.find(
+      (e) => e.name.toLowerCase() === trimmedName.toLowerCase()
+    )
+    if (existingFolder) {
+      setCreateError('A folder with this name already exists')
+      return
+    }
+
+    setIsCreating(true)
+    setCreateError(null)
+
+    try {
+      const newPath = currentPath.endsWith('/')
+        ? `${currentPath}${trimmedName}`
+        : `${currentPath}/${trimmedName}`
+
+      const newEntry = await projectApi.createFilesystemDirectory(newPath)
+
+      // Refresh directory listing
+      await loadDirectory(currentPath)
+
+      // Navigate to the new folder
+      navigateTo(newEntry.path)
+
+      // Close dialog and reset state
+      setShowCreateDialog(false)
+      setNewFolderName('')
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsCreating(false)
     }
   }
 
-  // Filter entries based on showHidden
-  const visibleEntries = showHidden ? entries : entries.filter((e) => !e.isHidden)
+  // Filter entries based on showHidden and filterQuery
+  const visibleEntries = entries.filter((e) => {
+    // Filter hidden folders
+    if (!showHidden && e.isHidden) {
+      return false
+    }
+    // Filter by search query
+    if (filterQuery.trim()) {
+      return e.name.toLowerCase().includes(filterQuery.toLowerCase())
+    }
+    return true
+  })
 
   return (
     <div className="flex flex-col h-[400px] w-full">
       {/* Header with path input */}
       <div className="p-3 border-b space-y-2">
-        <div className="text-sm font-medium">Browse Server Folders</div>
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Browse Server Folders</div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => {
+              setShowCreateDialog(true)
+              setCreateError(null)
+              setNewFolderName('')
+            }}
+            title="Create new folder"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New Folder</span>
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -167,6 +243,17 @@ export function RemoteFolderBrowser({
             {showHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
         </div>
+
+        {/* Filter input */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            placeholder="Filter folders..."
+            className="h-8 text-sm pl-8"
+          />
+        </div>
       </div>
 
       {/* Directory listing */}
@@ -190,9 +277,11 @@ export function RemoteFolderBrowser({
           </div>
         ) : visibleEntries.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            {showHidden
-              ? 'No folders in this directory'
-              : 'No visible folders (try showing hidden)'}
+            {filterQuery.trim()
+              ? 'No folders match your filter'
+              : showHidden
+                ? 'No folders in this directory'
+                : 'No visible folders (try showing hidden)'}
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -222,16 +311,6 @@ export function RemoteFolderBrowser({
           <span className="truncate flex-1 text-muted-foreground">{currentPath}</span>
         </div>
 
-        {/* Folder selector (shown when enabled) */}
-        {showFolderSelector && onCreateFolder && (
-          <FolderPicker
-            folders={folders}
-            selectedFolderId={selectedFolderId}
-            onSelect={setSelectedFolderId}
-            onCreateFolder={onCreateFolder}
-          />
-        )}
-
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
             <X className="h-4 w-4 mr-1" />
@@ -250,6 +329,55 @@ export function RemoteFolderBrowser({
           </Button>
         </div>
       </div>
+
+      {/* Create Folder Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+            <DialogDescription>
+              Create a new folder in <span className="font-mono text-xs">{currentPath}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-4">
+            <Input
+              value={newFolderName}
+              onChange={(e) => {
+                setNewFolderName(e.target.value)
+                setCreateError(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isCreating) handleCreateFolder()
+                if (e.key === 'Escape') setShowCreateDialog(false)
+              }}
+              placeholder="e.g., my-new-project"
+              autoFocus
+              disabled={isCreating}
+            />
+            {createError && <p className="text-sm text-destructive">{createError}</p>}
+          </div>
+
+          <div className="flex items-center gap-2 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCreateDialog(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleCreateFolder}
+              disabled={isCreating || !newFolderName.trim()}
+            >
+              {isCreating ? 'Creating...' : 'Create'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
