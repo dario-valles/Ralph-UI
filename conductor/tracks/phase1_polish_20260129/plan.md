@@ -1,6 +1,6 @@
 # Implementation Plan - Phase 1 Stability & Polish
 
-## Phase 1: Analysis & PRD Flow Audit
+## Phase 1: Analysis & PRD Flow Audit [checkpoint: 8b80b85]
 - [x] Task: Analyze current PRD creation code (`server/src/agents/`, `src/components/chat/`).
     - [x] Sub-task: Read and map out the state machine for the PRD chat flow.
     - [x] Sub-task: Identify current system prompts and context injection methods.
@@ -10,7 +10,7 @@
 - [x] Task: Design improvements for the PRD flow.
     - [x] Sub-task: Draft improved system prompts for better guidance and output structure.
     - [x] Sub-task: Mock up UI changes for a more "IDE-like" chat experience.
-- [ ] Task: Conductor - User Manual Verification 'Analysis & PRD Flow Audit' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Analysis & PRD Flow Audit' (Protocol in workflow.md)
 
 ## Phase 2: PRD Flow Implementation
 - [ ] Task: Implement improved system prompts.
