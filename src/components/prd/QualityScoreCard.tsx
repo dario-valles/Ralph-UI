@@ -30,6 +30,8 @@ interface QualityScoreCardProps {
   className?: string
   /** Render a compact version for smaller spaces */
   compact?: boolean
+  /** Callback when a missing section badge is clicked */
+  onMissingSectionClick?: (section: string) => void
 }
 
 interface ScoreBarProps {
@@ -69,6 +71,7 @@ export function QualityScoreCard({
   onRefresh,
   className,
   compact = false,
+  onMissingSectionClick,
 }: QualityScoreCardProps) {
   if (!assessment) {
     return (
@@ -217,7 +220,12 @@ export function QualityScoreCard({
                             <Badge
                               key={idx}
                               variant="secondary"
-                              className="text-[10px] font-normal"
+                              className={cn(
+                                'text-[10px] font-normal',
+                                onMissingSectionClick &&
+                                  'cursor-pointer hover:bg-secondary/80 transition-colors'
+                              )}
+                              onClick={() => onMissingSectionClick?.(section)}
                             >
                               {section}
                             </Badge>
@@ -315,7 +323,16 @@ export function QualityScoreCard({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {assessment.missingSections.map((section, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs font-normal">
+                <Badge
+                  key={idx}
+                  variant="secondary"
+                  className={cn(
+                    'text-xs font-normal',
+                    onMissingSectionClick &&
+                      'cursor-pointer hover:bg-secondary/80 transition-colors'
+                  )}
+                  onClick={() => onMissingSectionClick?.(section)}
+                >
                   {section}
                 </Badge>
               ))}

@@ -20,6 +20,8 @@ interface ChatInputAreaProps {
   onSendMessage: (content: string, attachments?: ChatAttachment[]) => void
   onRefreshQuality: () => void
   onExecutionModeChange?: (mode: ExecutionMode) => void
+  /** Callback when a missing section badge is clicked */
+  onMissingSectionClick?: (section: string) => void
 }
 
 /**
@@ -37,6 +39,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
     onSendMessage,
     onRefreshQuality,
     onExecutionModeChange,
+    onMissingSectionClick,
   },
   ref
 ) {
@@ -51,6 +54,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
           assessment={qualityAssessment}
           loading={loading}
           onRefresh={onRefreshQuality}
+          onMissingSectionClick={onMissingSectionClick}
         />
       )}
 

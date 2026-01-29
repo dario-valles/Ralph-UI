@@ -16,6 +16,8 @@ interface FloatingQualityBadgeProps {
   assessment: QualityAssessment | null
   loading: boolean
   onRefresh: () => void
+  /** Callback when a missing section badge is clicked */
+  onMissingSectionClick?: (section: string) => void
 }
 
 // Get gradient colors based on score
@@ -106,7 +108,7 @@ function CircularProgress({
   )
 }
 
-export function FloatingQualityBadge({ assessment, loading, onRefresh }: FloatingQualityBadgeProps) {
+export function FloatingQualityBadge({ assessment, loading, onRefresh, onMissingSectionClick }: FloatingQualityBadgeProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const isMobile = useIsMobile()
@@ -247,7 +249,12 @@ export function FloatingQualityBadge({ assessment, loading, onRefresh }: Floatin
               </div>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto p-4 min-h-0">
-              <QualityScoreCard assessment={assessment} loading={loading} onRefresh={onRefresh} />
+              <QualityScoreCard
+                assessment={assessment}
+                loading={loading}
+                onRefresh={onRefresh}
+                onMissingSectionClick={onMissingSectionClick}
+              />
             </div>
           </SheetContent>
         </Sheet>
@@ -300,7 +307,12 @@ export function FloatingQualityBadge({ assessment, loading, onRefresh }: Floatin
 
           {/* Score card content */}
           <div className="bg-popover">
-            <QualityScoreCard assessment={assessment} loading={loading} onRefresh={onRefresh} />
+            <QualityScoreCard
+              assessment={assessment}
+              loading={loading}
+              onRefresh={onRefresh}
+              onMissingSectionClick={onMissingSectionClick}
+            />
           </div>
         </DropdownMenuContent>
       </DropdownMenu>

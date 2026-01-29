@@ -387,14 +387,17 @@ export function PRDChatPanel() {
     }
   }
 
-  const handleSendMessage = async (content: string, attachments?: ChatAttachment[]) => {
-    startStreaming(content)
-    try {
-      await sendMessage(content, attachments)
-    } finally {
-      stopStreaming()
-    }
-  }
+  const handleSendMessage = useCallback(
+    async (content: string, attachments?: ChatAttachment[]) => {
+      startStreaming(content)
+      try {
+        await sendMessage(content, attachments)
+      } finally {
+        stopStreaming()
+      }
+    },
+    [startStreaming, sendMessage, stopStreaming]
+  )
 
   const handleRetryMessage = () => {
     if (lastMessageContent) {
@@ -483,6 +486,15 @@ export function PRDChatPanel() {
     chatInputRef.current?.insertText(text)
     chatInputRef.current?.focus()
   }, [])
+
+  /** Handle click on missing section badge - sends a message to generate that section */
+  const handleMissingSectionClick = useCallback(
+    (section: string) => {
+      const message = `Please generate ${section} for this PRD based on the requirements we've discussed. Include specific, actionable items.`
+      handleSendMessage(message)
+    },
+    [handleSendMessage]
+  )
 
   // ============================================================================
   // Computed Values
@@ -614,6 +626,7 @@ export function PRDChatPanel() {
             onSendMessage={handleSendMessage}
             onRefreshQuality={assessQuality}
             onExecutionModeChange={handleExecutionModeChange}
+            onMissingSectionClick={handleMissingSectionClick}
           />
         </CardContent>
       </Card>
