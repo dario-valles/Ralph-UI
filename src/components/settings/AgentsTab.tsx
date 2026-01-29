@@ -6,25 +6,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import { useOnboardingStore } from '@/stores/onboardingStore'
 import { getAllAgentsStatus } from '@/lib/api/agent-api'
 import type { AgentType, AgentStatusInfo } from '@/types'
 import { Bot, Check, X, Loader2, RefreshCw, AlertCircle, Copy, CheckCheck } from 'lucide-react'
 import { toast } from '@/stores/toastStore'
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
 
 export function AgentsTab() {
   const {
     enabledAgents,
     preferredAgent,
+    preferredModel,
+    preferredProvider,
     setEnabledAgents,
     setPreferredAgent,
+    setPreferredModel,
+    setPreferredProvider,
     hasCompletedAgentSetup,
     markAgentSetupComplete,
   } = useOnboardingStore()
@@ -36,6 +35,27 @@ export function AgentsTab() {
   // Local state for selections (initialized from store)
   const [selectedAgents, setSelectedAgents] = useState<Set<AgentType>>(new Set(enabledAgents))
   const [defaultAgent, setDefaultAgent] = useState<AgentType | null>(preferredAgent)
+
+  // Agent and model selector state
+  const {
+    agentType,
+    setAgentType,
+    providerId,
+    setProviderId,
+    modelId,
+    setModelId,
+    models,
+    modelsLoading,
+    defaultModelId,
+    agentOptions,
+    agentsLoading: agentOptionsLoading,
+    handleAgentOptionChange,
+    currentAgentOptionValue,
+  } = useAgentModelSelector({
+    initialAgent: preferredAgent || undefined,
+    initialModel: preferredModel || undefined,
+    initialProvider: preferredProvider || undefined,
+  })
 
   // Track if there are unsaved changes
   const [hasChanges, setHasChanges] = useState(false)
@@ -62,7 +82,17 @@ export function AgentsTab() {
   useEffect(() => {
     setSelectedAgents(new Set(enabledAgents))
     setDefaultAgent(preferredAgent)
-  }, [enabledAgents, preferredAgent])
+    // Only update selector if not already set by user
+    if (preferredAgent && !hasChanges) {
+      setAgentType(preferredAgent)
+      if (preferredProvider) {
+        setProviderId(preferredProvider)
+      }
+      if (preferredModel) {
+        setModelId(preferredModel)
+      }
+    }
+  }, [enabledAgents, preferredAgent, preferredModel, preferredProvider, setAgentType, setProviderId, setModelId, hasChanges])
 
   const handleToggleAgent = (agentType: AgentType) => {
     setSelectedAgents((prev) => {
@@ -88,12 +118,15 @@ export function AgentsTab() {
 
   const handleDefaultChange = (agent: AgentType) => {
     setDefaultAgent(agent)
+    setAgentType(agent)
     setHasChanges(true)
   }
 
   const handleSave = () => {
     setEnabledAgents(Array.from(selectedAgents))
-    setPreferredAgent(defaultAgent)
+    setPreferredAgent(agentType)
+    setPreferredModel(modelId || null)
+    setPreferredProvider(providerId || null)
     if (!hasCompletedAgentSetup) {
       markAgentSetupComplete()
     }
@@ -114,7 +147,6 @@ export function AgentsTab() {
   }
 
   const availableCount = agents.filter((a) => a.available).length
-  const selectedArray = Array.from(selectedAgents)
 
   return (
     <div className="space-y-6">
@@ -177,12 +209,12 @@ export function AgentsTab() {
         </CardContent>
       </Card>
 
-      {/* Default agent selector */}
+      {/* Default agent and model selector */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Default Agent</CardTitle>
+          <CardTitle className="text-base">Default Agent & Model</CardTitle>
           <CardDescription>
-            The agent to use by default when creating new sessions or PRDs
+            The agent and model to use by default when creating new sessions or PRDs
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -191,24 +223,32 @@ export function AgentsTab() {
               Enable at least one agent above to set a default
             </p>
           ) : (
-            <Select
-              value={defaultAgent || ''}
-              onValueChange={(value) => handleDefaultChange(value as AgentType)}
-            >
-              <SelectTrigger className="w-full max-w-xs">
-                <SelectValue placeholder="Select default agent" />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedArray.map((agentType) => {
-                  const agent = agents.find((a) => a.agentType === agentType)
-                  return (
-                    <SelectItem key={agentType} value={agentType}>
-                      {agent?.displayName || agentType}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
+            <div className="space-y-4">
+              <AgentModelSelector
+                agentType={agentType}
+                modelId={modelId}
+                onAgentChange={(agent) => {
+                  handleDefaultChange(agent)
+                }}
+                onModelChange={(model) => {
+                  setModelId(model)
+                  setHasChanges(true)
+                }}
+                models={models}
+                modelsLoading={modelsLoading}
+                defaultModelId={defaultModelId}
+                agentOptions={agentOptions.filter((opt) => selectedAgents.has(opt.agentType))}
+                currentAgentOptionValue={currentAgentOptionValue}
+                onAgentOptionChange={(value) => {
+                  handleAgentOptionChange(value)
+                  setHasChanges(true)
+                }}
+                agentsLoading={agentOptionsLoading}
+              />
+              <p className="text-xs text-muted-foreground">
+                This agent and model will be used as the default for new sessions and PRDs
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

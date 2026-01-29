@@ -1,5 +1,6 @@
 // Projects grid overview for Mission Control
 
+import { useMemo } from 'react'
 import { FolderPlus, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProjectStatusCard } from './ProjectStatusCard'
@@ -65,16 +66,18 @@ export function ProjectsOverview({
   onAddProject,
 }: ProjectsOverviewProps) {
   // Sort projects: active first, then by last activity
-  const sortedProjects = [...projectStatuses].sort((a, b) => {
-    // Active (healthy) projects first
-    if (a.health === 'healthy' && b.health !== 'healthy') return -1
-    if (b.health === 'healthy' && a.health !== 'healthy') return 1
+  const sortedProjects = useMemo(() => {
+    return [...projectStatuses].sort((a, b) => {
+      // Active (healthy) projects first
+      if (a.health === 'healthy' && b.health !== 'healthy') return -1
+      if (b.health === 'healthy' && a.health !== 'healthy') return 1
 
-    // Then by last activity
-    const aTime = a.lastActivity?.getTime() || 0
-    const bTime = b.lastActivity?.getTime() || 0
-    return bTime - aTime
-  })
+      // Then by last activity
+      const aTime = a.lastActivity?.getTime() || 0
+      const bTime = b.lastActivity?.getTime() || 0
+      return bTime - aTime
+    })
+  }, [projectStatuses])
 
   return (
     <div className="space-y-3">

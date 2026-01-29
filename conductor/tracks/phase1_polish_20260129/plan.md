@@ -26,12 +26,12 @@
 - [x] Task: Conductor - User Manual Verification 'PRD Flow Implementation' (Protocol in workflow.md)
 
 ## Phase 3: System Stability & Polish
-- [ ] Task: Review and fix high-priority bugs.
-    - [ ] Sub-task: Check `README.md` or issue tracker for list of known bugs.
-    - [ ] Sub-task: Implement fixes for top 3 critical stability issues.
-- [ ] Task: Performance Tuning.
-    - [ ] Sub-task: Profile backend resource usage (memory/CPU) during agent execution.
-    - [ ] Sub-task: Optimize frontend re-renders in the Mission Control view.
+- [x] Task: Review and fix high-priority bugs.
+    - [x] Sub-task: Check `README.md` or issue tracker for list of known bugs.
+    - [x] Sub-task: Implement fixes for top 3 critical stability issues.
+- [x] Task: Performance Tuning.
+    - [x] Sub-task: Profile backend resource usage (memory/CPU) during agent execution.
+    - [x] Sub-task: Optimize frontend re-renders in the Mission Control view.
 - [ ] Task: Conductor - User Manual Verification 'System Stability & Polish' (Protocol in workflow.md)
 
 ## Phase 4: Documentation & Wrap-up

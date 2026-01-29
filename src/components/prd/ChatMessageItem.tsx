@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Bot, User, Sparkles } from 'lucide-react'
@@ -9,7 +10,7 @@ interface ChatMessageItemProps {
   message: ChatMessage
 }
 
-export function ChatMessageItem({ message }: ChatMessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMessageItemProps) {
   const isUser = message.role === 'user'
   const timestamp = new Date(message.createdAt)
   const hasAttachments = message.attachments && message.attachments.length > 0
@@ -219,4 +220,4 @@ export function ChatMessageItem({ message }: ChatMessageItemProps) {
       </div>
     </div>
   )
-}
+})

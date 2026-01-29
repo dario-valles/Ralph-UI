@@ -14,6 +14,8 @@ interface OnboardingStore {
   hasCompletedAgentSetup: boolean
   enabledAgents: AgentType[]
   preferredAgent: AgentType | null
+  preferredModel: string | null
+  preferredProvider: string | null
 
   // Actions
   dismissHint: (hintId: string) => void
@@ -26,6 +28,8 @@ interface OnboardingStore {
   markAgentSetupComplete: () => void
   setEnabledAgents: (agents: AgentType[]) => void
   setPreferredAgent: (agent: AgentType | null) => void
+  setPreferredModel: (model: string | null) => void
+  setPreferredProvider: (provider: string | null) => void
   shouldShowAgentSetup: () => boolean
 }
 
@@ -40,6 +44,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
       hasCompletedAgentSetup: false,
       enabledAgents: [],
       preferredAgent: null,
+      preferredModel: null,
+      preferredProvider: null,
 
       dismissHint: (hintId: string) =>
         set((state) => ({
@@ -68,6 +74,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
           hasCompletedAgentSetup: false,
           enabledAgents: [],
           preferredAgent: null,
+          preferredModel: null,
+          preferredProvider: null,
         })),
 
       // Agent setup actions
@@ -86,6 +94,16 @@ export const useOnboardingStore = create<OnboardingStore>()(
           preferredAgent: agent,
         })),
 
+      setPreferredModel: (model: string | null) =>
+        set(() => ({
+          preferredModel: model,
+        })),
+
+      setPreferredProvider: (provider: string | null) =>
+        set(() => ({
+          preferredProvider: provider,
+        })),
+
       shouldShowAgentSetup: () => {
         const state = get()
         // Show agent setup if not completed yet
@@ -101,6 +119,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
         hasCompletedAgentSetup: state.hasCompletedAgentSetup,
         enabledAgents: state.enabledAgents,
         preferredAgent: state.preferredAgent,
+        preferredModel: state.preferredModel,
+        preferredProvider: state.preferredProvider,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as
@@ -111,6 +131,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
               hasCompletedAgentSetup?: boolean
               enabledAgents?: AgentType[]
               preferredAgent?: AgentType | null
+              preferredModel?: string | null
+              preferredProvider?: string | null
             }
           | undefined
         return {
@@ -121,6 +143,8 @@ export const useOnboardingStore = create<OnboardingStore>()(
           hasCompletedAgentSetup: persisted?.hasCompletedAgentSetup || false,
           enabledAgents: persisted?.enabledAgents || [],
           preferredAgent: persisted?.preferredAgent || null,
+          preferredModel: persisted?.preferredModel || null,
+          preferredProvider: persisted?.preferredProvider || null,
         }
       },
     }

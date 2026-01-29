@@ -144,13 +144,12 @@ impl PrdExecutor {
 
     /// Update the PRD metadata timestamp
     pub fn touch_prd(&self) -> Result<(), String> {
-        let mut prd = self.read_prd()?;
-
-        if let Some(ref mut metadata) = prd.metadata {
-            metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
-        }
-
-        self.write_prd(&prd)
+        self.with_prd_lock(|prd| {
+            if let Some(ref mut metadata) = prd.metadata {
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Ok(())
+        })
     }
 
     /// Mark a story as passing (with file locking for concurrent safety)
@@ -256,102 +255,103 @@ impl PrdExecutor {
 
     /// Set the last execution ID in metadata
     pub fn set_last_execution_id(&self, execution_id: &str) -> Result<(), String> {
-        let mut prd = self.read_prd()?;
-
-        if let Some(ref mut metadata) = prd.metadata {
-            metadata.last_execution_id = Some(execution_id.to_string());
-            metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
-        }
-
-        self.write_prd(&prd)
+        let execution_id = execution_id.to_string();
+        self.with_prd_lock(|prd| {
+            if let Some(ref mut metadata) = prd.metadata {
+                metadata.last_execution_id = Some(execution_id);
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Ok(())
+        })
     }
 
     /// Add a new story to the PRD
     pub fn add_story(&self, story: RalphStory) -> Result<(), String> {
-        let mut prd = self.read_prd()?;
-        prd.add_story(story);
+        self.with_prd_lock(|prd| {
+            prd.add_story(story);
 
-        if let Some(ref mut metadata) = prd.metadata {
-            metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
-        }
-
-        self.write_prd(&prd)
+            if let Some(ref mut metadata) = prd.metadata {
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Ok(())
+        })
     }
 
     /// Remove a story from the PRD
     pub fn remove_story(&self, story_id: &str) -> Result<bool, String> {
-        let mut prd = self.read_prd()?;
-        let initial_len = prd.stories.len();
-        prd.stories.retain(|s| s.id != story_id);
+        let story_id = story_id.to_string();
+        self.with_prd_lock(|prd| {
+            let initial_len = prd.stories.len();
+            prd.stories.retain(|s| s.id != story_id);
 
-        if prd.stories.len() != initial_len {
-            if let Some(ref mut metadata) = prd.metadata {
-                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            if prd.stories.len() != initial_len {
+                if let Some(ref mut metadata) = prd.metadata {
+                    metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                }
+                Ok(true)
+            } else {
+                Ok(false)
             }
-            self.write_prd(&prd)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        })
     }
 
     /// Update a story's details (excluding passes status)
     pub fn update_story(&self, story_id: &str, updates: StoryUpdates) -> Result<bool, String> {
-        let mut prd = self.read_prd()?;
+        let story_id = story_id.to_string();
+        self.with_prd_lock(|prd| {
+            if let Some(story) = prd.stories.iter_mut().find(|s| s.id == story_id) {
+                if let Some(title) = updates.title {
+                    story.title = title;
+                }
+                if let Some(description) = updates.description {
+                    story.description = Some(description);
+                }
+                if let Some(acceptance) = updates.acceptance {
+                    story.acceptance = acceptance;
+                }
+                if let Some(priority) = updates.priority {
+                    story.priority = priority;
+                }
+                if let Some(dependencies) = updates.dependencies {
+                    story.dependencies = dependencies;
+                }
+                if let Some(tags) = updates.tags {
+                    story.tags = tags;
+                }
+                if let Some(effort) = updates.effort {
+                    story.effort = Some(effort);
+                }
 
-        if let Some(story) = prd.stories.iter_mut().find(|s| s.id == story_id) {
-            if let Some(title) = updates.title {
-                story.title = title;
-            }
-            if let Some(description) = updates.description {
-                story.description = Some(description);
-            }
-            if let Some(acceptance) = updates.acceptance {
-                story.acceptance = acceptance;
-            }
-            if let Some(priority) = updates.priority {
-                story.priority = priority;
-            }
-            if let Some(dependencies) = updates.dependencies {
-                story.dependencies = dependencies;
-            }
-            if let Some(tags) = updates.tags {
-                story.tags = tags;
-            }
-            if let Some(effort) = updates.effort {
-                story.effort = Some(effort);
-            }
+                if let Some(ref mut metadata) = prd.metadata {
+                    metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                }
 
-            if let Some(ref mut metadata) = prd.metadata {
-                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+                Ok(true)
+            } else {
+                Ok(false)
             }
-
-            self.write_prd(&prd)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        })
     }
 
     /// Reorder stories by priority
     pub fn reorder_stories(&self, story_ids: &[String]) -> Result<(), String> {
-        let mut prd = self.read_prd()?;
-
-        // Update priorities based on position in the provided list
-        for (index, story_id) in story_ids.iter().enumerate() {
-            if let Some(story) = prd.stories.iter_mut().find(|s| &s.id == story_id) {
-                story.priority = index as u32;
+        let story_ids = story_ids.to_vec();
+        self.with_prd_lock(|prd| {
+            // Update priorities based on position in the provided list
+            for (index, story_id) in story_ids.iter().enumerate() {
+                if let Some(story) = prd.stories.iter_mut().find(|s| &s.id == story_id) {
+                    story.priority = index as u32;
+                }
             }
-        }
 
-        // Sort by priority
-        prd.stories.sort_by_key(|s| s.priority);
+            // Sort by priority
+            prd.stories.sort_by_key(|s| s.priority);
 
-        if let Some(ref mut metadata) = prd.metadata {
-            metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
-        }
-
-        self.write_prd(&prd)
+            if let Some(ref mut metadata) = prd.metadata {
+                metadata.updated_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Ok(())
+        })
     }
 
     /// Convert from the old database PRD format
