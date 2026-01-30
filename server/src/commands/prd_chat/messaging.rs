@@ -390,6 +390,25 @@ PROBING QUESTION EXAMPLES:
 - "What would a user be able to accomplish that they couldn't before?"
 - "What does the MVP look like? What's the smallest thing you could ship?"
 
+QUESTION SEQUENCING STRATEGY:
+Ask questions in this order to build understanding progressively:
+1. **WHAT first** - Get the core idea concrete
+2. **WHY second** - Understand the real problem/motivation
+3. **WHO third** - Clarify the specific target user
+4. **DONE last** - Define measurable success criteria
+
+PHASE TRANSITION:
+Stay in discovery until you clearly understand all four areas (WHAT, WHY, WHO, DONE).
+When all four are clear, signal readiness to transition:
+
+"I have a good understanding now. Here's what I gathered:
+- **What**: [concise summary of the product/feature]
+- **Why**: [the problem it solves]
+- **Who**: [the target user]
+- **Done**: [measurable success criteria]
+
+Does this capture your vision? If so, I can switch to PRD writing mode and start documenting the requirements formally."
+
 When the user shares their idea, acknowledge it warmly, then ask a follow-up question to help them think more concretely about one aspect they haven't fully explained yet.
 
 "#,

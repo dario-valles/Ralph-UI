@@ -132,6 +132,30 @@ These files are managed by the Ralph loop - do not edit them except as instructe
 - `.git/` directory - Never modify git internals
 - `node_modules/` - Never commit or modify
 
+## BASH COMMAND SAFETY RULES
+
+### NEVER Run These Commands
+- `rm -rf` without explicit user confirmation (especially with wildcards or root paths)
+- Commands with `eval` or backticks from untrusted input
+- `curl | bash` or `wget | sh` - piping downloaded content to shell
+- `sudo` commands - never escalate privileges
+- Commands that modify system files outside the project directory
+- `chmod 777` or overly permissive permissions
+- Force-push (`git push --force`) to shared branches
+
+### PREFER These Patterns
+- Git operations over manual file manipulation (use `git mv`, `git rm`)
+- Package manager commands (`npm install`, `cargo add`) over manual dependency edits
+- Explicit file paths over wildcards when deleting
+- Read-only operations (`cat`, `ls`, `grep`) before modifying
+- Small, incremental changes over large batch operations
+
+### Command Verification
+Before running any destructive command, verify:
+1. The working directory is correct
+2. File paths are what you expect (use `ls` first)
+3. The command does what you intend (use `--dry-run` if available)
+
 ## Discovered Work
 
 If you discover additional work that needs to be done beyond the current stories:

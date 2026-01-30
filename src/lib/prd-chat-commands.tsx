@@ -10,6 +10,8 @@ import {
   GitCompare,
   GitBranch,
   MessageSquare,
+  CheckCircle,
+  Network,
 } from 'lucide-react'
 import type { ChatCommandConfig } from '@/types'
 
@@ -84,24 +86,39 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'ideas',
     label: 'Ideas',
-    description: 'Analyze codebase and suggest improvements',
+    description: 'Analyze codebase and suggest specific improvements',
     icon: <Lightbulb className="h-4 w-4 mr-2" />,
     type: 'template',
-    template: `Please analyze the codebase and suggest improvements in the following categories:
+    template: `Analyze this codebase and provide SPECIFIC, ACTIONABLE improvements.
 
-## Quick Wins (< 1 hour)
-- TODOs, dead code, missing docs
+For EACH suggestion, you MUST provide:
+1. **File path(s)** affected
+2. **Current problem** (cite specific lines if possible)
+3. **Proposed solution** (concrete steps, not vague advice)
+4. **Effort estimate** (minutes/hours/days)
+5. **Impact** (what specifically improves: performance, readability, maintainability, etc.)
 
-## Refactoring Opportunities (1-8 hours)
-- Code duplication, complexity, better abstractions
+## Categories to Analyze
 
-## Architecture Improvements (> 1 day)
-- Patterns, performance, scalability
+### Quick Wins (< 1 hour)
+- Unused imports, dead code, missing error handling
+- TODO/FIXME comments that should be addressed
+- Inconsistent naming or formatting
 
-## Feature Ideas
-- Natural extensions based on existing code patterns
+### Refactoring (1-8 hours)
+- Code duplication (show the duplicated code locations)
+- Functions that are too long or complex
+- Missing abstractions that would simplify code
 
-Focus on actionable, specific suggestions with file paths where relevant.`,
+### Architecture (> 1 day)
+- Performance bottlenecks (cite evidence)
+- Scalability concerns
+- Technical debt patterns
+
+## Rules
+- Do NOT suggest vague improvements like "add more tests" or "improve error handling"
+- Each suggestion MUST be immediately actionable with a clear first step
+- If you can't cite a specific file/line, the suggestion isn't specific enough`,
   },
   {
     id: 'research',
@@ -208,6 +225,79 @@ Include scenarios for:
 - API changes
 
 This will help clarify the implementation scope.`,
+  },
+  {
+    id: 'verify',
+    label: 'Verify',
+    description: 'Verify requirements completeness and quality',
+    icon: <CheckCircle className="h-4 w-4 mr-2" />,
+    type: 'template',
+    template: `Please verify the requirements in the PRD against this quality checklist:
+
+## Completeness Check
+- [ ] Every user story has acceptance criteria
+- [ ] Edge cases documented (empty states, max limits, errors)
+- [ ] Error handling defined for each feature
+- [ ] Success metrics are quantifiable
+
+## Specificity Check
+- [ ] No vague terms ("fast", "easy", "simple") - all values are measurable
+- [ ] Response times, limits, and thresholds are explicit
+- [ ] User actions are described step-by-step
+
+## Consistency Check
+- [ ] No conflicting requirements
+- [ ] Terminology is used consistently
+- [ ] Dependencies between stories are explicit
+
+## Testability Check
+- [ ] Each acceptance criterion can be verified by a test
+- [ ] Expected vs actual behavior is clear
+- [ ] Boundary conditions are defined
+
+For EACH failed check:
+1. Cite the specific requirement that fails
+2. Explain why it fails the check
+3. Provide a concrete suggestion to fix it
+
+If all checks pass, confirm the PRD is ready for implementation.`,
+  },
+  {
+    id: 'dependencies',
+    label: 'Dependencies',
+    description: 'Analyze and visualize story dependencies',
+    icon: <Network className="h-4 w-4 mr-2" />,
+    type: 'template',
+    template: `Analyze the story dependencies in the PRD and provide:
+
+## Dependency Graph
+Create a Mermaid diagram showing story dependencies:
+
+\`\`\`mermaid
+graph TD
+    US-1.1["US-1.1: Story Title"]
+    US-1.2["US-1.2: Another Story"]
+    US-1.1 --> US-1.2
+\`\`\`
+
+## Critical Path
+Identify the longest dependency chain that determines the minimum timeline.
+List each story in the critical path with its effort estimate.
+
+## Parallelization Opportunities
+Which stories can be worked on simultaneously by different developers?
+Group stories into "parallel tracks" that have no dependencies on each other.
+
+## Recommended Execution Order
+Provide a numbered list of stories in the order they should be implemented:
+1. **[US-X.X]** - [Reason: no dependencies, unblocks X other stories]
+2. **[US-X.X]** - [Reason: depends only on completed stories]
+...
+
+## Dependency Risks
+- Are there any circular dependencies?
+- Are there bottleneck stories that block many others?
+- Any stories with unclear dependencies?`,
   },
 
   // ==========================================================================
@@ -323,6 +413,8 @@ export const COMMAND_ICONS: Record<string, React.ReactNode> = {
   agents: <FileCode className="h-4 w-4 mr-2" />,
   criteria: <ListChecks className="h-4 w-4 mr-2" />,
   spec: <GitCompare className="h-4 w-4 mr-2" />,
+  verify: <CheckCircle className="h-4 w-4 mr-2" />,
+  dependencies: <Network className="h-4 w-4 mr-2" />,
   critique: <Sparkles className="h-4 w-4 mr-2" />,
   epic: <Layers className="h-4 w-4 mr-2" />,
   story: <FileText className="h-4 w-4 mr-2" />,
