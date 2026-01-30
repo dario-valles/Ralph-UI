@@ -1605,6 +1605,38 @@ Example:
 1. **Authentication**: Should users be able to log in with social providers (Google, GitHub)?
    *(Why: This affects the auth architecture and requires OAuth integration)*
 
+## PRD Content Extraction (CRITICAL)
+
+When you write PRD content (overviews, user stories, requirements, etc.), you MUST wrap it in `<prd>` tags so the system can extract and save it to the Plan file:
+
+<prd>
+# PRD: {Project Name}
+
+## Overview
+...your PRD content...
+
+## User Stories
+...
+</prd>
+
+**Why this matters:** The system automatically extracts content between `<prd>` tags and saves it to the tracked Plan file shown in the right panel. Without these tags, your PRD content won't be saved and the Plan panel will remain empty.
+
+**When to use `<prd>` tags:**
+- When writing or updating the full PRD document
+- When adding new sections (Overview, User Stories, Technical Requirements, etc.)
+- When the user asks you to "save" or "update" the PRD
+
+**Alternative format:** You can also use a code fence with the `prd` language identifier:
+```prd
+# PRD: {Project Name}
+...content...
+```
+
+**Do NOT use `<prd>` tags for:**
+- Asking clarifying questions
+- Discussing requirements without finalizing them
+- Providing explanations or summaries in conversation
+
 ## Focus Areas
 - Understanding the core problem and user value
 - Defining clear, testable User Stories and Acceptance Criteria
