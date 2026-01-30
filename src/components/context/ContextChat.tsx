@@ -589,6 +589,35 @@ export function ContextChat({ projectPath, onClose }: ContextChatProps) {
         </div>
       )}
 
+      {/* Floating Next Step Banner - shows when context is saved */}
+      {extractedContext && chatSession?.contextSaved && (
+        <div className="border-t border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 px-3 py-2.5 flex-shrink-0 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <FileText className="h-4 w-4 text-blue-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-400 truncate">
+                  Context saved successfully
+                </p>
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  Now create a PRD to define what you want to build
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => navigate('/prds/chat', { state: { projectPath } })}
+              className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
+            >
+              <FileText className="h-4 w-4 mr-1.5" />
+              Create PRD
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input Area - reusing PRD Chat ChatInput component */}
       <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background">
         <ChatInput
