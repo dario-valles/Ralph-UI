@@ -7,6 +7,7 @@
 export type {
   Project,
   ProjectFolder,
+  ProjectSetupStatus,
   DirectoryEntry,
   RateLimitType,
   RateLimitEvent,

@@ -555,6 +555,40 @@ export function ContextChat({ projectPath, onClose }: ContextChatProps) {
         )}
       </div>
 
+      {/* Floating Save Banner - shows when context is ready but not yet saved */}
+      {extractedContext && !chatSession?.contextSaved && (
+        <div className="border-t border-green-500/30 bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-teal-500/10 px-3 py-2.5 flex-shrink-0 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-8 w-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="h-4 w-4 text-green-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-green-700 dark:text-green-400 truncate">
+                  Context ready to save
+                </p>
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  Review above and save when ready
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSaveContext}
+              disabled={useContextStore.getState().loading}
+              className="bg-green-600 hover:bg-green-700 text-white flex-shrink-0"
+            >
+              {useContextStore.getState().loading ? (
+                <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+              ) : (
+                <Save className="h-3 w-3 mr-1.5" />
+              )}
+              Save Context
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input Area - reusing PRD Chat ChatInput component */}
       <div className="border-t border-border/50 p-3 sm:p-4 flex-shrink-0 bg-gradient-to-t from-muted/30 to-background">
         <ChatInput

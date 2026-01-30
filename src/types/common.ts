@@ -21,6 +21,16 @@ export interface ProjectFolder {
   projectCount?: number  // Computed, not stored
 }
 
+/** Setup progress for a project (computed from context and PRD existence) */
+export interface ProjectSetupStatus {
+  /** Whether the project has context configured */
+  hasContext: boolean
+  /** Whether the project has at least one PRD */
+  hasFirstPrd: boolean
+  /** Loading state for async checks */
+  loading: boolean
+}
+
 /** Directory entry for filesystem browsing */
 export interface DirectoryEntry {
   name: string

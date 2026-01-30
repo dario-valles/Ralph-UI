@@ -18,6 +18,11 @@ interface UIStore {
   // Terminal mode for mobile
   terminalMode: TerminalMode
   setTerminalMode: (mode: TerminalMode) => void
+
+  // Project switcher state (for triggering from other components)
+  projectSwitcherOpen: boolean
+  setProjectSwitcherOpen: (open: boolean) => void
+  openProjectSwitcher: () => void
 }
 
 export const useUIStore = create<UIStore>()(
@@ -35,6 +40,11 @@ export const useUIStore = create<UIStore>()(
       // Terminal mode
       terminalMode: 'docked' as TerminalMode,
       setTerminalMode: (mode: TerminalMode) => set({ terminalMode: mode }),
+
+      // Project switcher state
+      projectSwitcherOpen: false,
+      setProjectSwitcherOpen: (open: boolean) => set({ projectSwitcherOpen: open }),
+      openProjectSwitcher: () => set({ projectSwitcherOpen: true }),
     }),
     {
       name: 'ralph-ui-storage',

@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
+import { useUIStore } from '@/stores/uiStore'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FolderOpen, ChevronDown, Star, Clock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react'
 import { RemoteFolderBrowser } from './RemoteFolderBrowser'
+import { ProjectSetupWizard } from '@/components/onboarding/ProjectSetupWizard'
 
 // Hook to detect mobile viewport
 function useIsMobile(breakpoint = 768) {
@@ -37,6 +39,8 @@ export function ProjectSwitcher({
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [showBrowser, setShowBrowser] = useState(false)
+  const [showSetupWizard, setShowSetupWizard] = useState(false)
+  const [newlyAddedProject, setNewlyAddedProject] = useState<Project | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
 
@@ -51,6 +55,20 @@ export function ProjectSwitcher({
     getRecentProjects,
     getFavoriteProjects,
   } = useProjectStore()
+
+  // External trigger from UI store (e.g., from welcome screen button)
+  const { projectSwitcherOpen, setProjectSwitcherOpen } = useUIStore()
+
+  // Sync with external trigger - use queueMicrotask to avoid synchronous setState in effect
+  useEffect(() => {
+    if (projectSwitcherOpen && !isOpen) {
+      queueMicrotask(() => {
+        setIsOpen(true)
+        setShowBrowser(true) // Go straight to folder browser
+        setProjectSwitcherOpen(false) // Reset the trigger
+      })
+    }
+  }, [projectSwitcherOpen, isOpen, setProjectSwitcherOpen])
 
   const activeProject = projects.find((p) => p.id === activeProjectId)
   const favoriteProjects = getFavoriteProjects()
@@ -82,6 +100,9 @@ export function ProjectSwitcher({
       setActiveProject(project.id)
       setShowBrowser(false)
       setIsOpen(false)
+      // Show the setup wizard for newly added projects
+      setNewlyAddedProject(project)
+      setShowSetupWizard(true)
     } catch (error) {
       console.error('Failed to register project:', error)
     }
@@ -304,6 +325,18 @@ export function ProjectSwitcher({
             </div>
           )}
         </div>
+      )}
+
+      {/* Project Setup Wizard - shown after adding a new project */}
+      {newlyAddedProject && (
+        <ProjectSetupWizard
+          open={showSetupWizard}
+          onOpenChange={(open) => {
+            setShowSetupWizard(open)
+            if (!open) setNewlyAddedProject(null)
+          }}
+          project={newlyAddedProject}
+        />
       )}
     </div>
   )

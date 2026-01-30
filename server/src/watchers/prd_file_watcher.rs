@@ -48,6 +48,7 @@ pub struct PrdFileWatcherManager {
 impl PrdFileWatcherManager {
     /// Create a new watcher manager
     pub fn new(update_sender: mpsc::UnboundedSender<PrdFileUpdate>) -> Self {
+        log::debug!("PrdFileWatcherManager: Initializing new watcher manager");
         Self {
             watched_files: Arc::new(Mutex::new(HashMap::new())),
             watcher: Arc::new(Mutex::new(None)),
@@ -57,10 +58,18 @@ impl PrdFileWatcherManager {
 
     /// Start watching a PRD plan file
     pub fn watch_file(&self, session_id: &str, file_path: &Path) -> WatchResult {
+        log::debug!(
+            "PrdFileWatcherManager::watch_file: Starting watch for session={}, path={}",
+            session_id,
+            file_path.display()
+        );
+
         // Read initial content if file exists
         let initial_content = if file_path.exists() {
+            log::debug!("PrdFileWatcherManager::watch_file: File exists, reading initial content");
             std::fs::read_to_string(file_path).ok()
         } else {
+            log::debug!("PrdFileWatcherManager::watch_file: File does not exist yet");
             None
         };
 
@@ -79,13 +88,22 @@ impl PrdFileWatcherManager {
 
         // Initialize watcher if not already done
         if watcher_guard.is_none() {
+            log::debug!("PrdFileWatcherManager::watch_file: Creating new file system watcher");
             let watched_files = self.watched_files.clone();
             let sender = self.update_sender.clone();
 
             let watcher_result = RecommendedWatcher::new(
-                move |res: Result<Event, notify::Error>| {
-                    if let Ok(event) = res {
-                        handle_file_event(event, &watched_files, &sender);
+                move |res: Result<Event, notify::Error>| match &res {
+                    Ok(event) => {
+                        log::debug!(
+                                "PrdFileWatcherManager: File system event received: {:?} for paths: {:?}",
+                                event.kind,
+                                event.paths
+                            );
+                        handle_file_event(event.clone(), &watched_files, &sender);
+                    }
+                    Err(e) => {
+                        log::warn!("PrdFileWatcherManager: File system watcher error: {}", e);
                     }
                 },
                 Config::default().with_poll_interval(Duration::from_millis(200)),
@@ -93,9 +111,11 @@ impl PrdFileWatcherManager {
 
             match watcher_result {
                 Ok(w) => {
+                    log::info!("PrdFileWatcherManager: File system watcher created successfully");
                     *watcher_guard = Some(w);
                 }
                 Err(e) => {
+                    log::error!("PrdFileWatcherManager: Failed to create watcher: {}", e);
                     return WatchResult {
                         success: false,
                         path: file_path.to_string_lossy().to_string(),
@@ -133,7 +153,15 @@ impl PrdFileWatcherManager {
 
         // Start watching the parent directory (to catch file creation)
         if let Some(ref mut watcher) = *watcher_guard {
+            log::debug!(
+                "PrdFileWatcherManager::watch_file: Adding watch for directory: {}",
+                parent_dir.display()
+            );
             if let Err(e) = watcher.watch(parent_dir, RecursiveMode::NonRecursive) {
+                log::error!(
+                    "PrdFileWatcherManager::watch_file: Failed to watch directory: {}",
+                    e
+                );
                 return WatchResult {
                     success: false,
                     path: file_path.to_string_lossy().to_string(),
@@ -152,6 +180,11 @@ impl PrdFileWatcherManager {
                     session_id: session_id.to_string(),
                     last_event: Instant::now(),
                 },
+            );
+            log::info!(
+                "PrdFileWatcherManager::watch_file: Successfully registered watch for session={}, path={}",
+                session_id,
+                file_path.display()
             );
         }
 
@@ -202,12 +235,25 @@ fn handle_file_event(
     let is_relevant = matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_));
 
     if !is_relevant {
+        log::trace!(
+            "handle_file_event: Ignoring non-relevant event kind: {:?}",
+            event.kind
+        );
         return;
     }
 
+    log::debug!(
+        "handle_file_event: Processing {:?} event for paths: {:?}",
+        event.kind,
+        event.paths
+    );
+
     let files = match watched_files.lock() {
         Ok(f) => f,
-        Err(_) => return,
+        Err(e) => {
+            log::warn!("handle_file_event: Failed to lock watched_files: {}", e);
+            return;
+        }
     };
 
     for path in &event.paths {
@@ -216,20 +262,57 @@ fn handle_file_event(
             if path == &watched_file.path {
                 // Debounce: skip if we just processed this file
                 if watched_file.last_event.elapsed() < Duration::from_millis(100) {
+                    log::debug!(
+                        "handle_file_event: Debouncing event for session={}, elapsed={:?}",
+                        session_id,
+                        watched_file.last_event.elapsed()
+                    );
                     continue;
                 }
 
                 // Read the new content
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    let update = PrdFileUpdate {
-                        session_id: session_id.clone(),
-                        content,
-                        path: path.to_string_lossy().to_string(),
-                    };
+                match std::fs::read_to_string(path) {
+                    Ok(content) => {
+                        log::info!(
+                            "handle_file_event: File changed for session={}, path={}, content_len={}",
+                            session_id,
+                            path.display(),
+                            content.len()
+                        );
 
-                    // Send update (ignore errors - receiver may have been dropped)
-                    let _ = sender.send(update);
+                        let update = PrdFileUpdate {
+                            session_id: session_id.clone(),
+                            content,
+                            path: path.to_string_lossy().to_string(),
+                        };
+
+                        // Send update (ignore errors - receiver may have been dropped)
+                        match sender.send(update) {
+                            Ok(()) => {
+                                log::debug!(
+                                    "handle_file_event: Successfully sent prd:file_updated event for session={}",
+                                    session_id
+                                );
+                            }
+                            Err(e) => {
+                                log::warn!("handle_file_event: Failed to send update event: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "handle_file_event: Failed to read file {}: {}",
+                            path.display(),
+                            e
+                        );
+                    }
                 }
+            } else {
+                log::trace!(
+                    "handle_file_event: Event path {} does not match watched path {}",
+                    path.display(),
+                    watched_file.path.display()
+                );
             }
         }
     }
