@@ -6,6 +6,128 @@ use crate::utils::as_path;
 use regex::Regex;
 
 // ============================================================================
+// PRD Block Extraction (for auto-save)
+// ============================================================================
+
+/// Extract PRD markdown content from agent response.
+///
+/// Looks for PRD content in the following formats (in priority order):
+/// 1. Content between `<prd>...</prd>` tags
+/// 2. Content in ````prd ... ```` fenced code block
+/// 3. Content in ````markdown ... ```` fenced code block that contains PRD-like headers
+/// 4. Content starting with "# PRD" or "# Product Requirements Document" header
+///
+/// Returns the extracted content trimmed, or None if no PRD content found.
+pub fn extract_prd_block(response: &str) -> Option<String> {
+    // 1. Look for <prd>...</prd> tags
+    if let Ok(re) = Regex::new(r"(?s)<prd>(.*?)</prd>") {
+        if let Some(caps) = re.captures(response) {
+            if let Some(m) = caps.get(1) {
+                let content = m.as_str().trim();
+                if !content.is_empty() {
+                    log::debug!("Extracted PRD from <prd> tags ({} chars)", content.len());
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Look for ```prd ... ``` fenced code block
+    if let Ok(re) = Regex::new(r"(?s)```prd\s*(.*?)```") {
+        if let Some(caps) = re.captures(response) {
+            if let Some(m) = caps.get(1) {
+                let content = m.as_str().trim();
+                if !content.is_empty() {
+                    log::debug!(
+                        "Extracted PRD from ```prd code block ({} chars)",
+                        content.len()
+                    );
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+
+    // 3. Look for ```markdown ... ``` that contains PRD-like headers
+    if let Ok(re) = Regex::new(r"(?s)```markdown\s*(.*?)```") {
+        for caps in re.captures_iter(response) {
+            if let Some(m) = caps.get(1) {
+                let content = m.as_str().trim();
+                // Check if it looks like a PRD (has common PRD section headers)
+                if looks_like_prd(content) {
+                    log::debug!(
+                        "Extracted PRD from ```markdown code block ({} chars)",
+                        content.len()
+                    );
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+
+    // 4. Look for content starting with PRD headers
+    // This handles cases where the agent writes PRD content directly without code blocks
+    // We look for a PRD header and capture everything until end of string (greedy)
+    // then validate the content looks like a PRD
+    if let Ok(re) = Regex::new(r"(?s)(#\s*(?:PRD|Product Requirements Document)[^\n]*\n.+)") {
+        if let Some(caps) = re.captures(response) {
+            if let Some(m) = caps.get(1) {
+                let content = m.as_str().trim();
+                // Only use this if it's substantial:
+                // - More than just a header (100+ chars)
+                // - At least 5 non-empty lines (to avoid incomplete fragments)
+                // - Looks like a PRD (has section indicators)
+                let non_empty_line_count = content.lines().filter(|l| !l.trim().is_empty()).count();
+                if content.len() > 100 && non_empty_line_count >= 5 && looks_like_prd(content) {
+                    log::debug!(
+                        "Extracted PRD from header-based content ({} chars, {} lines)",
+                        content.len(),
+                        non_empty_line_count
+                    );
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+
+    log::debug!("No PRD content found in response");
+    None
+}
+
+/// Check if content looks like a PRD document.
+/// Returns true if the content has common PRD section headers.
+fn looks_like_prd(content: &str) -> bool {
+    let lower = content.to_lowercase();
+    let prd_indicators = [
+        "## overview",
+        "## problem",
+        "## user stor",
+        "## requirement",
+        "## functional",
+        "## acceptance",
+        "## scope",
+        "## goals",
+        "## success",
+        "## epic",
+        "## features",
+        "## background",
+        "## objectives",
+        "## out of scope",
+        "### us-", // User story format
+        "### ep-", // Epic format
+    ];
+
+    // Count how many PRD indicators are present
+    let indicator_count = prd_indicators
+        .iter()
+        .filter(|&indicator| lower.contains(indicator))
+        .count();
+
+    // Consider it a PRD if it has at least 2 indicators
+    indicator_count >= 2
+}
+
+// ============================================================================
 // Extraction Commands
 // ============================================================================
 
@@ -451,6 +573,126 @@ pub fn extract_out_of_scope(content: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // =========================================================================
+    // extract_prd_block tests
+    // =========================================================================
+
+    #[test]
+    fn test_extract_prd_block_with_prd_tags() {
+        let response = r#"Here is the PRD I created:
+
+<prd>
+# PRD: User Authentication
+
+## Overview
+This document describes the authentication feature.
+
+## Requirements
+- Users should be able to log in
+- Users should be able to log out
+</prd>
+
+Let me know if you need any changes!"#;
+
+        let extracted = extract_prd_block(response);
+        assert!(extracted.is_some());
+        let content = extracted.unwrap();
+        assert!(content.contains("# PRD: User Authentication"));
+        assert!(content.contains("## Overview"));
+        assert!(content.contains("## Requirements"));
+    }
+
+    #[test]
+    fn test_extract_prd_block_with_prd_code_fence() {
+        let response = r#"Here's the PRD:
+
+```prd
+# Product Requirements Document
+
+## Overview
+A new feature for the app.
+
+## User Stories
+- As a user, I want to...
+
+## Acceptance Criteria
+- Users can log in
+```
+
+That's the PRD!"#;
+
+        let extracted = extract_prd_block(response);
+        assert!(extracted.is_some());
+        let content = extracted.unwrap();
+        assert!(content.contains("# Product Requirements Document"));
+        assert!(content.contains("## Overview"));
+        assert!(content.contains("## User Stories"));
+    }
+
+    #[test]
+    fn test_extract_prd_block_with_markdown_fence() {
+        let response = r#"I've created the PRD:
+
+```markdown
+# PRD: Feature X
+
+## Overview
+This is a feature.
+
+## Functional Requirements
+- Requirement 1
+
+## Acceptance Criteria
+- Criterion 1
+```
+
+Let me know your thoughts!"#;
+
+        let extracted = extract_prd_block(response);
+        assert!(extracted.is_some());
+        let content = extracted.unwrap();
+        assert!(content.contains("# PRD: Feature X"));
+        assert!(content.contains("## Functional Requirements"));
+    }
+
+    #[test]
+    fn test_extract_prd_block_no_prd_content() {
+        let response =
+            "I'd be happy to help you create a PRD! What feature would you like to document?";
+        let extracted = extract_prd_block(response);
+        assert!(extracted.is_none());
+    }
+
+    #[test]
+    fn test_extract_prd_block_empty_tags() {
+        let response = "<prd></prd>";
+        let extracted = extract_prd_block(response);
+        assert!(extracted.is_none());
+    }
+
+    #[test]
+    fn test_looks_like_prd_with_enough_indicators() {
+        let content = r#"# PRD
+## Overview
+This is a test.
+## Requirements
+- Req 1
+## Acceptance Criteria
+- Criterion 1"#;
+
+        assert!(looks_like_prd(content));
+    }
+
+    #[test]
+    fn test_looks_like_prd_not_enough_indicators() {
+        let content = "# Just a Title\nSome regular text without PRD sections.";
+        assert!(!looks_like_prd(content));
+    }
+
+    // =========================================================================
+    // Other extraction tests
+    // =========================================================================
 
     #[test]
     fn test_extract_user_stories() {

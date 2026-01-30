@@ -7,11 +7,13 @@ use crate::prd_workflow::{read_research_file, ProjectContext, WorkflowPhase};
 use crate::templates::builtin::{get_builtin_template, PRD_CHAT_SYSTEM};
 use crate::templates::engine::{TemplateContext, TemplateEngine};
 use crate::utils::as_path;
+use crate::watchers::PrdFileUpdate;
 use serde_json;
 use std::path::Path;
 use uuid::Uuid;
 
 use super::agent_executor::{self, generate_session_title};
+use super::extraction;
 use super::parse_agent_type_with_provider;
 use super::types::{SendMessageRequest, SendMessageResponse};
 
@@ -279,11 +281,14 @@ pub async fn send_prd_chat_message(
         .map_err(|e| format!("Failed to update session: {}", e))?;
 
     // Auto-generate title from first message if not set
-    if session.title.is_none() {
+    // Track the generated title so we can use it for PRD file path without reloading session
+    let generated_title: Option<String> = if session.title.is_none() {
         let title = generate_session_title(&request.content, session.prd_type.as_deref());
         chat_ops::update_chat_session_title(project_path_obj, &request.session_id, &title).ok();
-        // Ignore title update errors
-    }
+        Some(title)
+    } else {
+        None
+    };
 
     // If structured mode is enabled, parse JSON blocks from response
     if session.structured_mode {
@@ -308,6 +313,53 @@ pub async fn send_prd_chat_message(
                 Some(&structure_json),
             )
             .map_err(|e| format!("Failed to update structure: {}", e))?;
+        }
+    }
+
+    // Auto-extract and save PRD content from agent response.
+    // This ensures PRD content goes to the correct file path regardless of agent behavior.
+    // Following the same pattern as Context Chat's extract_context_block.
+    if let Some(project_path) = &session.project_path {
+        if let Some(prd_content) = extraction::extract_prd_block(&response_content) {
+            // Get the correct PRD file path
+            // Use generated_title if we just created one, otherwise use existing session.title
+            let effective_title = generated_title.as_deref().or(session.title.as_deref());
+
+            let plan_path = crate::watchers::get_prd_plan_file_path(
+                project_path,
+                &request.session_id,
+                effective_title,
+                session.prd_id.as_deref(),
+            );
+
+            // Ensure directory exists
+            if let Some(parent) = plan_path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    log::warn!("Failed to create PRD directory: {}", e);
+                }
+            }
+
+            // Write the PRD content to the correct file
+            match crate::file_storage::atomic_write(&plan_path, &prd_content) {
+                Ok(()) => {
+                    log::info!(
+                        "Auto-saved PRD content to {} ({} chars)",
+                        plan_path.display(),
+                        prd_content.len()
+                    );
+
+                    // Emit prd:file_updated event so the frontend Plan panel updates
+                    let update = PrdFileUpdate {
+                        session_id: request.session_id.clone(),
+                        content: prd_content,
+                        path: plan_path.to_string_lossy().to_string(),
+                    };
+                    app_handle.broadcast("prd:file_updated", update);
+                }
+                Err(e) => {
+                    log::warn!("Failed to auto-save PRD content: {}", e);
+                }
+            }
         }
     }
 
