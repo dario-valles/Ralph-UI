@@ -1499,12 +1499,20 @@ impl RalphLoopOrchestrator {
             self.execution_id
         );
 
+        // Create git manager early - needed for branch detection and cleanup operations
+        let git_manager = GitManager::new(&self.config.project_path)
+            .map_err(|e| format!("Failed to open git repository: {}", e))?;
+
         // Get the base branch (the branch to start from)
-        let base_branch = self
-            .config
-            .branch
-            .clone()
-            .unwrap_or_else(|| "main".to_string());
+        // If not configured, detect the repository's current/default branch
+        let base_branch = self.config.branch.clone().unwrap_or_else(|| {
+            let detected = git_manager.get_default_branch_name();
+            log::info!(
+                "[RalphLoop] No branch configured, detected default branch: '{}'",
+                detected
+            );
+            detected
+        });
 
         // Generate a STABLE worktree ID based on project path + branch
         // This allows reusing the same worktree when restarting the same PRD
@@ -1531,10 +1539,6 @@ impl RalphLoopOrchestrator {
             .map_err(|e| format!("Failed to create .worktrees directory: {}", e))?;
 
         let worktree_path = worktree_dir.join(format!("ralph-{}", stable_id));
-
-        // Create git manager early for cleanup operations
-        let git_manager = GitManager::new(&self.config.project_path)
-            .map_err(|e| format!("Failed to open git repository: {}", e))?;
 
         // Prune orphaned worktrees (where physical directory was deleted but .git/worktrees entry remains)
         match git_manager.prune_orphaned_worktrees() {

@@ -232,4 +232,28 @@ mod tests {
         assert_eq!(commit.email, "test@example.com");
         assert!(commit.timestamp > 0);
     }
+
+    #[test]
+    fn test_get_default_branch_name_returns_head_branch() {
+        let (_temp_dir, manager) = setup_test_repo();
+
+        // The default branch should be whatever HEAD points to (main or master)
+        let default_branch = manager.get_default_branch_name();
+        let current_branch = manager.get_current_branch().unwrap();
+
+        assert_eq!(default_branch, current_branch.name);
+    }
+
+    #[test]
+    fn test_get_default_branch_name_with_checked_out_branch() {
+        let (_temp_dir, manager) = setup_test_repo();
+
+        // Create and checkout a new branch
+        manager.create_branch("feature-branch", false).unwrap();
+        manager.checkout_branch("feature-branch").unwrap();
+
+        // Now get_default_branch_name should return "feature-branch"
+        let default_branch = manager.get_default_branch_name();
+        assert_eq!(default_branch, "feature-branch");
+    }
 }

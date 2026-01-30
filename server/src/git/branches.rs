@@ -150,4 +150,31 @@ impl GitManager {
             parent_ids,
         })
     }
+
+    /// Get the default branch name for this repository.
+    ///
+    /// Resolution order:
+    /// 1. Current HEAD branch (if HEAD points to a branch)
+    /// 2. First existing common default branch ("main", "master")
+    /// 3. Fallback to "main"
+    pub fn get_default_branch_name(&self) -> String {
+        // Try to get the current HEAD branch
+        if let Ok(head) = self.repo.head() {
+            if head.is_branch() {
+                if let Some(name) = head.shorthand() {
+                    return name.to_string();
+                }
+            }
+        }
+
+        // Check for common default branches
+        for name in &["main", "master"] {
+            if self.repo.find_branch(name, BranchType::Local).is_ok() {
+                return (*name).to_string();
+            }
+        }
+
+        // Final fallback
+        "main".to_string()
+    }
 }
