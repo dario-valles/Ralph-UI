@@ -130,6 +130,7 @@ export async function invoke<T>(
     if (!response.ok) {
       const errorText = await response.text()
       if (response.status === 401) {
+        useConnectionStore.getState().markDisconnected('Invalid or expired auth token', 'auth')
         throw new Error('Unauthorized: Invalid or expired auth token')
       }
       throw new Error(`Server error (${response.status}): ${errorText}`)
