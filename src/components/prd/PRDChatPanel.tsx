@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertTriangle } from 'lucide-react'
@@ -25,6 +25,7 @@ import { ChatArea } from './ChatArea'
 import { ChatInputArea, type ChatInputHandle } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
+import { ContextSetupBanner } from '@/components/context'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ExecutionMode } from '@/types'
 import { cn } from '@/lib/utils'
@@ -39,6 +40,7 @@ import { usePRDChatPanelState } from '@/hooks/usePRDChatPanelState'
 
 export function PRDChatPanel() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const prdIdFromUrl = searchParams.get('prdId')
 
   const { registerProject } = useProjectStore()
@@ -593,6 +595,15 @@ export function PRDChatPanel() {
                 <p className="text-xs mt-1">{agentError}</p>
               </div>
             </div>
+          )}
+
+          {/* Context Setup Banner */}
+          {activeProject?.path && (
+            <ContextSetupBanner
+              projectPath={activeProject.path}
+              onSetup={() => navigate('/context/chat', { state: { projectPath: activeProject.path } })}
+              className="mx-3 mt-3 sm:mx-4 sm:mt-4"
+            />
           )}
 
           {/* Messages Area */}

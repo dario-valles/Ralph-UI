@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Gauge, FileText, MessageSquare, Repeat } from 'lucide-react'
+import { Gauge, FileText, MessageSquare, Repeat, BookOpen } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 
@@ -8,6 +8,7 @@ const navigation = [
   { name: 'Mission Control', to: '/', icon: Gauge },
   { name: 'PRDs', to: '/prds', icon: FileText },
   { name: 'PRD Chat', to: '/prds/chat', icon: MessageSquare },
+  { name: 'Context Chat', to: '/context/chat', icon: BookOpen },
   { name: 'Ralph Loop', to: '/ralph-loop', icon: Repeat },
 ]
 

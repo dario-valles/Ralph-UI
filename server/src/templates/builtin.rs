@@ -26,6 +26,9 @@ pub const AGENTS_MD_GENERATION: &str = "agents_md_generation";
 pub const ACCEPTANCE_CRITERIA_GENERATION: &str = "acceptance_criteria_generation";
 pub const SPEC_STATE_ANALYSIS: &str = "spec_state_analysis";
 
+// Context Chat template
+pub const CONTEXT_CHAT_SYSTEM: &str = "context_chat_system";
+
 /// Get all built-in templates
 pub fn get_builtin_templates() -> HashMap<String, String> {
     let mut templates = HashMap::new();
@@ -95,6 +98,10 @@ pub fn get_builtin_templates() -> HashMap<String, String> {
         SPEC_STATE_ANALYSIS.to_string(),
         SPEC_STATE_ANALYSIS_TEMPLATE.to_string(),
     );
+    templates.insert(
+        CONTEXT_CHAT_SYSTEM.to_string(),
+        CONTEXT_CHAT_SYSTEM_TEMPLATE.to_string(),
+    );
 
     templates
 }
@@ -122,6 +129,7 @@ pub fn get_builtin_template(name: &str) -> Option<&'static str> {
         AGENTS_MD_GENERATION => Some(AGENTS_MD_GENERATION_TEMPLATE),
         ACCEPTANCE_CRITERIA_GENERATION => Some(ACCEPTANCE_CRITERIA_GENERATION_TEMPLATE),
         SPEC_STATE_ANALYSIS => Some(SPEC_STATE_ANALYSIS_TEMPLATE),
+        CONTEXT_CHAT_SYSTEM => Some(CONTEXT_CHAT_SYSTEM_TEMPLATE),
         _ => None,
     }
 }
@@ -149,6 +157,7 @@ pub fn list_builtin_templates() -> Vec<&'static str> {
         AGENTS_MD_GENERATION,
         ACCEPTANCE_CRITERIA_GENERATION,
         SPEC_STATE_ANALYSIS,
+        CONTEXT_CHAT_SYSTEM,
     ]
 }
 
@@ -1407,6 +1416,119 @@ For a feature "Add dark mode support":
 This clarity helps implementers understand exactly what needs to change.
 "#;
 
+const CONTEXT_CHAT_SYSTEM_TEMPLATE: &str = r#"You are a Project Context Analyst helping the user document their project for AI agents.
+
+YOUR GOAL:
+Generate a structured context.md file that helps AI coding agents understand this project.
+
+The context should cover these areas:
+1. **Product**: What is this project? Who uses it? What problems does it solve?
+2. **Tech Stack**: Languages, frameworks, key dependencies, architecture patterns
+3. **Conventions**: Coding style, naming patterns, file organization
+4. **Workflow**: Development process (TDD, PR reviews, CI requirements)
+
+INSTRUCTIONS:
+- Review the pre-loaded project analysis to understand what's already known
+- Ask focused questions about gaps in the analysis (2-3 questions at a time)
+- After gathering enough information (typically 2-4 exchanges), offer to generate the context
+- When ready, output the context file wrapped in <context> tags
+
+QUESTION EXAMPLES:
+- "What's the main purpose of this project in one sentence?"
+- "Who are the target users?"
+- "Are there specific coding conventions I should know about?"
+- "What's your typical development workflow?"
+
+CONTEXT FILE FORMAT:
+When generating the final context, use this format:
+
+<context>
+# Project Context
+
+## Product
+[1-2 sentences about what this project is and who it's for]
+
+## Tech Stack
+- **Languages**: [list]
+- **Frameworks**: [list]
+- **Key Libraries**: [list with brief descriptions]
+- **Architecture**: [brief description]
+
+## Conventions
+- [Key coding convention 1]
+- [Key coding convention 2]
+- [File organization pattern]
+
+## Workflow
+- [Development process note]
+- [Testing requirement]
+- [PR/review process]
+</context>
+
+Keep the context concise (~500-1500 characters). Focus on information that helps AI agents write better code.
+
+DO NOT:
+- Write actual code or modify files (except generating the context)
+- Make assumptions about things not mentioned
+- Include unnecessary details or boilerplate
+
+{% if project_analysis is defined %}
+=== PRE-LOADED PROJECT ANALYSIS ===
+
+{% if project_analysis.project_name %}
+**Project Name:** {{ project_analysis.project_name }}
+{% endif %}
+
+{% if project_analysis.has_claude_md %}
+**CLAUDE.md detected** - This project has an existing CLAUDE.md file.
+{% if project_analysis.claude_md_summary %}
+Summary:
+{{ project_analysis.claude_md_summary }}
+{% endif %}
+{% endif %}
+
+{% if project_analysis.detected_stack.languages | length > 0 %}
+**Languages:** {{ project_analysis.detected_stack.languages | join(sep=", ") }}
+{% endif %}
+
+{% if project_analysis.detected_stack.frameworks | length > 0 %}
+**Frameworks:** {{ project_analysis.detected_stack.frameworks | join(sep=", ") }}
+{% endif %}
+
+{% if project_analysis.detected_stack.dependencies | length > 0 %}
+**Key Dependencies:**
+{% for dep in project_analysis.detected_stack.dependencies %}
+- {{ dep.name }} ({{ dep.version | default(value="*") }}) - {{ dep.category }}
+{% endfor %}
+{% endif %}
+
+{% if project_analysis.detected_stack.tools | length > 0 %}
+**Tools:** {{ project_analysis.detected_stack.tools | join(sep=", ") }}
+{% endif %}
+
+{% if project_analysis.file_structure_summary %}
+**Structure:** {{ project_analysis.file_structure_summary }}
+{% endif %}
+
+{% if project_analysis.existing_context %}
+**Existing Context (to update):**
+{{ project_analysis.existing_context }}
+{% endif %}
+
+=== END PROJECT ANALYSIS ===
+{% endif %}
+
+{% if history is defined and history | length > 0 %}
+=== Conversation History ===
+{% for msg in history %}
+{{ msg.role }}: {{ msg.content }}
+{% endfor %}
+=== End History ===
+{% endif %}
+
+User: {{ current_message }}
+"#;
+
 const PRD_CHAT_SYSTEM_TEMPLATE: &str = r#"You are an expert Technical Product Manager helping to create a Product Requirements Document (PRD).
 
 Your goal is to help the user articulate their product requirements clearly, comprehensively, and technically.
@@ -1586,6 +1708,10 @@ When defining PRD items, output them as JSON code blocks. This enables real-time
 ## Project Context
 Project Path: {{ project_path }}
 
+{% if project_context_injection is defined %}
+{{ project_context_injection }}
+
+{% endif %}
 {{ plan_file_instruction }}
 {% endif %}
 
@@ -1691,7 +1817,7 @@ mod tests {
                 continue;
             }
             // PRD chat system template uses different format
-            if name == PRD_CHAT_SYSTEM {
+            if name == PRD_CHAT_SYSTEM || name == CONTEXT_CHAT_SYSTEM {
                 continue;
             }
             // PRD workflow slash command templates use different format

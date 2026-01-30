@@ -1,6 +1,7 @@
 // Individual project summary card for Mission Control
 
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import {
   FolderOpen,
   Play,
@@ -12,6 +13,7 @@ import {
   MoreVertical,
   Copy,
   List,
+  BookOpen,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,6 +29,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import { toast } from '@/stores/toastStore'
+import { ContextEditorDialog } from '@/components/context'
 import type { ProjectStatus } from '@/hooks/useMissionControlData'
 
 interface ProjectStatusCardProps {
@@ -76,6 +79,7 @@ function formatLastActivity(date: Date | null): string {
 
 export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCardProps) {
   const { project, health, lastActivity, activeExecutionId, prdCount } = projectStatus
+  const [contextEditorOpen, setContextEditorOpen] = useState(false)
 
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
 
@@ -163,6 +167,11 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
                     New PRD Chat
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setContextEditorOpen(true)}>
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Project Context
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -220,6 +229,13 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
           </Link>
         </div>
       </CardContent>
+
+      {/* Context Editor Dialog */}
+      <ContextEditorDialog
+        projectPath={project.path}
+        open={contextEditorOpen}
+        onOpenChange={setContextEditorOpen}
+      />
     </Card>
   )
 }

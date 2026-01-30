@@ -290,3 +290,37 @@ export {
   getScopeInfo,
   getStatusInfo,
 } from './prd-workflow'
+
+// ============================================================================
+// Context Types (Project Context Files)
+// ============================================================================
+
+export type {
+  ContextMode,
+  ContextConfig,
+  ContextFile,
+  ProjectContextState,
+  DependencyInfo,
+  TechStackInfo,
+  ProjectAnalysis,
+  ContextChatSession,
+  ContextChatMessage,
+  StartContextChatRequest,
+  SendContextChatMessageRequest,
+  SendContextChatMessageResponse,
+  SaveContextFromChatRequest,
+  ContextFileName,
+} from './context'
+
+export {
+  CONTEXT_FILE_NAMES,
+  MAX_CONTEXT_FILE_SIZE,
+  TOKENS_PER_CHAR,
+  DEFAULT_CONTEXT_TEMPLATE,
+  estimateTokens,
+  isContextConfigured,
+  getTotalTokenCount,
+  capitalizeContextFileName,
+  createDefaultContextConfig,
+  createDefaultProjectContext,
+} from './context'

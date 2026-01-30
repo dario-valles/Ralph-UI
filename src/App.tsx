@@ -5,6 +5,7 @@ import { MissionControlPage } from './components/mission-control'
 import { PRDList } from './components/prd/PRDList'
 import { PRDFileEditor } from './components/prd/PRDFileEditor'
 import { PRDChatPanel } from './components/prd/PRDChatPanel'
+import { ContextChatPage } from './components/context'
 import { ToastContainer } from './components/ui/toast'
 import { ServerUpdateBanner } from './components/ServerUpdateBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -126,6 +127,7 @@ function App() {
               <Route path="prds/new" element={<Navigate to="/prds/chat" replace />} />
               <Route path="prds/chat" element={<PRDChatPanel />} />
               <Route path="prds/file" element={<PRDFileEditor />} />
+              <Route path="context/chat" element={<ContextChatPage />} />
               <Route
                 path="ralph-loop"
                 element={

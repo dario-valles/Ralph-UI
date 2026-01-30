@@ -18,9 +18,9 @@ import {
   ScrollText,
   ChevronDown,
   Play,
-  Sparkles,
 } from 'lucide-react'
 import { ModelSelector } from '@/components/shared/ModelSelector'
+import { GroupedAgentModelSelector } from '@/components/shared/GroupedAgentModelSelector'
 import type { ChatSession, QualityAssessment } from '@/types'
 import type { AgentType } from '@/types/agent'
 import type { AgentOption } from '@/hooks/useAgentModelSelector'
@@ -207,42 +207,21 @@ export function ChatHeader({
             </CardTitle>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Agent/Model Selector - Clean grouped design */}
-            <div className="flex items-center bg-muted/40 rounded-lg border border-border/40">
-              {/* Agent selector with icon */}
-              <div className="flex items-center gap-1.5 pl-2.5 pr-1">
-                <Bot className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
-                <Select
-                  id="agent-selector"
-                  aria-label="Agent"
-                  value={currentAgentOptionValue}
-                  onChange={(e) => onAgentOptionChange(e.target.value)}
-                  disabled={streaming}
-                  className="w-28 text-sm h-8 bg-transparent border-0 font-medium text-foreground cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
-                >
-                  {agentOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              {/* Vertical divider */}
-              <div className="w-px h-6 bg-border/60" />
-              {/* Model selector with icon */}
-              <div className="flex items-center gap-1.5 pl-2 pr-1">
-                <Sparkles className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
-                <ModelSelector
-                  id="model-selector"
-                  value={selectedModel || defaultModelId || ''}
-                  onChange={onModelChange}
-                  models={models}
-                  loading={modelsLoading}
-                  disabled={streaming}
-                  className="w-40 xl:w-48 text-sm h-8 bg-transparent border-0 font-medium text-foreground cursor-pointer hover:text-foreground/80 focus:ring-0 focus:ring-offset-0 pr-6"
-                />
-              </div>
-            </div>
+            {/* Agent/Model Selector - Shared grouped component */}
+            <GroupedAgentModelSelector
+              agentOptions={agentOptions}
+              currentAgentOptionValue={currentAgentOptionValue}
+              onAgentOptionChange={onAgentOptionChange}
+              modelId={selectedModel}
+              defaultModelId={defaultModelId}
+              onModelChange={onModelChange}
+              models={models}
+              modelsLoading={modelsLoading}
+              disabled={streaming}
+              idPrefix="prd"
+              agentWidth="w-28"
+              modelWidth="w-40 xl:w-48"
+            />
 
             {/* Plan Sidebar Toggle */}
             {currentSession?.projectPath && (

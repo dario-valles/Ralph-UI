@@ -23,6 +23,7 @@ pub mod attachments;
 pub mod chat;
 pub mod chat_command_ops;
 pub mod chat_ops;
+pub mod context_ops;
 pub mod index;
 pub mod iterations;
 pub mod projects;
@@ -101,6 +102,7 @@ pub fn init_ralph_ui_dir(project_path: &Path) -> FileResult<PathBuf> {
     ensure_dir(&ralph_ui_dir.join("sessions"))?;
     ensure_dir(&ralph_ui_dir.join("prds"))?;
     ensure_dir(&ralph_ui_dir.join("chat"))?;
+    ensure_dir(&ralph_ui_dir.join("context"))?;
     ensure_dir(&ralph_ui_dir.join("agents"))?;
     ensure_dir(&ralph_ui_dir.join("executions"))?;
 
@@ -113,6 +115,8 @@ pub fn init_ralph_ui_dir(project_path: &Path) -> FileResult<PathBuf> {
 agents/
 executions/
 attachments/
+context-chat/
+context-dismissed
 "#;
         fs::write(&gitignore_path, gitignore_content)
             .map_err(|e| format!("Failed to write .gitignore: {}", e))?;

@@ -3,6 +3,8 @@
 pub mod agents;
 pub mod chat_commands;
 pub mod config;
+pub mod context;
+pub mod context_chat;
 pub mod git;
 pub mod github;
 pub mod mission_control;
@@ -25,6 +27,8 @@ pub mod traces;
 pub use agents::*;
 pub use chat_commands::*;
 pub use config::*;
+pub use context::*;
+pub use context_chat::*;
 pub use git::*;
 pub use github::*;
 pub use mission_control::*;

@@ -557,6 +557,13 @@ fn build_prd_chat_prompt(
             session.prd_id.as_deref(),
         );
         context = context.with_custom("path_reminder", &path_reminder);
+
+        // Inject project context if available and enabled
+        if let Some(context_content) =
+            crate::file_storage::context_ops::get_context_for_injection(as_path(project_path), true)
+        {
+            context = context.with_custom("project_context_injection", &context_content);
+        }
     }
 
     // History (Skip if resuming external session)

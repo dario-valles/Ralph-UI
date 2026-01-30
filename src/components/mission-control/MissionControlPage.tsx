@@ -12,9 +12,10 @@ import {
   useVisibilityPolling,
 } from '@/hooks/useMissionControlData'
 import { useProjectStore } from '@/stores/projectStore'
-import { Repeat, ArrowRight } from 'lucide-react'
+import { Repeat, ArrowRight, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ProjectContextCard } from '@/components/context'
 
 export function MissionControlPage() {
   const navigate = useNavigate()
@@ -23,8 +24,15 @@ export function MissionControlPage() {
   const globalStats = useGlobalStats()
   const { projectStatuses, loading: projectsLoading } = useProjectStatuses()
 
-  // Store actions for refreshing
+  // Store state
   const loadProjects = useProjectStore((s) => s.loadProjects)
+  const activeProjectId = useProjectStore((s) => s.activeProjectId)
+  const projects = useProjectStore((s) => s.projects)
+
+  // Get the active project or the first project for context card
+  const activeProject = activeProjectId
+    ? projects.find((p) => p.id === activeProjectId)
+    : projects[0]
 
   // Initial data load
   useEffect(() => {
@@ -89,6 +97,23 @@ export function MissionControlPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Project Context Setup Card - Shows for active project */}
+          {activeProject && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FolderOpen className="h-4 w-4" />
+                <span>Context for selected project:</span>
+                <span className="font-medium text-foreground">{activeProject.name}</span>
+              </div>
+              <ProjectContextCard
+                projectPath={activeProject.path}
+                onOpenContextChat={() =>
+                  navigate('/context/chat', { state: { projectPath: activeProject.path } })
+                }
+              />
+            </div>
           )}
 
           {/* Projects Overview */}

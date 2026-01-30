@@ -8,9 +8,14 @@ import { cn } from '@/lib/utils'
 
 interface ChatMessageItemProps {
   message: ChatMessage
+  /** Assistant display name (default: "Assistant") */
+  assistantName?: string
 }
 
-export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({
+  message,
+  assistantName = 'Assistant',
+}: ChatMessageItemProps) {
   const isUser = message.role === 'user'
   const timestamp = new Date(message.createdAt)
   const hasAttachments = message.attachments && message.attachments.length > 0
@@ -64,7 +69,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMe
               'text-sm font-semibold tracking-tight',
               isUser ? 'text-foreground' : 'text-emerald-600 dark:text-emerald-400'
             )}>
-              {isUser ? 'You' : 'Assistant'}
+              {isUser ? 'You' : assistantName}
             </span>
             {!isUser && (
               <Sparkles className="h-3 w-3 text-emerald-500/60" />
