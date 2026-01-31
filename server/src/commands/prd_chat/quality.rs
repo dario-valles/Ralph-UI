@@ -2,11 +2,16 @@
 
 use crate::file_storage::chat_ops;
 use crate::models::{
-    ChatMessage, ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment,
-    QuestionType,
+    ChatMessage, DetailedQualityAssessment, ExtractedPRDContent, GuidedQuestion, MessageRole,
+    PRDType, QualityAssessment, QualityCheck, QualityCheckSeverity, QuestionType,
 };
 use crate::utils::as_path;
 use regex::Regex;
+use std::sync::LazyLock;
+
+/// Regex for detecting quantifiable metrics (used in quality checks)
+static METRIC_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\d+\s*(ms|s|second|minute|hour|%|MB|GB|KB)").unwrap());
 
 use super::extraction::extract_prd_content_advanced;
 
@@ -681,6 +686,680 @@ fn add_type_specific_suggestions(
 }
 
 // ============================================================================
+// Specific Quality Validation Checks
+// ============================================================================
+
+/// Vague terms that should be replaced with specific, measurable criteria
+const VAGUE_TERMS: &[(&str, &str)] = &[
+    (
+        "fast",
+        "Specify exact timing (e.g., '< 200ms response time')",
+    ),
+    ("slow", "Specify exact timing (e.g., '> 3 seconds')"),
+    ("easy", "Define specific steps or clicks required"),
+    ("simple", "Describe the exact user flow or interface"),
+    (
+        "secure",
+        "Specify security standards (e.g., 'AES-256 encryption', 'OAuth 2.0')",
+    ),
+    ("good", "Define measurable quality criteria"),
+    ("better", "Specify the metric and target improvement"),
+    (
+        "user-friendly",
+        "Define specific usability criteria (e.g., 'fewer than 3 clicks')",
+    ),
+    (
+        "scalable",
+        "Specify scale targets (e.g., '10,000 concurrent users')",
+    ),
+    (
+        "robust",
+        "Define specific reliability metrics (e.g., '99.9% uptime')",
+    ),
+    ("efficient", "Specify performance metrics or resource usage"),
+    ("flexible", "List specific configuration options required"),
+    ("modern", "Specify exact technologies or design patterns"),
+    ("intuitive", "Define expected user flows and learning curve"),
+    (
+        "seamless",
+        "Specify integration requirements or error handling",
+    ),
+];
+
+/// Weak requirement verbs that indicate non-testable requirements
+const WEAK_REQUIREMENT_PATTERNS: &[(&str, &str)] = &[
+    (
+        r"\bshould try\b",
+        "Replace 'should try' with 'must' or 'shall'",
+    ),
+    (
+        r"\bwould be nice\b",
+        "Convert to a concrete requirement with 'must' or remove",
+    ),
+    (
+        r"\bmight\b",
+        "Replace 'might' with definitive 'must' or 'shall'",
+    ),
+    (
+        r"\bcould potentially\b",
+        "Replace with 'must' and specific conditions",
+    ),
+    (
+        r"\bpossibly\b",
+        "Remove ambiguity - either require it or don't",
+    ),
+    (
+        r"\bmaybe\b",
+        "Remove ambiguity - either require it or don't",
+    ),
+    (
+        r"\bprobably\b",
+        "Remove ambiguity - specify the actual requirement",
+    ),
+    (r"\bsomehow\b", "Specify the exact mechanism or approach"),
+    (r"\betc\.?\b", "Replace 'etc.' with complete list of items"),
+    (r"\band so on\b", "Replace with complete list of items"),
+    (
+        r"\bas needed\b",
+        "Specify exact conditions when something is needed",
+    ),
+    (
+        r"\bif possible\b",
+        "Either require it or make it explicitly optional",
+    ),
+];
+
+/// Perform specific quality checks on PRD content
+/// Returns a list of specific issues found
+pub fn validate_prd_quality_checks(content: &str, prd_type: Option<&str>) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+    let content_lower = content.to_lowercase();
+
+    // 1. Vague Language Detection
+    checks.extend(check_vague_language(content));
+
+    // 2. Non-Testable Requirements Detection
+    checks.extend(check_non_testable_requirements(content));
+
+    // 3. Missing Quantifiable Metrics
+    checks.extend(check_missing_metrics(content, &content_lower));
+
+    // 4. Acceptance Criteria Validation (per user story)
+    checks.extend(check_acceptance_criteria(content, &content_lower));
+
+    // 5. SMART Goal Validation
+    checks.extend(check_smart_goals(content, &content_lower));
+
+    // 6. PRD Type-Specific Checks
+    if let Some(pt) = prd_type {
+        checks.extend(check_type_specific_issues(content, &content_lower, pt));
+    }
+
+    checks
+}
+
+/// Check for vague language that should be replaced with specific criteria
+fn check_vague_language(content: &str) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    for (term, suggestion) in VAGUE_TERMS {
+        let term_lower = term.to_lowercase();
+        // Use word boundary matching to avoid false positives
+        let pattern = format!(r"\b{}\b", regex::escape(&term_lower));
+        if let Ok(re) = Regex::new(&pattern) {
+            for mat in re.find_iter(&content.to_lowercase()) {
+                // Find the line containing this match
+                let line_start = content[..mat.start()]
+                    .rfind('\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                let line_end = content[mat.end()..]
+                    .find('\n')
+                    .map(|i| mat.end() + i)
+                    .unwrap_or(content.len());
+                let line = content[line_start..line_end].trim();
+
+                checks.push(QualityCheck {
+                    id: "vague-language".to_string(),
+                    name: "Vague Language Detected".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: format!("Found vague term '{}'", term),
+                    location: Some(format!(
+                        "Line containing: \"{}...\"",
+                        truncate_str(line, 60)
+                    )),
+                    matched_text: Some(term.to_string()),
+                    suggestion: Some(suggestion.to_string()),
+                });
+            }
+        }
+    }
+
+    checks
+}
+
+/// Check for non-testable requirements using weak language
+fn check_non_testable_requirements(content: &str) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    for (pattern, suggestion) in WEAK_REQUIREMENT_PATTERNS {
+        if let Ok(re) = Regex::new(&format!("(?i){}", pattern)) {
+            for mat in re.find_iter(content) {
+                let matched = mat.as_str();
+                let line_start = content[..mat.start()]
+                    .rfind('\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                let line_end = content[mat.end()..]
+                    .find('\n')
+                    .map(|i| mat.end() + i)
+                    .unwrap_or(content.len());
+                let line = content[line_start..line_end].trim();
+
+                checks.push(QualityCheck {
+                    id: "non-testable-requirement".to_string(),
+                    name: "Non-Testable Requirement".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: format!("Weak requirement language: '{}'", matched),
+                    location: Some(format!("Line: \"{}...\"", truncate_str(line, 60))),
+                    matched_text: Some(matched.to_string()),
+                    suggestion: Some(suggestion.to_string()),
+                });
+            }
+        }
+    }
+
+    checks
+}
+
+/// Check for missing quantifiable metrics in requirements
+fn check_missing_metrics(content: &str, content_lower: &str) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    // Check for performance requirements without numbers
+    let perf_keywords = [
+        "performance",
+        "response time",
+        "latency",
+        "throughput",
+        "load time",
+    ];
+    for keyword in perf_keywords {
+        if content_lower.contains(keyword) {
+            // Check if there's a number nearby (within 100 chars after the keyword)
+            if let Some(pos) = content_lower.find(keyword) {
+                let search_area = &content[pos..std::cmp::min(pos + 150, content.len())];
+                let has_number = METRIC_REGEX.is_match(search_area);
+
+                if !has_number {
+                    checks.push(QualityCheck {
+                        id: "missing-metric".to_string(),
+                        name: "Missing Performance Metric".to_string(),
+                        severity: QualityCheckSeverity::Warning,
+                        message: format!(
+                            "Performance requirement '{}' lacks quantifiable metric",
+                            keyword
+                        ),
+                        location: Some(format!("Near '{}'", keyword)),
+                        matched_text: Some(keyword.to_string()),
+                        suggestion: Some(
+                            "Add specific numbers (e.g., '< 200ms', '99.9% uptime')".to_string(),
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    // Check for scalability mentions without numbers
+    // Note: "scalable" does NOT contain "scale" as substring (s-c-a-l-a-b-l-e vs s-c-a-l-e)
+    // So we check for "scal" which matches both "scale" and "scalable"
+    if content_lower.contains("scal") || content_lower.contains("concurrent") {
+        // Match patterns like "1000 users", "1000 concurrent users", "10k requests/second"
+        let has_scale_number =
+            Regex::new(r"\d+[k]?\s*(?:concurrent\s+)?(?:users|requests|connections|rps|qps)")
+                .map(|re| re.is_match(content_lower))
+                .unwrap_or(false);
+
+        if !has_scale_number && !content_lower.contains("not applicable") {
+            checks.push(QualityCheck {
+                id: "missing-scale-target".to_string(),
+                name: "Missing Scale Target".to_string(),
+                severity: QualityCheckSeverity::Info,
+                message: "Scalability mentioned without specific targets".to_string(),
+                location: None,
+                matched_text: None,
+                suggestion: Some(
+                    "Specify scale targets (e.g., '1000 concurrent users', '10k requests/second')"
+                        .to_string(),
+                ),
+            });
+        }
+    }
+
+    checks
+}
+
+/// Check for user stories missing acceptance criteria
+fn check_acceptance_criteria(content: &str, _content_lower: &str) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    // Find user story patterns
+    let story_pattern = Regex::new(r"(?i)(as a|user story|US-\d+)").unwrap();
+    let ac_pattern =
+        Regex::new(r"(?i)(acceptance criteria|given\s+.+\s+when\s+.+\s+then|AC:|criteria:)")
+            .unwrap();
+
+    // Count user stories and acceptance criteria sections
+    let story_count = story_pattern.find_iter(content).count();
+    let ac_count = ac_pattern.find_iter(content).count();
+
+    // If there are stories but significantly fewer AC sections, flag it
+    if story_count > 0 && ac_count < story_count / 2 {
+        checks.push(QualityCheck {
+            id: "missing-acceptance-criteria".to_string(),
+            name: "Missing Acceptance Criteria".to_string(),
+            severity: QualityCheckSeverity::Warning,
+            message: format!(
+                "Found {} user stories but only {} acceptance criteria sections",
+                story_count, ac_count
+            ),
+            location: None,
+            matched_text: None,
+            suggestion: Some(
+                "Each user story should have specific, testable acceptance criteria".to_string(),
+            ),
+        });
+    }
+
+    // Check for user stories without the standard format
+    let proper_story_format = Regex::new(r"(?i)as a .+,?\s+I want .+,?\s+so that").unwrap();
+    let informal_story = Regex::new(r"(?i)user story|US-\d+").unwrap();
+
+    let proper_count = proper_story_format.find_iter(content).count();
+    let informal_count = informal_story.find_iter(content).count();
+
+    if informal_count > 0 && proper_count < informal_count {
+        checks.push(QualityCheck {
+            id: "informal-user-story".to_string(),
+            name: "Informal User Story Format".to_string(),
+            severity: QualityCheckSeverity::Info,
+            message: "Some user stories don't follow the standard format".to_string(),
+            location: None,
+            matched_text: None,
+            suggestion: Some(
+                "Use: 'As a [user type], I want [action], so that [benefit]'".to_string(),
+            ),
+        });
+    }
+
+    checks
+}
+
+/// Check for SMART goal compliance (Specific, Measurable, Achievable, Relevant, Time-bound)
+fn check_smart_goals(content: &str, content_lower: &str) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    // Check for success metrics / goals section
+    let has_metrics_section = content_lower.contains("success metric")
+        || content_lower.contains("success criteria")
+        || content_lower.contains("kpi")
+        || content_lower.contains("goal");
+
+    if has_metrics_section {
+        // Check for time-bound language
+        // Use regex to match timeframe patterns with word boundaries to avoid false positives
+        // like "by 15%" being matched as a timeframe
+        let timeframe_patterns = [
+            r"\bwithin\b",
+            r"\bdeadline\b",
+            r"\bsprint\b",
+            r"\bweek[s]?\b",
+            r"\bmonth[s]?\b",
+            r"\bquarter\b",
+            r"\bphase\b",
+            r"\bmilestone\b",
+            r"\bby\s+(?:end|q[1-4]|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|the)",
+            r"\bby\s+\d{4}\b", // "by 2024"
+        ];
+        let has_timeframe = timeframe_patterns.iter().any(|pattern| {
+            Regex::new(&format!("(?i){}", pattern))
+                .map(|re| re.is_match(content_lower))
+                .unwrap_or(false)
+        });
+
+        if !has_timeframe {
+            checks.push(QualityCheck {
+                id: "missing-timeframe".to_string(),
+                name: "Missing Timeframe".to_string(),
+                severity: QualityCheckSeverity::Info,
+                message: "Goals/success criteria lack time-bound elements".to_string(),
+                location: None,
+                matched_text: None,
+                suggestion: Some(
+                    "Add timeframes (e.g., 'by end of Sprint 3', 'within 2 weeks of launch')"
+                        .to_string(),
+                ),
+            });
+        }
+
+        // Check for measurable language
+        let measurement_patterns = [
+            "%",
+            "increase",
+            "decrease",
+            "reduce",
+            "improve by",
+            "target",
+        ];
+        let has_measurement = measurement_patterns
+            .iter()
+            .any(|p| content_lower.contains(p))
+            || Regex::new(r"\d+")
+                .map(|re| re.is_match(content))
+                .unwrap_or(false);
+
+        if !has_measurement {
+            checks.push(QualityCheck {
+                id: "non-measurable-goal".to_string(),
+                name: "Non-Measurable Goal".to_string(),
+                severity: QualityCheckSeverity::Warning,
+                message: "Success criteria lack measurable targets".to_string(),
+                location: None,
+                matched_text: None,
+                suggestion: Some(
+                    "Add specific numbers (e.g., 'increase by 20%', 'reduce to < 5%')".to_string(),
+                ),
+            });
+        }
+    }
+
+    checks
+}
+
+/// PRD type-specific validation checks
+fn check_type_specific_issues(
+    _content: &str,
+    content_lower: &str,
+    prd_type: &str,
+) -> Vec<QualityCheck> {
+    let mut checks = Vec::new();
+
+    match prd_type {
+        "bug_fix" => {
+            // Bug fixes should have reproduction steps
+            if !content_lower.contains("reproduce")
+                && !content_lower.contains("steps to")
+                && !content_lower.contains("reproduction")
+            {
+                checks.push(QualityCheck {
+                    id: "missing-repro-steps".to_string(),
+                    name: "Missing Reproduction Steps".to_string(),
+                    severity: QualityCheckSeverity::Error,
+                    message: "Bug fix PRD should include steps to reproduce".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "Add numbered steps to reproduce the bug consistently".to_string(),
+                    ),
+                });
+            }
+
+            // Should have expected vs actual behavior
+            if !content_lower.contains("expected") || !content_lower.contains("actual") {
+                checks.push(QualityCheck {
+                    id: "missing-expected-actual".to_string(),
+                    name: "Missing Expected/Actual Behavior".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "Bug fix should describe expected vs actual behavior".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "Add 'Expected Behavior' and 'Actual Behavior' sections".to_string(),
+                    ),
+                });
+            }
+        }
+        "api_integration" => {
+            // API integrations should document endpoints
+            if !content_lower.contains("endpoint") && !content_lower.contains("api ") {
+                checks.push(QualityCheck {
+                    id: "missing-api-details".to_string(),
+                    name: "Missing API Details".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "API integration PRD should document endpoints".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "List API endpoints, methods, and expected request/response formats"
+                            .to_string(),
+                    ),
+                });
+            }
+
+            // Should mention authentication
+            if !content_lower.contains("auth") && !content_lower.contains("token") {
+                checks.push(QualityCheck {
+                    id: "missing-auth-details".to_string(),
+                    name: "Missing Authentication Details".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "API integration should document authentication method".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "Specify authentication method (OAuth, API key, JWT, etc.)".to_string(),
+                    ),
+                });
+            }
+
+            // Should mention error handling
+            if !content_lower.contains("error")
+                && !content_lower.contains("failure")
+                && !content_lower.contains("retry")
+            {
+                checks.push(QualityCheck {
+                    id: "missing-error-handling".to_string(),
+                    name: "Missing Error Handling".to_string(),
+                    severity: QualityCheckSeverity::Info,
+                    message: "Consider documenting error handling strategy".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "Document retry logic, timeout handling, and error responses".to_string(),
+                    ),
+                });
+            }
+        }
+        "refactoring" => {
+            // Refactoring should explicitly state behavior preservation
+            if !content_lower.contains("behavior")
+                && !content_lower.contains("functionality")
+                && !content_lower.contains("unchanged")
+            {
+                checks.push(QualityCheck {
+                    id: "unclear-behavior-change".to_string(),
+                    name: "Unclear Behavior Change Policy".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "Refactoring PRD should clarify if behavior will change".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "State explicitly: 'Existing behavior must remain unchanged' or list allowed changes".to_string(),
+                    ),
+                });
+            }
+
+            // Should mention testing strategy
+            if !content_lower.contains("test") {
+                checks.push(QualityCheck {
+                    id: "missing-test-strategy".to_string(),
+                    name: "Missing Test Strategy".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "Refactoring should document testing strategy".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "Describe how to verify the refactoring doesn't break existing functionality"
+                            .to_string(),
+                    ),
+                });
+            }
+        }
+        "full_new_app" | "new_feature" => {
+            // New apps/features should have MVP scope
+            if !content_lower.contains("mvp")
+                && !content_lower.contains("minimum viable")
+                && !content_lower.contains("phase 1")
+                && !content_lower.contains("v1")
+            {
+                checks.push(QualityCheck {
+                    id: "missing-mvp-scope".to_string(),
+                    name: "Missing MVP Scope".to_string(),
+                    severity: QualityCheckSeverity::Info,
+                    message: "Consider defining MVP scope to focus initial development".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some("Define what's in MVP vs future phases".to_string()),
+                });
+            }
+
+            // Full new app should have tech stack
+            if prd_type == "full_new_app"
+                && !content_lower.contains("stack")
+                && !content_lower.contains("framework")
+                && !content_lower.contains("technology")
+            {
+                checks.push(QualityCheck {
+                    id: "missing-tech-stack".to_string(),
+                    name: "Missing Technology Stack".to_string(),
+                    severity: QualityCheckSeverity::Warning,
+                    message: "Full app PRD should document technology choices".to_string(),
+                    location: None,
+                    matched_text: None,
+                    suggestion: Some(
+                        "List frontend framework, backend language, database, etc.".to_string(),
+                    ),
+                });
+            }
+        }
+        _ => {}
+    }
+
+    checks
+}
+
+/// Helper to truncate a string for display
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
+/// Perform detailed quality assessment including specific checks
+pub fn calculate_detailed_quality_assessment(
+    content: &str,
+    prd_type: Option<&str>,
+) -> DetailedQualityAssessment {
+    // Get base assessment (from markdown or messages)
+    let base = calculate_quality_from_markdown(content, prd_type);
+
+    // Get specific quality checks
+    let quality_checks = validate_prd_quality_checks(content, prd_type);
+
+    // Count by severity
+    let error_count = quality_checks
+        .iter()
+        .filter(|c| c.severity == QualityCheckSeverity::Error)
+        .count();
+    let warning_count = quality_checks
+        .iter()
+        .filter(|c| c.severity == QualityCheckSeverity::Warning)
+        .count();
+    let info_count = quality_checks
+        .iter()
+        .filter(|c| c.severity == QualityCheckSeverity::Info)
+        .count();
+
+    DetailedQualityAssessment {
+        base,
+        quality_checks,
+        error_count,
+        warning_count,
+        info_count,
+    }
+}
+
+/// Assess detailed quality of a PRD chat session
+/// Returns extended assessment with specific quality checks
+pub async fn assess_detailed_prd_quality(
+    session_id: String,
+    project_path: String,
+) -> Result<DetailedQualityAssessment, String> {
+    let project_path_obj = as_path(&project_path);
+
+    // Get session from file storage
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    // Try to use PRD plan file content first if available
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        session.title.as_deref(),
+        session.prd_id.as_deref(),
+    );
+
+    let assessment = if plan_path.exists() {
+        match std::fs::read_to_string(&plan_path) {
+            Ok(content) => {
+                log::info!(
+                    "Detailed quality assessment from PRD plan file: {:?}",
+                    plan_path
+                );
+                calculate_detailed_quality_assessment(&content, session.prd_type.as_deref())
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to read PRD plan file, falling back to messages: {}",
+                    e
+                );
+                // Fall back to messages
+                let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+                    .map_err(|e| format!("Failed to get messages: {}", e))?;
+                let content = messages
+                    .iter()
+                    .map(|m| m.content.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                calculate_detailed_quality_assessment(&content, session.prd_type.as_deref())
+            }
+        }
+    } else {
+        // No plan file yet, use messages
+        let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+        let content = messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        calculate_detailed_quality_assessment(&content, session.prd_type.as_deref())
+    };
+
+    // Update session with quality score in file storage
+    chat_ops::update_chat_session_quality_score(
+        project_path_obj,
+        &session_id,
+        assessment.base.overall as i32,
+    )
+    .map_err(|e| format!("Failed to update quality score: {}", e))?;
+
+    Ok(assessment)
+}
+
+// ============================================================================
 // Guided Questions Generator
 // ============================================================================
 
@@ -1345,5 +2024,273 @@ Description.
                 .contains(&"Implementation Tasks".to_string()),
             "Should detect '## TODO' header"
         );
+    }
+
+    // ============================================================================
+    // Specific Quality Check Tests
+    // ============================================================================
+
+    #[test]
+    fn test_vague_language_detection() {
+        let content = "The system should be fast and easy to use with a simple interface.";
+        let checks = check_vague_language(content);
+
+        assert!(!checks.is_empty(), "Should detect vague language");
+
+        let vague_terms_found: Vec<_> = checks
+            .iter()
+            .filter_map(|c| c.matched_text.as_ref())
+            .collect();
+        assert!(vague_terms_found.contains(&&"fast".to_string()));
+        assert!(vague_terms_found.contains(&&"easy".to_string()));
+        assert!(vague_terms_found.contains(&&"simple".to_string()));
+    }
+
+    #[test]
+    fn test_vague_language_no_false_positives() {
+        let content = "The API response time must be < 200ms. User can complete task in 3 clicks.";
+        let checks = check_vague_language(content);
+
+        assert!(
+            checks.is_empty(),
+            "Should not flag specific, measurable language"
+        );
+    }
+
+    #[test]
+    fn test_non_testable_requirement_detection() {
+        let content = "The feature should try to load quickly. It would be nice to have caching. We might add offline support.";
+        let checks = check_non_testable_requirements(content);
+
+        assert!(
+            !checks.is_empty(),
+            "Should detect weak requirement language"
+        );
+
+        let patterns_found: Vec<_> = checks
+            .iter()
+            .filter_map(|c| c.matched_text.as_ref())
+            .map(|s| s.to_lowercase())
+            .collect();
+        assert!(patterns_found.iter().any(|s| s.contains("should try")));
+        assert!(patterns_found.iter().any(|s| s.contains("would be nice")));
+        assert!(patterns_found.iter().any(|s| s.contains("might")));
+    }
+
+    #[test]
+    fn test_missing_metrics_detection() {
+        let content = "The application must have good performance and be scalable.";
+        let content_lower = content.to_lowercase();
+
+        let checks = check_missing_metrics(content, &content_lower);
+
+        // Should detect scalability mention without numbers
+        // Note: we check for "scal" to match both "scale" and "scalable"
+        assert!(
+            checks.iter().any(|c| c.id == "missing-scale-target"),
+            "Should detect missing scale target. Got: {:?}",
+            checks.iter().map(|c| &c.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_missing_metrics_with_numbers() {
+        let content =
+            "The API must respond in < 200ms. The system must support 1000 concurrent users.";
+        let content_lower = content.to_lowercase();
+        let checks = check_missing_metrics(content, &content_lower);
+
+        assert!(
+            checks.is_empty(),
+            "Should not flag when metrics are present"
+        );
+    }
+
+    #[test]
+    fn test_acceptance_criteria_check() {
+        let content = r#"
+## User Stories
+
+As a user, I want to login so that I can access my account.
+
+As a user, I want to reset my password so that I can recover my account.
+
+As a user, I want to view my profile so that I can see my information.
+"#;
+        let content_lower = content.to_lowercase();
+        let checks = check_acceptance_criteria(content, &content_lower);
+
+        assert!(
+            checks.iter().any(|c| c.id == "missing-acceptance-criteria"),
+            "Should detect user stories without acceptance criteria"
+        );
+    }
+
+    #[test]
+    fn test_acceptance_criteria_present() {
+        let content = r#"
+## User Stories
+
+As a user, I want to login so that I can access my account.
+
+**Acceptance Criteria:**
+- User can enter email and password
+- Invalid credentials show error message
+- Successful login redirects to dashboard
+"#;
+        let content_lower = content.to_lowercase();
+        let checks = check_acceptance_criteria(content, &content_lower);
+
+        // Should not flag missing AC when present
+        assert!(
+            !checks.iter().any(|c| c.id == "missing-acceptance-criteria"),
+            "Should not flag when acceptance criteria are present"
+        );
+    }
+
+    #[test]
+    fn test_smart_goals_missing_timeframe() {
+        let content = r#"
+## Success Metrics
+- Increase user engagement
+- Reduce churn rate by 15%
+"#;
+        let content_lower = content.to_lowercase();
+        let checks = check_smart_goals(content, &content_lower);
+
+        assert!(
+            checks.iter().any(|c| c.id == "missing-timeframe"),
+            "Should detect missing timeframe in goals"
+        );
+    }
+
+    #[test]
+    fn test_smart_goals_complete() {
+        let content = r#"
+## Success Metrics
+- Increase user engagement by 25% within 3 months
+- Reduce churn rate by 15% by end of Q2
+"#;
+        let content_lower = content.to_lowercase();
+        let checks = check_smart_goals(content, &content_lower);
+
+        assert!(
+            !checks.iter().any(|c| c.id == "missing-timeframe"),
+            "Should not flag when timeframe is present"
+        );
+        assert!(
+            !checks.iter().any(|c| c.id == "non-measurable-goal"),
+            "Should not flag when measurements are present"
+        );
+    }
+
+    #[test]
+    fn test_bug_fix_type_specific_checks() {
+        let content = "The button is broken and needs to be fixed.";
+        let content_lower = content.to_lowercase();
+        let checks = check_type_specific_issues(content, &content_lower, "bug_fix");
+
+        assert!(
+            checks.iter().any(|c| c.id == "missing-repro-steps"),
+            "Bug fix should require reproduction steps"
+        );
+        assert!(
+            checks.iter().any(|c| c.id == "missing-expected-actual"),
+            "Bug fix should require expected/actual behavior"
+        );
+    }
+
+    #[test]
+    fn test_bug_fix_complete() {
+        let content = r#"
+## Bug Description
+The save button is not working.
+
+## Steps to Reproduce
+1. Open the form
+2. Fill in the fields
+3. Click Save
+
+## Expected Behavior
+The form should be saved and a success message should appear.
+
+## Actual Behavior
+Nothing happens when clicking Save.
+"#;
+        let content_lower = content.to_lowercase();
+        let checks = check_type_specific_issues(content, &content_lower, "bug_fix");
+
+        assert!(
+            !checks.iter().any(|c| c.id == "missing-repro-steps"),
+            "Should not flag when repro steps are present"
+        );
+        assert!(
+            !checks.iter().any(|c| c.id == "missing-expected-actual"),
+            "Should not flag when expected/actual are present"
+        );
+    }
+
+    #[test]
+    fn test_api_integration_checks() {
+        let content = "We need to integrate with the payment service.";
+        let content_lower = content.to_lowercase();
+        let checks = check_type_specific_issues(content, &content_lower, "api_integration");
+
+        assert!(
+            checks.iter().any(|c| c.id == "missing-api-details"),
+            "API integration should require endpoint details"
+        );
+        assert!(
+            checks.iter().any(|c| c.id == "missing-auth-details"),
+            "API integration should require auth details"
+        );
+    }
+
+    #[test]
+    fn test_refactoring_checks() {
+        let content = "We need to refactor the user module to improve code quality.";
+        let content_lower = content.to_lowercase();
+        let checks = check_type_specific_issues(content, &content_lower, "refactoring");
+
+        assert!(
+            checks.iter().any(|c| c.id == "unclear-behavior-change"),
+            "Refactoring should clarify behavior change policy"
+        );
+        assert!(
+            checks.iter().any(|c| c.id == "missing-test-strategy"),
+            "Refactoring should include test strategy"
+        );
+    }
+
+    #[test]
+    fn test_detailed_quality_assessment() {
+        let content = r#"
+## Overview
+This is a fast and easy to use application.
+
+## User Stories
+As a user, I want to login.
+
+## Tasks
+1. Implement login
+2. Add validation
+"#;
+        let assessment = calculate_detailed_quality_assessment(content, Some("new_feature"));
+
+        // Should have base assessment
+        assert!(assessment.base.overall > 0);
+
+        // Should have quality checks
+        assert!(!assessment.quality_checks.is_empty());
+
+        // Should count severities
+        let total = assessment.error_count + assessment.warning_count + assessment.info_count;
+        assert_eq!(total, assessment.quality_checks.len());
+    }
+
+    #[test]
+    fn test_truncate_str() {
+        assert_eq!(truncate_str("short", 10), "short");
+        assert_eq!(truncate_str("this is a long string", 10), "this is a ...");
     }
 }

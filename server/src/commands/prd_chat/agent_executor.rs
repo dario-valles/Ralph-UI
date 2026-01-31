@@ -4,12 +4,12 @@
 //! with streaming output via WebSocket broadcast.
 
 use crate::events::{
-    ToolCallCompletedPayload, ToolCallStartedPayload, EVENT_TOOL_CALL_COMPLETED,
-    EVENT_TOOL_CALL_STARTED,
+    MdFileDetectedPayload, ToolCallCompletedPayload, ToolCallStartedPayload,
+    EVENT_MD_FILE_DETECTED, EVENT_TOOL_CALL_COMPLETED, EVENT_TOOL_CALL_STARTED,
 };
 use crate::models::AgentType;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -32,13 +32,43 @@ static TOOL_RESULT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[✓✗]\s*(?:Tool\s+)?(?:Result|Completed|Done|Error)").unwrap()
 });
 
+/// Regex pattern to detect file paths in tool output (absolute paths ending in .md)
+static MD_FILE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    // Match absolute file paths that end with .md
+    // Captures paths like /Users/project/docs/prd.md or /home/user/project/README.md
+    // The path must start with / and be preceded by:
+    //   - A prefix like "file_path: ", "wrote to ", etc. (case-insensitive)
+    //   - An optional quote (single or double)
+    //   - Start of line/string
+    // This prevents matching partial paths like /prd.md within docs/prd.md
+    Regex::new(r#"(?i)(?:^|file_path[:\s]+|wrote to |writing to |created |creating |['"])(/[^\s'"<>|*?]+\.md)['"]?"#)
+        .unwrap()
+});
+
+/// Regex pattern to detect .md file paths in agent natural language responses
+/// Matches patterns like:
+/// - "renamed to: docs/file.md"
+/// - "at: docs/PRD-more-components.md"
+/// - "saved to docs/file.md"
+/// - "created docs/file.md"
+/// - "wrote docs/file.md"
+/// - Also matches absolute paths with the same prefixes
+static MD_RESPONSE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    // Match .md file paths in agent responses with common prefixes
+    // Captures both relative paths (docs/file.md) and absolute paths (/path/to/file.md)
+    // The path can be optionally quoted
+    Regex::new(r#"(?i)(?:renamed to[:\s]+|at[:\s]+|to[:\s]+|saved (?:to )?|wrote (?:to )?|created |moved to[:\s]+)['"]?([^\s'"<>|*?\n]+\.md)['"]?"#)
+        .unwrap()
+});
+
 /// State for tracking active tool calls during streaming
 struct ToolCallState {
     tool_id: String,
-    #[allow(dead_code)] // Kept for debugging purposes
     tool_name: String,
     started_at: std::time::Instant,
     input_lines: Vec<String>,
+    /// Detected .md file paths from this tool call (for Write tool detection)
+    detected_md_paths: Vec<String>,
 }
 
 /// Trait for emitting chat streaming events
@@ -51,6 +81,9 @@ pub trait ChatEventEmitter: Send + Sync {
 
     /// Emit a tool call completed event
     fn emit_tool_completed(&self, payload: ToolCallCompletedPayload);
+
+    /// Emit a markdown file detected event (when agent creates .md files)
+    fn emit_md_file_detected(&self, payload: MdFileDetectedPayload);
 }
 
 /// Broadcast-based event emitter for WebSocket clients
@@ -82,6 +115,10 @@ impl ChatEventEmitter for BroadcastEmitter {
     fn emit_tool_completed(&self, payload: ToolCallCompletedPayload) {
         self.broadcaster
             .broadcast(EVENT_TOOL_CALL_COMPLETED, payload);
+    }
+
+    fn emit_md_file_detected(&self, payload: MdFileDetectedPayload) {
+        self.broadcaster.broadcast(EVENT_MD_FILE_DETECTED, payload);
     }
 }
 
@@ -330,6 +367,9 @@ pub async fn execute_chat_agent_with_env<E: ChatEventEmitter>(
     let mut active_tool: Option<ToolCallState> = None;
     let mut tool_counter: u32 = 0;
 
+    // Track detected .md files at session level to avoid duplicate events
+    let mut detected_files: HashSet<String> = HashSet::new();
+
     // Stream lines with overall timeout
     let stream_result = timeout(Duration::from_secs(AGENT_TIMEOUT_SECS), async {
         while let Some(line) = reader
@@ -349,6 +389,17 @@ pub async fn execute_chat_agent_with_env<E: ChatEventEmitter>(
                 &line,
                 &mut active_tool,
                 &mut tool_counter,
+                working_dir,
+            );
+
+            // Detect .md file paths in agent natural language responses
+            // This catches paths like "renamed to: docs/PRD.md" or "saved to docs/file.md"
+            detect_and_emit_md_file_from_response(
+                emitter,
+                session_id,
+                &line,
+                working_dir,
+                &mut detected_files,
             );
 
             // Emit streaming chunk via the abstracted emitter
@@ -357,19 +408,7 @@ pub async fn execute_chat_agent_with_env<E: ChatEventEmitter>(
 
         // If there's still an active tool when streaming ends, complete it
         if let Some(tool_state) = active_tool.take() {
-            let duration_ms = tool_state.started_at.elapsed().as_millis() as u64;
-            emitter.emit_tool_completed(ToolCallCompletedPayload {
-                agent_id: session_id.to_string(),
-                tool_id: tool_state.tool_id,
-                output: if tool_state.input_lines.is_empty() {
-                    None
-                } else {
-                    Some(tool_state.input_lines.join("\n"))
-                },
-                duration_ms: Some(duration_ms),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                is_error: false,
-            });
+            complete_tool_and_emit_events(emitter, session_id, tool_state, false, working_dir);
         }
 
         Ok::<(), String>(())
@@ -434,30 +473,21 @@ pub async fn execute_chat_agent_with_env<E: ChatEventEmitter>(
 ///
 /// Detects tool start patterns like "⚡ Using Read" and tool result patterns
 /// like "✓ Tool Result", emitting appropriate events.
+///
+/// Also detects Write tool calls that create .md files and emits md_file_detected events.
 fn parse_and_emit_tool_events<E: ChatEventEmitter>(
     emitter: &E,
     session_id: &str,
     line: &str,
     active_tool: &mut Option<ToolCallState>,
     tool_counter: &mut u32,
+    working_dir: Option<&str>,
 ) {
     // Check for tool start pattern
     if let Some(caps) = TOOL_START_RE.captures(line) {
-        // First, complete any existing active tool
+        // First, complete any existing active tool (including emitting md_file_detected events)
         if let Some(prev_tool) = active_tool.take() {
-            let duration_ms = prev_tool.started_at.elapsed().as_millis() as u64;
-            emitter.emit_tool_completed(ToolCallCompletedPayload {
-                agent_id: session_id.to_string(),
-                tool_id: prev_tool.tool_id,
-                output: if prev_tool.input_lines.is_empty() {
-                    None
-                } else {
-                    Some(prev_tool.input_lines.join("\n"))
-                },
-                duration_ms: Some(duration_ms),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                is_error: false,
-            });
+            complete_tool_and_emit_events(emitter, session_id, prev_tool, false, working_dir);
         }
 
         // Start a new tool call
@@ -481,32 +511,14 @@ fn parse_and_emit_tool_events<E: ChatEventEmitter>(
             tool_name: tool_name.to_string(),
             started_at: std::time::Instant::now(),
             input_lines: Vec::new(),
+            detected_md_paths: Vec::new(),
         });
     }
     // Check for tool result pattern (completes the active tool)
     else if TOOL_RESULT_RE.is_match(line) {
         if let Some(tool_state) = active_tool.take() {
-            let duration_ms = tool_state.started_at.elapsed().as_millis() as u64;
             let is_error = line.contains('✗');
-
-            emitter.emit_tool_completed(ToolCallCompletedPayload {
-                agent_id: session_id.to_string(),
-                tool_id: tool_state.tool_id,
-                output: if tool_state.input_lines.is_empty() {
-                    None
-                } else {
-                    // Truncate output if too long
-                    let output = tool_state.input_lines.join("\n");
-                    Some(if output.len() > 5000 {
-                        format!("{}... (truncated)", &output[..5000])
-                    } else {
-                        output
-                    })
-                },
-                duration_ms: Some(duration_ms),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                is_error,
-            });
+            complete_tool_and_emit_events(emitter, session_id, tool_state, is_error, working_dir);
         }
     }
     // If we have an active tool, accumulate lines as potential output
@@ -515,6 +527,169 @@ fn parse_and_emit_tool_events<E: ChatEventEmitter>(
         let trimmed = line.trim();
         if !trimmed.is_empty() {
             tool_state.input_lines.push(line.to_string());
+
+            // If this is a Write tool, check for .md file paths
+            if tool_state.tool_name == "Write" {
+                if let Some(caps) = MD_FILE_PATH_RE.captures(line) {
+                    if let Some(path_match) = caps.get(1) {
+                        let md_path = path_match.as_str().to_string();
+                        // Avoid duplicates
+                        if !tool_state.detected_md_paths.contains(&md_path) {
+                            log::info!(
+                                "📄 Detected .md file write: {} (session: {})",
+                                md_path,
+                                session_id
+                            );
+                            tool_state.detected_md_paths.push(md_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Detect .md file paths from agent natural language responses and emit events
+///
+/// This function catches file paths mentioned in agent responses like:
+/// - "renamed to: docs/PRD-more-components.md"
+/// - "saved to docs/file.md"
+/// - "The PRD is now at: docs/prd.md"
+///
+/// It handles both relative and absolute paths and emits md_file_detected events.
+fn detect_and_emit_md_file_from_response<E: ChatEventEmitter>(
+    emitter: &E,
+    session_id: &str,
+    line: &str,
+    working_dir: Option<&str>,
+    detected_files: &mut HashSet<String>,
+) {
+    // Check for .md file paths in the response text
+    if let Some(caps) = MD_RESPONSE_PATH_RE.captures(line) {
+        if let Some(path_match) = caps.get(1) {
+            let detected_path = path_match.as_str().to_string();
+
+            // Skip if already detected this path
+            if detected_files.contains(&detected_path) {
+                return;
+            }
+
+            // Skip files in .ralph-ui/prds/ - those are already in the correct location
+            if detected_path.contains(".ralph-ui/prds/") {
+                log::debug!(
+                    "Skipping md_file_detected for standard PRD location: {}",
+                    detected_path
+                );
+                return;
+            }
+
+            // Determine if path is absolute or relative
+            let (file_path, relative_path) = if detected_path.starts_with('/') {
+                // Absolute path - compute relative path from working_dir
+                let rel = if let Some(wd) = working_dir {
+                    detected_path
+                        .strip_prefix(wd)
+                        .map(|p| p.trim_start_matches('/').to_string())
+                        .unwrap_or_else(|| detected_path.clone())
+                } else {
+                    detected_path.clone()
+                };
+                (detected_path.clone(), rel)
+            } else {
+                // Relative path - construct absolute path from working_dir
+                let abs = if let Some(wd) = working_dir {
+                    format!("{}/{}", wd, detected_path)
+                } else {
+                    detected_path.clone()
+                };
+                (abs, detected_path.clone())
+            };
+
+            // Mark as detected to avoid duplicates
+            detected_files.insert(detected_path);
+
+            log::info!(
+                "📄 Detected .md file from response: {} (relative: {}, session: {})",
+                file_path,
+                relative_path,
+                session_id
+            );
+
+            emitter.emit_md_file_detected(MdFileDetectedPayload {
+                session_id: session_id.to_string(),
+                file_path,
+                relative_path,
+                detected_at: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    }
+}
+
+/// Complete a tool call and emit all associated events (tool_completed, md_file_detected)
+fn complete_tool_and_emit_events<E: ChatEventEmitter>(
+    emitter: &E,
+    session_id: &str,
+    tool_state: ToolCallState,
+    is_error: bool,
+    working_dir: Option<&str>,
+) {
+    let duration_ms = tool_state.started_at.elapsed().as_millis() as u64;
+
+    // Emit tool completed event
+    emitter.emit_tool_completed(ToolCallCompletedPayload {
+        agent_id: session_id.to_string(),
+        tool_id: tool_state.tool_id,
+        output: if tool_state.input_lines.is_empty() {
+            None
+        } else {
+            // Truncate output if too long
+            let output = tool_state.input_lines.join("\n");
+            Some(if output.len() > 5000 {
+                format!("{}... (truncated)", &output[..5000])
+            } else {
+                output
+            })
+        },
+        duration_ms: Some(duration_ms),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        is_error,
+    });
+
+    // Emit md_file_detected events for each detected .md file
+    // Only emit if tool was successful (not error)
+    if !is_error && tool_state.tool_name == "Write" {
+        for md_path in tool_state.detected_md_paths {
+            // Skip files in .ralph-ui/prds/ - those are already in the correct location
+            if md_path.contains("/.ralph-ui/prds/") {
+                log::debug!(
+                    "Skipping md_file_detected for standard PRD location: {}",
+                    md_path
+                );
+                continue;
+            }
+
+            // Compute relative path if working_dir is provided
+            let relative_path = if let Some(wd) = working_dir {
+                md_path
+                    .strip_prefix(wd)
+                    .map(|p| p.trim_start_matches('/').to_string())
+                    .unwrap_or_else(|| md_path.clone())
+            } else {
+                md_path.clone()
+            };
+
+            log::info!(
+                "📣 Emitting md_file_detected event: {} (relative: {})",
+                md_path,
+                relative_path
+            );
+
+            emitter.emit_md_file_detected(MdFileDetectedPayload {
+                session_id: session_id.to_string(),
+                file_path: md_path,
+                relative_path,
+                detected_at: chrono::Utc::now().to_rfc3339(),
+            });
         }
     }
 }
@@ -861,5 +1036,153 @@ mod tests {
         // Actual execution tests would require mocking the command
         // This test just verifies the function exists at compile time
         assert!(true);
+    }
+
+    // MD file path detection tests
+    #[test]
+    fn test_md_file_path_pattern_absolute_path() {
+        let line = "file_path: /Users/project/docs/prd.md";
+        let caps = MD_FILE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/project/docs/prd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_file_path_pattern_wrote_to() {
+        let line = "Wrote to /home/user/project/README.md";
+        let caps = MD_FILE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/home/user/project/README.md"
+        );
+    }
+
+    #[test]
+    fn test_md_file_path_pattern_with_quotes() {
+        let line = "Writing to '/Users/project/docs/feature.md'";
+        let caps = MD_FILE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/project/docs/feature.md"
+        );
+    }
+
+    #[test]
+    fn test_md_file_path_pattern_no_match_non_md() {
+        let line = "file_path: /Users/project/src/main.rs";
+        let caps = MD_FILE_PATH_RE.captures(line);
+        assert!(caps.is_none());
+    }
+
+    #[test]
+    fn test_md_file_path_pattern_no_match_relative() {
+        let line = "file_path: docs/prd.md";
+        let caps = MD_FILE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Only matches absolute paths
+    }
+
+    // MD response path detection tests (relative paths in agent responses)
+    #[test]
+    fn test_md_response_path_renamed_to() {
+        let line = "Done! The PRD has been renamed to: docs/PRD-more-components.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "docs/PRD-more-components.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_at_colon() {
+        let line = "The PRD is now at: docs/more-componenets-5e9364cd.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "docs/more-componenets-5e9364cd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_saved_to() {
+        let line = "I've saved to docs/requirements.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "docs/requirements.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_wrote() {
+        let line = "wrote docs/feature-spec.md with the requirements";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "docs/feature-spec.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_created() {
+        let line = "I created README.md for you";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "README.md");
+    }
+
+    #[test]
+    fn test_md_response_path_moved_to() {
+        let line = "File has been moved to: prds/new-location.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "prds/new-location.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_with_quotes() {
+        let line = "Renamed to: \"docs/quoted-file.md\"";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "docs/quoted-file.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_absolute() {
+        let line = "saved to /Users/dario/project/docs/prd.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/dario/project/docs/prd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_no_match_non_md() {
+        let line = "saved to docs/main.rs";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Only matches .md files
+    }
+
+    #[test]
+    fn test_md_response_path_no_match_no_prefix() {
+        let line = "The file docs/prd.md contains the requirements";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Needs a recognized prefix
     }
 }
