@@ -136,7 +136,7 @@ pub async fn send_prd_chat_message(
     // Load planning documents for PRD workflow sessions.
     // These persist across session resumption when conversation history is omitted,
     // ensuring the agent always has access to research, requirements, and roadmap.
-    let planning_context = if get_workflow_phase(&session).is_some() {
+    let planning_context = if get_workflow_phase(&session, &history).is_some() {
         Some(load_planning_context(project_path_obj, &session.id))
     } else {
         None
@@ -144,7 +144,7 @@ pub async fn send_prd_chat_message(
 
     // Build prompt based on mode - use discovery prompt for PRD workflow Discovery phase
     // When resuming an external session, history is omitted (agent maintains its own context)
-    let prompt = match get_workflow_phase(&session) {
+    let prompt = match get_workflow_phase(&session, &history) {
         Some(WorkflowPhase::Discovery) => build_deep_questioning_prompt(
             &session,
             &history,
@@ -387,13 +387,34 @@ pub async fn get_prd_chat_history(
 // Prompt Building Functions
 // ============================================================================
 
-/// Get the current workflow phase from a chat session
+/// Get the current workflow phase from a chat session based on conversation progress.
 ///
-/// Note: This function is for PRD workflow sessions that use the prd_workflow module.
-/// Currently returns None as GSD mode has been removed. The workflow phase
-/// is managed separately through the prd_workflow_routes.
-pub fn get_workflow_phase(_session: &ChatSession) -> Option<WorkflowPhase> {
-    // Workflow phase is now managed through prd_workflow module, not embedded in session
+/// For new conversations (empty history or few assistant responses), returns Discovery
+/// phase to ensure the agent asks clarifying questions before jumping to PRD writing.
+/// This prevents the agent from implementing code instead of gathering requirements.
+///
+/// After 2+ assistant messages, returns None to allow PRD writing mode.
+pub fn get_workflow_phase(
+    _session: &ChatSession,
+    history: &[ChatMessage],
+) -> Option<WorkflowPhase> {
+    // For new conversations (no previous messages), use Discovery phase
+    // to gather requirements before jumping to PRD writing
+    if history.is_empty() {
+        return Some(WorkflowPhase::Discovery);
+    }
+
+    // Check if we have enough context to move past discovery
+    // Count assistant messages as a proxy for conversation progress
+    let assistant_count = history
+        .iter()
+        .filter(|m| m.role == MessageRole::Assistant)
+        .count();
+    if assistant_count < 2 {
+        return Some(WorkflowPhase::Discovery);
+    }
+
+    // After 2+ assistant messages, switch to PRD writing mode
     None
 }
 
@@ -419,7 +440,15 @@ fn build_deep_questioning_prompt(
 
     // Discovery coach persona - NOT a PRD writer
     prompt.push_str(
-        r#"You are a friendly product discovery coach helping someone clarify their project idea.
+        r#"## ⛔ CRITICAL: NO IMPLEMENTATION - DISCOVERY PHASE
+
+**YOU MUST NOT IMPLEMENT CODE. IMPLEMENTATION HAPPENS ONLY IN THE RALPH LOOP.**
+
+This is the DISCOVERY phase. Your ONLY job is to ask questions and understand requirements.
+
+---
+
+You are a friendly product discovery coach helping someone clarify their project idea.
 
 YOUR ROLE:
 - Ask thoughtful, probing questions to understand what they want to build
@@ -433,6 +462,7 @@ WHAT YOU MUST NOT DO:
 - Do NOT write user stories, epics, or acceptance criteria yet
 - Do NOT break things into tasks or features yet
 - Do NOT write to any files
+- Do NOT write ANY code - implementation happens in Ralph Loop, not here
 - This is the DISCOVERY phase - we're just understanding the idea through conversation
 
 PROBING QUESTION EXAMPLES:
@@ -459,7 +489,10 @@ When all four are clear, signal readiness to transition:
 - **Who**: [the target user]
 - **Done**: [measurable success criteria]
 
-Does this capture your vision? If so, I can switch to PRD writing mode and start documenting the requirements formally."
+Does this capture your vision? If so, I can switch to PRD writing mode and document the requirements formally. Once the PRD is complete, you can start a **Ralph Loop session** to implement the code."
+
+**If the user asks you to "build it" or "implement it":**
+→ Say: "Let me first document the requirements in a PRD. Once that's complete, you can start a Ralph Loop session to implement. What would you like to clarify about the requirements?"
 
 When the user shares their idea, acknowledge it warmly, then ask a follow-up question to help them think more concretely about one aspect they haven't fully explained yet.
 
@@ -680,11 +713,11 @@ fn get_prd_path_reminder(
     let prd_name = get_prd_filename(session_id, title, prd_id);
     format!(
         "\n---\n\
-        ⚠️ SYSTEM REQUIREMENT - PRD FILE PATH:\n\
-        You MUST write the PRD to this EXACT path: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\
-        DO NOT create files at any other location. The UI tracks this specific file.\n\
-        \n\
-        REMINDER: You are a PRD writer, not a developer. Do NOT create code files.\n\
+        ⚠️ FINAL REMINDER - PRD ONLY, NO CODE:\n\
+        - Write PRD to: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\
+        - DO NOT create code files, config files, or any other files\n\
+        - DO NOT implement features - that happens in Ralph Loop, not here\n\
+        - Your job: Document requirements. Implementation: Ralph Loop.\n\
         ---\n"
     )
 }
@@ -1143,8 +1176,9 @@ mod tests {
         assert!(reminder.contains("camera-feature-"));
         assert!(reminder.contains(".md"));
         // Should contain the warning markers
-        assert!(reminder.contains("SYSTEM REQUIREMENT"));
-        assert!(reminder.contains("DO NOT create files at any other location"));
+        assert!(reminder.contains("FINAL REMINDER"));
+        assert!(reminder.contains("DO NOT create code files"));
+        assert!(reminder.contains("Ralph Loop"));
     }
 
     #[test]
@@ -1158,11 +1192,11 @@ mod tests {
 
         // Should contain both the full instruction AND the reminder
         assert!(prompt.contains("PLAN FILE INSTRUCTION"));
-        assert!(prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+        assert!(prompt.contains("FINAL REMINDER - PRD ONLY, NO CODE"));
 
         // The path reminder should appear AFTER the planning context injection
         // and BEFORE the user message
-        let reminder_pos = prompt.find("SYSTEM REQUIREMENT - PRD FILE PATH").unwrap();
+        let reminder_pos = prompt.find("FINAL REMINDER - PRD ONLY, NO CODE").unwrap();
         let user_msg_pos = prompt.find("User: Create a PRD").unwrap();
         assert!(
             reminder_pos < user_msg_pos,
@@ -1207,7 +1241,7 @@ mod tests {
         assert!(!prompt.contains("Previous message"));
 
         // But the path reminder should STILL be present
-        assert!(prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+        assert!(prompt.contains("FINAL REMINDER - PRD ONLY, NO CODE"));
         assert!(prompt.contains(".ralph-ui/prds/my-feature-"));
     }
 
@@ -1223,5 +1257,115 @@ mod tests {
         assert!(!prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
         // Should also not contain the main plan instruction
         assert!(!prompt.contains("PLAN FILE INSTRUCTION"));
+    }
+
+    #[test]
+    fn test_get_workflow_phase_empty_history_returns_discovery() {
+        let session = make_test_session("test");
+        let history: Vec<ChatMessage> = vec![];
+
+        let phase = get_workflow_phase(&session, &history);
+
+        assert_eq!(phase, Some(WorkflowPhase::Discovery));
+    }
+
+    #[test]
+    fn test_get_workflow_phase_one_assistant_message_returns_discovery() {
+        let session = make_test_session("test");
+        let history = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I want to build a game".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "What kind of game?".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+        ];
+
+        let phase = get_workflow_phase(&session, &history);
+
+        // Still in discovery with only 1 assistant message
+        assert_eq!(phase, Some(WorkflowPhase::Discovery));
+    }
+
+    #[test]
+    fn test_get_workflow_phase_two_assistant_messages_exits_discovery() {
+        let session = make_test_session("test");
+        let history = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "I want to build a game".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "What kind of game?".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "3".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "A space shooter".to_string(),
+                created_at: "2026-01-17T00:02:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "4".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::Assistant,
+                content: "What features do you want?".to_string(),
+                created_at: "2026-01-17T00:03:00Z".to_string(),
+                attachments: None,
+            },
+        ];
+
+        let phase = get_workflow_phase(&session, &history);
+
+        // After 2 assistant messages, should exit discovery (return None for PRD writing mode)
+        assert_eq!(phase, None);
+    }
+
+    #[test]
+    fn test_get_workflow_phase_only_user_messages_returns_discovery() {
+        let session = make_test_session("test");
+        let history = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "First message".to_string(),
+                created_at: "2026-01-17T00:00:00Z".to_string(),
+                attachments: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                session_id: "test".to_string(),
+                role: MessageRole::User,
+                content: "Second message".to_string(),
+                created_at: "2026-01-17T00:01:00Z".to_string(),
+                attachments: None,
+            },
+        ];
+
+        let phase = get_workflow_phase(&session, &history);
+
+        // No assistant messages yet, should still be in discovery
+        assert_eq!(phase, Some(WorkflowPhase::Discovery));
     }
 }
