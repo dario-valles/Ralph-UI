@@ -17,6 +17,7 @@ import type {
   ChatMessage,
   ChatAttachment,
   QualityAssessment,
+  EnhancedQualityReport,
   ExtractedPRDContent,
   PRDTypeValue,
 } from '@/types'
@@ -30,6 +31,7 @@ export const createMessagingSlice = (
 ): MessagingSlice => ({
   // Initial state
   qualityAssessment: null,
+  enhancedQualityReport: null,
   guidedQuestions: [],
   extractedContent: null,
 
@@ -181,6 +183,22 @@ export const createMessagingSlice = (
       const assessment = await prdChatApi.assessQuality(ctx.session.id, ctx.projectPath)
       set({ qualityAssessment: assessment, loading: false })
       return assessment
+    } catch (error) {
+      set({ error: errorToString(error), loading: false })
+      return null
+    }
+  },
+
+  // Assess enhanced quality with 13-point checklist
+  assessEnhancedQuality: async (): Promise<EnhancedQualityReport | null> => {
+    const ctx = getSessionWithPath(get)
+    if (!ctx) return null
+
+    set({ loading: true, error: null })
+    try {
+      const report = await prdChatApi.assessEnhancedQuality(ctx.session.id, ctx.projectPath)
+      set({ enhancedQualityReport: report, loading: false })
+      return report
     } catch (error) {
       set({ error: errorToString(error), loading: false })
       return null

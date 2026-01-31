@@ -127,9 +127,11 @@ export const createChatSessionSlice = (
       ? Date.now() - new Date(session.pendingOperationStartedAt).getTime() < 25 * 60 * 1000 // 25 minutes
       : false
 
+    // Clear enhanced quality report when switching sessions
     set({
       currentSession: session,
       messages: [],
+      enhancedQualityReport: null,
       ...(shouldRestoreStreaming && session
         ? {
             streaming: true,
@@ -137,6 +139,18 @@ export const createChatSessionSlice = (
           }
         : {}),
     })
+
+    // Load guided questions if session has a PRD type
+    if (session?.prdType) {
+      prdChatApi.getGuidedQuestions(session.prdType).then((questions) => {
+        set({ guidedQuestions: questions })
+      }).catch((err) => {
+        console.error('Failed to load guided questions:', err)
+      })
+    } else {
+      // Clear guided questions if no PRD type
+      set({ guidedQuestions: [] })
+    }
   },
 
   // Delete a chat session

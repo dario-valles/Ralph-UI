@@ -7,7 +7,7 @@ use super::chat::{
     add_message_to_chat, chat_file_exists, clear_chat_messages, delete_chat_file, list_chat_files,
     read_chat_file, save_chat_file, ChatFile,
 };
-use crate::models::{ChatMessage, ChatSession};
+use crate::models::{ChatMessage, ChatSession, DiscoveryProgress};
 use chrono::Utc;
 use std::path::Path;
 
@@ -115,6 +115,21 @@ pub fn update_chat_session_quality_score(
     Ok(())
 }
 
+/// Update chat session discovery progress
+pub fn update_chat_session_discovery_progress(
+    project_path: &Path,
+    session_id: &str,
+    progress: &DiscoveryProgress,
+) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.discovery_progress = Some(progress.clone());
+    chat_file.updated_at = Utc::now();
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
 /// Update chat session structured mode
 pub fn update_chat_session_structured_mode(
     project_path: &Path,
@@ -198,6 +213,21 @@ pub fn update_chat_session_external_id(
     Ok(())
 }
 
+/// Update PRD ID for a chat session (used when assigning an external file as PRD)
+pub fn update_chat_session_prd_id(
+    project_path: &Path,
+    session_id: &str,
+    prd_id: &str,
+) -> Result<(), String> {
+    let mut chat_file = read_chat_file(project_path, session_id)?;
+
+    chat_file.prd_id = Some(prd_id.to_string());
+    chat_file.updated_at = Utc::now();
+
+    save_chat_file(project_path, &chat_file)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +252,7 @@ mod tests {
             message_count: Some(0),
             pending_operation_started_at: None,
             external_session_id: None,
+            discovery_progress: None,
         }
     }
 

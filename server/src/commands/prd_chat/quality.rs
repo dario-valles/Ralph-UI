@@ -2,8 +2,9 @@
 
 use crate::file_storage::chat_ops;
 use crate::models::{
-    ChatMessage, DetailedQualityAssessment, ExtractedPRDContent, GuidedQuestion, MessageRole,
-    PRDType, QualityAssessment, QualityCheck, QualityCheckSeverity, QuestionType,
+    ChatMessage, DetailedQualityAssessment, EnhancedQualityCheck, EnhancedQualityReport,
+    ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QualityCheck,
+    QualityCheckSeverity, QualityGrade, QuestionType, VagueLanguageWarning,
 };
 use crate::utils::as_path;
 use regex::Regex;
@@ -1255,6 +1256,1103 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     } else {
         format!("{}...", &s[..max_len])
     }
+}
+
+// ============================================================================
+// Enhanced 13-Check Quality Validation System
+// ============================================================================
+
+/// Extended vague terms with specific replacement suggestions
+/// Vague language patterns with replacement suggestions
+const ENHANCED_VAGUE_TERMS: &[(&str, &str)] = &[
+    ("fast", "Specify response time (e.g., '< 200ms p95')"),
+    ("quick", "Specify response time (e.g., '< 200ms p95')"),
+    ("slow", "Specify timing threshold (e.g., '> 3 seconds')"),
+    (
+        "easy",
+        "Define specific steps or clicks (e.g., 'complete in < 3 clicks')",
+    ),
+    ("simple", "Describe the exact user flow or interface"),
+    (
+        "user-friendly",
+        "Define UX criteria (e.g., 'fewer than 3 clicks', 'time to completion < 30s')",
+    ),
+    (
+        "secure",
+        "Specify security controls (e.g., 'bcrypt cost 12', 'TLS 1.3', 'AES-256')",
+    ),
+    (
+        "safe",
+        "Specify security controls (e.g., 'bcrypt cost 12', 'TLS 1.3')",
+    ),
+    (
+        "scalable",
+        "Define scale targets (e.g., '10k concurrent users', '1M requests/day')",
+    ),
+    ("flexible", "List specific configuration options required"),
+    (
+        "performant",
+        "Specify throughput/latency targets (e.g., '1000 RPS', '< 100ms p99')",
+    ),
+    (
+        "efficient",
+        "Specify performance metrics or resource usage (e.g., '< 100MB memory')",
+    ),
+    ("good", "Define measurable quality criteria"),
+    (
+        "better",
+        "Quantify improvement (e.g., 'reduce by 50%', 'increase to 99.9%')",
+    ),
+    ("improved", "Quantify improvement with baseline and target"),
+    (
+        "robust",
+        "Define reliability metrics (e.g., '99.9% uptime', 'auto-retry 3x')",
+    ),
+    ("modern", "Specify exact technologies or design patterns"),
+    ("intuitive", "Define expected user flows and learning curve"),
+    (
+        "seamless",
+        "Specify integration requirements or error handling",
+    ),
+];
+
+/// Detect all vague language in content and return warnings
+/// Detect vague language in PRD content
+pub fn detect_vague_language(content: &str) -> Vec<VagueLanguageWarning> {
+    let mut warnings = Vec::new();
+    let content_lower = content.to_lowercase();
+
+    for (term, suggestion) in ENHANCED_VAGUE_TERMS {
+        let term_lower = term.to_lowercase();
+        let pattern = format!(r"\b{}\b", regex::escape(&term_lower));
+        if let Ok(re) = Regex::new(&pattern) {
+            for mat in re.find_iter(&content_lower) {
+                // Find the line containing this match
+                let line_start = content[..mat.start()]
+                    .rfind('\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                let line_end = content[mat.end()..]
+                    .find('\n')
+                    .map(|i| mat.end() + i)
+                    .unwrap_or(content.len());
+                let line = content[line_start..line_end].trim();
+
+                // Determine section from nearby headers
+                let section = find_nearest_section(content, mat.start());
+
+                warnings.push(VagueLanguageWarning {
+                    term: term.to_string(),
+                    location: format!("{}: \"{}\"", section, truncate_str(line, 50)),
+                    suggestion: suggestion.to_string(),
+                });
+            }
+        }
+    }
+
+    warnings
+}
+
+/// Find the nearest section header before a given position
+fn find_nearest_section(content: &str, pos: usize) -> String {
+    let before = &content[..pos];
+    // Look for markdown headers
+    if let Some(header_pos) = before.rfind("\n#") {
+        let header_line_end = content[header_pos + 1..]
+            .find('\n')
+            .map(|i| header_pos + 1 + i)
+            .unwrap_or(content.len());
+        let header = content[header_pos + 1..header_line_end].trim();
+        // Clean up header (remove # symbols)
+        let cleaned = header.trim_start_matches('#').trim();
+        if !cleaned.is_empty() {
+            return cleaned.to_string();
+        }
+    }
+    "Document".to_string()
+}
+
+/// Run all 13 enhanced quality checks and return a comprehensive report
+pub fn run_enhanced_quality_checks(content: &str, prd_type: Option<&str>) -> EnhancedQualityReport {
+    let content_lower = content.to_lowercase();
+
+    // Build the 13-point quality checklist
+    let mut checks: Vec<EnhancedQualityCheck> = vec![
+        // Check 1: Executive Summary (10 points)
+        check_executive_summary(content, &content_lower),
+        // Check 2: User Impact in Problem Statement (8 points)
+        check_user_impact(content, &content_lower),
+        // Check 3: Business Impact in Problem Statement (8 points)
+        check_business_impact(content, &content_lower),
+        // Check 4: SMART Goals (10 points)
+        check_smart_goals_enhanced(content, &content_lower),
+        // Check 5: User Stories with Acceptance Criteria (10 points)
+        check_user_stories_with_ac(content, &content_lower),
+        // Check 6: Testable Requirements (8 points)
+        check_testable_requirements(content, &content_lower),
+        // Check 7: NFR with Specific Targets (8 points)
+        check_nfr_targets(content, &content_lower),
+        // Check 8: Architecture Considerations (8 points)
+        check_architecture(content, &content_lower),
+        // Check 9: Out of Scope Defined (6 points)
+        check_out_of_scope(content, &content_lower),
+        // Check 10: Task Breakdown Hints (8 points)
+        check_task_breakdown(content, &content_lower),
+        // Check 11: Complexity Estimates (6 points)
+        check_complexity_estimates(content, &content_lower),
+        // Check 12: Dependencies Identified (6 points)
+        check_dependencies(content, &content_lower),
+        // Check 13: Concrete Acceptance Criteria (8 points)
+        check_concrete_criteria(content, &content_lower),
+    ];
+
+    // Add PRD type-specific checks (4 points bonus)
+    if let Some(pt) = prd_type {
+        if let Some(type_check) = check_type_specific_requirements(content, &content_lower, pt) {
+            checks.push(type_check);
+        }
+    }
+
+    // Detect vague language
+    let vague_warnings = detect_vague_language(content);
+
+    // Calculate totals
+    let total_score: u8 = checks.iter().map(|c| c.score).sum();
+    let max_score: u8 = checks.iter().map(|c| c.max_score).sum();
+    let passed_count = checks.iter().filter(|c| c.passed).count() as u8;
+    let total_checks = checks.len() as u8;
+
+    let percentage = if max_score > 0 {
+        ((total_score as f32 / max_score as f32) * 100.0) as u8
+    } else {
+        0
+    };
+
+    let grade = QualityGrade::from_percentage(percentage);
+
+    // Check for critical failures (errors that block export)
+    let has_critical_failure = checks.iter().any(|c| {
+        !c.passed
+            && (c.id == "executive_summary"
+                || c.id == "user_stories_ac"
+                || c.id == "task_breakdown")
+    });
+
+    let ready_for_export =
+        grade != QualityGrade::NeedsWork && !has_critical_failure && vague_warnings.len() < 5;
+
+    // Generate summary
+    let summary = generate_quality_summary(&checks, &vague_warnings, percentage, &grade);
+
+    EnhancedQualityReport {
+        checks,
+        vague_warnings,
+        total_score,
+        max_score,
+        percentage,
+        grade,
+        passed_count,
+        total_checks,
+        ready_for_export,
+        summary,
+    }
+}
+
+fn generate_quality_summary(
+    checks: &[EnhancedQualityCheck],
+    vague_warnings: &[VagueLanguageWarning],
+    percentage: u8,
+    grade: &QualityGrade,
+) -> String {
+    let failed: Vec<_> = checks.iter().filter(|c| !c.passed).collect();
+
+    if failed.is_empty() && vague_warnings.is_empty() {
+        return format!(
+            "Excellent! All {} checks passed with {}% score.",
+            checks.len(),
+            percentage
+        );
+    }
+
+    let mut summary = format!("Quality: {} ({}%). ", grade.as_str(), percentage);
+
+    if !failed.is_empty() {
+        summary.push_str(&format!(
+            "{} check(s) need attention: {}. ",
+            failed.len(),
+            failed
+                .iter()
+                .take(3)
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    if !vague_warnings.is_empty() {
+        summary.push_str(&format!(
+            "{} vague term(s) should be made specific.",
+            vague_warnings.len()
+        ));
+    }
+
+    summary
+}
+
+// Individual check implementations
+// These functions implement the 13-check quality validation system
+
+fn check_executive_summary(content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let has_summary = content_lower.contains("## executive summary")
+        || content_lower.contains("## overview")
+        || content_lower.contains("# overview")
+        || content_lower.contains("## summary")
+        || content_lower.contains("## problem statement");
+
+    // Check word count in the summary section (50-200 words ideal)
+    let word_count = if has_summary {
+        // Find and count words in the summary section
+        if let Some(start) = content_lower
+            .find("## executive summary")
+            .or_else(|| content_lower.find("## overview"))
+            .or_else(|| content_lower.find("## summary"))
+        {
+            let section_end = content[start + 10..]
+                .find("\n#")
+                .map(|i| start + 10 + i)
+                .unwrap_or(content.len().min(start + 1000));
+            content[start..section_end].split_whitespace().count()
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let passed = has_summary && word_count >= 20;
+    let score = if passed { 10 } else { 0 };
+
+    let message = if !has_summary {
+        "No executive summary or overview section found".to_string()
+    } else if word_count < 20 {
+        format!(
+            "Executive summary is too brief ({} words, recommend 50-200)",
+            word_count
+        )
+    } else {
+        format!("Executive summary present ({} words)", word_count)
+    };
+
+    EnhancedQualityCheck {
+        id: "executive_summary".to_string(),
+        name: "Executive Summary".to_string(),
+        passed,
+        score,
+        max_score: 10,
+        message,
+        suggestion: if !passed {
+            Some("Add a 2-3 sentence summary: problem + solution + expected impact".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_user_impact(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let user_impact_indicators = [
+        "user impact",
+        "users will",
+        "users can",
+        "affects users",
+        "user experience",
+        "user pain",
+        "user problem",
+        "pain point",
+        "frustration",
+        "currently users",
+        "who is affected",
+    ];
+
+    let has_user_impact = user_impact_indicators
+        .iter()
+        .any(|ind| content_lower.contains(ind));
+
+    let passed = has_user_impact;
+    let score = if passed { 8 } else { 0 };
+
+    EnhancedQualityCheck {
+        id: "user_impact".to_string(),
+        name: "User Impact".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            "User impact is described".to_string()
+        } else {
+            "Problem statement lacks explicit user impact".to_string()
+        },
+        suggestion: if !passed {
+            Some(
+                "Add: Who is affected? How are they affected? Severity/frequency of the problem?"
+                    .to_string(),
+            )
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_business_impact(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let business_indicators = [
+        "business impact",
+        "revenue",
+        "cost",
+        "efficiency",
+        "productivity",
+        "roi",
+        "return on investment",
+        "market",
+        "competitive",
+        "opportunity cost",
+        "support tickets",
+        "customer retention",
+        "churn",
+    ];
+
+    let has_business_impact = business_indicators
+        .iter()
+        .any(|ind| content_lower.contains(ind));
+
+    let passed = has_business_impact;
+    let score = if passed { 8 } else { 0 };
+
+    EnhancedQualityCheck {
+        id: "business_impact".to_string(),
+        name: "Business Impact".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            "Business impact is described".to_string()
+        } else {
+            "Problem statement lacks business impact justification".to_string()
+        },
+        suggestion: if !passed {
+            Some(
+                "Add: Cost of the problem? Revenue impact? Opportunity cost? Support burden?"
+                    .to_string(),
+            )
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_smart_goals_enhanced(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    // SMART: Specific, Measurable, Achievable, Relevant, Time-bound
+    let has_metrics_section = content_lower.contains("success metric")
+        || content_lower.contains("success criteria")
+        || content_lower.contains("## goals")
+        || content_lower.contains("## metrics")
+        || content_lower.contains("kpi");
+
+    let has_numbers = Regex::new(r"\d+\s*(%|ms|s|users|requests|days|weeks)")
+        .map(|re| re.is_match(content_lower))
+        .unwrap_or(false);
+
+    let has_timeframe = content_lower.contains("by ")
+        || content_lower.contains("within ")
+        || content_lower.contains("deadline")
+        || content_lower.contains("milestone")
+        || content_lower.contains("sprint")
+        || content_lower.contains("phase");
+
+    let has_baseline = content_lower.contains("baseline")
+        || content_lower.contains("current")
+        || content_lower.contains("today")
+        || content_lower.contains("currently");
+
+    let has_target =
+        content_lower.contains("target") || content_lower.contains("goal") || has_numbers;
+
+    let score_parts = [
+        has_metrics_section,
+        has_numbers,
+        has_timeframe,
+        has_baseline && has_target,
+    ];
+    let parts_count = score_parts.iter().filter(|&&x| x).count();
+
+    let passed = parts_count >= 3;
+    let score = if passed {
+        10
+    } else {
+        (parts_count * 3).min(10) as u8
+    };
+
+    let mut missing = Vec::new();
+    if !has_metrics_section {
+        missing.push("metrics section");
+    }
+    if !has_numbers {
+        missing.push("quantified values");
+    }
+    if !has_timeframe {
+        missing.push("timeframe");
+    }
+    if !has_baseline || !has_target {
+        missing.push("baseline/target");
+    }
+
+    EnhancedQualityCheck {
+        id: "smart_goals".to_string(),
+        name: "SMART Goals".to_string(),
+        passed,
+        score,
+        max_score: 10,
+        message: if passed {
+            "Goals follow SMART format".to_string()
+        } else {
+            format!("Goals missing: {}", missing.join(", "))
+        },
+        suggestion: if !passed {
+            Some(
+                "Use format: Metric | Baseline | Target | Timeframe (e.g., 'Response time: 500ms → 200ms by Sprint 3')".to_string(),
+            )
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_user_stories_with_ac(content: &str, _content_lower: &str) -> EnhancedQualityCheck {
+    // Count user stories
+    let story_pattern = Regex::new(r"(?i)(as a\s+\w+.+I want|US-\d+)").unwrap();
+    let story_count = story_pattern.find_iter(content).count();
+
+    // Count acceptance criteria sections
+    let ac_pattern = Regex::new(r"(?i)(acceptance criteria|given.+when.+then|\bAC:\b)").unwrap();
+    let ac_count = ac_pattern.find_iter(content).count();
+
+    // Check for minimum 3 criteria per story (approximation)
+    let criteria_items = content.matches("- [ ]").count()
+        + content.matches("- [x]").count()
+        + content.matches("* [ ]").count()
+        + content
+            .lines()
+            .filter(|l| l.trim().starts_with("- "))
+            .count();
+
+    let has_stories = story_count > 0;
+    let has_enough_ac = story_count == 0 || ac_count >= story_count / 2;
+    let has_criteria_items = criteria_items >= story_count * 2;
+
+    let passed = has_stories && has_enough_ac && has_criteria_items;
+    let score = if passed {
+        10
+    } else if has_stories {
+        5
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "user_stories_ac".to_string(),
+        name: "User Stories with AC".to_string(),
+        passed,
+        score,
+        max_score: 10,
+        message: if passed {
+            format!("{} user stories with acceptance criteria", story_count)
+        } else if !has_stories {
+            "No user stories found".to_string()
+        } else {
+            format!(
+                "{} stories but insufficient acceptance criteria (found {})",
+                story_count, ac_count
+            )
+        },
+        suggestion: if !passed {
+            Some("Each user story needs at least 3 acceptance criteria".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_testable_requirements(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    // Look for strong requirement language
+    let strong_verbs = ["must", "shall", "will"];
+    let strong_count: usize = strong_verbs
+        .iter()
+        .map(|v| content_lower.matches(v).count())
+        .sum();
+
+    // Check for absence of weak language
+    let weak_patterns = ["should try", "would be nice", "might", "possibly", "maybe"];
+    let weak_count: usize = weak_patterns
+        .iter()
+        .map(|p| content_lower.matches(p).count())
+        .sum();
+
+    let passed = strong_count >= 3 && weak_count == 0;
+    let score = if passed {
+        8
+    } else if strong_count >= 3 {
+        5
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "testable_requirements".to_string(),
+        name: "Testable Requirements".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            format!(
+                "Requirements use strong language ({} must/shall/will)",
+                strong_count
+            )
+        } else if weak_count > 0 {
+            format!(
+                "Found {} weak phrases (should try, might, etc.)",
+                weak_count
+            )
+        } else {
+            "Requirements lack definitive language".to_string()
+        },
+        suggestion: if !passed {
+            Some("Replace 'should try', 'might', 'maybe' with 'must' or 'shall'".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_nfr_targets(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let has_nfr_section = content_lower.contains("non-functional")
+        || content_lower.contains("performance requirement")
+        || content_lower.contains("security requirement")
+        || content_lower.contains("## performance")
+        || content_lower.contains("## security");
+
+    // Check for specific numbers in NFR context
+    let has_perf_numbers = Regex::new(r"\d+\s*(ms|s|second|minute|%|MB|GB|KB|rps|qps)")
+        .map(|re| re.is_match(content_lower))
+        .unwrap_or(false);
+
+    let has_scale_numbers = Regex::new(r"\d+[k]?\s*(concurrent|users|requests|connections)")
+        .map(|re| re.is_match(content_lower))
+        .unwrap_or(false);
+
+    let passed = has_nfr_section || (has_perf_numbers && has_scale_numbers);
+    let score = if passed {
+        8
+    } else if has_perf_numbers || has_scale_numbers {
+        4
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "nfr_targets".to_string(),
+        name: "NFR Specific Targets".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            "Non-functional requirements have specific targets".to_string()
+        } else {
+            "NFRs lack specific numbers".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add: Response time < Xms, Xk concurrent users, 99.X% uptime, etc.".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_architecture(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let arch_indicators = [
+        "architecture",
+        "component",
+        "module",
+        "service",
+        "layer",
+        "api spec",
+        "endpoint",
+        "database schema",
+        "data model",
+        "diagram",
+        "flowchart",
+        "sequence",
+    ];
+
+    let found_indicators: Vec<&str> = arch_indicators
+        .iter()
+        .filter(|ind| content_lower.contains(*ind))
+        .copied()
+        .collect();
+
+    let passed = found_indicators.len() >= 2;
+    let score = if passed {
+        8
+    } else if !found_indicators.is_empty() {
+        4
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "architecture".to_string(),
+        name: "Architecture Considerations".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            format!(
+                "Architecture addressed: {}",
+                found_indicators
+                    .iter()
+                    .take(3)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else {
+            "Technical architecture not documented".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add architecture section: components, data flow, API specs".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_out_of_scope(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let scope_indicators = [
+        "out of scope",
+        "not included",
+        "excluded",
+        "non-goal",
+        "future phase",
+        "v2",
+        "later",
+        "not in mvp",
+        "## scope",
+        "### out of scope",
+    ];
+
+    let has_scope = scope_indicators
+        .iter()
+        .any(|ind| content_lower.contains(ind));
+
+    let passed = has_scope;
+    let score = if passed { 6 } else { 0 };
+
+    EnhancedQualityCheck {
+        id: "out_of_scope".to_string(),
+        name: "Out of Scope Defined".to_string(),
+        passed,
+        score,
+        max_score: 6,
+        message: if passed {
+            "Scope boundaries are defined".to_string()
+        } else {
+            "No explicit 'out of scope' section".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add 'Out of Scope' section listing what's NOT included".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_task_breakdown(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let task_indicators = [
+        "## task",
+        "# task",
+        "## implementation",
+        "## phase",
+        "## checklist",
+        "## roadmap",
+        "task breakdown",
+        "work breakdown",
+    ];
+
+    let has_task_section = task_indicators
+        .iter()
+        .any(|ind| content_lower.contains(ind));
+
+    // Check for numbered task list
+    let numbered_tasks = Regex::new(r"\n\d+\.\s+\w+")
+        .map(|re| re.find_iter(content_lower).count())
+        .unwrap_or(0);
+
+    let passed = has_task_section || numbered_tasks >= 3;
+    let score = if passed { 8 } else { 0 };
+
+    EnhancedQualityCheck {
+        id: "task_breakdown".to_string(),
+        name: "Task Breakdown".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            format!("Task breakdown present ({} numbered tasks)", numbered_tasks)
+        } else {
+            "No task breakdown or implementation plan".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add numbered tasks with descriptions and complexity estimates".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_complexity_estimates(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let complexity_indicators = [
+        "small",
+        "medium",
+        "large",
+        "xl",
+        "hour",
+        "day",
+        "week",
+        "sprint",
+        "effort",
+        "complexity",
+        "estimate",
+        "t-shirt",
+        "story point",
+    ];
+
+    let found_count = complexity_indicators
+        .iter()
+        .filter(|ind| content_lower.contains(*ind))
+        .count();
+
+    let passed = found_count >= 2;
+    let score = if passed {
+        6
+    } else if found_count >= 1 {
+        3
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "complexity_estimates".to_string(),
+        name: "Complexity Estimates".to_string(),
+        passed,
+        score,
+        max_score: 6,
+        message: if passed {
+            "Complexity/effort estimates provided".to_string()
+        } else {
+            "Tasks lack complexity estimates".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add estimates: Small (2-4h), Medium (4-8h), Large (1-2d)".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_dependencies(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    let dep_indicators = [
+        "depends on",
+        "dependency",
+        "dependencies",
+        "blocked by",
+        "prerequisite",
+        "after",
+        "before",
+        "requires",
+        "→",
+        "->",
+    ];
+
+    let found_count = dep_indicators
+        .iter()
+        .filter(|ind| content_lower.contains(*ind))
+        .count();
+
+    let passed = found_count >= 2;
+    let score = if passed {
+        6
+    } else if found_count >= 1 {
+        3
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "dependencies".to_string(),
+        name: "Dependencies Identified".to_string(),
+        passed,
+        score,
+        max_score: 6,
+        message: if passed {
+            "Task dependencies are documented".to_string()
+        } else {
+            "Dependencies between tasks not explicit".to_string()
+        },
+        suggestion: if !passed {
+            Some("Add 'Depends on: [US-X.X]' or 'Blocked by:' to each task".to_string())
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_concrete_criteria(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    // Look for verifiable criteria language
+    let verifiable_patterns = [
+        "verify",
+        "confirm",
+        "check that",
+        "ensure",
+        "validate",
+        "test that",
+        "returns",
+        "displays",
+        "shows",
+        "navigates to",
+        "redirects",
+    ];
+
+    let found_count = verifiable_patterns
+        .iter()
+        .filter(|p| content_lower.contains(*p))
+        .count();
+
+    // Count checkbox items (likely acceptance criteria)
+    let checkbox_count =
+        content_lower.matches("- [ ]").count() + content_lower.matches("- [x]").count();
+
+    let passed = found_count >= 3 || checkbox_count >= 5;
+    let score = if passed {
+        8
+    } else if found_count >= 1 || checkbox_count >= 2 {
+        4
+    } else {
+        0
+    };
+
+    EnhancedQualityCheck {
+        id: "concrete_criteria".to_string(),
+        name: "Concrete Acceptance Criteria".to_string(),
+        passed,
+        score,
+        max_score: 8,
+        message: if passed {
+            format!(
+                "Criteria are verifiable ({} action verbs, {} checkboxes)",
+                found_count, checkbox_count
+            )
+        } else {
+            "Acceptance criteria lack verifiable actions".to_string()
+        },
+        suggestion: if !passed {
+            Some(
+                "Use action verbs: 'Verify that X returns Y', 'User can navigate to Z'".to_string(),
+            )
+        } else {
+            None
+        },
+        location: None,
+    }
+}
+
+fn check_type_specific_requirements(
+    _content: &str,
+    content_lower: &str,
+    prd_type: &str,
+) -> Option<EnhancedQualityCheck> {
+    match prd_type {
+        "bug_fix" => {
+            let has_repro = content_lower.contains("reproduce")
+                || content_lower.contains("steps to")
+                || content_lower.contains("reproduction");
+            let has_expected_actual =
+                content_lower.contains("expected") && content_lower.contains("actual");
+
+            let passed = has_repro && has_expected_actual;
+            Some(EnhancedQualityCheck {
+                id: "bug_fix_specific".to_string(),
+                name: "Bug Fix Requirements".to_string(),
+                passed,
+                score: if passed { 4 } else { 0 },
+                max_score: 4,
+                message: if passed {
+                    "Bug fix has repro steps and expected/actual".to_string()
+                } else {
+                    "Missing reproduction steps or expected/actual behavior".to_string()
+                },
+                suggestion: if !passed {
+                    Some("Add: Steps to reproduce, Expected behavior, Actual behavior".to_string())
+                } else {
+                    None
+                },
+                location: None,
+            })
+        }
+        "api_integration" => {
+            let has_endpoint = content_lower.contains("endpoint") || content_lower.contains("api");
+            let has_auth = content_lower.contains("auth") || content_lower.contains("token");
+            let has_error_handling =
+                content_lower.contains("error") || content_lower.contains("retry");
+
+            let passed = has_endpoint && has_auth;
+            Some(EnhancedQualityCheck {
+                id: "api_integration_specific".to_string(),
+                name: "API Integration Requirements".to_string(),
+                passed,
+                score: if passed && has_error_handling {
+                    4
+                } else if passed {
+                    3
+                } else {
+                    0
+                },
+                max_score: 4,
+                message: if passed {
+                    "API integration has endpoint and auth details".to_string()
+                } else {
+                    "Missing API endpoint or authentication details".to_string()
+                },
+                suggestion: if !passed {
+                    Some("Document: Endpoints, Auth method, Request/Response formats".to_string())
+                } else {
+                    None
+                },
+                location: None,
+            })
+        }
+        "refactoring" => {
+            let has_behavior = content_lower.contains("behavior")
+                || content_lower.contains("unchanged")
+                || content_lower.contains("preserve");
+            let has_testing = content_lower.contains("test");
+
+            let passed = has_behavior && has_testing;
+            Some(EnhancedQualityCheck {
+                id: "refactoring_specific".to_string(),
+                name: "Refactoring Requirements".to_string(),
+                passed,
+                score: if passed { 4 } else { 0 },
+                max_score: 4,
+                message: if passed {
+                    "Refactoring clarifies behavior and testing".to_string()
+                } else {
+                    "Missing behavior change policy or test strategy".to_string()
+                },
+                suggestion: if !passed {
+                    Some("Add: 'Behavior must remain unchanged' and testing strategy".to_string())
+                } else {
+                    None
+                },
+                location: None,
+            })
+        }
+        "full_new_app" | "new_feature" => {
+            let has_mvp = content_lower.contains("mvp")
+                || content_lower.contains("minimum viable")
+                || content_lower.contains("phase 1")
+                || content_lower.contains("v1");
+            let has_tech_stack = prd_type != "full_new_app"
+                || content_lower.contains("stack")
+                || content_lower.contains("framework")
+                || content_lower.contains("technology");
+
+            let passed = has_mvp && has_tech_stack;
+            Some(EnhancedQualityCheck {
+                id: "new_app_specific".to_string(),
+                name: "New App/Feature Requirements".to_string(),
+                passed,
+                score: if passed { 4 } else { 0 },
+                max_score: 4,
+                message: if passed {
+                    "MVP scope and tech stack defined".to_string()
+                } else {
+                    "Missing MVP scope or technology stack".to_string()
+                },
+                suggestion: if !passed {
+                    Some("Define MVP scope and technology choices".to_string())
+                } else {
+                    None
+                },
+                location: None,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Public API for enhanced quality assessment
+pub async fn assess_enhanced_prd_quality(
+    session_id: String,
+    project_path: String,
+) -> Result<EnhancedQualityReport, String> {
+    let project_path_obj = as_path(&project_path);
+
+    // Get session from file storage
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    // Try to use PRD plan file content first if available
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        session.title.as_deref(),
+        session.prd_id.as_deref(),
+    );
+
+    let content = if plan_path.exists() {
+        std::fs::read_to_string(&plan_path)
+            .map_err(|e| format!("Failed to read PRD file: {}", e))?
+    } else {
+        // Fall back to chat messages
+        let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+        messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    };
+
+    let report = run_enhanced_quality_checks(&content, session.prd_type.as_deref());
+
+    // Update session with quality score
+    chat_ops::update_chat_session_quality_score(
+        project_path_obj,
+        &session_id,
+        report.percentage as i32,
+    )
+    .map_err(|e| format!("Failed to update quality score: {}", e))?;
+
+    Ok(report)
 }
 
 /// Perform detailed quality assessment including specific checks

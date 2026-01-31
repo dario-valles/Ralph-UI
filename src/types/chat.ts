@@ -1,5 +1,7 @@
 // Chat types for PRD chat and messaging
 
+import type { DiscoveryProgress } from './prd'
+
 // ============================================================================
 // Chat Message Types
 // ============================================================================
@@ -102,11 +104,47 @@ export interface ChatSession {
    * full conversation history, resulting in 67-90% token savings.
    */
   externalSessionId?: string
+  /**
+   * Discovery phase progress tracking.
+   * Tracks which areas (WHAT, WHO, WHY, DONE) have been covered in conversation.
+   */
+  discoveryProgress?: DiscoveryProgress
 }
 
 export interface SendMessageResponse {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
+}
+
+// ============================================================================
+// PRD File Detection Types
+// ============================================================================
+
+/** Payload for markdown file detected events from the backend */
+export interface MdFileDetectedPayload {
+  /** Session ID of the chat where the file was detected */
+  sessionId: string
+  /** Absolute path where the agent wrote the file */
+  filePath: string
+  /** Path relative to the project directory */
+  relativePath: string
+  /** Timestamp when the file was detected */
+  detectedAt: string
+  /**
+   * Whether this file was auto-assigned (created in .ralph-ui/prds/ standard location).
+   * When true, frontend should update session's prd_id instead of showing DetectedFileCard.
+   */
+  autoAssigned?: boolean
+}
+
+/** Result of assigning a file as PRD */
+export interface AssignPrdResult {
+  /** Path where the PRD was copied to (in .ralph-ui/prds/) */
+  assignedPath: string
+  /** Title extracted from the file (first # heading) */
+  title: string
+  /** The new prd_id value (file:{filename}) */
+  prdId: string
 }
 
 // ============================================================================

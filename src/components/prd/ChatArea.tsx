@@ -4,7 +4,8 @@ import { Plus, MessageSquare, ArrowDown } from 'lucide-react'
 import { ChatMessageItem } from './ChatMessageItem'
 import { StreamingIndicator } from './StreamingIndicator'
 import { PRDGuidancePanel } from './PRDGuidancePanel'
-import type { ChatSession, ChatMessage } from '@/types'
+import { DetectedFileCard } from './DetectedFileCard'
+import type { ChatSession, ChatMessage, MdFileDetectedPayload } from '@/types'
 import { cn } from '@/lib/utils'
 
 interface ChatAreaProps {
@@ -17,6 +18,8 @@ interface ChatAreaProps {
   streamingContent: string
   processingSessionId: string | null
   isAtBottom: boolean
+  /** Detected .md files that haven't been assigned as PRD yet */
+  detectedMdFiles?: MdFileDetectedPayload[]
   onCreateSession: () => void
   onQuickStart: () => void
   onSendMessage: (content: string) => void
@@ -25,6 +28,8 @@ interface ChatAreaProps {
   onRetry: () => void
   onCancel: () => void
   onScrollToBottom: () => void
+  /** Called when user clicks "Assign as PRD" on a detected file */
+  onAssignFileAsPrd?: (file: MdFileDetectedPayload) => Promise<void>
 }
 
 /**
@@ -40,6 +45,7 @@ export function ChatArea({
   streamingContent,
   processingSessionId,
   isAtBottom,
+  detectedMdFiles = [],
   onCreateSession,
   onQuickStart,
   onSendMessage,
@@ -47,6 +53,7 @@ export function ChatArea({
   onRetry,
   onCancel,
   onScrollToBottom,
+  onAssignFileAsPrd,
 }: ChatAreaProps) {
   // No session state
   if (!currentSession) {
@@ -160,6 +167,20 @@ export function ChatArea({
         {messages.map((message) => (
           <ChatMessageItem key={message.id} message={message} />
         ))}
+
+        {/* Show detected .md files that can be assigned as PRD */}
+        {detectedMdFiles.length > 0 && onAssignFileAsPrd && (
+          <div className="space-y-3">
+            {detectedMdFiles.map((file) => (
+              <DetectedFileCard
+                key={file.filePath}
+                file={file}
+                onAssign={() => onAssignFileAsPrd(file)}
+              />
+            ))}
+          </div>
+        )}
+
         {streaming && processingSessionId === currentSession?.id && (
           <StreamingIndicator
             startedAt={streamingStartedAt || undefined}

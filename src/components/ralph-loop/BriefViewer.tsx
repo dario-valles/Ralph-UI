@@ -10,7 +10,7 @@
  * - Loading and error states
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -118,6 +118,11 @@ export function BriefViewer({
   >([])
   const [selectedIteration, setSelectedIteration] = useState<string>('current')
 
+  // Use ref to avoid infinite loop - loadBrief needs access to historicalBriefs
+  // but shouldn't re-create when it changes
+  const historicalBriefsRef = useRef(historicalBriefs)
+  historicalBriefsRef.current = historicalBriefs
+
   const loadHistoricalBriefs = useCallback(async () => {
     try {
       const briefs = await ralphLoopApi.getHistoricalBriefs(projectPath, prdName)
@@ -138,7 +143,7 @@ export function BriefViewer({
         if (iteration && iteration !== 'current') {
           // Load historical brief
           const iterNum = parseInt(iteration)
-          const historical = historicalBriefs.find((b) => b.iteration === iterNum)
+          const historical = historicalBriefsRef.current.find((b) => b.iteration === iterNum)
           if (historical) {
             content = historical.content
           } else {
@@ -155,7 +160,7 @@ export function BriefViewer({
         setLoading(false)
       }
     },
-    [projectPath, prdName, historicalBriefs]
+    [projectPath, prdName]
   )
 
   const handleRegenerate = useCallback(async () => {
@@ -186,11 +191,13 @@ export function BriefViewer({
     }
   }, [briefContent])
 
-  // Initial load
+  // Initial load - only run when projectPath or prdName changes
   useEffect(() => {
     loadHistoricalBriefs()
     loadBrief('current')
-  }, [loadHistoricalBriefs, loadBrief])
+    // Reset selection when PRD changes
+    setSelectedIteration('current')
+  }, [projectPath, prdName, loadHistoricalBriefs, loadBrief])
 
   const handleIterationChange = (value: string) => {
     setSelectedIteration(value)

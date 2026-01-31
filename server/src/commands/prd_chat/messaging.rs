@@ -1,9 +1,12 @@
 // PRD Chat messaging operations - send messages, get history, build prompts
 
 use crate::file_storage::{attachments, chat_ops};
-use crate::models::{ChatMessage, ChatSession, ExtractedPRDStructure, MessageRole};
+use crate::models::{
+    get_discovery_questions, ChatMessage, ChatSession, DiscoveryCategory, DiscoveryProgress,
+    DiscoveryQuestion, ExtractedPRDStructure, MessageRole,
+};
 use crate::parsers::structured_output;
-use crate::prd_workflow::{read_research_file, ProjectContext, WorkflowPhase};
+use crate::prd_workflow::{read_research_file, WorkflowPhase};
 use crate::templates::builtin::{get_builtin_template, PRD_CHAT_SYSTEM};
 use crate::templates::engine::{TemplateContext, TemplateEngine};
 use crate::utils::as_path;
@@ -152,6 +155,7 @@ pub async fn send_prd_chat_message(
             &all_attachment_paths,
             has_external_session,
             planning_context.as_ref(),
+            Some(project_path_obj),
         ),
         _ => build_prd_chat_prompt(
             &session,
@@ -280,6 +284,20 @@ pub async fn send_prd_chat_message(
     chat_ops::update_chat_session_timestamp(project_path_obj, &request.session_id, &response_now)
         .map_err(|e| format!("Failed to update session: {}", e))?;
 
+    // Update discovery progress after each message exchange
+    // Include the new messages in analysis
+    let mut updated_history = history.clone();
+    updated_history.push(user_message.clone());
+    updated_history.push(assistant_message.clone());
+    let progress = analyze_discovery_progress(&updated_history);
+    if let Err(e) = chat_ops::update_chat_session_discovery_progress(
+        project_path_obj,
+        &request.session_id,
+        &progress,
+    ) {
+        log::warn!("Failed to update discovery progress: {}", e);
+    }
+
     // Auto-generate title from first message if not set
     // Track the generated title so we can use it for PRD file path without reloading session
     let generated_title: Option<String> = if session.title.is_none() {
@@ -387,25 +405,179 @@ pub async fn get_prd_chat_history(
 // Prompt Building Functions
 // ============================================================================
 
+/// Analyze conversation content to determine which discovery areas are covered.
+/// Returns a DiscoveryProgress struct with coverage status for each area.
+pub fn analyze_discovery_progress(history: &[ChatMessage]) -> DiscoveryProgress {
+    if history.is_empty() {
+        return DiscoveryProgress::default();
+    }
+
+    // Combine all conversation content for analysis
+    let content: String = history
+        .iter()
+        .map(|m| m.content.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // WHAT - Problem/feature indicators
+    let problem_covered = content.contains("problem")
+        || content.contains("feature")
+        || content.contains("build")
+        || content.contains("create")
+        || content.contains("implement")
+        || content.contains("want to")
+        || content.contains("need to")
+        || content.contains("goal is");
+
+    // WHO - User/target audience indicators
+    let users_covered = content.contains("user")
+        || content.contains("customer")
+        || content.contains("audience")
+        || content.contains("target")
+        || content.contains("persona")
+        || content.contains("who will")
+        || content.contains("developers")
+        || content.contains("team");
+
+    // WHY - Motivation/value indicators
+    let motivation_covered = content.contains("because")
+        || content.contains("reason")
+        || content.contains("motivation")
+        || content.contains("value")
+        || content.contains("benefit")
+        || content.contains("pain point")
+        || content.contains("currently")
+        || content.contains("right now");
+
+    // DONE - Success criteria indicators
+    let success_covered = content.contains("success")
+        || content.contains("criteria")
+        || content.contains("measure")
+        || content.contains("metric")
+        || content.contains("kpi")
+        || content.contains("done when")
+        || content.contains("complete when")
+        || content.contains("achieve");
+
+    // TECH - Technical constraints (optional)
+    let tech_covered = content.contains("tech")
+        || content.contains("stack")
+        || content.contains("framework")
+        || content.contains("language")
+        || content.contains("database")
+        || content.contains("api")
+        || content.contains("architecture")
+        || content.contains("integration");
+
+    // SCOPE - Boundaries (optional)
+    let scope_covered = content.contains("scope")
+        || content.contains("out of scope")
+        || content.contains("boundary")
+        || content.contains("mvp")
+        || content.contains("phase 1")
+        || content.contains("not include")
+        || content.contains("later");
+
+    DiscoveryProgress {
+        problem_covered,
+        users_covered,
+        motivation_covered,
+        success_covered,
+        tech_covered,
+        scope_covered,
+        summary: None,
+    }
+}
+
+/// Check if discovery is complete enough to transition to PRD writing.
+/// Requires the 4 core areas (WHAT, WHO, WHY, DONE) to be covered.
+/// Tech and Scope are optional and don't block transition.
+pub fn is_discovery_complete(progress: &DiscoveryProgress) -> bool {
+    progress.problem_covered
+        && progress.users_covered
+        && progress.motivation_covered
+        && progress.success_covered
+}
+
+/// Get which discovery areas still need coverage (for future UI integration)
+#[allow(dead_code)]
+pub fn get_missing_discovery_areas(progress: &DiscoveryProgress) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if !progress.problem_covered {
+        missing.push("WHAT (problem/feature)");
+    }
+    if !progress.users_covered {
+        missing.push("WHO (target users)");
+    }
+    if !progress.motivation_covered {
+        missing.push("WHY (motivation/value)");
+    }
+    if !progress.success_covered {
+        missing.push("DONE (success criteria)");
+    }
+    missing
+}
+
+/// Map DiscoveryProgress flags to the corresponding question IDs.
+/// This allows the structured question list to show which questions have been answered
+/// based on the content analysis from `analyze_discovery_progress`.
+fn map_progress_to_question_ids(progress: &DiscoveryProgress) -> Vec<&'static str> {
+    let mut ids = Vec::new();
+
+    // Map progress flags to question IDs
+    if progress.problem_covered {
+        ids.push("problem");
+        ids.push("solution"); // Problem discussion often includes solution
+    }
+    if progress.users_covered {
+        ids.push("users");
+    }
+    if progress.motivation_covered {
+        // Motivation maps to problem understanding (why this matters)
+    }
+    if progress.success_covered {
+        ids.push("metrics");
+        ids.push("constraints"); // Success criteria often include constraints
+    }
+    if progress.tech_covered {
+        ids.push("codebase");
+        ids.push("stack");
+        ids.push("integrations");
+        ids.push("performance");
+    }
+    if progress.scope_covered {
+        ids.push("complexity");
+        ids.push("timeline");
+    }
+
+    ids
+}
+
 /// Get the current workflow phase from a chat session based on conversation progress.
 ///
-/// For new conversations (empty history or few assistant responses), returns Discovery
+/// For new conversations or when discovery areas are incomplete, returns Discovery
 /// phase to ensure the agent asks clarifying questions before jumping to PRD writing.
 /// This prevents the agent from implementing code instead of gathering requirements.
 ///
-/// After 2+ assistant messages, returns None to allow PRD writing mode.
-pub fn get_workflow_phase(
-    _session: &ChatSession,
-    history: &[ChatMessage],
-) -> Option<WorkflowPhase> {
+/// Uses content-based analysis to check if key areas (WHAT, WHO, WHY, DONE) are covered.
+pub fn get_workflow_phase(session: &ChatSession, history: &[ChatMessage]) -> Option<WorkflowPhase> {
     // For new conversations (no previous messages), use Discovery phase
-    // to gather requirements before jumping to PRD writing
     if history.is_empty() {
         return Some(WorkflowPhase::Discovery);
     }
 
-    // Check if we have enough context to move past discovery
-    // Count assistant messages as a proxy for conversation progress
+    // Use stored discovery progress if available, otherwise analyze from history
+    let progress = session
+        .discovery_progress
+        .clone()
+        .unwrap_or_else(|| analyze_discovery_progress(history));
+
+    // Check if core discovery areas are covered
+    if !is_discovery_complete(&progress) {
+        return Some(WorkflowPhase::Discovery);
+    }
+
+    // Also require minimum 2 assistant messages to ensure real conversation happened
     let assistant_count = history
         .iter()
         .filter(|m| m.role == MessageRole::Assistant)
@@ -414,16 +586,7 @@ pub fn get_workflow_phase(
         return Some(WorkflowPhase::Discovery);
     }
 
-    // After 2+ assistant messages, switch to PRD writing mode
-    None
-}
-
-/// Extract project context from workflow state
-///
-/// Note: This function is for PRD workflow sessions. Currently returns None
-/// as project context is managed through the prd_workflow module, not embedded in session.
-fn get_project_context(_session: &ChatSession) -> Option<ProjectContext> {
-    // Project context is now managed through prd_workflow module
+    // Discovery complete - switch to PRD writing mode
     None
 }
 
@@ -435,8 +598,23 @@ fn build_deep_questioning_prompt(
     attachment_paths: &[String],
     has_external_session: bool,
     planning_context: Option<&PlanningContext>,
+    project_path: Option<&Path>,
 ) -> String {
     let mut prompt = String::new();
+
+    // Inject codebase analysis at the beginning if project path is available
+    if let Some(path) = project_path {
+        if let Ok(analysis) = super::analysis::analyze_project_for_prd(path) {
+            let analysis_summary = super::analysis::format_analysis_for_prompt(&analysis);
+            if !analysis_summary.is_empty() && analysis_summary != "No project analysis available."
+            {
+                prompt.push_str("=== PROJECT CODEBASE ANALYSIS ===\n");
+                prompt.push_str(&analysis_summary);
+                prompt.push_str("\n=== END ANALYSIS ===\n\n");
+                prompt.push_str("Use this codebase context to ask relevant questions about how the new feature/change will integrate with existing patterns and architecture.\n\n");
+            }
+        }
+    }
 
     // Discovery coach persona - NOT a PRD writer
     prompt.push_str(
@@ -465,20 +643,6 @@ WHAT YOU MUST NOT DO:
 - Do NOT write ANY code - implementation happens in Ralph Loop, not here
 - This is the DISCOVERY phase - we're just understanding the idea through conversation
 
-PROBING QUESTION EXAMPLES:
-- "Can you describe the main action or workflow a user would take?"
-- "What problem does the user have RIGHT NOW that this solves?"
-- "Can you describe a specific person who would use this?"
-- "What would a user be able to accomplish that they couldn't before?"
-- "What does the MVP look like? What's the smallest thing you could ship?"
-
-QUESTION SEQUENCING STRATEGY:
-Ask questions in this order to build understanding progressively:
-1. **WHAT first** - Get the core idea concrete
-2. **WHY second** - Understand the real problem/motivation
-3. **WHO third** - Clarify the specific target user
-4. **DONE last** - Define measurable success criteria
-
 PHASE TRANSITION:
 Stay in discovery until you clearly understand all four areas (WHAT, WHY, WHO, DONE).
 When all four are clear, signal readiness to transition:
@@ -499,42 +663,111 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
 "#,
     );
 
-    // Add context status if available
-    if let Some(context) = get_project_context(session) {
-        prompt.push_str("CURRENT CONTEXT STATUS:\n");
+    // Get structured discovery questions
+    let discovery_questions = get_discovery_questions();
+
+    // Analyze discovery progress and show status
+    let progress = session
+        .discovery_progress
+        .clone()
+        .unwrap_or_else(|| analyze_discovery_progress(history));
+
+    // Map progress flags to question IDs that are considered answered
+    let answered_question_ids = map_progress_to_question_ids(&progress);
+
+    // Show discovery progress status with structured questions
+    prompt.push_str("\n=== DISCOVERY QUESTIONS ===\n\n");
+
+    // Essential Questions (Required)
+    prompt.push_str("**Essential Questions (Required for PRD):**\n");
+    let essential_questions: Vec<&DiscoveryQuestion> = discovery_questions
+        .iter()
+        .filter(|q| q.category == DiscoveryCategory::Essential)
+        .collect();
+
+    for q in &essential_questions {
+        let answered = answered_question_ids.contains(&q.id.as_str());
+        let status = if answered { "✓" } else { "○" };
         prompt.push_str(&format!(
-            "- What: {}\n",
-            if context.what.is_some() {
-                "filled"
-            } else {
-                "needs input"
-            }
+            "{} **{}**: {}\n",
+            status,
+            q.id.to_uppercase(),
+            q.question
         ));
+        if !answered {
+            prompt.push_str(&format!("   → Follow-up: {}\n", q.follow_up_hint));
+        }
+    }
+
+    // Technical Questions (Optional)
+    prompt.push_str("\n**Technical Questions (Optional):**\n");
+    let technical_questions: Vec<&DiscoveryQuestion> = discovery_questions
+        .iter()
+        .filter(|q| q.category == DiscoveryCategory::Technical)
+        .collect();
+
+    for q in &technical_questions {
+        let answered = answered_question_ids.contains(&q.id.as_str());
+        let status = if answered { "✓" } else { "○" };
         prompt.push_str(&format!(
-            "- Why: {}\n",
-            if context.why.is_some() {
-                "filled"
-            } else {
-                "needs input"
-            }
+            "{} **{}**: {}\n",
+            status,
+            q.id.to_uppercase(),
+            q.question
         ));
+    }
+
+    // Implementation Questions (Optional)
+    prompt.push_str("\n**Implementation Questions (Optional):**\n");
+    let implementation_questions: Vec<&DiscoveryQuestion> = discovery_questions
+        .iter()
+        .filter(|q| q.category == DiscoveryCategory::Implementation)
+        .collect();
+
+    for q in &implementation_questions {
+        let answered = answered_question_ids.contains(&q.id.as_str());
+        let status = if answered { "✓" } else { "○" };
         prompt.push_str(&format!(
-            "- Who: {}\n",
-            if context.who.is_some() {
-                "filled"
-            } else {
-                "needs input"
-            }
+            "{} **{}**: {}\n",
+            status,
+            q.id.to_uppercase(),
+            q.question
         ));
+    }
+
+    prompt.push_str("\n=== END QUESTIONS ===\n\n");
+
+    // Calculate progress summary
+    let essential_answered = essential_questions
+        .iter()
+        .filter(|q| answered_question_ids.contains(&q.id.as_str()))
+        .count();
+    let total_essential = essential_questions.len();
+
+    prompt.push_str(&format!(
+        "**Progress: {}/{} essential questions answered**\n\n",
+        essential_answered, total_essential
+    ));
+
+    // Find the next unanswered question to suggest
+    let next_question = discovery_questions
+        .iter()
+        .filter(|q| q.required)
+        .find(|q| !answered_question_ids.contains(&q.id.as_str()));
+
+    if let Some(next_q) = next_question {
         prompt.push_str(&format!(
-            "- Done: {}\n\n",
-            if context.done.is_some() {
-                "filled"
-            } else {
-                "needs input"
-            }
+            "**NEXT QUESTION TO ASK:**\n\
+             Ask about **{}** ({})\n\
+             Follow-up hint: {}\n\n",
+            next_q.id.to_uppercase(),
+            next_q.question,
+            next_q.follow_up_hint
         ));
-        prompt.push_str("Focus your questions on the items that still need input.\n\n");
+    } else if essential_answered == total_essential {
+        prompt.push_str(
+            "**ALL ESSENTIAL QUESTIONS COVERED** - You can now offer to transition to PRD writing mode.\n\n",
+        );
     }
 
     // Include conversation history only if we don't have an active external session
@@ -804,6 +1037,7 @@ mod tests {
             message_count: None,
             pending_operation_started_at: None,
             external_session_id: None,
+            discovery_progress: None,
         }
     }
 
@@ -1300,12 +1534,14 @@ mod tests {
     #[test]
     fn test_get_workflow_phase_two_assistant_messages_exits_discovery() {
         let session = make_test_session("test");
+        // Messages that cover all discovery areas: WHAT (problem/build), WHO (users), WHY (because/value), DONE (success/measure)
         let history = vec![
             ChatMessage {
                 id: "1".to_string(),
                 session_id: "test".to_string(),
                 role: MessageRole::User,
-                content: "I want to build a game".to_string(),
+                // Covers: problem, build (WHAT), users (WHO)
+                content: "I want to build a game for casual users who need entertainment".to_string(),
                 created_at: "2026-01-17T00:00:00Z".to_string(),
                 attachments: None,
             },
@@ -1313,7 +1549,7 @@ mod tests {
                 id: "2".to_string(),
                 session_id: "test".to_string(),
                 role: MessageRole::Assistant,
-                content: "What kind of game?".to_string(),
+                content: "What's the motivation behind this?".to_string(),
                 created_at: "2026-01-17T00:01:00Z".to_string(),
                 attachments: None,
             },
@@ -1321,7 +1557,8 @@ mod tests {
                 id: "3".to_string(),
                 session_id: "test".to_string(),
                 role: MessageRole::User,
-                content: "A space shooter".to_string(),
+                // Covers: because (WHY), success/measure (DONE)
+                content: "Because existing games are too complex. Success would be measured by daily active users and retention".to_string(),
                 created_at: "2026-01-17T00:02:00Z".to_string(),
                 attachments: None,
             },
@@ -1329,7 +1566,7 @@ mod tests {
                 id: "4".to_string(),
                 session_id: "test".to_string(),
                 role: MessageRole::Assistant,
-                content: "What features do you want?".to_string(),
+                content: "Great, I understand the value proposition now".to_string(),
                 created_at: "2026-01-17T00:03:00Z".to_string(),
                 attachments: None,
             },
@@ -1337,7 +1574,7 @@ mod tests {
 
         let phase = get_workflow_phase(&session, &history);
 
-        // After 2 assistant messages, should exit discovery (return None for PRD writing mode)
+        // After 2 assistant messages AND all areas covered, should exit discovery
         assert_eq!(phase, None);
     }
 

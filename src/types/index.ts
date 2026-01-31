@@ -76,13 +76,33 @@ export type {
   CreatePRDRequest,
   UpdatePRDRequest,
   QualityAssessment,
+  QualityCheck,
+  QualityCheckSeverity,
+  DetailedQualityAssessment,
+  DiscoveryProgress,
+  DiscoverySummary,
   QuestionType,
   GuidedQuestion,
   ExtractedPRDContent,
   SchedulingStrategy,
   ExecutionConfig,
   DryRunResult,
+  EffortSize,
+  Complexity,
+  PRDItemType,
+  StructuredPRDItem,
+  ExtractedPRDStructure,
+  // Enhanced quality check types (13-check system)
+  EnhancedQualityCheck,
+  VagueLanguageWarning,
+  QualityGrade,
+  EnhancedQualityReport,
+  // Structured discovery question types
+  DiscoveryCategory,
+  DiscoveryQuestion,
 } from './prd'
+
+export { DISCOVERY_QUESTIONS, getQuestionsByCategory, getRequiredQuestions } from './prd'
 
 // ============================================================================
 // Chat Types
@@ -97,6 +117,8 @@ export type {
   ChatSession,
   SendMessageResponse,
   PastedTextBlock,
+  MdFileDetectedPayload,
+  AssignPrdResult,
 } from './chat'
 
 export { ATTACHMENT_LIMITS } from './chat'

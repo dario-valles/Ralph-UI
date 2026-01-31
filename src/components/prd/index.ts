@@ -8,3 +8,17 @@ export { DependencyGraphView } from './DependencyGraphView'
 
 // Onboarding guidance
 export { PRDGuidancePanel } from './PRDGuidancePanel'
+
+// Discovery progress
+export { DiscoveryProgressCard } from './DiscoveryProgressCard'
+
+// Quality checks
+export {
+  QualityChecksList,
+  EnhancedQualityChecksList,
+  QualityChecksSummary,
+  EnhancedChecksSummary,
+} from './QualityChecksList'
+
+// File detection
+export { DetectedFileCard } from './DetectedFileCard'

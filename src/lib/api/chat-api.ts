@@ -6,9 +6,12 @@ import type {
   ChatAttachment,
   SendMessageResponse,
   QualityAssessment,
+  DetailedQualityAssessment,
+  EnhancedQualityReport,
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
+  AssignPrdResult,
 } from '@/types'
 import { invoke } from '../invoke'
 import type { AgentAvailabilityResult, WatchFileResponse } from './types'
@@ -76,6 +79,22 @@ export const prdChatApi = {
     return await invoke('assess_prd_quality', { sessionId, projectPath })
   },
 
+  /** Assess detailed quality with specific checks (vague language, testability, etc.) */
+  assessDetailedQuality: async (
+    sessionId: string,
+    projectPath: string
+  ): Promise<DetailedQualityAssessment> => {
+    return await invoke('assess_detailed_prd_quality', { sessionId, projectPath })
+  },
+
+  /** Assess enhanced quality with 13-point checklist and vague language detection */
+  assessEnhancedQuality: async (
+    sessionId: string,
+    projectPath: string
+  ): Promise<EnhancedQualityReport> => {
+    return await invoke('assess_enhanced_prd_quality', { sessionId, projectPath })
+  },
+
   /** Get guided questions based on PRD type */
   getGuidedQuestions: async (prdType: PRDTypeValue): Promise<GuidedQuestion[]> => {
     return await invoke('get_guided_questions', { prdType })
@@ -124,5 +143,14 @@ export const prdChatApi = {
   /** Get the current content of a PRD plan file */
   getPlanContent: async (sessionId: string, projectPath: string): Promise<string | null> => {
     return await invoke('get_prd_plan_content', { sessionId, projectPath })
+  },
+
+  /** Assign an external .md file as the PRD for a session */
+  assignFileAsPrd: async (
+    projectPath: string,
+    sessionId: string,
+    sourceFilePath: string
+  ): Promise<AssignPrdResult> => {
+    return await invoke('assign_file_as_prd', { projectPath, sessionId, sourceFilePath })
   },
 }

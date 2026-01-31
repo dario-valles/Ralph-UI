@@ -307,6 +307,9 @@ That's the epic.
             dependencies: None,
             estimated_effort: Some(EffortSize::Medium),
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         };
 
         assert!(validate_prd_item(&item).is_ok());
@@ -325,6 +328,9 @@ That's the epic.
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         };
 
         assert!(validate_prd_item(&item).is_err());
@@ -343,6 +349,9 @@ That's the epic.
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         };
 
         assert!(validate_prd_item(&item).is_err());
@@ -364,6 +373,9 @@ That's the epic.
                 dependencies: None,
                 estimated_effort: None,
                 tags: None,
+                complexity: None,
+                parallelizable: None,
+                suggested_order: None,
             },
             StructuredPRDItem {
                 item_type: PRDItemType::Task,
@@ -376,6 +388,9 @@ That's the epic.
                 dependencies: None,
                 estimated_effort: None,
                 tags: None,
+                complexity: None,
+                parallelizable: None,
+                suggested_order: None,
             },
         ];
 
@@ -399,6 +414,9 @@ That's the epic.
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         });
 
         let items = vec![StructuredPRDItem {
@@ -412,6 +430,9 @@ That's the epic.
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         }];
 
         merge_items(&mut structure, items);
@@ -483,6 +504,9 @@ And a task:
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         });
         structure.user_stories.push(StructuredPRDItem {
             item_type: PRDItemType::UserStory,
@@ -495,6 +519,9 @@ And a task:
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         });
         structure.user_stories.push(StructuredPRDItem {
             item_type: PRDItemType::UserStory,
@@ -507,6 +534,9 @@ And a task:
             dependencies: None,
             estimated_effort: None,
             tags: None,
+            complexity: None,
+            parallelizable: None,
+            suggested_order: None,
         });
 
         let counts = get_item_counts(&structure);

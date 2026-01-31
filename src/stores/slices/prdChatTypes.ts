@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatAttachment,
   QualityAssessment,
+  EnhancedQualityReport,
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
@@ -63,6 +64,7 @@ export interface ChatSessionSlice {
 export interface MessagingSlice {
   // State
   qualityAssessment: QualityAssessment | null
+  enhancedQualityReport: EnhancedQualityReport | null
   guidedQuestions: GuidedQuestion[]
   extractedContent: ExtractedPRDContent | null
 
@@ -70,6 +72,7 @@ export interface MessagingSlice {
   sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>
   loadHistory: (sessionId: string, projectPath?: string) => Promise<void>
   assessQuality: () => Promise<QualityAssessment | null>
+  assessEnhancedQuality: () => Promise<EnhancedQualityReport | null>
   loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
   previewExtraction: () => Promise<ExtractedPRDContent | null>
   setStructuredMode: (enabled: boolean) => Promise<void>

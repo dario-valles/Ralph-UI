@@ -16,8 +16,11 @@ pub use context::{
     MAX_CONTEXT_FILE_SIZE,
 };
 pub use prd_chat::{
-    attachment_limits, AttachmentMimeType, ChatAttachment, ChatMessage, ChatSession,
-    ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QuestionType,
+    attachment_limits, get_discovery_questions, AttachmentMimeType, ChatAttachment, ChatMessage,
+    ChatSession, DetailedQualityAssessment, DiscoveryCategory, DiscoveryProgress,
+    DiscoveryQuestion, DiscoverySummary, EnhancedQualityCheck, EnhancedQualityReport,
+    ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QualityCheck,
+    QualityCheckSeverity, QualityGrade, QuestionType, VagueLanguageWarning,
 };
 
 use chrono::{DateTime, Utc};
@@ -397,6 +400,47 @@ impl std::str::FromStr for EffortSize {
     }
 }
 
+/// Complexity level for tasks (distinct from effort - complexity is about technical difficulty)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Complexity {
+    Low,
+    Medium,
+    High,
+}
+
+impl Complexity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Complexity::Low => "low",
+            Complexity::Medium => "medium",
+            Complexity::High => "high",
+        }
+    }
+}
+
+impl std::fmt::Display for Complexity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for Complexity {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "low" | "l" => Ok(Complexity::Low),
+            "medium" | "m" => Ok(Complexity::Medium),
+            "high" | "h" => Ok(Complexity::High),
+            _ => Err(format!(
+                "Invalid complexity: '{}'. Expected 'low', 'medium', or 'high'",
+                s
+            )),
+        }
+    }
+}
+
 /// A structured PRD item extracted from agent output
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -404,14 +448,31 @@ pub struct StructuredPRDItem {
     #[serde(rename = "type")]
     pub item_type: PRDItemType,
     pub id: String,
+    #[serde(default)]
     pub parent_id: Option<String>,
     pub title: String,
     pub description: String,
+    #[serde(default)]
     pub acceptance_criteria: Option<Vec<String>>,
+    #[serde(default)]
     pub priority: Option<i32>,
+    /// Task IDs this item depends on
+    #[serde(default)]
     pub dependencies: Option<Vec<String>>,
+    /// Effort estimate: small (S), medium (M), large (L)
+    #[serde(default)]
     pub estimated_effort: Option<EffortSize>,
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
+    /// Technical complexity: low, medium, high
+    #[serde(default)]
+    pub complexity: Option<Complexity>,
+    /// Whether this task can be executed in parallel with other tasks
+    #[serde(default)]
+    pub parallelizable: Option<bool>,
+    /// Suggested execution order (1 = first, higher = later)
+    #[serde(default)]
+    pub suggested_order: Option<i32>,
 }
 
 /// Collection of extracted PRD items grouped by type

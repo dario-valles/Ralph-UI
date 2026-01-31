@@ -1,0 +1,128 @@
+import { useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { FileText, FolderInput, Loader2, Eye, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type { MdFileDetectedPayload } from '@/types'
+
+interface DetectedFileCardProps {
+  /** The detected file payload */
+  file: MdFileDetectedPayload
+  /** Handler for assigning the file as PRD */
+  onAssign: () => Promise<void>
+  /** Handler for previewing the file content */
+  onPreview?: () => void
+  /** Whether this file has been assigned */
+  isAssigned?: boolean
+  /** Optional className for styling */
+  className?: string
+}
+
+/**
+ * Card component displayed when agent creates an .md file outside of .ralph-ui/prds/
+ * Shows the detected file path and provides buttons to preview or assign as PRD.
+ */
+export function DetectedFileCard({
+  file,
+  onAssign,
+  onPreview,
+  isAssigned = false,
+  className,
+}: DetectedFileCardProps) {
+  const [isAssigning, setIsAssigning] = useState(false)
+
+  const handleAssign = async () => {
+    setIsAssigning(true)
+    try {
+      await onAssign()
+    } finally {
+      setIsAssigning(false)
+    }
+  }
+
+  return (
+    <Card
+      className={cn(
+        'w-full max-w-lg mx-auto',
+        'bg-blue-500/5 border-blue-500/30 dark:bg-blue-500/10',
+        isAssigned && 'bg-green-500/5 border-green-500/30 dark:bg-green-500/10',
+        className
+      )}
+    >
+      <CardContent className="py-3 px-4">
+        <div className="flex items-start gap-3">
+          {/* Icon */}
+          <div
+            className={cn(
+              'flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
+              isAssigned
+                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+            )}
+          >
+            {isAssigned ? (
+              <CheckCircle2 className="h-5 w-5" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-medium text-foreground">
+                {isAssigned ? 'File Assigned' : 'File Created'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground font-mono truncate" title={file.filePath}>
+              {file.relativePath}
+            </p>
+
+            {/* Actions */}
+            {!isAssigned && (
+              <div className="flex items-center gap-2 mt-2.5">
+                {onPreview && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onPreview}
+                    className="h-7 px-2.5 text-xs"
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Preview
+                  </Button>
+                )}
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleAssign}
+                  disabled={isAssigning}
+                  className="h-7 px-2.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isAssigning ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : (
+                    <>
+                      <FolderInput className="h-3.5 w-3.5 mr-1" />
+                      Assign as PRD
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Success message */}
+            {isAssigned && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                Copied to .ralph-ui/prds/
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

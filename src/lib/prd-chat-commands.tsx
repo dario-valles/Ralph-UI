@@ -12,6 +12,7 @@ import {
   MessageSquare,
   CheckCircle,
   Network,
+  FileSliders,
 } from 'lucide-react'
 import type { ChatCommandConfig } from '@/types'
 
@@ -263,6 +264,80 @@ For EACH failed check:
 If all checks pass, confirm the PRD is ready for implementation.`,
   },
   {
+    id: 'template',
+    label: 'PRD Template',
+    description: 'Insert comprehensive 11-section PRD template',
+    icon: <FileSliders className="h-4 w-4 mr-2" />,
+    type: 'template',
+    template: `Please generate a comprehensive PRD using this 11-section template structure:
+
+# PRD: [Project Name]
+
+## 1. Executive Summary
+<!-- 2-3 sentences: problem + solution + expected impact with measurable outcome -->
+
+## 2. Problem Statement
+### Current Situation
+### User Impact
+- **Who is affected:** [Specific user segments]
+- **How they're affected:** [Pain points with examples]
+- **Severity:** [Critical/High/Medium with evidence]
+
+### Business Impact
+- **Cost of problem:** [Quantified]
+- **Opportunity cost:** [What's being missed]
+
+## 3. Goals & Success Metrics
+<!-- Use SMART format with specific numbers -->
+| Goal | Metric | Baseline | Target | Timeframe |
+|------|--------|----------|--------|-----------|
+
+## 4. User Stories
+<!-- Each story needs 3+ acceptance criteria -->
+#### US-1.1: [Title]
+**As a** [user], **I want** [action], **So that** [benefit].
+**Acceptance Criteria:**
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+- [ ] [Criterion 3]
+**Effort:** [S|M|L] **Depends on:** [US-X.X or None]
+
+## 5. Functional Requirements
+<!-- Numbered, prioritized: Must/Should/Could -->
+### REQ-001: [Title] (Must Have)
+**Task Breakdown:**
+- Task 1.1: [Description] (Small: 2-4h)
+- Task 1.2: [Description] (Medium: 4-8h)
+
+## 6. Non-Functional Requirements
+<!-- Specific numbers only - no "fast" or "scalable" -->
+- **Response time:** < [X]ms p95
+- **Concurrent users:** [X] users
+- **Uptime:** [X]%
+
+## 7. Technical Considerations
+### Architecture
+### API Specifications
+### Database Schema
+
+## 8. Implementation Roadmap
+### Phase 1: [Name] (Week X-Y)
+| Task | Description | Effort | Depends On |
+**Checkpoint:** [What to test]
+
+## 9. Out of Scope
+- [Item]: [Reason]
+
+## 10. Open Questions & Risks
+| Risk | Likelihood | Impact | Mitigation |
+
+## 11. Validation Checkpoints
+- [ ] After Phase 1: [Criteria]
+- [ ] Before Launch: [Criteria]
+
+Fill in this template based on our discussion, using specific numbers and measurable criteria throughout.`,
+  },
+  {
     id: 'dependencies',
     label: 'Dependencies',
     description: 'Analyze and visualize story dependencies',
@@ -415,6 +490,7 @@ export const COMMAND_ICONS: Record<string, React.ReactNode> = {
   spec: <GitCompare className="h-4 w-4 mr-2" />,
   verify: <CheckCircle className="h-4 w-4 mr-2" />,
   dependencies: <Network className="h-4 w-4 mr-2" />,
+  template: <FileSliders className="h-4 w-4 mr-2" />,
   critique: <Sparkles className="h-4 w-4 mr-2" />,
   epic: <Layers className="h-4 w-4 mr-2" />,
   story: <FileText className="h-4 w-4 mr-2" />,

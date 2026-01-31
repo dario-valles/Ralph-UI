@@ -61,6 +61,25 @@ static MD_RESPONSE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+/// Regex pattern to detect standalone .md file paths (on their own line).
+///
+/// Matches paths in code blocks or quoted, like:
+/// - `/Users/project/docs/file.md`
+/// - `docs/prd.md`
+/// - /absolute/path/to/file.md
+///
+/// This is needed when agents output the path on a separate line (e.g., in a code block).
+///
+/// NOTE: Simple filenames without directory info (e.g., `README.md`) are NOT matched
+/// because we cannot reliably determine their actual location in the filesystem.
+static MD_STANDALONE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    // Match a line that is primarily a .md file path
+    // Allows optional backticks, quotes, or whitespace around it
+    // Must end with .md and contain at least one path separator (/ or \)
+    // Simple filenames without paths are NOT matched - we can't determine their location
+    Regex::new(r#"^\s*[`'"]*([^\s`'"<>|*?\n]*[/\\][^\s`'"<>|*?\n]*\.md)[`'"]*\s*$"#).unwrap()
+});
+
 /// State for tracking active tool calls during streaming
 struct ToolCallState {
     tool_id: String,
@@ -555,6 +574,7 @@ fn parse_and_emit_tool_events<E: ChatEventEmitter>(
 /// - "renamed to: docs/PRD-more-components.md"
 /// - "saved to docs/file.md"
 /// - "The PRD is now at: docs/prd.md"
+/// - Standalone paths in code blocks: `/Users/project/docs/file.md`
 ///
 /// It handles both relative and absolute paths and emits md_file_detected events.
 fn detect_and_emit_md_file_from_response<E: ChatEventEmitter>(
@@ -564,64 +584,66 @@ fn detect_and_emit_md_file_from_response<E: ChatEventEmitter>(
     working_dir: Option<&str>,
     detected_files: &mut HashSet<String>,
 ) {
-    // Check for .md file paths in the response text
-    if let Some(caps) = MD_RESPONSE_PATH_RE.captures(line) {
-        if let Some(path_match) = caps.get(1) {
-            let detected_path = path_match.as_str().to_string();
+    // Check for .md file paths in the response text (with prefixes like "saved to", "at:", etc.)
+    let detected_path = if let Some(caps) = MD_RESPONSE_PATH_RE.captures(line) {
+        caps.get(1).map(|m| m.as_str().to_string())
+    } else if let Some(caps) = MD_STANDALONE_PATH_RE.captures(line) {
+        // Also check for standalone paths (code blocks, separate lines)
+        caps.get(1).map(|m| m.as_str().to_string())
+    } else {
+        None
+    };
 
-            // Skip if already detected this path
-            if detected_files.contains(&detected_path) {
-                return;
-            }
-
-            // Skip files in .ralph-ui/prds/ - those are already in the correct location
-            if detected_path.contains(".ralph-ui/prds/") {
-                log::debug!(
-                    "Skipping md_file_detected for standard PRD location: {}",
-                    detected_path
-                );
-                return;
-            }
-
-            // Determine if path is absolute or relative
-            let (file_path, relative_path) = if detected_path.starts_with('/') {
-                // Absolute path - compute relative path from working_dir
-                let rel = if let Some(wd) = working_dir {
-                    detected_path
-                        .strip_prefix(wd)
-                        .map(|p| p.trim_start_matches('/').to_string())
-                        .unwrap_or_else(|| detected_path.clone())
-                } else {
-                    detected_path.clone()
-                };
-                (detected_path.clone(), rel)
-            } else {
-                // Relative path - construct absolute path from working_dir
-                let abs = if let Some(wd) = working_dir {
-                    format!("{}/{}", wd, detected_path)
-                } else {
-                    detected_path.clone()
-                };
-                (abs, detected_path.clone())
-            };
-
-            // Mark as detected to avoid duplicates
-            detected_files.insert(detected_path);
-
-            log::info!(
-                "📄 Detected .md file from response: {} (relative: {}, session: {})",
-                file_path,
-                relative_path,
-                session_id
-            );
-
-            emitter.emit_md_file_detected(MdFileDetectedPayload {
-                session_id: session_id.to_string(),
-                file_path,
-                relative_path,
-                detected_at: chrono::Utc::now().to_rfc3339(),
-            });
+    if let Some(detected_path) = detected_path {
+        // Skip if already detected this path
+        if detected_files.contains(&detected_path) {
+            return;
         }
+
+        // For files in .ralph-ui/prds/, emit event with auto_assigned=true
+        // This tells the frontend to update the session's prd_id instead of showing DetectedFileCard
+        let auto_assigned = detected_path.contains(".ralph-ui/prds/");
+
+        // Determine if path is absolute or relative
+        let (file_path, relative_path) = if detected_path.starts_with('/') {
+            // Absolute path - compute relative path from working_dir
+            let rel = if let Some(wd) = working_dir {
+                detected_path
+                    .strip_prefix(wd)
+                    .map(|p| p.trim_start_matches('/').to_string())
+                    .unwrap_or_else(|| detected_path.clone())
+            } else {
+                detected_path.clone()
+            };
+            (detected_path.clone(), rel)
+        } else {
+            // Relative path - construct absolute path from working_dir
+            let abs = if let Some(wd) = working_dir {
+                format!("{}/{}", wd, detected_path)
+            } else {
+                detected_path.clone()
+            };
+            (abs, detected_path.clone())
+        };
+
+        // Mark as detected to avoid duplicates
+        detected_files.insert(detected_path);
+
+        log::info!(
+            "📄 Detected .md file from response: {} (relative: {}, session: {}, auto_assigned: {})",
+            file_path,
+            relative_path,
+            session_id,
+            auto_assigned
+        );
+
+        emitter.emit_md_file_detected(MdFileDetectedPayload {
+            session_id: session_id.to_string(),
+            file_path,
+            relative_path,
+            detected_at: chrono::Utc::now().to_rfc3339(),
+            auto_assigned,
+        });
     }
 }
 
@@ -659,14 +681,9 @@ fn complete_tool_and_emit_events<E: ChatEventEmitter>(
     // Only emit if tool was successful (not error)
     if !is_error && tool_state.tool_name == "Write" {
         for md_path in tool_state.detected_md_paths {
-            // Skip files in .ralph-ui/prds/ - those are already in the correct location
-            if md_path.contains("/.ralph-ui/prds/") {
-                log::debug!(
-                    "Skipping md_file_detected for standard PRD location: {}",
-                    md_path
-                );
-                continue;
-            }
+            // For files in .ralph-ui/prds/, emit event with auto_assigned=true
+            // This tells the frontend to update the session's prd_id instead of showing DetectedFileCard
+            let auto_assigned = md_path.contains("/.ralph-ui/prds/");
 
             // Compute relative path if working_dir is provided
             let relative_path = if let Some(wd) = working_dir {
@@ -679,9 +696,10 @@ fn complete_tool_and_emit_events<E: ChatEventEmitter>(
             };
 
             log::info!(
-                "📣 Emitting md_file_detected event: {} (relative: {})",
+                "📣 Emitting md_file_detected event: {} (relative: {}, auto_assigned: {})",
                 md_path,
-                relative_path
+                relative_path,
+                auto_assigned
             );
 
             emitter.emit_md_file_detected(MdFileDetectedPayload {
@@ -689,6 +707,7 @@ fn complete_tool_and_emit_events<E: ChatEventEmitter>(
                 file_path: md_path,
                 relative_path,
                 detected_at: chrono::Utc::now().to_rfc3339(),
+                auto_assigned,
             });
         }
     }
@@ -1184,5 +1203,78 @@ mod tests {
         let line = "The file docs/prd.md contains the requirements";
         let caps = MD_RESPONSE_PATH_RE.captures(line);
         assert!(caps.is_none()); // Needs a recognized prefix
+    }
+
+    // Standalone .md path detection tests (for paths on their own line)
+    #[test]
+    fn test_md_standalone_path_absolute_with_backticks() {
+        let line = "`/Users/dario/personal/remotion-video/docs/more-componenets-5e9364cd.md`";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/dario/personal/remotion-video/docs/more-componenets-5e9364cd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_standalone_path_absolute_no_decoration() {
+        let line = "/Users/project/docs/prd.md";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/project/docs/prd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_standalone_path_relative_with_backticks() {
+        let line = "`docs/prd.md`";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "docs/prd.md");
+    }
+
+    #[test]
+    fn test_md_standalone_path_with_whitespace() {
+        let line = "  `/path/to/file.md`  ";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), "/path/to/file.md");
+    }
+
+    #[test]
+    fn test_md_standalone_path_simple_filename_no_match() {
+        // Simple filenames without directory info should NOT match
+        // because we can't reliably determine their actual location
+        let line = "README.md";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Intentionally no match - can't determine path
+    }
+
+    #[test]
+    fn test_md_standalone_path_no_match_sentence() {
+        let line = "The full path to the PRD is:";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Not a path
+    }
+
+    #[test]
+    fn test_md_standalone_path_no_match_non_md() {
+        let line = "`/path/to/file.rs`";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_none()); // Only matches .md files
+    }
+
+    #[test]
+    fn test_md_standalone_path_with_quotes() {
+        let line = "\"/Users/project/docs/spec.md\"";
+        let caps = MD_STANDALONE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/project/docs/spec.md"
+        );
     }
 }

@@ -117,6 +117,24 @@ pub async fn route_prd_command(
             )
         }
 
+        "assess_detailed_prd_quality" => {
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::assess_detailed_prd_quality(session_id, project_path)
+            )
+        }
+
+        "assess_enhanced_prd_quality" => {
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::assess_enhanced_prd_quality(session_id, project_path)
+            )
+        }
+
         "preview_prd_extraction" => {
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
@@ -193,6 +211,16 @@ pub async fn route_prd_command(
             serde_json::to_value(stopped).map_err(|e| e.to_string())
         }
 
+        "assign_file_as_prd" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let source_file_path: String = get_arg(&args, "sourceFilePath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::assign_file_as_prd(project_path, session_id, source_file_path)
+            )
+        }
+
         _ => Err(format!("Unknown PRD command: {}", cmd)),
     }
 }
@@ -213,6 +241,8 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "delete_prd_chat_session"
             | "update_prd_chat_agent"
             | "assess_prd_quality"
+            | "assess_detailed_prd_quality"
+            | "assess_enhanced_prd_quality"
             | "preview_prd_extraction"
             | "check_agent_availability"
             | "get_guided_questions"
@@ -221,5 +251,6 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "get_prd_plan_content"
             | "start_watching_prd_file"
             | "stop_watching_prd_file"
+            | "assign_file_as_prd"
     )
 }

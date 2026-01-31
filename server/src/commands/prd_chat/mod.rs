@@ -8,10 +8,12 @@
 // - quality: Quality assessment and guided questions
 // - extraction: PRD content extraction and parsing
 // - file_watch: File watching and plan content operations
+// - analysis: Codebase analysis for context-aware PRD creation
 //
 // Storage: Chat sessions are stored in {project}/.ralph-ui/chat/{id}.json
 
 pub mod agent_executor;
+mod analysis;
 mod extraction;
 mod file_watch;
 mod messaging;
@@ -34,19 +36,25 @@ pub use file_watch::{
 
 // Re-export session functions
 pub use session::{
-    check_agent_availability, clear_extracted_structure, delete_prd_chat_session,
-    get_extracted_structure, list_prd_chat_sessions, set_structured_mode, start_prd_chat_session,
-    update_prd_chat_agent,
+    assign_file_as_prd, check_agent_availability, clear_extracted_structure,
+    delete_prd_chat_session, get_extracted_structure, list_prd_chat_sessions, set_structured_mode,
+    start_prd_chat_session, update_prd_chat_agent, AssignPrdResult,
 };
 
 // Re-export messaging functions
 pub use messaging::{get_prd_chat_history, send_prd_chat_message};
 
 // Re-export quality functions
-pub use quality::{assess_prd_quality, get_guided_questions};
+pub use quality::{
+    assess_detailed_prd_quality, assess_enhanced_prd_quality, assess_prd_quality,
+    get_guided_questions,
+};
 
 // Re-export extraction functions
 pub use extraction::preview_prd_extraction;
+
+// Re-export analysis functions
+pub use analysis::{analyze_project_for_prd, format_analysis_for_prompt, PrdCodebaseAnalysis};
 
 use crate::models::{AgentType, PRDType};
 use serde::{Deserialize, Serialize};
@@ -176,6 +184,7 @@ mod tests {
             message_count: None,
             pending_operation_started_at: None,
             external_session_id: None,
+            discovery_progress: None,
         }
     }
 

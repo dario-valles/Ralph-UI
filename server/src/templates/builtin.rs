@@ -19,6 +19,7 @@ pub const MARKET_ANALYSIS: &str = "market_analysis";
 pub const FEASIBILITY_ANALYSIS: &str = "feasibility_analysis";
 pub const BRAINSTORM_IDEAS: &str = "brainstorm_ideas";
 pub const PRD_CHAT_SYSTEM: &str = "prd_chat_system";
+pub const PRD_COMPREHENSIVE_TEMPLATE: &str = "prd_comprehensive_template";
 
 // New templates for PRD Workflow
 pub const IDEAS_ANALYSIS: &str = "ideas_analysis";
@@ -83,6 +84,10 @@ pub fn get_builtin_templates() -> HashMap<String, String> {
         PRD_CHAT_SYSTEM_TEMPLATE.to_string(),
     );
     templates.insert(
+        PRD_COMPREHENSIVE_TEMPLATE.to_string(),
+        PRD_COMPREHENSIVE_TEMPLATE_CONTENT.to_string(),
+    );
+    templates.insert(
         IDEAS_ANALYSIS.to_string(),
         IDEAS_ANALYSIS_TEMPLATE.to_string(),
     );
@@ -125,6 +130,7 @@ pub fn get_builtin_template(name: &str) -> Option<&'static str> {
         FEASIBILITY_ANALYSIS => Some(FEASIBILITY_ANALYSIS_TEMPLATE),
         BRAINSTORM_IDEAS => Some(BRAINSTORM_IDEAS_TEMPLATE),
         PRD_CHAT_SYSTEM => Some(PRD_CHAT_SYSTEM_TEMPLATE),
+        PRD_COMPREHENSIVE_TEMPLATE => Some(PRD_COMPREHENSIVE_TEMPLATE_CONTENT),
         IDEAS_ANALYSIS => Some(IDEAS_ANALYSIS_TEMPLATE),
         AGENTS_MD_GENERATION => Some(AGENTS_MD_GENERATION_TEMPLATE),
         ACCEPTANCE_CRITERIA_GENERATION => Some(ACCEPTANCE_CRITERIA_GENERATION_TEMPLATE),
@@ -153,6 +159,7 @@ pub fn list_builtin_templates() -> Vec<&'static str> {
         FEASIBILITY_ANALYSIS,
         BRAINSTORM_IDEAS,
         PRD_CHAT_SYSTEM,
+        PRD_COMPREHENSIVE_TEMPLATE,
         IDEAS_ANALYSIS,
         AGENTS_MD_GENERATION,
         ACCEPTANCE_CRITERIA_GENERATION,
@@ -1529,6 +1536,223 @@ Summary:
 User: {{ current_message }}
 "#;
 
+// ===============================================
+// COMPREHENSIVE PRD TEMPLATE (11 SECTIONS)
+// ===============================================
+
+const PRD_COMPREHENSIVE_TEMPLATE_CONTENT: &str = r#"# PRD: {{ title }}
+
+## 1. Executive Summary
+
+<!-- 2-3 sentences covering: problem + solution + expected impact -->
+[Brief problem statement] [Proposed solution] [Expected business/user impact with measurable outcome]
+
+---
+
+## 2. Problem Statement
+
+### Current Situation
+<!-- What exists today and what's wrong with it -->
+[Description of the current state]
+
+### User Impact
+- **Who is affected:** [Specific user segments/personas]
+- **How they're affected:** [Concrete pain points with examples]
+- **Severity:** [Critical/High/Medium - with evidence: frequency, support tickets, user feedback]
+
+### Business Impact
+- **Cost of problem:** [Quantified: lost revenue, support costs, productivity loss]
+- **Opportunity cost:** [What the business is missing by not solving this]
+- **Why now:** [Urgency drivers]
+
+---
+
+## 3. Goals & Success Metrics
+
+<!-- Use SMART format: Specific, Measurable, Achievable, Relevant, Time-bound -->
+
+| Goal | Metric | Baseline | Target | Timeframe |
+|------|--------|----------|--------|-----------|
+| [Primary Goal] | [How we measure] | [Current value] | [Target value] | [When] |
+| [Secondary Goal] | [Measurement] | [Current] | [Target] | [When] |
+
+### Key Results
+1. [Specific, measurable outcome with number]
+2. [Another measurable outcome]
+3. [Third measurable outcome]
+
+---
+
+## 4. User Stories
+
+### Epic: [Epic Name]
+
+#### US-1.1: [Story Title]
+**As a** [user type], **I want to** [action], **So that** [benefit].
+
+**Acceptance Criteria:**
+- [ ] [Specific, testable criterion with expected behavior]
+- [ ] [Another criterion - include edge cases]
+- [ ] [Third criterion - include error handling]
+
+**Effort:** [S|M|L|XL]
+**Priority:** [1-5]
+**Depends on:** [US-X.X or "None"]
+
+#### US-1.2: [Another Story]
+**As a** [user type], **I want to** [action], **So that** [benefit].
+
+**Acceptance Criteria:**
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+- [ ] [Criterion 3]
+
+**Effort:** [S|M|L|XL]
+**Priority:** [1-5]
+
+---
+
+## 5. Functional Requirements
+
+<!-- Number requirements for tracking. Use testable language. -->
+
+### REQ-001: [Requirement Title] (Must Have)
+**Description:** [What the system must do - specific and testable]
+**Acceptance Criteria:**
+- [Testable condition 1]
+- [Testable condition 2]
+
+**Task Breakdown:**
+- Task 1.1: [Description] (Small: 2-4h)
+- Task 1.2: [Description] (Medium: 4-8h)
+
+### REQ-002: [Requirement Title] (Should Have)
+**Description:** [System capability]
+**Acceptance Criteria:**
+- [Condition 1]
+- [Condition 2]
+
+### REQ-003: [Requirement Title] (Could Have)
+**Description:** [Nice-to-have capability]
+
+---
+
+## 6. Non-Functional Requirements
+
+<!-- Include specific numbers - no vague terms like "fast" or "scalable" -->
+
+### Performance
+- **Response time:** < [X]ms for 95th percentile
+- **Throughput:** [X] requests/second sustained
+- **Page load:** < [X]s on 3G connection
+
+### Scalability
+- **Concurrent users:** Support [X] simultaneous users
+- **Data volume:** Handle [X] records without degradation
+- **Growth:** Scale to [X] within [timeframe]
+
+### Security
+- **Authentication:** [Specific method: OAuth 2.0, JWT, etc.]
+- **Encryption:** [Specific standard: AES-256, TLS 1.3]
+- **Compliance:** [Specific requirements: GDPR, SOC2, etc.]
+
+### Reliability
+- **Uptime:** [X]% availability (e.g., 99.9%)
+- **Recovery:** RTO < [X] hours, RPO < [X] hours
+- **Backup:** [Frequency and retention]
+
+---
+
+## 7. Technical Considerations
+
+### Architecture
+<!-- High-level system design -->
+[Description or diagram reference]
+
+```
+[Architecture diagram using ASCII or reference to external diagram]
+```
+
+### API Specifications
+<!-- Key endpoints with request/response examples -->
+
+```
+POST /api/[resource]
+Request: { "field": "value" }
+Response: { "id": "123", "status": "created" }
+```
+
+### Database Schema
+<!-- Key tables and relationships -->
+- **[Table Name]:** [Description and key fields]
+- **[Table Name]:** [Description and key fields]
+
+### Integration Points
+- **[System/Service]:** [How it integrates, data flow]
+- **[External API]:** [Purpose, auth method, rate limits]
+
+---
+
+## 8. Implementation Roadmap
+
+### Phase 1: [Name] (Week X-Y)
+| Task | Description | Effort | Depends On |
+|------|-------------|--------|------------|
+| T-1.1 | [Task description] | Small (2-4h) | None |
+| T-1.2 | [Task description] | Medium (4-8h) | T-1.1 |
+| T-1.3 | [Task description] | Large (1-2d) | T-1.1 |
+
+**Checkpoint:** [What should be testable after Phase 1]
+
+### Phase 2: [Name] (Week X-Y)
+| Task | Description | Effort | Depends On |
+|------|-------------|--------|------------|
+| T-2.1 | [Task description] | Medium | T-1.3 |
+| T-2.2 | [Task description] | Small | T-2.1 |
+
+**Checkpoint:** [What should be testable after Phase 2]
+
+---
+
+## 9. Out of Scope
+
+<!-- Explicitly list what is NOT included to prevent scope creep -->
+
+- **[Item 1]:** [Reason why it's deferred]
+- **[Item 2]:** [Reason - e.g., "Future phase", "Different initiative"]
+- **[Item 3]:** [Reason]
+
+---
+
+## 10. Open Questions & Risks
+
+### Open Questions
+| Question | Owner | Due Date | Decision |
+|----------|-------|----------|----------|
+| [Question needing resolution] | [Person] | [Date] | [TBD/Decision] |
+
+### Risk Assessment
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| [Risk description] | High/Med/Low | High/Med/Low | [Mitigation strategy] |
+| [Another risk] | [Level] | [Level] | [Strategy] |
+
+---
+
+## 11. Validation Checkpoints
+
+<!-- Quality gates for each phase -->
+
+- [ ] **After Phase 1:** [Specific testable criteria]
+- [ ] **After Phase 2:** [Specific testable criteria]
+- [ ] **Before Launch:** [Final acceptance criteria]
+- [ ] **Post-Launch (1 week):** [Success metrics to verify]
+
+---
+
+*Document Version: 1.0 | Last Updated: [Date]*
+"#;
+
 const PRD_CHAT_SYSTEM_TEMPLATE: &str = r#"## ⛔ CRITICAL: NO IMPLEMENTATION - READ THIS FIRST
 
 **YOU MUST NOT IMPLEMENT CODE. IMPLEMENTATION HAPPENS ONLY IN THE RALPH LOOP.**
@@ -1737,13 +1961,30 @@ When defining PRD items, output them as JSON code blocks. This enables real-time
   "parentId": "US-1.1",
   "title": "Create login form component",
   "description": "Build React component with email/password inputs and validation",
-  "estimatedEffort": "small"
+  "estimatedEffort": "small",
+  "complexity": "low",
+  "dependencies": [],
+  "parallelizable": true,
+  "suggestedOrder": 1
 }
 ```
+
+### Field Descriptions
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `estimatedEffort` | "small", "medium", "large" | Time/effort estimate (S=hours, M=days, L=week+) |
+| `complexity` | "low", "medium", "high" | Technical difficulty level |
+| `dependencies` | ["T-1.1.0"] | Task IDs that must complete first |
+| `parallelizable` | true/false | Can run simultaneously with other tasks |
+| `suggestedOrder` | 1, 2, 3... | Recommended execution sequence |
 
 **Guidelines:**
 - Use sequential IDs: EP-1, US-1.1, T-1.1.1
 - Link items using parentId
+- Set dependencies to show which tasks must complete first
+- Mark tasks as parallelizable if they don't share state/resources
+- Use suggestedOrder to indicate optimal execution sequence
 - Continue conversation naturally, outputting JSON blocks when defining new items
 {% endif %}
 
@@ -1861,6 +2102,10 @@ mod tests {
             }
             // PRD chat system template uses different format
             if name == PRD_CHAT_SYSTEM || name == CONTEXT_CHAT_SYSTEM {
+                continue;
+            }
+            // PRD comprehensive template is a structural template, not a task prompt
+            if name == PRD_COMPREHENSIVE_TEMPLATE {
                 continue;
             }
             // PRD workflow slash command templates use different format

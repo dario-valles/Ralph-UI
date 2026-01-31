@@ -4,7 +4,7 @@
 
 use super::index::{update_index_entry, ChatIndexEntry};
 use super::{atomic_write, ensure_dir, get_ralph_ui_dir, read_json, FileResult};
-use crate::models::{ChatAttachment, ChatMessage, ChatSession, MessageRole};
+use crate::models::{ChatAttachment, ChatMessage, ChatSession, DiscoveryProgress, MessageRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -55,6 +55,9 @@ pub struct ChatFile {
     /// This allows resuming agent sessions without resending full history
     #[serde(default)]
     pub external_session_id: Option<String>,
+    /// Discovery phase progress tracking
+    #[serde(default)]
+    pub discovery_progress: Option<DiscoveryProgress>,
 }
 
 /// Message entry in chat file
@@ -128,6 +131,7 @@ impl From<&ChatSession> for ChatFile {
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                 .map(|dt| dt.with_timezone(&Utc)),
             external_session_id: session.external_session_id.clone(),
+            discovery_progress: session.discovery_progress.clone(),
         }
     }
 }
@@ -154,6 +158,7 @@ impl ChatFile {
                 .pending_operation_started_at
                 .map(|dt| dt.to_rfc3339()),
             external_session_id: self.external_session_id.clone(),
+            discovery_progress: self.discovery_progress.clone(),
         }
     }
 
@@ -368,6 +373,7 @@ mod tests {
             ],
             pending_operation_started_at: None,
             external_session_id: None,
+            discovery_progress: None,
         }
     }
 

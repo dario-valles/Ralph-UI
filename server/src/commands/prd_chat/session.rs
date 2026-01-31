@@ -65,6 +65,7 @@ pub async fn start_prd_chat_session(
         message_count: Some(0),
         pending_operation_started_at: None,
         external_session_id: None,
+        discovery_progress: None, // Will be updated as conversation progresses
     };
 
     // Initialize .ralph-ui directory and save session to file
@@ -243,6 +244,104 @@ pub async fn clear_extracted_structure(
 
     Ok(())
 }
+
+// ============================================================================
+// PRD File Assignment
+// ============================================================================
+
+/// Result of assigning a file as PRD
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignPrdResult {
+    /// Path where the PRD was copied to (in .ralph-ui/prds/)
+    pub assigned_path: String,
+    /// Title extracted from the file (first # heading)
+    pub title: String,
+    /// The new prd_id value (file:{filename})
+    pub prd_id: String,
+}
+
+/// Assign an external .md file as the PRD for a session.
+///
+/// This copies the content from `source_file_path` to `.ralph-ui/prds/{filename}.md`
+/// and updates the session's prd_id to point to the new file.
+pub async fn assign_file_as_prd(
+    project_path: String,
+    session_id: String,
+    source_file_path: String,
+) -> Result<AssignPrdResult, String> {
+    let project_path_obj = as_path(&project_path);
+
+    // 1. Validate source file exists
+    let source = if source_file_path.starts_with('/') {
+        std::path::PathBuf::from(&source_file_path)
+    } else {
+        project_path_obj.join(&source_file_path)
+    };
+
+    if !source.exists() {
+        return Err(format!("Source file not found: {}", source.display()));
+    }
+
+    // 2. Read content
+    let content = std::fs::read_to_string(&source)
+        .map_err(|e| format!("Failed to read source file: {}", e))?;
+
+    // 3. Extract title from first # heading
+    let title = extract_title_from_content(&content).unwrap_or_else(|| "prd".to_string());
+
+    // 4. Generate target filename
+    let prd_filename = crate::ralph_loop::make_prd_filename(&title, &session_id);
+
+    // 5. Ensure target directory exists
+    let prds_dir = project_path_obj.join(".ralph-ui").join("prds");
+    std::fs::create_dir_all(&prds_dir)
+        .map_err(|e| format!("Failed to create prds directory: {}", e))?;
+
+    // 6. Copy content to target
+    let target = prds_dir.join(format!("{}.md", prd_filename));
+    std::fs::write(&target, &content).map_err(|e| format!("Failed to write PRD file: {}", e))?;
+
+    log::info!(
+        "📄 Assigned external file as PRD: {} -> {}",
+        source.display(),
+        target.display()
+    );
+
+    // 7. Update session's prd_id
+    let prd_id = format!("file:{}", prd_filename);
+    chat_ops::update_chat_session_prd_id(project_path_obj, &session_id, &prd_id)
+        .map_err(|e| format!("Failed to update session prd_id: {}", e))?;
+
+    // 8. Optionally update session title if not set
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+    if session.title.is_none() {
+        chat_ops::update_chat_session_title(project_path_obj, &session_id, &title)
+            .map_err(|e| format!("Failed to update session title: {}", e))?;
+    }
+
+    Ok(AssignPrdResult {
+        assigned_path: target.to_string_lossy().to_string(),
+        title,
+        prd_id,
+    })
+}
+
+/// Extract title from markdown content (first # heading)
+fn extract_title_from_content(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("# ") {
+            return Some(trimmed[2..].trim().to_string());
+        }
+    }
+    None
+}
+
+// ============================================================================
+// Agent Availability
+// ============================================================================
 
 /// Check if an agent CLI is available in the system PATH
 pub async fn check_agent_availability(

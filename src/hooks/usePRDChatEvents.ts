@@ -1,8 +1,9 @@
 // Hook for PRD chat event listeners
-// Consolidates prd:file_updated and prd:chat_chunk event handling
+// Consolidates prd:file_updated, prd:chat_chunk, and prd:md_file_detected event handling
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { subscribeEvent } from '@/lib/events-client'
+import type { MdFileDetectedPayload } from '@/types'
 
 interface PRDFileUpdatedPayload {
   sessionId: string
@@ -20,6 +21,10 @@ interface UsePRDChatEventsOptions {
   sessionId: string | undefined
   /** Callback when plan file is updated */
   onPlanUpdated: (content: string, path: string) => void
+  /** Callback when an .md file is detected (optional) */
+  onMdFileDetected?: (payload: MdFileDetectedPayload) => void
+  /** Callback when a PRD is auto-assigned (created in .ralph-ui/prds/) */
+  onPrdAutoAssigned?: (payload: MdFileDetectedPayload, prdId: string) => void
 }
 
 interface UsePRDChatEventsReturn {
@@ -27,6 +32,12 @@ interface UsePRDChatEventsReturn {
   streamingContent: string
   /** Clear the streaming content buffer */
   clearStreamingContent: () => void
+  /** List of detected .md files for the current session */
+  detectedMdFiles: MdFileDetectedPayload[]
+  /** Clear the detected .md files list */
+  clearDetectedMdFiles: () => void
+  /** Mark a file as assigned (removes from unassigned list) */
+  markFileAsAssigned: (filePath: string) => void
 }
 
 /**
@@ -82,18 +93,32 @@ function useEventSubscription<T extends { sessionId: string }>(
  * Listens for:
  * - prd:file_updated - Plan file changes from agent
  * - prd:chat_chunk - Streaming response chunks
+ * - prd:md_file_detected - Agent created .md file outside standard PRD location
  *
  * @param options - Configuration options
- * @returns Object with streaming content state and clear function
+ * @returns Object with streaming content state, detected files, and utility functions
  */
 export function usePRDChatEvents({
   sessionId,
   onPlanUpdated,
+  onMdFileDetected,
+  onPrdAutoAssigned,
 }: UsePRDChatEventsOptions): UsePRDChatEventsReturn {
   const [streamingContent, setStreamingContent] = useState<string>('')
+  const [detectedMdFiles, setDetectedMdFiles] = useState<MdFileDetectedPayload[]>([])
+  const [assignedFilePaths, setAssignedFilePaths] = useState<Set<string>>(new Set())
 
   const clearStreamingContent = useCallback(() => {
     setStreamingContent('')
+  }, [])
+
+  const clearDetectedMdFiles = useCallback(() => {
+    setDetectedMdFiles([])
+    setAssignedFilePaths(new Set())
+  }, [])
+
+  const markFileAsAssigned = useCallback((filePath: string) => {
+    setAssignedFilePaths((prev) => new Set([...prev, filePath]))
   }, [])
 
   // Listen for PRD file update events
@@ -112,8 +137,50 @@ export function usePRDChatEvents({
     setStreamingContent((prev) => prev + payload.content + '\n')
   )
 
+  // Listen for .md file detection events
+  useEventSubscription<MdFileDetectedPayload>('prd:md_file_detected', sessionId, (payload) => {
+    console.debug(
+      '[usePRDChatEvents] Received prd:md_file_detected event:',
+      `sessionId=${payload.sessionId}`,
+      `filePath=${payload.filePath}`,
+      `relativePath=${payload.relativePath}`,
+      `autoAssigned=${payload.autoAssigned}`
+    )
+
+    // If auto-assigned (created in .ralph-ui/prds/), extract prd_id and notify
+    if (payload.autoAssigned) {
+      // Extract filename without .md extension to build prd_id
+      // e.g., ".ralph-ui/prds/visual-quality-improvements.md" -> "file:visual-quality-improvements"
+      const match = payload.relativePath.match(/\.ralph-ui\/prds\/([^/]+)\.md$/)
+      if (match && onPrdAutoAssigned) {
+        const prdId = `file:${match[1]}`
+        console.log('[usePRDChatEvents] PRD auto-assigned:', prdId)
+        onPrdAutoAssigned(payload, prdId)
+      }
+      return // Don't add to detectedMdFiles - it's already in the correct location
+    }
+
+    // Avoid duplicates
+    setDetectedMdFiles((prev) => {
+      const exists = prev.some((f) => f.filePath === payload.filePath)
+      if (exists) return prev
+      return [...prev, payload]
+    })
+
+    // Call optional callback
+    if (onMdFileDetected) {
+      onMdFileDetected(payload)
+    }
+  })
+
+  // Filter out assigned files for return
+  const unassignedFiles = detectedMdFiles.filter((f) => !assignedFilePaths.has(f.filePath))
+
   return {
     streamingContent,
     clearStreamingContent,
+    detectedMdFiles: unassignedFiles,
+    clearDetectedMdFiles,
+    markFileAsAssigned,
   }
 }

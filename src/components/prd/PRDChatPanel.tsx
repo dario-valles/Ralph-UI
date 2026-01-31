@@ -25,6 +25,7 @@ import { ChatArea } from './ChatArea'
 import { ChatInputArea, type ChatInputHandle } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
+import type { MdFileDetectedPayload } from '@/types'
 import { ContextSetupBanner } from '@/components/context'
 import { toast } from '@/stores/toastStore'
 import type { PRDTypeValue, AgentType, PRDFile, ChatAttachment, ExecutionMode } from '@/types'
@@ -95,6 +96,7 @@ export function PRDChatPanel() {
     streaming,
     error,
     qualityAssessment,
+    enhancedQualityReport,
     processingSessionId,
     watchedPlanContent,
     watchedPlanPath,
@@ -106,6 +108,7 @@ export function PRDChatPanel() {
     loadHistory,
     loadSessions,
     assessQuality,
+    assessEnhancedQuality,
     startWatchingPlanFile,
     stopWatchingPlanFile,
     updatePlanContent,
@@ -154,10 +157,38 @@ export function PRDChatPanel() {
     [updatePlanContent]
   )
 
+  // Handle auto-assigned PRD (created in .ralph-ui/prds/ standard location)
+  const handlePrdAutoAssigned = useCallback(
+    async (_payload: MdFileDetectedPayload, prdId: string) => {
+      if (!currentSession) return
+
+      console.log('[PRDChatPanel] PRD auto-assigned, updating session prd_id:', prdId)
+
+      // Update current session with new prdId
+      setCurrentSession({ ...currentSession, prdId })
+
+      // Refresh the plan watcher to pick up the new file
+      await startWatchingPlanFile()
+
+      // Assess quality
+      await assessQuality()
+
+      toast.success('PRD Created', 'Your PRD document has been saved and is now being watched.')
+    },
+    [currentSession, setCurrentSession, startWatchingPlanFile, assessQuality]
+  )
+
   // PRD chat events hook
-  const { streamingContent, clearStreamingContent } = usePRDChatEvents({
+  const {
+    streamingContent,
+    clearStreamingContent,
+    detectedMdFiles,
+    clearDetectedMdFiles,
+    markFileAsAssigned,
+  } = usePRDChatEvents({
     sessionId: currentSession?.id,
     onPlanUpdated: handlePlanUpdated,
+    onPrdAutoAssigned: handlePrdAutoAssigned,
   })
 
   // Reset user selection when agent type changes
@@ -249,9 +280,11 @@ export function PRDChatPanel() {
   useEffect(() => {
     if (currentSession && currentSession.id !== prevSessionIdRef.current) {
       loadHistory(currentSession.id, currentSession.projectPath)
+      // Clear detected files when switching sessions
+      clearDetectedMdFiles()
       prevSessionIdRef.current = currentSession.id
     }
-  }, [currentSession, loadHistory])
+  }, [currentSession, loadHistory, clearDetectedMdFiles])
 
   // Load or create workflow when session changes
   useEffect(() => {
@@ -498,6 +531,45 @@ export function PRDChatPanel() {
     [handleSendMessage]
   )
 
+  /** Handle assigning an external .md file as the PRD */
+  const handleAssignFileAsPrd = useCallback(
+    async (file: MdFileDetectedPayload) => {
+      if (!currentSession?.projectPath) return
+
+      try {
+        const result = await prdChatApi.assignFileAsPrd(
+          currentSession.projectPath,
+          currentSession.id,
+          file.filePath
+        )
+
+        // Mark the file as assigned so it shows the success state
+        markFileAsAssigned(file.filePath)
+
+        // Refresh the plan content to show the newly assigned PRD
+        await startWatchingPlanFile()
+
+        // Update current session with new prdId (sync frontend state)
+        setCurrentSession({ ...currentSession, prdId: result.prdId })
+
+        // Refresh quality assessment immediately
+        await assessQuality()
+
+        toast.success(
+          'PRD Assigned',
+          `File copied to ${result.assignedPath.split('/').pop()}`
+        )
+      } catch (err) {
+        console.error('Failed to assign file as PRD:', err)
+        toast.error(
+          'Failed to assign PRD',
+          err instanceof Error ? err.message : 'An unexpected error occurred.'
+        )
+      }
+    },
+    [currentSession, markFileAsAssigned, startWatchingPlanFile, setCurrentSession, assessQuality]
+  )
+
   // ============================================================================
   // Computed Values
   // ============================================================================
@@ -536,8 +608,11 @@ export function PRDChatPanel() {
         onSelectSession={setCurrentSession}
         onDeleteSession={openDeleteConfirm}
         qualityAssessment={qualityAssessment}
+        enhancedQualityReport={enhancedQualityReport}
+        discoveryProgress={currentSession?.discoveryProgress}
         loading={loading}
         onRefreshQuality={assessQuality}
+        onRefreshEnhancedQuality={assessEnhancedQuality}
         className="hidden md:flex"
       />
 
@@ -616,6 +691,7 @@ export function PRDChatPanel() {
             streamingContent={streamingContent}
             processingSessionId={processingSessionId}
             isAtBottom={isAtBottom}
+            detectedMdFiles={detectedMdFiles}
             onCreateSession={openTypeSelector}
             onQuickStart={handleQuickStart}
             onSendMessage={handleSendMessage}
@@ -623,6 +699,7 @@ export function PRDChatPanel() {
             onRetry={handleRetryMessage}
             onCancel={handleCancelStreaming}
             onScrollToBottom={scrollToBottom}
+            onAssignFileAsPrd={handleAssignFileAsPrd}
           />
 
           {/* Input Area */}

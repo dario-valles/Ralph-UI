@@ -1,12 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
-import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp, ClipboardCheck } from 'lucide-react'
 import { SessionItem } from './SessionItem'
 import { QualityScoreCard } from './QualityScoreCard'
+import { DiscoveryProgressCard } from './DiscoveryProgressCard'
+import { EnhancedQualityChecksList } from './QualityChecksList'
 import { cn } from '@/lib/utils'
-import type { ChatSession, QualityAssessment } from '@/types'
+import type { ChatSession, QualityAssessment, EnhancedQualityReport, DiscoveryProgress } from '@/types'
+
+/** Check if all required discovery areas are covered */
+function isDiscoveryComplete(progress?: DiscoveryProgress | null): boolean {
+  if (!progress) return false
+  return (
+    progress.problemCovered &&
+    progress.usersCovered &&
+    progress.motivationCovered &&
+    progress.successCovered
+  )
+}
 
 /** Number of sessions to show before "Show more" */
 const INITIAL_SESSIONS_COUNT = 5
@@ -23,8 +36,11 @@ interface SessionsSidebarProps {
   onDeleteSession: (sessionId: string) => void
   onCloneSession?: (session: ChatSession) => void
   qualityAssessment: QualityAssessment | null
+  enhancedQualityReport?: EnhancedQualityReport | null
+  discoveryProgress?: DiscoveryProgress | null
   loading: boolean
   onRefreshQuality: () => void
+  onRefreshEnhancedQuality?: () => void
   className?: string
 }
 
@@ -44,13 +60,25 @@ export function SessionsSidebar({
   onDeleteSession,
   onCloneSession,
   qualityAssessment,
+  enhancedQualityReport,
+  discoveryProgress,
   loading,
   onRefreshQuality,
+  onRefreshEnhancedQuality,
   className,
 }: SessionsSidebarProps) {
   const [showAll, setShowAll] = useState(false)
+  const [showEnhancedChecks, setShowEnhancedChecks] = useState(false)
   const hasMore = sessions.length > INITIAL_SESSIONS_COUNT
   const visibleSessions = showAll ? sessions : sessions.slice(0, INITIAL_SESSIONS_COUNT)
+
+  // Fetch enhanced quality report when session changes and discovery is complete
+  const sessionId = currentSession?.id
+  useEffect(() => {
+    if (sessionId && isDiscoveryComplete(discoveryProgress) && onRefreshEnhancedQuality && !enhancedQualityReport) {
+      onRefreshEnhancedQuality()
+    }
+  }, [sessionId, discoveryProgress, onRefreshEnhancedQuality, enhancedQualityReport])
 
   return (
     <Card
@@ -174,15 +202,59 @@ export function SessionsSidebar({
             )}
           </CardContent>
 
-          {/* Quality Score in Sidebar */}
+          {/* Discovery Progress & Quality Score in Sidebar */}
           {currentSession && hasMessages && (
-            <div className="p-2 border-t">
-              <QualityScoreCard
-                assessment={qualityAssessment}
-                loading={loading}
-                onRefresh={onRefreshQuality}
-                className="border-0 shadow-none"
-              />
+            <div className="p-2 border-t space-y-2">
+              {/* Show discovery progress during discovery phase */}
+              {discoveryProgress && !isDiscoveryComplete(discoveryProgress) && (
+                <DiscoveryProgressCard
+                  progress={discoveryProgress}
+                  compact
+                  className="border-0 shadow-none"
+                />
+              )}
+              {/* Show quality score when discovery is complete or assessment is available */}
+              {(isDiscoveryComplete(discoveryProgress) || qualityAssessment) && (
+                <>
+                  <QualityScoreCard
+                    assessment={qualityAssessment}
+                    loading={loading}
+                    onRefresh={onRefreshQuality}
+                    className="border-0 shadow-none"
+                  />
+                  {/* Enhanced Quality Checks Toggle */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-muted-foreground hover:text-foreground p-1.5 h-auto justify-start gap-1.5"
+                    onClick={() => {
+                      setShowEnhancedChecks(!showEnhancedChecks)
+                      if (!showEnhancedChecks && !enhancedQualityReport && onRefreshEnhancedQuality) {
+                        onRefreshEnhancedQuality()
+                      }
+                    }}
+                  >
+                    <ClipboardCheck className="h-3.5 w-3.5" />
+                    <span className="flex-1 text-left">Detailed Quality Checks</span>
+                    {showEnhancedChecks ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                  {showEnhancedChecks && enhancedQualityReport && (
+                    <EnhancedQualityChecksList
+                      report={enhancedQualityReport}
+                      className="border-0 shadow-none"
+                    />
+                  )}
+                  {showEnhancedChecks && !enhancedQualityReport && loading && (
+                    <div className="text-xs text-muted-foreground text-center py-2">
+                      Loading quality checks...
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </>

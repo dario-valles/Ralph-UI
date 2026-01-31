@@ -39,6 +39,9 @@ pub const EVENT_MERGE_CONFLICT_DETECTED: &str = "merge:conflict_detected";
 pub const EVENT_TOOL_CALL_STARTED: &str = "tool:started";
 pub const EVENT_TOOL_CALL_COMPLETED: &str = "tool:completed";
 
+// PRD file detection events (for detecting agent-created .md files)
+pub const EVENT_MD_FILE_DETECTED: &str = "prd:md_file_detected";
+
 /// Payload for agent status change events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -521,6 +524,29 @@ pub struct ToolCallCompletedPayload {
     pub is_error: bool,
 }
 
+// ============================================================================
+// PRD File Detection Events
+// ============================================================================
+
+/// Payload for markdown file detected events.
+/// Emitted when agent uses Write tool to create a .md file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MdFileDetectedPayload {
+    /// Session ID of the chat where the file was detected
+    pub session_id: String,
+    /// Absolute path where the agent wrote the file
+    pub file_path: String,
+    /// Path relative to the project directory
+    pub relative_path: String,
+    /// Timestamp when the file was detected
+    pub detected_at: String,
+    /// Whether this file was auto-assigned (created in .ralph-ui/prds/ standard location).
+    /// When true, frontend should update session's prd_id instead of showing DetectedFileCard.
+    #[serde(default)]
+    pub auto_assigned: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -759,5 +785,26 @@ mod tests {
         };
         let cloned = task_payload.clone();
         assert_eq!(task_payload.task_id, cloned.task_id);
+    }
+
+    #[test]
+    fn test_md_file_detected_event_constant() {
+        assert_eq!(EVENT_MD_FILE_DETECTED, "prd:md_file_detected");
+    }
+
+    #[test]
+    fn test_md_file_detected_payload_serialization() {
+        let payload = MdFileDetectedPayload {
+            session_id: "session-123".to_string(),
+            file_path: "/home/user/project/docs/prd.md".to_string(),
+            relative_path: "docs/prd.md".to_string(),
+            detected_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"sessionId\":\"session-123\""));
+        assert!(json.contains("\"filePath\":\"/home/user/project/docs/prd.md\""));
+        assert!(json.contains("\"relativePath\":\"docs/prd.md\""));
+        assert!(json.contains("\"detectedAt\":\"2024-01-01T00:00:00Z\""));
     }
 }
