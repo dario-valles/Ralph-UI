@@ -412,49 +412,89 @@ pub async fn regenerate_ralph_prd_stories_server(
     Ok(prd)
 }
 
-/// Build prompt for AI to extract user stories from PRD content
+/// Build prompt for AI to extract IMPLEMENTATION user stories from PRD content.
+///
+/// This prompt is specifically designed to extract actionable CODE IMPLEMENTATION
+/// tasks, NOT document sections like "Executive Summary" or "Problem Statement".
 fn build_story_extraction_prompt(prd_content: &str) -> String {
     format!(
-        r#"Analyze this PRD document and extract all user stories in a structured format.
+        r#"Analyze this PRD document and extract IMPLEMENTATION user stories.
+
+## CRITICAL RULES - READ CAREFULLY
+
+You are extracting **CODE IMPLEMENTATION TASKS**, NOT documentation sections.
+
+**SKIP these document sections entirely - they are NOT implementation tasks:**
+- Executive Summary, Overview, Introduction, Background
+- Problem Statement, Current State, Current Situation
+- Goals, Success Metrics, KPIs, Objectives
+- Pain Points, Opportunities, User Impact, Business Impact
+- Non-Functional Requirements (as a section heading)
+- Timeline, Roadmap, Out of Scope
+- Open Questions, Risks, Appendix, References
+- Any section that describes the document structure rather than code to write
+
+**EXTRACT these as implementation tasks:**
+- Features with specific code changes (e.g., "Add login form", "Implement API endpoint")
+- User stories with "As a user, I want..." format
+- Technical tasks (e.g., "Set up database schema", "Create React component")
+- Bug fixes or enhancements with clear code changes
+- Integration tasks (e.g., "Connect to payment API")
 
 ## PRD Content:
 {}
 
 ## Instructions:
-1. Identify all user stories, features, or tasks that should be implemented
-2. Assign each a unique ID in the format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
-3. Extract or create clear acceptance criteria for each story
+1. Read the PRD and identify features/tasks that require CODE CHANGES
+2. Skip all documentation sections (see list above)
+3. Create actionable stories with code-oriented acceptance criteria
+4. Acceptance criteria should be TESTABLE and describe CODE BEHAVIOR, not documentation
+5. Assign IDs in format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
 
 ## Output Format:
 Return ONLY a JSON array with no additional text. Each story should have:
 - "id": string (US-X.X format)
-- "title": string (brief, actionable title)
-- "acceptance_criteria": array of strings
+- "title": string (brief, actionable - describes code to write)
+- "acceptance_criteria": array of strings (each describes testable code behavior)
 
-Example:
+## Good Example:
 ```json
 [
   {{
     "id": "US-1.1",
-    "title": "User Login",
+    "title": "Implement user login form",
     "acceptance_criteria": [
-      "User can enter email and password",
-      "Form validates inputs before submission",
-      "Shows error message on invalid credentials"
+      "Login form component renders with email and password fields",
+      "Form validates email format before submission",
+      "Submit button is disabled while request is pending",
+      "Error message displays on invalid credentials",
+      "User is redirected to dashboard on successful login"
     ]
   }},
   {{
     "id": "US-1.2",
-    "title": "User Registration",
+    "title": "Create authentication API endpoint",
     "acceptance_criteria": [
-      "User can create account with email",
-      "Password must meet security requirements"
+      "POST /api/auth/login endpoint accepts email and password",
+      "Returns 200 with JWT token on valid credentials",
+      "Returns 401 with error message on invalid credentials",
+      "Rate limits to 5 attempts per minute per IP"
     ]
   }}
 ]
 ```
 
-Extract the stories now and return ONLY the JSON array:"#,
+## BAD Example (DO NOT DO THIS):
+```json
+[
+  {{"id": "task-1", "title": "Executive Summary", ...}},
+  {{"id": "task-2", "title": "Problem Statement", ...}},
+  {{"id": "task-3", "title": "Goals & Success Metrics", ...}}
+]
+```
+These are document sections, NOT implementation tasks!
+
+Now extract ONLY implementation tasks and return the JSON array:"#,
         prd_content
     )
 }
