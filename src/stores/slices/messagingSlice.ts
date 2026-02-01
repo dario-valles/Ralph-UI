@@ -191,6 +191,15 @@ export const createMessagingSlice = (
                 sessions: updatedSessions,
               }
             })
+
+            // Restart file watcher to pick up the correct PRD file
+            // Stop current watcher and start new one with updated prdId
+            const { stopWatchingPlanFile, startWatchingPlanFile, currentSession } = get()
+            if (currentSession?.id === sessionId) {
+              stopWatchingPlanFile().then(() => {
+                startWatchingPlanFile()
+              })
+            }
           }
         }).catch(err => {
           console.warn('Failed to detect PRD from history:', err)
