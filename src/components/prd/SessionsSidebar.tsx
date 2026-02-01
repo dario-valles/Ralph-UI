@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
-import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp, ClipboardCheck } from 'lucide-react'
+import { Plus, MessageSquare, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import { SessionItem } from './SessionItem'
 import { QualityScoreCard } from './QualityScoreCard'
 import { DiscoveryProgressCard } from './DiscoveryProgressCard'
 import { EnhancedQualityChecksList } from './QualityChecksList'
 import { cn } from '@/lib/utils'
-import type { ChatSession, QualityAssessment, EnhancedQualityReport, DiscoveryProgress } from '@/types'
+import type { ChatSession, QualityAssessment, UnifiedQualityReport, DiscoveryProgress } from '@/types'
 
 /** Check if all required discovery areas are covered */
 function isDiscoveryComplete(progress?: DiscoveryProgress | null): boolean {
@@ -35,12 +35,14 @@ interface SessionsSidebarProps {
   onSelectSession: (session: ChatSession) => void
   onDeleteSession: (sessionId: string) => void
   onCloneSession?: (session: ChatSession) => void
-  qualityAssessment: QualityAssessment | null
-  enhancedQualityReport?: EnhancedQualityReport | null
+  /** @deprecated Use unifiedQualityReport instead */
+  qualityAssessment?: QualityAssessment | null
+  /** Unified quality report with 13-check system and 3D dimension scores */
+  unifiedQualityReport?: UnifiedQualityReport | null
   discoveryProgress?: DiscoveryProgress | null
   loading: boolean
+  /** Refresh unified quality assessment */
   onRefreshQuality: () => void
-  onRefreshEnhancedQuality?: () => void
   className?: string
 }
 
@@ -60,11 +62,10 @@ export function SessionsSidebar({
   onDeleteSession,
   onCloneSession,
   qualityAssessment,
-  enhancedQualityReport,
+  unifiedQualityReport,
   discoveryProgress,
   loading,
   onRefreshQuality,
-  onRefreshEnhancedQuality,
   className,
 }: SessionsSidebarProps) {
   const [showAll, setShowAll] = useState(false)
@@ -72,13 +73,13 @@ export function SessionsSidebar({
   const hasMore = sessions.length > INITIAL_SESSIONS_COUNT
   const visibleSessions = showAll ? sessions : sessions.slice(0, INITIAL_SESSIONS_COUNT)
 
-  // Fetch enhanced quality report when session changes and discovery is complete
+  // Fetch unified quality report when session changes and discovery is complete
   const sessionId = currentSession?.id
   useEffect(() => {
-    if (sessionId && isDiscoveryComplete(discoveryProgress) && onRefreshEnhancedQuality && !enhancedQualityReport) {
-      onRefreshEnhancedQuality()
+    if (sessionId && isDiscoveryComplete(discoveryProgress) && !unifiedQualityReport) {
+      onRefreshQuality()
     }
-  }, [sessionId, discoveryProgress, onRefreshEnhancedQuality, enhancedQualityReport])
+  }, [sessionId, discoveryProgress, onRefreshQuality, unifiedQualityReport])
 
   return (
     <Card
@@ -214,44 +215,50 @@ export function SessionsSidebar({
                 />
               )}
               {/* Show quality score when discovery is complete or assessment is available */}
-              {(isDiscoveryComplete(discoveryProgress) || qualityAssessment) && (
+              {(isDiscoveryComplete(discoveryProgress) || unifiedQualityReport || qualityAssessment) && (
                 <>
                   <QualityScoreCard
                     assessment={qualityAssessment}
+                    unifiedReport={unifiedQualityReport}
                     loading={loading}
                     onRefresh={onRefreshQuality}
+                    compact
                     className="border-0 shadow-none"
                   />
-                  {/* Enhanced Quality Checks Toggle */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs text-muted-foreground hover:text-foreground p-1.5 h-auto justify-start gap-1.5"
-                    onClick={() => {
-                      setShowEnhancedChecks(!showEnhancedChecks)
-                      if (!showEnhancedChecks && !enhancedQualityReport && onRefreshEnhancedQuality) {
-                        onRefreshEnhancedQuality()
-                      }
-                    }}
-                  >
-                    <ClipboardCheck className="h-3.5 w-3.5" />
-                    <span className="flex-1 text-left">Detailed Quality Checks</span>
-                    {showEnhancedChecks ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                  {showEnhancedChecks && enhancedQualityReport && (
-                    <EnhancedQualityChecksList
-                      report={enhancedQualityReport}
-                      className="border-0 shadow-none"
-                    />
-                  )}
-                  {showEnhancedChecks && !enhancedQualityReport && loading && (
-                    <div className="text-xs text-muted-foreground text-center py-2">
-                      Loading quality checks...
-                    </div>
+                  {/* Expandable Quality Checks List */}
+                  {unifiedQualityReport && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs text-muted-foreground hover:text-foreground p-1.5 h-auto justify-between"
+                        onClick={() => setShowEnhancedChecks(!showEnhancedChecks)}
+                      >
+                        <span>View {unifiedQualityReport.totalChecks} checks</span>
+                        {showEnhancedChecks ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                      {showEnhancedChecks && (
+                        <EnhancedQualityChecksList
+                          report={{
+                            checks: unifiedQualityReport.checks,
+                            vagueWarnings: unifiedQualityReport.vagueWarnings,
+                            totalScore: unifiedQualityReport.checks.reduce((sum, c) => sum + c.score, 0),
+                            maxScore: unifiedQualityReport.checks.reduce((sum, c) => sum + c.maxScore, 0),
+                            percentage: unifiedQualityReport.overall,
+                            grade: unifiedQualityReport.grade,
+                            passedCount: unifiedQualityReport.passedCount,
+                            totalChecks: unifiedQualityReport.totalChecks,
+                            readyForExport: unifiedQualityReport.readyForExport,
+                            summary: unifiedQualityReport.summary,
+                          }}
+                          className="border-0 shadow-none"
+                        />
+                      )}
+                    </>
                   )}
                 </>
               )}

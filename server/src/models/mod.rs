@@ -20,7 +20,7 @@ pub use prd_chat::{
     ChatSession, DetailedQualityAssessment, DiscoveryCategory, DiscoveryProgress,
     DiscoveryQuestion, DiscoverySummary, EnhancedQualityCheck, EnhancedQualityReport,
     ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QualityCheck,
-    QualityCheckSeverity, QualityGrade, QuestionType, VagueLanguageWarning,
+    QualityCheckSeverity, QualityGrade, QuestionType, UnifiedQualityReport, VagueLanguageWarning,
 };
 
 use chrono::{DateTime, Utc};

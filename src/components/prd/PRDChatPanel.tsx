@@ -96,7 +96,7 @@ export function PRDChatPanel() {
     streaming,
     error,
     qualityAssessment,
-    enhancedQualityReport,
+    unifiedQualityReport,
     processingSessionId,
     watchedPlanContent,
     watchedPlanPath,
@@ -107,8 +107,7 @@ export function PRDChatPanel() {
     setCurrentSession,
     loadHistory,
     loadSessions,
-    assessQuality,
-    assessEnhancedQuality,
+    assessUnifiedQuality,
     startWatchingPlanFile,
     stopWatchingPlanFile,
     updatePlanContent,
@@ -178,11 +177,11 @@ export function PRDChatPanel() {
       await startWatchingPlanFile()
 
       // Assess quality
-      await assessQuality()
+      await assessUnifiedQuality()
 
       toast.success('PRD Created', 'Your PRD document has been saved and is now being watched.')
     },
-    [currentSession, activeProject?.path, setCurrentSession, startWatchingPlanFile, assessQuality]
+    [currentSession, activeProject?.path, setCurrentSession, startWatchingPlanFile, assessUnifiedQuality]
   )
 
   // PRD chat events hook
@@ -391,10 +390,10 @@ export function PRDChatPanel() {
   useEffect(() => {
     if (watchedPlanContent && watchedPlanContent !== prevPlanContentRef.current) {
       prevPlanContentRef.current = watchedPlanContent
-      const timer = setTimeout(() => assessQuality(), 1000)
+      const timer = setTimeout(() => assessUnifiedQuality(), 1000)
       return () => clearTimeout(timer)
     }
-  }, [watchedPlanContent, assessQuality])
+  }, [watchedPlanContent, assessUnifiedQuality])
 
 
   // ============================================================================
@@ -560,7 +559,7 @@ export function PRDChatPanel() {
         setCurrentSession({ ...currentSession, prdId: result.prdId })
 
         // Refresh quality assessment immediately
-        await assessQuality()
+        await assessUnifiedQuality()
 
         toast.success(
           'PRD Assigned',
@@ -574,7 +573,7 @@ export function PRDChatPanel() {
         )
       }
     },
-    [currentSession, markFileAsAssigned, startWatchingPlanFile, setCurrentSession, assessQuality]
+    [currentSession, markFileAsAssigned, startWatchingPlanFile, setCurrentSession, assessUnifiedQuality]
   )
 
   // ============================================================================
@@ -615,11 +614,10 @@ export function PRDChatPanel() {
         onSelectSession={setCurrentSession}
         onDeleteSession={openDeleteConfirm}
         qualityAssessment={qualityAssessment}
-        enhancedQualityReport={enhancedQualityReport}
+        unifiedQualityReport={unifiedQualityReport}
         discoveryProgress={currentSession?.discoveryProgress}
         loading={loading}
-        onRefreshQuality={assessQuality}
-        onRefreshEnhancedQuality={assessEnhancedQuality}
+        onRefreshQuality={assessUnifiedQuality}
         className="hidden md:flex"
       />
 
@@ -648,7 +646,7 @@ export function PRDChatPanel() {
           onSelectSession={setCurrentSession}
           onCreateSession={openTypeSelector}
           onPlanToggle={handlePlanToggle}
-          onRefreshQuality={assessQuality}
+          onRefreshQuality={assessUnifiedQuality}
           onExecutePrd={handleExecutePrd}
         />
 
@@ -719,7 +717,7 @@ export function PRDChatPanel() {
             qualityAssessment={qualityAssessment}
             executionMode={currentWorkflow?.executionMode}
             onSendMessage={handleSendMessage}
-            onRefreshQuality={assessQuality}
+            onRefreshQuality={assessUnifiedQuality}
             onExecutionModeChange={handleExecutionModeChange}
             onMissingSectionClick={handleMissingSectionClick}
           />

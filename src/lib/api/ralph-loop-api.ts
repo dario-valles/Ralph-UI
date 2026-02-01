@@ -23,6 +23,7 @@ import type {
   LearningEntry,
   AddLearningInput,
   UpdateLearningInput,
+  AnalyzePrdStoriesResponse,
 } from '@/types'
 import { invoke } from '../invoke'
 
@@ -406,5 +407,28 @@ export const ralphLoopApi = {
   /** Export learnings to markdown (US-6.3: Learning Analytics) */
   exportLearnings: async (projectPath: string, prdName: string): Promise<string> => {
     return await invoke('export_ralph_learnings', { projectPath, prdName })
+  },
+
+  // ============================================================================
+  // PRD Story Analysis API (Document Section Detection)
+  // ============================================================================
+
+  /** Analyze PRD stories to detect if they look like document sections rather than
+   * implementation tasks. This helps catch cases where a PRD was parsed and the
+   * "stories" are actually just document headings like "Executive Summary".
+   *
+   * @returns Analysis result including:
+   * - hasImplementationStories: true if there are real implementation tasks
+   * - documentSectionCount: number of stories that look like doc sections
+   * - documentSectionIds: IDs of the document section stories
+   * - suggestRegeneration: true if AI story regeneration is recommended
+   */
+  analyzePrdStories: async (
+    projectPath: string,
+    prdName: string
+  ): Promise<AnalyzePrdStoriesResponse> => {
+    return await invoke('analyze_ralph_prd_stories', {
+      request: { projectPath, prdName },
+    })
   },
 }

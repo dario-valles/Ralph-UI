@@ -183,7 +183,7 @@ describe('PRDChatPanel', () => {
   const mockLoadHistory = vi.fn().mockResolvedValue(undefined)
   const mockLoadSessions = vi.fn().mockResolvedValue(undefined)
   const mockClearError = vi.fn()
-  const mockAssessQuality = vi.fn()
+  const mockAssessUnifiedQuality = vi.fn()
   const mockLoadGuidedQuestions = vi.fn()
   const mockPreviewExtraction = vi.fn()
   const mockSetStructuredMode = vi.fn()
@@ -201,6 +201,7 @@ describe('PRDChatPanel', () => {
     streaming: false,
     error: null,
     qualityAssessment: null,
+    unifiedQualityReport: null,
     guidedQuestions: [],
     extractedContent: null,
     processingSessionId: null,
@@ -215,7 +216,7 @@ describe('PRDChatPanel', () => {
     loadHistory: mockLoadHistory,
     loadSessions: mockLoadSessions,
     clearError: mockClearError,
-    assessQuality: mockAssessQuality,
+    assessUnifiedQuality: mockAssessUnifiedQuality,
     loadGuidedQuestions: mockLoadGuidedQuestions,
     previewExtraction: mockPreviewExtraction,
     setStructuredMode: mockSetStructuredMode,
@@ -632,7 +633,7 @@ describe('PRDChatPanel', () => {
       expect(screen.getByText(/Send a message first/i)).toBeInTheDocument()
     })
 
-    it('calls assessQuality when check quality is clicked', async () => {
+    it('calls assessUnifiedQuality when check quality is clicked', async () => {
       const user = userEvent.setup()
       renderWithRouter(<PRDChatPanel />)
 
@@ -646,7 +647,7 @@ describe('PRDChatPanel', () => {
       await user.click(qualityOption)
 
       await waitFor(() => {
-        expect(mockAssessQuality).toHaveBeenCalled()
+        expect(mockAssessUnifiedQuality).toHaveBeenCalled()
       })
     })
 

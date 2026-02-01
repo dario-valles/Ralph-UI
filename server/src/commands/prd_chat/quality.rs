@@ -4,7 +4,7 @@ use crate::file_storage::chat_ops;
 use crate::models::{
     ChatMessage, DetailedQualityAssessment, EnhancedQualityCheck, EnhancedQualityReport,
     ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QualityCheck,
-    QualityCheckSeverity, QualityGrade, QuestionType, VagueLanguageWarning,
+    QualityCheckSeverity, QualityGrade, QuestionType, UnifiedQualityReport, VagueLanguageWarning,
 };
 use crate::utils::as_path;
 use regex::Regex;
@@ -2773,6 +2773,174 @@ pub fn generate_guided_questions(prd_type: PRDType) -> Vec<GuidedQuestion> {
     });
 
     questions
+}
+
+// ============================================================================
+// Unified Quality Assessment (Consolidates Basic + Enhanced)
+// ============================================================================
+
+/// Check ID to dimension mapping for deriving 3D scores from 13 checks
+/// Completeness: Checks #1, #5, #6, #10, #13 (content coverage)
+/// Clarity: Checks #2, #3, #4, #8 (communication quality)
+/// Actionability: Checks #7, #9, #11, #12 (execution readiness)
+const COMPLETENESS_CHECKS: &[&str] = &[
+    "executive_summary",     // Check 1
+    "user_stories_ac",       // Check 5
+    "testable_requirements", // Check 6
+    "task_breakdown",        // Check 10
+    "concrete_criteria",     // Check 13
+];
+
+const CLARITY_CHECKS: &[&str] = &[
+    "user_impact",     // Check 2
+    "business_impact", // Check 3
+    "smart_goals",     // Check 4
+    "architecture",    // Check 8
+];
+
+const ACTIONABILITY_CHECKS: &[&str] = &[
+    "nfr_targets",          // Check 7
+    "out_of_scope",         // Check 9
+    "complexity_estimates", // Check 11
+    "dependencies",         // Check 12
+];
+
+/// Calculate a dimension score (0-100) from a subset of checks
+fn calculate_dimension_score(checks: &[EnhancedQualityCheck], dimension_check_ids: &[&str]) -> u8 {
+    let matching_checks: Vec<_> = checks
+        .iter()
+        .filter(|c| dimension_check_ids.contains(&c.id.as_str()))
+        .collect();
+
+    if matching_checks.is_empty() {
+        return 0;
+    }
+
+    let total_score: u16 = matching_checks.iter().map(|c| c.score as u16).sum();
+    let max_score: u16 = matching_checks.iter().map(|c| c.max_score as u16).sum();
+
+    if max_score == 0 {
+        return 0;
+    }
+
+    ((total_score as f32 / max_score as f32) * 100.0) as u8
+}
+
+/// Generate suggestions based on failed checks
+fn generate_suggestions_from_checks(checks: &[EnhancedQualityCheck]) -> Vec<String> {
+    checks
+        .iter()
+        .filter(|c| !c.passed && c.suggestion.is_some())
+        .map(|c| c.suggestion.clone().unwrap())
+        .take(5) // Limit to top 5 suggestions
+        .collect()
+}
+
+/// Generate missing sections list from failed checks
+fn generate_missing_sections_from_checks(checks: &[EnhancedQualityCheck]) -> Vec<String> {
+    checks
+        .iter()
+        .filter(|c| !c.passed)
+        .map(|c| c.name.clone())
+        .collect()
+}
+
+/// Run unified quality assessment combining 13-check system with 3D dimension scores
+pub fn run_unified_quality_assessment(
+    content: &str,
+    prd_type: Option<&str>,
+) -> UnifiedQualityReport {
+    // Run the 13-point enhanced quality checks
+    let enhanced_report = run_enhanced_quality_checks(content, prd_type);
+
+    // Extract derived dimension scores from the checks
+    let completeness = calculate_dimension_score(&enhanced_report.checks, COMPLETENESS_CHECKS);
+    let clarity = calculate_dimension_score(&enhanced_report.checks, CLARITY_CHECKS);
+    let actionability = calculate_dimension_score(&enhanced_report.checks, ACTIONABILITY_CHECKS);
+
+    // Calculate overall score as weighted average (same weights as legacy)
+    // 40% completeness, 30% clarity, 30% actionability
+    let overall =
+        ((completeness as f32 * 0.4) + (clarity as f32 * 0.3) + (actionability as f32 * 0.3)) as u8;
+
+    // Generate suggestions from failed checks
+    let suggestions = generate_suggestions_from_checks(&enhanced_report.checks);
+
+    // Generate missing sections from failed checks
+    let missing_sections = generate_missing_sections_from_checks(&enhanced_report.checks);
+
+    UnifiedQualityReport {
+        // 13-point checklist
+        checks: enhanced_report.checks,
+        passed_count: enhanced_report.passed_count,
+        total_checks: enhanced_report.total_checks,
+
+        // 3D dimension scores (derived from checks)
+        completeness,
+        clarity,
+        actionability,
+        overall,
+
+        // Issue detection
+        vague_warnings: enhanced_report.vague_warnings,
+        missing_sections,
+
+        // Summary
+        grade: enhanced_report.grade,
+        ready_for_export: enhanced_report.ready_for_export,
+        summary: enhanced_report.summary,
+        suggestions,
+    }
+}
+
+/// Public API for unified quality assessment - replaces both assess_prd_quality and assess_enhanced_prd_quality
+pub async fn assess_unified_prd_quality(
+    session_id: String,
+    project_path: String,
+) -> Result<UnifiedQualityReport, String> {
+    let project_path_obj = as_path(&project_path);
+
+    // Get session from file storage
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Session not found: {}", e))?;
+
+    // Try to use PRD plan file content first if available
+    let plan_path = crate::watchers::get_prd_plan_file_path(
+        &project_path,
+        &session_id,
+        session.title.as_deref(),
+        session.prd_id.as_deref(),
+    );
+
+    let content = if plan_path.exists() {
+        log::info!(
+            "Unified quality assessment from PRD plan file: {:?}",
+            plan_path
+        );
+        std::fs::read_to_string(&plan_path)
+            .map_err(|e| format!("Failed to read PRD file: {}", e))?
+    } else {
+        // Fall back to chat messages
+        let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+        messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    };
+
+    let report = run_unified_quality_assessment(&content, session.prd_type.as_deref());
+
+    // Update session with quality score
+    chat_ops::update_chat_session_quality_score(
+        project_path_obj,
+        &session_id,
+        report.overall as i32,
+    )
+    .map_err(|e| format!("Failed to update quality score: {}", e))?;
+
+    Ok(report)
 }
 
 #[cfg(test)]

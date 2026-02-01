@@ -18,6 +18,7 @@ import type {
   ChatAttachment,
   QualityAssessment,
   EnhancedQualityReport,
+  UnifiedQualityReport,
   ExtractedPRDContent,
   PRDTypeValue,
 } from '@/types'
@@ -32,6 +33,7 @@ export const createMessagingSlice = (
   // Initial state
   qualityAssessment: null,
   enhancedQualityReport: null,
+  unifiedQualityReport: null,
   guidedQuestions: [],
   extractedContent: null,
 
@@ -198,6 +200,48 @@ export const createMessagingSlice = (
     try {
       const report = await prdChatApi.assessEnhancedQuality(ctx.session.id, ctx.projectPath)
       set({ enhancedQualityReport: report, loading: false })
+      return report
+    } catch (error) {
+      set({ error: errorToString(error), loading: false })
+      return null
+    }
+  },
+
+  // Assess unified quality - combines 13-check system with 3D dimension scores
+  assessUnifiedQuality: async (): Promise<UnifiedQualityReport | null> => {
+    const ctx = getSessionWithPath(get)
+    if (!ctx) return null
+
+    set({ loading: true, error: null })
+    try {
+      const report = await prdChatApi.assessUnifiedQuality(ctx.session.id, ctx.projectPath)
+      // Also update legacy fields for backwards compatibility
+      const legacyAssessment = {
+        completeness: report.completeness,
+        clarity: report.clarity,
+        actionability: report.actionability,
+        overall: report.overall,
+        missingSections: report.missingSections,
+        suggestions: report.suggestions,
+        readyForExport: report.readyForExport,
+      }
+      set({
+        unifiedQualityReport: report,
+        qualityAssessment: legacyAssessment,
+        enhancedQualityReport: {
+          checks: report.checks,
+          vagueWarnings: report.vagueWarnings,
+          totalScore: report.checks.reduce((sum, c) => sum + c.score, 0),
+          maxScore: report.checks.reduce((sum, c) => sum + c.maxScore, 0),
+          percentage: report.overall,
+          grade: report.grade,
+          passedCount: report.passedCount,
+          totalChecks: report.totalChecks,
+          readyForExport: report.readyForExport,
+          summary: report.summary,
+        },
+        loading: false,
+      })
       return report
     } catch (error) {
       set({ error: errorToString(error), loading: false })

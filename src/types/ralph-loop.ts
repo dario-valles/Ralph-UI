@@ -521,3 +521,29 @@ export interface UpdateLearningInput {
   /** Updated story ID (optional, empty string to remove) */
   storyId?: string
 }
+
+// ============================================================================
+// PRD Story Analysis Types (Document Section Detection)
+// ============================================================================
+
+/** Request to analyze PRD stories for document sections */
+export interface AnalyzePrdStoriesRequest {
+  /** Project path */
+  projectPath: string
+  /** PRD name (without .json extension) */
+  prdName: string
+}
+
+/** Response from analyzing PRD stories */
+export interface AnalyzePrdStoriesResponse {
+  /** Whether there are implementation-focused stories (not just doc sections) */
+  hasImplementationStories: boolean
+  /** Number of stories that appear to be document sections */
+  documentSectionCount: number
+  /** Total number of stories */
+  totalStories: number
+  /** List of story IDs that appear to be document sections */
+  documentSectionIds: string[]
+  /** Whether we suggest regenerating stories with AI */
+  suggestRegeneration: boolean
+}

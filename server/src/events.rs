@@ -799,6 +799,7 @@ mod tests {
             file_path: "/home/user/project/docs/prd.md".to_string(),
             relative_path: "docs/prd.md".to_string(),
             detected_at: "2024-01-01T00:00:00Z".to_string(),
+            auto_assigned: false,
         };
 
         let json = serde_json::to_string(&payload).unwrap();

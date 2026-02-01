@@ -9,6 +9,7 @@ import type {
   ChatAttachment,
   QualityAssessment,
   EnhancedQualityReport,
+  UnifiedQualityReport,
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
@@ -63,16 +64,24 @@ export interface ChatSessionSlice {
  */
 export interface MessagingSlice {
   // State
+  /** @deprecated Use unifiedQualityReport instead - kept for backwards compatibility */
   qualityAssessment: QualityAssessment | null
+  /** @deprecated Use unifiedQualityReport instead - kept for backwards compatibility */
   enhancedQualityReport: EnhancedQualityReport | null
+  /** Unified quality report combining 13-check system with 3D dimension scores */
+  unifiedQualityReport: UnifiedQualityReport | null
   guidedQuestions: GuidedQuestion[]
   extractedContent: ExtractedPRDContent | null
 
   // Actions
   sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>
   loadHistory: (sessionId: string, projectPath?: string) => Promise<void>
+  /** @deprecated Use assessUnifiedQuality instead */
   assessQuality: () => Promise<QualityAssessment | null>
+  /** @deprecated Use assessUnifiedQuality instead */
   assessEnhancedQuality: () => Promise<EnhancedQualityReport | null>
+  /** Assess unified quality - combines 13-check system with 3D dimension scores */
+  assessUnifiedQuality: () => Promise<UnifiedQualityReport | null>
   loadGuidedQuestions: (prdType: PRDTypeValue) => Promise<void>
   previewExtraction: () => Promise<ExtractedPRDContent | null>
   setStructuredMode: (enabled: boolean) => Promise<void>

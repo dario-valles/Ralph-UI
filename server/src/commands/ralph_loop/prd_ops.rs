@@ -96,6 +96,32 @@ pub struct ExtractedStory {
     pub acceptance_criteria: Vec<String>,
 }
 
+/// Request to analyze stories in a PRD
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzePrdStoriesRequest {
+    /// Project path
+    pub project_path: String,
+    /// PRD name (without .json extension)
+    pub prd_name: String,
+}
+
+/// Response from analyzing PRD stories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzePrdStoriesResponse {
+    /// Whether there are implementation-focused stories (not just doc sections)
+    pub has_implementation_stories: bool,
+    /// Number of stories that appear to be document sections
+    pub document_section_count: usize,
+    /// Total number of stories
+    pub total_stories: usize,
+    /// List of story IDs that appear to be document sections
+    pub document_section_ids: Vec<String>,
+    /// Whether we suggest regenerating stories with AI
+    pub suggest_regeneration: bool,
+}
+
 // ============================================================================
 // PRD Operations
 // ============================================================================
@@ -903,49 +929,89 @@ pub(crate) fn parse_markdown_stories_with_acceptance(content: &str) -> Vec<Ralph
     stories
 }
 
-/// Build prompt for AI to extract user stories from PRD content
+/// Build prompt for AI to extract IMPLEMENTATION user stories from PRD content.
+///
+/// This prompt is specifically designed to extract actionable CODE IMPLEMENTATION
+/// tasks, NOT document sections like "Executive Summary" or "Problem Statement".
 fn build_story_extraction_prompt(prd_content: &str) -> String {
     format!(
-        r#"Analyze this PRD document and extract all user stories in a structured format.
+        r#"Analyze this PRD document and extract IMPLEMENTATION user stories.
+
+## CRITICAL RULES - READ CAREFULLY
+
+You are extracting **CODE IMPLEMENTATION TASKS**, NOT documentation sections.
+
+**SKIP these document sections entirely - they are NOT implementation tasks:**
+- Executive Summary, Overview, Introduction, Background
+- Problem Statement, Current State, Current Situation
+- Goals, Success Metrics, KPIs, Objectives
+- Pain Points, Opportunities, User Impact, Business Impact
+- Non-Functional Requirements (as a section heading)
+- Timeline, Roadmap, Out of Scope
+- Open Questions, Risks, Appendix, References
+- Any section that describes the document structure rather than code to write
+
+**EXTRACT these as implementation tasks:**
+- Features with specific code changes (e.g., "Add login form", "Implement API endpoint")
+- User stories with "As a user, I want..." format
+- Technical tasks (e.g., "Set up database schema", "Create React component")
+- Bug fixes or enhancements with clear code changes
+- Integration tasks (e.g., "Connect to payment API")
 
 ## PRD Content:
 {}
 
 ## Instructions:
-1. Identify all user stories, features, or tasks that should be implemented
-2. Assign each a unique ID in the format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
-3. Extract or create clear acceptance criteria for each story
+1. Read the PRD and identify features/tasks that require CODE CHANGES
+2. Skip all documentation sections (see list above)
+3. Create actionable stories with code-oriented acceptance criteria
+4. Acceptance criteria should be TESTABLE and describe CODE BEHAVIOR, not documentation
+5. Assign IDs in format US-X.X (e.g., US-1.1, US-1.2, US-2.1)
 
 ## Output Format:
 Return ONLY a JSON array with no additional text. Each story should have:
 - "id": string (US-X.X format)
-- "title": string (brief, actionable title)
-- "acceptance_criteria": array of strings
+- "title": string (brief, actionable - describes code to write)
+- "acceptance_criteria": array of strings (each describes testable code behavior)
 
-Example:
+## Good Example:
 ```json
 [
   {{
     "id": "US-1.1",
-    "title": "User Login",
+    "title": "Implement user login form",
     "acceptance_criteria": [
-      "User can enter email and password",
-      "Form validates inputs before submission",
-      "Shows error message on invalid credentials"
+      "Login form component renders with email and password fields",
+      "Form validates email format before submission",
+      "Submit button is disabled while request is pending",
+      "Error message displays on invalid credentials",
+      "User is redirected to dashboard on successful login"
     ]
   }},
   {{
     "id": "US-1.2",
-    "title": "User Registration",
+    "title": "Create authentication API endpoint",
     "acceptance_criteria": [
-      "User can create account with email",
-      "Password must meet security requirements"
+      "POST /api/auth/login endpoint accepts email and password",
+      "Returns 200 with JWT token on valid credentials",
+      "Returns 401 with error message on invalid credentials",
+      "Rate limits to 5 attempts per minute per IP"
     ]
   }}
 ]
 ```
 
-Extract the stories now and return ONLY the JSON array:"#,
+## BAD Example (DO NOT DO THIS):
+```json
+[
+  {{"id": "task-1", "title": "Executive Summary", ...}},
+  {{"id": "task-2", "title": "Problem Statement", ...}},
+  {{"id": "task-3", "title": "Goals & Success Metrics", ...}}
+]
+```
+These are document sections, NOT implementation tasks!
+
+Now extract ONLY implementation tasks and return the JSON array:"#,
         prd_content
     )
 }
@@ -1000,6 +1066,111 @@ fn extract_dependency_ids(line: &str) -> Vec<String> {
     Vec::new()
 }
 
+/// Check if a story title looks like a document section rather than an implementation task.
+///
+/// Document sections are common PRD structural elements like "Executive Summary",
+/// "Problem Statement", "Goals & Success Metrics" etc. that should NOT be treated
+/// as implementation tasks for the Ralph Loop.
+///
+/// Returns true if the title appears to be a document section header.
+pub fn is_document_section(title: &str) -> bool {
+    let lower = title.to_lowercase();
+
+    // Document section patterns that are NOT implementation tasks
+    let doc_patterns = [
+        // Executive/Summary sections
+        "executive summary",
+        "overview",
+        "introduction",
+        "background",
+        "context",
+        "summary",
+        // Problem/Solution sections
+        "problem statement",
+        "current state",
+        "current situation",
+        "proposed solution",
+        "solution overview",
+        // Analysis sections
+        "pain point",
+        "opportunity",
+        "user impact",
+        "business impact",
+        "competitive analysis",
+        "market analysis",
+        "risk assessment",
+        "risk analysis",
+        // Goals/Metrics sections
+        "goals",
+        "success metrics",
+        "key results",
+        "objectives",
+        "kpis",
+        // Requirements overview (not specific requirements)
+        "non-functional requirements",
+        "constraints",
+        "assumptions",
+        "dependencies overview",
+        // Planning/Meta sections
+        "timeline",
+        "roadmap",
+        "implementation roadmap",
+        "out of scope",
+        "open questions",
+        "appendix",
+        "references",
+        "glossary",
+        "revision history",
+        "document version",
+        "validation checkpoints",
+        // Technical overview (not specific implementation)
+        "technical considerations",
+        "architecture overview",
+        "system overview",
+    ];
+
+    // Check for exact matches and partial matches
+    for pattern in doc_patterns {
+        if lower.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Also check for numbered section patterns like "1. Executive Summary" or "## 2. Problem Statement"
+    // These are typically document structure, not implementation tasks
+    // Strip leading numbers and check if remainder matches doc patterns
+    let without_number =
+        lower.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c.is_whitespace());
+    if without_number != lower {
+        // There was a leading number, check if remainder is a doc section
+        for pattern in doc_patterns {
+            if without_number.starts_with(pattern) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Analyze a list of stories to determine if they look like document sections
+/// rather than implementation tasks.
+///
+/// Returns a tuple of (document_section_count, total_count, has_implementation_stories)
+pub fn analyze_stories_for_document_sections(stories: &[RalphStory]) -> (usize, usize, bool) {
+    let total = stories.len();
+    let doc_count = stories
+        .iter()
+        .filter(|s| is_document_section(&s.title))
+        .count();
+
+    // Stories are considered implementation-focused if less than 50% are doc sections
+    // AND there's at least one story that doesn't look like a doc section
+    let has_impl = doc_count < total && (total - doc_count) > 0;
+
+    (doc_count, total, has_impl)
+}
+
 /// Extract effort estimate from a line like "**Effort:** S" or "Effort: M/L/XL"
 fn extract_effort(line: &str) -> Option<String> {
     let cleaned = line.replace("**", "").replace("*", "");
@@ -1022,6 +1193,52 @@ fn extract_effort(line: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Analyze the stories in a PRD to detect if they look like document sections
+/// rather than implementation tasks.
+///
+/// This helps detect cases where a PRD was parsed and the "stories" are actually
+/// just document headings like "Executive Summary", "Problem Statement" etc.
+/// which should NOT be executed as implementation tasks.
+pub fn analyze_prd_stories(
+    request: AnalyzePrdStoriesRequest,
+) -> Result<AnalyzePrdStoriesResponse, String> {
+    let project_path = PathBuf::from(&request.project_path);
+    let executor = PrdExecutor::new(&project_path, &request.prd_name);
+    let prd = executor.read_prd()?;
+
+    let document_section_ids: Vec<String> = prd
+        .stories
+        .iter()
+        .filter(|s| is_document_section(&s.title))
+        .map(|s| s.id.clone())
+        .collect();
+
+    let doc_count = document_section_ids.len();
+    let total = prd.stories.len();
+
+    // Suggest regeneration if:
+    // 1. More than 50% of stories are document sections, OR
+    // 2. All stories are document sections, OR
+    // 3. No proper US-X.X format IDs are found
+    let has_proper_story_ids = prd
+        .stories
+        .iter()
+        .any(|s| s.id.starts_with("US-") || s.id.starts_with("T-"));
+
+    let has_implementation_stories =
+        doc_count < total && (total - doc_count) > 0 && has_proper_story_ids;
+    let suggest_regeneration =
+        !has_implementation_stories || (doc_count as f64 / total as f64 > 0.5);
+
+    Ok(AnalyzePrdStoriesResponse {
+        has_implementation_stories,
+        document_section_count: doc_count,
+        total_stories: total,
+        document_section_ids,
+        suggest_regeneration,
+    })
 }
 
 /// Get the prompt.md content
@@ -1135,5 +1352,150 @@ mod tests {
             result,
             Some(("US-1.1".to_string(), "Some Title".to_string()))
         );
+    }
+
+    // =========================================================================
+    // Document Section Detection Tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_document_section_executive_summary() {
+        assert!(is_document_section("Executive Summary"));
+        assert!(is_document_section("executive summary"));
+        assert!(is_document_section("1. Executive Summary"));
+        assert!(is_document_section("## Executive Summary"));
+    }
+
+    #[test]
+    fn test_is_document_section_problem_statement() {
+        assert!(is_document_section("Problem Statement"));
+        assert!(is_document_section("Current State"));
+        assert!(is_document_section("Current Situation"));
+        assert!(is_document_section("2. Problem Statement"));
+    }
+
+    #[test]
+    fn test_is_document_section_goals_metrics() {
+        assert!(is_document_section("Goals"));
+        assert!(is_document_section("Success Metrics"));
+        assert!(is_document_section("Key Results"));
+        assert!(is_document_section("Goals & Success Metrics"));
+        assert!(is_document_section("3. Goals and Success Metrics"));
+    }
+
+    #[test]
+    fn test_is_document_section_technical_sections() {
+        assert!(is_document_section("Non-Functional Requirements"));
+        assert!(is_document_section("Technical Considerations"));
+        assert!(is_document_section("Architecture Overview"));
+        assert!(is_document_section("System Overview"));
+    }
+
+    #[test]
+    fn test_is_document_section_planning_sections() {
+        assert!(is_document_section("Timeline"));
+        assert!(is_document_section("Roadmap"));
+        assert!(is_document_section("Implementation Roadmap"));
+        assert!(is_document_section("Out of Scope"));
+        assert!(is_document_section("Open Questions"));
+        assert!(is_document_section("Appendix"));
+        assert!(is_document_section("References"));
+    }
+
+    #[test]
+    fn test_is_document_section_analysis_sections() {
+        assert!(is_document_section("Pain Points"));
+        assert!(is_document_section("Opportunity"));
+        assert!(is_document_section("User Impact"));
+        assert!(is_document_section("Business Impact"));
+        assert!(is_document_section("Competitive Analysis"));
+        assert!(is_document_section("Risk Assessment"));
+    }
+
+    #[test]
+    fn test_is_not_document_section_implementation_tasks() {
+        // These should NOT be detected as document sections
+        assert!(!is_document_section("Implement user login form"));
+        assert!(!is_document_section("Add authentication API endpoint"));
+        assert!(!is_document_section("Create database schema"));
+        assert!(!is_document_section("Build React component"));
+        assert!(!is_document_section("User Login"));
+        assert!(!is_document_section("User Registration"));
+        assert!(!is_document_section("Payment Processing"));
+        assert!(!is_document_section("File Upload Feature"));
+    }
+
+    #[test]
+    fn test_is_not_document_section_user_stories() {
+        // User story titles should NOT be detected as document sections
+        assert!(!is_document_section("US-1.1: User Login"));
+        assert!(!is_document_section("T-1: Setup Database"));
+        assert!(!is_document_section("Implement OAuth integration"));
+    }
+
+    #[test]
+    fn test_is_document_section_numbered() {
+        // Numbered sections should be detected
+        assert!(is_document_section("1. Executive Summary"));
+        assert!(is_document_section("2. Problem Statement"));
+        assert!(is_document_section("10. Appendix"));
+
+        // But numbered implementation tasks should not
+        assert!(!is_document_section("1. Add login form"));
+        assert!(!is_document_section("2. Create API endpoint"));
+    }
+
+    #[test]
+    fn test_analyze_stories_all_doc_sections() {
+        let stories = vec![
+            RalphStory::new("task-1", "Executive Summary", "Write summary"),
+            RalphStory::new("task-2", "Problem Statement", "Write problem"),
+            RalphStory::new("task-3", "Goals & Success Metrics", "Write goals"),
+        ];
+
+        let (doc_count, total, has_impl) = analyze_stories_for_document_sections(&stories);
+
+        assert_eq!(doc_count, 3);
+        assert_eq!(total, 3);
+        assert!(!has_impl); // No implementation stories
+    }
+
+    #[test]
+    fn test_analyze_stories_all_implementation() {
+        let stories = vec![
+            RalphStory::new(
+                "US-1.1",
+                "Implement user login",
+                "- Form renders\n- Validates input",
+            ),
+            RalphStory::new(
+                "US-1.2",
+                "Create auth API",
+                "- POST /api/auth\n- Returns JWT",
+            ),
+            RalphStory::new("US-1.3", "Add dashboard page", "- Shows user data"),
+        ];
+
+        let (doc_count, total, has_impl) = analyze_stories_for_document_sections(&stories);
+
+        assert_eq!(doc_count, 0);
+        assert_eq!(total, 3);
+        assert!(has_impl); // All are implementation stories
+    }
+
+    #[test]
+    fn test_analyze_stories_mixed() {
+        let stories = vec![
+            RalphStory::new("task-1", "Executive Summary", "Write summary"),
+            RalphStory::new("US-1.1", "Implement user login", "- Form renders"),
+            RalphStory::new("task-3", "Problem Statement", "Write problem"),
+            RalphStory::new("US-1.2", "Create auth API", "- POST /api/auth"),
+        ];
+
+        let (doc_count, total, has_impl) = analyze_stories_for_document_sections(&stories);
+
+        assert_eq!(doc_count, 2); // Executive Summary, Problem Statement
+        assert_eq!(total, 4);
+        assert!(has_impl); // 2 implementation stories exist
     }
 }

@@ -8,7 +8,7 @@ import { useAvailableAgents } from '@/hooks/useAvailableAgents'
 import { useTreeViewSettings } from '@/hooks/useTreeViewSettings'
 import { getDefaultModel } from '@/lib/fallback-models'
 import { ralphLoopApi } from '@/lib/backend-api'
-import type { RalphStory, RalphLoopState, AgentType } from '@/types'
+import type { RalphStory, RalphLoopState, AgentType, AnalyzePrdStoriesResponse } from '@/types'
 
 export interface ConfigOverrides {
   maxIterations?: string
@@ -63,6 +63,10 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
   const [regeneratingStories, setRegeneratingStories] = useState(false)
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
   const [executionPreviewOpen, setExecutionPreviewOpen] = useState(false)
+
+  // Story analysis state (detects document sections vs implementation tasks)
+  const [storyAnalysis, setStoryAnalysis] = useState<AnalyzePrdStoriesResponse | null>(null)
+  const [storyAnalysisLoading, setStoryAnalysisLoading] = useState(false)
 
   // Available agents - use shared hook
   const { agents: availableAgents } = useAvailableAgents()
@@ -211,6 +215,30 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
       checkForActiveExecution()
     }
   }, [prd, activeExecutionId, checkForActiveExecution])
+
+  // Analyze stories to detect document sections when PRD loads
+  useEffect(() => {
+    if (!prd || !projectPath || !prdName) {
+      setStoryAnalysis(null)
+      return
+    }
+
+    const analyzeStories = async () => {
+      setStoryAnalysisLoading(true)
+      try {
+        const analysis = await ralphLoopApi.analyzePrdStories(projectPath, prdName)
+        setStoryAnalysis(analysis)
+      } catch (err) {
+        console.error('Failed to analyze PRD stories:', err)
+        // Don't show error to user - this is a non-critical analysis
+        setStoryAnalysis(null)
+      } finally {
+        setStoryAnalysisLoading(false)
+      }
+    }
+
+    analyzeStories()
+  }, [prd, projectPath, prdName])
 
   // Detect existing worktrees for this PRD
   useEffect(() => {
@@ -577,6 +605,8 @@ export function useRalphLoopDashboard({ projectPath, prdName }: UseRalphLoopDash
     setRegenerateConfirmOpen,
     executionPreviewOpen,
     setExecutionPreviewOpen,
+    storyAnalysis,
+    storyAnalysisLoading,
 
     // Worktree dialog state
     diffDialogOpen,

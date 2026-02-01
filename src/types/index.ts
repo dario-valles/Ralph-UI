@@ -97,6 +97,8 @@ export type {
   VagueLanguageWarning,
   QualityGrade,
   EnhancedQualityReport,
+  // Unified quality report (consolidates Basic + Enhanced)
+  UnifiedQualityReport,
   // Structured discovery question types
   DiscoveryCategory,
   DiscoveryQuestion,
@@ -214,6 +216,8 @@ export type {
   LearningsFile,
   AddLearningInput,
   UpdateLearningInput,
+  AnalyzePrdStoriesRequest,
+  AnalyzePrdStoriesResponse,
 } from './ralph-loop'
 
 // ============================================================================

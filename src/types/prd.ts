@@ -242,6 +242,52 @@ export interface EnhancedQualityReport {
   summary: string
 }
 
+/**
+ * Unified quality report that combines the 13-check system with 3D dimension scores.
+ * This consolidates the previous separate Basic (QualityAssessment) and Enhanced
+ * (EnhancedQualityReport) systems into a single comprehensive report.
+ *
+ * The 3D dimension scores are derived from the 13 checks:
+ * - Completeness: Checks #1, #5, #6, #10, #13 (content coverage)
+ * - Clarity: Checks #2, #3, #4, #8 (communication quality)
+ * - Actionability: Checks #7, #9, #11, #12 (execution readiness)
+ */
+export interface UnifiedQualityReport {
+  // === 13-Point Checklist ===
+  /** Individual quality check results */
+  checks: EnhancedQualityCheck[]
+  /** Number of checks that passed */
+  passedCount: number
+  /** Total number of checks */
+  totalChecks: number
+
+  // === 3D Dimension Scores (derived from checks) ===
+  /** Completeness score (0-100) - from checks #1, #5, #6, #10, #13 */
+  completeness: number
+  /** Clarity score (0-100) - from checks #2, #3, #4, #8 */
+  clarity: number
+  /** Actionability score (0-100) - from checks #7, #9, #11, #12 */
+  actionability: number
+  /** Overall quality score (0-100) */
+  overall: number
+
+  // === Issue Detection ===
+  /** Vague language warnings */
+  vagueWarnings: VagueLanguageWarning[]
+  /** List of missing sections (for backwards compatibility) */
+  missingSections: string[]
+
+  // === Summary ===
+  /** Quality grade based on overall percentage */
+  grade: QualityGrade
+  /** Whether the PRD is ready for export */
+  readyForExport: boolean
+  /** Summary of quality assessment */
+  summary: string
+  /** Suggestions for improving the PRD */
+  suggestions: string[]
+}
+
 // ============================================================================
 // Structured Discovery Question Types
 // ============================================================================

@@ -8,6 +8,7 @@ import type {
   QualityAssessment,
   DetailedQualityAssessment,
   EnhancedQualityReport,
+  UnifiedQualityReport,
   GuidedQuestion,
   ExtractedPRDContent,
   PRDTypeValue,
@@ -74,12 +75,18 @@ export const prdChatApi = {
     return await invoke('delete_prd_chat_session', { sessionId, projectPath })
   },
 
-  /** Assess the quality of a PRD chat session before export */
+  /**
+   * @deprecated Use assessUnifiedQuality instead
+   * Assess the quality of a PRD chat session before export
+   */
   assessQuality: async (sessionId: string, projectPath: string): Promise<QualityAssessment> => {
     return await invoke('assess_prd_quality', { sessionId, projectPath })
   },
 
-  /** Assess detailed quality with specific checks (vague language, testability, etc.) */
+  /**
+   * @deprecated Use assessUnifiedQuality instead - this endpoint is unused
+   * Assess detailed quality with specific checks (vague language, testability, etc.)
+   */
   assessDetailedQuality: async (
     sessionId: string,
     projectPath: string
@@ -87,12 +94,23 @@ export const prdChatApi = {
     return await invoke('assess_detailed_prd_quality', { sessionId, projectPath })
   },
 
-  /** Assess enhanced quality with 13-point checklist and vague language detection */
+  /**
+   * @deprecated Use assessUnifiedQuality instead
+   * Assess enhanced quality with 13-point checklist and vague language detection
+   */
   assessEnhancedQuality: async (
     sessionId: string,
     projectPath: string
   ): Promise<EnhancedQualityReport> => {
     return await invoke('assess_enhanced_prd_quality', { sessionId, projectPath })
+  },
+
+  /** Assess unified quality combining 13-check system with 3D dimension scores */
+  assessUnifiedQuality: async (
+    sessionId: string,
+    projectPath: string
+  ): Promise<UnifiedQualityReport> => {
+    return await invoke('assess_unified_prd_quality', { sessionId, projectPath })
   },
 
   /** Get guided questions based on PRD type */

@@ -443,6 +443,12 @@ pub async fn route_ralph_loop_command(
             ))
         }
 
+        "analyze_ralph_prd_stories" => {
+            let request: commands::ralph_loop::AnalyzePrdStoriesRequest =
+                get_arg(&args, "request")?;
+            route_sync!(commands::ralph_loop::analyze_prd_stories(request))
+        }
+
         "regenerate_ralph_prd_stories" => {
             let request: commands::ralph_loop::RegenerateStoriesRequest =
                 get_arg(&args, "request")?;
@@ -530,6 +536,7 @@ pub fn is_ralph_loop_command(cmd: &str) -> bool {
                 | "convert_prd_file_to_ralph"
                 | "regenerate_ralph_prd_acceptance"
                 | "regenerate_ralph_prd_stories"
+                | "analyze_ralph_prd_stories"
                 | "start_ralph_loop"
                 | "stop_ralph_loop"
                 | "manual_assign_ralph_story"

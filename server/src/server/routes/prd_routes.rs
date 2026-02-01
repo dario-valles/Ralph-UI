@@ -135,6 +135,15 @@ pub async fn route_prd_command(
             )
         }
 
+        "assess_unified_prd_quality" => {
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let project_path: String = get_arg(&args, "projectPath")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::assess_unified_prd_quality(session_id, project_path)
+            )
+        }
+
         "preview_prd_extraction" => {
             let session_id: String = get_arg(&args, "sessionId")?;
             let project_path: String = get_arg(&args, "projectPath")?;
@@ -254,6 +263,7 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "assess_prd_quality"
             | "assess_detailed_prd_quality"
             | "assess_enhanced_prd_quality"
+            | "assess_unified_prd_quality"
             | "preview_prd_extraction"
             | "check_agent_availability"
             | "get_guided_questions"

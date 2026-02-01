@@ -6,6 +6,7 @@ import { RalphLoopHeader } from './RalphLoopHeader'
 import { DashboardTabs } from './DashboardTabs'
 import { ExecutionDialogs } from './ExecutionDialogs'
 import { ExecutionPreviewDialog } from './ExecutionPreviewDialog'
+import { DocumentSectionWarning } from './DocumentSectionWarning'
 
 export interface RalphLoopDashboardProps {
   projectPath: string
@@ -42,6 +43,7 @@ export function RalphLoopDashboard({
     setRegenerateConfirmOpen,
     executionPreviewOpen,
     setExecutionPreviewOpen,
+    storyAnalysis,
 
     // Worktree dialog state
     diffDialogOpen,
@@ -153,6 +155,15 @@ export function RalphLoopDashboard({
         onOpenTerminal={handleOpenTerminal}
         onOpenInEditor={handleOpenInEditor}
       />
+
+      {/* Document Section Warning */}
+      {storyAnalysis?.suggestRegeneration && (
+        <DocumentSectionWarning
+          analysis={storyAnalysis}
+          onRegenerateStories={handleRegenerateStories}
+          regenerating={regeneratingStories}
+        />
+      )}
 
       {/* Tabs for Stories, Progress, Terminal, etc. */}
       <DashboardTabs

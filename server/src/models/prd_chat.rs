@@ -631,6 +631,91 @@ impl Default for EnhancedQualityReport {
 }
 
 // ============================================================================
+// Unified Quality Report (Consolidates Basic + Enhanced)
+// ============================================================================
+
+/// Unified quality report that combines the 13-check system with 3D dimension scores.
+/// This consolidates the previous separate Basic (QualityAssessment) and Enhanced
+/// (EnhancedQualityReport) systems into a single comprehensive report.
+///
+/// The 3D dimension scores are derived from the 13 checks:
+/// - Completeness: Checks #1, #5, #6, #10, #13 (content coverage)
+/// - Clarity: Checks #2, #3, #4, #8 (communication quality)
+/// - Actionability: Checks #7, #9, #11, #12 (execution readiness)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnifiedQualityReport {
+    // === 13-Point Checklist ===
+    /// Individual quality check results
+    pub checks: Vec<EnhancedQualityCheck>,
+    /// Number of checks that passed
+    pub passed_count: u8,
+    /// Total number of checks
+    pub total_checks: u8,
+
+    // === 3D Dimension Scores (derived from checks) ===
+    /// Completeness score (0-100) - from checks #1, #5, #6, #10, #13
+    pub completeness: u8,
+    /// Clarity score (0-100) - from checks #2, #3, #4, #8
+    pub clarity: u8,
+    /// Actionability score (0-100) - from checks #7, #9, #11, #12
+    pub actionability: u8,
+    /// Overall quality score (0-100)
+    pub overall: u8,
+
+    // === Issue Detection ===
+    /// Vague language warnings
+    pub vague_warnings: Vec<VagueLanguageWarning>,
+    /// List of missing sections (kept for backwards compat with QualityAssessment)
+    pub missing_sections: Vec<String>,
+
+    // === Summary ===
+    /// Quality grade based on overall percentage
+    pub grade: QualityGrade,
+    /// Whether the PRD is ready for export
+    pub ready_for_export: bool,
+    /// Summary of quality assessment
+    pub summary: String,
+    /// Suggestions for improving the PRD
+    pub suggestions: Vec<String>,
+}
+
+impl Default for UnifiedQualityReport {
+    fn default() -> Self {
+        Self {
+            checks: vec![],
+            passed_count: 0,
+            total_checks: 0,
+            completeness: 0,
+            clarity: 0,
+            actionability: 0,
+            overall: 0,
+            vague_warnings: vec![],
+            missing_sections: vec![],
+            grade: QualityGrade::NeedsWork,
+            ready_for_export: false,
+            summary: "No quality checks performed yet".to_string(),
+            suggestions: vec![],
+        }
+    }
+}
+
+impl UnifiedQualityReport {
+    /// Convert to the legacy QualityAssessment for backwards compatibility
+    pub fn to_quality_assessment(&self) -> QualityAssessment {
+        QualityAssessment {
+            completeness: self.completeness,
+            clarity: self.clarity,
+            actionability: self.actionability,
+            overall: self.overall,
+            missing_sections: self.missing_sections.clone(),
+            suggestions: self.suggestions.clone(),
+            ready_for_export: self.ready_for_export,
+        }
+    }
+}
+
+// ============================================================================
 // Structured Discovery Question Types
 // ============================================================================
 

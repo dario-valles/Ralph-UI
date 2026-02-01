@@ -46,6 +46,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     // Messaging State
     qualityAssessment: messagingSlice.qualityAssessment,
     enhancedQualityReport: messagingSlice.enhancedQualityReport,
+    unifiedQualityReport: messagingSlice.unifiedQualityReport,
     guidedQuestions: messagingSlice.guidedQuestions,
     extractedContent: messagingSlice.extractedContent,
 
@@ -67,6 +68,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     loadHistory: messagingSlice.loadHistory,
     assessQuality: messagingSlice.assessQuality,
     assessEnhancedQuality: messagingSlice.assessEnhancedQuality,
+    assessUnifiedQuality: messagingSlice.assessUnifiedQuality,
     loadGuidedQuestions: messagingSlice.loadGuidedQuestions,
     previewExtraction: messagingSlice.previewExtraction,
     setStructuredMode: messagingSlice.setStructuredMode,

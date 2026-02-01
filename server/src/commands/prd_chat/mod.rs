@@ -47,7 +47,7 @@ pub use messaging::{get_prd_chat_history, send_prd_chat_message};
 // Re-export quality functions
 pub use quality::{
     assess_detailed_prd_quality, assess_enhanced_prd_quality, assess_prd_quality,
-    get_guided_questions,
+    assess_unified_prd_quality, get_guided_questions,
 };
 
 // Re-export extraction functions
