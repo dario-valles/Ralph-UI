@@ -339,6 +339,26 @@ fn extract_title_from_content(content: &str) -> Option<String> {
     None
 }
 
+/// Update a session's prd_id field (used for auto-assignment when agent creates PRD in standard location)
+pub async fn update_session_prd_id(
+    project_path: String,
+    session_id: String,
+    prd_id: String,
+) -> Result<(), String> {
+    let project_path_obj = as_path(&project_path);
+
+    chat_ops::update_chat_session_prd_id(project_path_obj, &session_id, &prd_id)
+        .map_err(|e| format!("Failed to update session prd_id: {}", e))?;
+
+    log::info!(
+        "📄 Updated session prd_id: session={}, prd_id={}",
+        session_id,
+        prd_id
+    );
+
+    Ok(())
+}
+
 // ============================================================================
 // Agent Availability
 // ============================================================================

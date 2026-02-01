@@ -160,9 +160,16 @@ export function PRDChatPanel() {
   // Handle auto-assigned PRD (created in .ralph-ui/prds/ standard location)
   const handlePrdAutoAssigned = useCallback(
     async (_payload: MdFileDetectedPayload, prdId: string) => {
-      if (!currentSession) return
+      if (!currentSession || !activeProject?.path) return
 
       console.log('[PRDChatPanel] PRD auto-assigned, updating session prd_id:', prdId)
+
+      // Persist prd_id to backend
+      try {
+        await prdChatApi.updateSessionPrdId(activeProject.path, currentSession.id, prdId)
+      } catch (err) {
+        console.error('[PRDChatPanel] Failed to persist prd_id:', err)
+      }
 
       // Update current session with new prdId
       setCurrentSession({ ...currentSession, prdId })
@@ -175,7 +182,7 @@ export function PRDChatPanel() {
 
       toast.success('PRD Created', 'Your PRD document has been saved and is now being watched.')
     },
-    [currentSession, setCurrentSession, startWatchingPlanFile, assessQuality]
+    [currentSession, activeProject?.path, setCurrentSession, startWatchingPlanFile, assessQuality]
   )
 
   // PRD chat events hook

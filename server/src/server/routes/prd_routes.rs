@@ -221,6 +221,17 @@ pub async fn route_prd_command(
             )
         }
 
+        "update_session_prd_id" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let prd_id: String = get_arg(&args, "prdId")?;
+            route_unit_async!(commands::prd_chat::update_session_prd_id(
+                project_path,
+                session_id,
+                prd_id
+            ))
+        }
+
         _ => Err(format!("Unknown PRD command: {}", cmd)),
     }
 }
@@ -252,5 +263,6 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "start_watching_prd_file"
             | "stop_watching_prd_file"
             | "assign_file_as_prd"
+            | "update_session_prd_id"
     )
 }

@@ -153,4 +153,13 @@ export const prdChatApi = {
   ): Promise<AssignPrdResult> => {
     return await invoke('assign_file_as_prd', { projectPath, sessionId, sourceFilePath })
   },
+
+  /** Update a session's prd_id (used for auto-assignment when agent creates PRD in standard location) */
+  updateSessionPrdId: async (
+    projectPath: string,
+    sessionId: string,
+    prdId: string
+  ): Promise<void> => {
+    return await invoke('update_session_prd_id', { projectPath, sessionId, prdId })
+  },
 }
