@@ -163,10 +163,39 @@ export const createMessagingSlice = (
 
       // Check if operation completed while we were away (last message is from assistant)
       // If so, clear streaming state since the response is already available
-      const { streaming, processingSessionId } = get()
+      const { streaming, processingSessionId, currentSession, sessions } = get()
       const lastMessage = messages[messages.length - 1]
       const operationCompleted =
         streaming && processingSessionId === sessionId && lastMessage?.role === 'assistant'
+
+      // For older sessions without prd_id, try to detect PRD from history
+      const session = currentSession?.id === sessionId
+        ? currentSession
+        : sessions.find(s => s.id === sessionId)
+
+      if (session && !session.prdId && messages.length > 0) {
+        // Attempt to detect and auto-assign PRD (runs in background, doesn't block)
+        prdChatApi.detectPrdFromHistory(resolvedPath!, sessionId).then(detectedPrdId => {
+          if (detectedPrdId) {
+            console.log('📄 [PRD Chat] Detected PRD from history:', detectedPrdId)
+            // Update session in store
+            set((state) => {
+              const updatedSession = state.currentSession?.id === sessionId
+                ? { ...state.currentSession, prdId: detectedPrdId }
+                : state.currentSession
+              const updatedSessions = state.sessions.map(s =>
+                s.id === sessionId ? { ...s, prdId: detectedPrdId } : s
+              )
+              return {
+                currentSession: updatedSession,
+                sessions: updatedSessions,
+              }
+            })
+          }
+        }).catch(err => {
+          console.warn('Failed to detect PRD from history:', err)
+        })
+      }
 
       return {
         messages,

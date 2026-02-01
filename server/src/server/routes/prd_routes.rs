@@ -241,6 +241,15 @@ pub async fn route_prd_command(
             ))
         }
 
+        "detect_prd_from_history" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            route_async!(
+                cmd,
+                commands::prd_chat::detect_prd_from_history(project_path, session_id)
+            )
+        }
+
         _ => Err(format!("Unknown PRD command: {}", cmd)),
     }
 }
@@ -274,5 +283,6 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "stop_watching_prd_file"
             | "assign_file_as_prd"
             | "update_session_prd_id"
+            | "detect_prd_from_history"
     )
 }

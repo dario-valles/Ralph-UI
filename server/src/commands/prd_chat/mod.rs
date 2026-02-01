@@ -37,8 +37,9 @@ pub use file_watch::{
 // Re-export session functions
 pub use session::{
     assign_file_as_prd, check_agent_availability, clear_extracted_structure,
-    delete_prd_chat_session, get_extracted_structure, list_prd_chat_sessions, set_structured_mode,
-    start_prd_chat_session, update_prd_chat_agent, update_session_prd_id, AssignPrdResult,
+    delete_prd_chat_session, detect_prd_from_history, get_extracted_structure,
+    list_prd_chat_sessions, set_structured_mode, start_prd_chat_session, update_prd_chat_agent,
+    update_session_prd_id, AssignPrdResult,
 };
 
 // Re-export messaging functions

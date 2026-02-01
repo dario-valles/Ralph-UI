@@ -180,4 +180,12 @@ export const prdChatApi = {
   ): Promise<void> => {
     return await invoke('update_session_prd_id', { projectPath, sessionId, prdId })
   },
+
+  /** Detect and auto-assign PRD from session history for older sessions */
+  detectPrdFromHistory: async (
+    projectPath: string,
+    sessionId: string
+  ): Promise<string | null> => {
+    return await invoke('detect_prd_from_history', { projectPath, sessionId })
+  },
 }

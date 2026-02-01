@@ -359,6 +359,90 @@ pub async fn update_session_prd_id(
     Ok(())
 }
 
+/// Detect and auto-assign PRD from session history for older sessions
+///
+/// This function scans existing messages for `.ralph-ui/prds/*.md` file paths
+/// and auto-assigns the PRD if found. Useful for sessions created before
+/// real-time auto-detection was implemented.
+pub async fn detect_prd_from_history(
+    project_path: String,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    use regex::Regex;
+
+    let project_path_obj = as_path(&project_path);
+
+    // Get the session first to check if prd_id is already set
+    let session = chat_ops::get_chat_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+
+    // If prd_id is already set, return it
+    if let Some(ref prd_id) = session.prd_id {
+        log::debug!("Session {} already has prd_id: {}", session_id, prd_id);
+        return Ok(Some(prd_id.clone()));
+    }
+
+    // Get message history
+    let messages = chat_ops::get_messages_by_session(project_path_obj, &session_id)
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    if messages.is_empty() {
+        return Ok(None);
+    }
+
+    // Regex to find .ralph-ui/prds/*.md paths
+    // Matches both absolute and relative paths
+    // Simpler pattern: look for .ralph-ui/prds/ followed by filename.md
+    let prds_path_re = Regex::new(r"\.ralph-ui/prds/([a-zA-Z0-9_-]+\.md)")
+        .map_err(|e| format!("Regex error: {}", e))?;
+
+    // Scan all messages for PRD file paths
+    let mut detected_prd_id: Option<String> = None;
+
+    for message in messages.iter().rev() {
+        // Check assistant messages primarily (agent output)
+        if message.role == MessageRole::Assistant {
+            if let Some(caps) = prds_path_re.captures(&message.content) {
+                if let Some(prd_name) = caps.get(1) {
+                    let prd_filename = prd_name.as_str();
+                    // Extract PRD ID (filename without .md extension)
+                    let prd_id = prd_filename.trim_end_matches(".md").to_string();
+
+                    // Verify the file exists
+                    let prd_path = project_path_obj
+                        .join(".ralph-ui")
+                        .join("prds")
+                        .join(prd_filename);
+
+                    if prd_path.exists() {
+                        log::info!(
+                            "📄 Detected PRD from history: {} (session: {})",
+                            prd_id,
+                            session_id
+                        );
+                        detected_prd_id = Some(prd_id);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // If we found a PRD, update the session
+    if let Some(ref prd_id) = detected_prd_id {
+        chat_ops::update_chat_session_prd_id(project_path_obj, &session_id, prd_id)
+            .map_err(|e| format!("Failed to update session prd_id: {}", e))?;
+
+        log::info!(
+            "📄 Auto-assigned PRD from history: session={}, prd_id={}",
+            session_id,
+            prd_id
+        );
+    }
+
+    Ok(detected_prd_id)
+}
+
 // ============================================================================
 // Agent Availability
 // ============================================================================
