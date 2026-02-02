@@ -1503,20 +1503,35 @@ fn generate_quality_summary(
 // These functions implement the 13-check quality validation system
 
 fn check_executive_summary(content: &str, content_lower: &str) -> EnhancedQualityCheck {
+    // Match numbered section headers like "## 1. Executive Summary"
+    let numbered_header_re =
+        Regex::new(r"(?i)##\s*\d+\.?\s*(executive summary|overview|summary|problem statement)")
+            .unwrap();
+
     let has_summary = content_lower.contains("## executive summary")
         || content_lower.contains("## overview")
         || content_lower.contains("# overview")
         || content_lower.contains("## summary")
-        || content_lower.contains("## problem statement");
+        || content_lower.contains("## problem statement")
+        || numbered_header_re.is_match(content);
 
     // Check word count in the summary section (50-200 words ideal)
     let word_count = if has_summary {
         // Find and count words in the summary section
-        if let Some(start) = content_lower
+        // First try standard headers
+        let standard_start = content_lower
             .find("## executive summary")
             .or_else(|| content_lower.find("## overview"))
-            .or_else(|| content_lower.find("## summary"))
-        {
+            .or_else(|| content_lower.find("## summary"));
+
+        // If not found, try numbered headers
+        let start = if let Some(pos) = standard_start {
+            Some(pos)
+        } else {
+            numbered_header_re.find(content).map(|m| m.start())
+        };
+
+        if let Some(start) = start {
             let section_end = content[start + 10..]
                 .find("\n#")
                 .map(|i| start + 10 + i)
@@ -1785,13 +1800,46 @@ fn check_user_stories_with_ac(content: &str, _content_lower: &str) -> EnhancedQu
     }
 }
 
-fn check_testable_requirements(_content: &str, content_lower: &str) -> EnhancedQualityCheck {
+fn check_testable_requirements(content: &str, content_lower: &str) -> EnhancedQualityCheck {
     // Look for strong requirement language
     let strong_verbs = ["must", "shall", "will"];
     let strong_count: usize = strong_verbs
         .iter()
         .map(|v| content_lower.matches(v).count())
         .sum();
+
+    // Definitive action verbs commonly used in acceptance criteria
+    let definitive_verbs = [
+        "displays",
+        "shows",
+        "returns",
+        "validates",
+        "prevents",
+        "enables",
+        "disables",
+        "stores",
+        "loads",
+        "saves",
+        "triggers",
+        "executes",
+        "completes",
+        "fails",
+        "starts",
+        "stops",
+        "creates",
+        "deletes",
+        "updates",
+        "sends",
+        "receives",
+    ];
+    let definitive_count: usize = definitive_verbs
+        .iter()
+        .map(|v| content_lower.matches(v).count())
+        .sum();
+
+    // Count acceptance criteria patterns (AC-X.Y, Given/When/Then, checkboxes)
+    let ac_pattern = Regex::new(r"(?i)AC-\d+\.\d+|given.+when.+then|\[ \]|\[x\]|\[\s\]").unwrap();
+    let ac_count = ac_pattern.find_iter(content).count();
 
     // Check for absence of weak language
     let weak_patterns = ["should try", "would be nice", "might", "possibly", "maybe"];
@@ -1800,14 +1848,22 @@ fn check_testable_requirements(_content: &str, content_lower: &str) -> EnhancedQ
         .map(|p| content_lower.matches(p).count())
         .sum();
 
-    let passed = strong_count >= 3 && weak_count == 0;
+    // Pass if: strong verbs OR (definitive verbs + AC patterns), with no weak language
+    let has_strong = strong_count >= 3;
+    let has_definitive = definitive_count >= 5 && ac_count >= 3;
+    let passed = (has_strong || has_definitive) && weak_count == 0;
+
     let score = if passed {
         8
-    } else if strong_count >= 3 {
+    } else if has_strong || has_definitive {
         5
+    } else if definitive_count >= 3 || ac_count >= 2 {
+        3
     } else {
         0
     };
+
+    let total_definitive = strong_count + definitive_count;
 
     EnhancedQualityCheck {
         id: "testable_requirements".to_string(),
@@ -1816,20 +1872,36 @@ fn check_testable_requirements(_content: &str, content_lower: &str) -> EnhancedQ
         score,
         max_score: 8,
         message: if passed {
-            format!(
-                "Requirements use strong language ({} must/shall/will)",
-                strong_count
-            )
+            if has_strong {
+                format!(
+                    "Requirements use strong language ({} must/shall/will)",
+                    strong_count
+                )
+            } else {
+                format!(
+                    "Requirements use definitive verbs ({} action verbs, {} acceptance criteria)",
+                    definitive_count, ac_count
+                )
+            }
         } else if weak_count > 0 {
             format!(
                 "Found {} weak phrases (should try, might, etc.)",
                 weak_count
             )
-        } else {
+        } else if total_definitive < 3 {
             "Requirements lack definitive language".to_string()
+        } else {
+            format!(
+                "Requirements have some definitive language ({} verbs) but could be stronger",
+                total_definitive
+            )
         },
         suggestion: if !passed {
-            Some("Replace 'should try', 'might', 'maybe' with 'must' or 'shall'".to_string())
+            if weak_count > 0 {
+                Some("Replace 'should try', 'might', 'maybe' with 'must' or 'shall'".to_string())
+            } else {
+                Some("Add 'must' or 'shall' statements, or include acceptance criteria with Given/When/Then format".to_string())
+            }
         } else {
             None
         },
