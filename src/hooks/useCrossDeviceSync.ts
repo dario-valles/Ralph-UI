@@ -17,6 +17,7 @@
 import { useEffect, useRef } from 'react'
 import { subscribeEvent } from '@/lib/events-client'
 import { invoke } from '@/lib/invoke'
+import { useToolCallStore } from '@/stores/toolCallStore'
 import type {
   TaskStatusChangedPayload,
   SessionStatusChangedPayload,
@@ -216,44 +217,37 @@ export function setupGlobalSyncListeners(): void {
   globalListenersInitialized = true
   // console.log('[CrossDeviceSync] Setting up global event listeners')
 
-  // Import events-client dynamically to avoid SSR issues
-  import('@/lib/events-client').then(({ subscribeEvent }) => {
-    // Set up tool call listeners (from toolCallStore pattern)
-    import('@/stores/toolCallStore').then(({ useToolCallStore }) => {
-      const store = useToolCallStore.getState()
+  // Set up tool call listeners
+  const store = useToolCallStore.getState()
 
-      subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
-        store.addToolCall(payload)
-      })
-
-      subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
-        store.completeToolCall(payload)
-      })
-
-      // console.log('[CrossDeviceSync] Tool call listeners registered')
-    })
-
-    // Log cross-device sync events for debugging
-    subscribeEvent<TaskStatusChangedPayload>('task:status_changed', () => {
-      // console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
-    })
-
-    subscribeEvent<SessionStatusChangedPayload>('session:status_changed', () => {
-      // console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
-    })
-
-    subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', () => {
-      // console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
-    })
-
-    subscribeEvent<AgentCompletedPayload>('agent:completed', () => {
-      // console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
-    })
-
-    subscribeEvent<AgentFailedPayload>('agent:failed', () => {
-      // console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
-    })
-
-    // console.log('[CrossDeviceSync] Global event listeners registered')
+  subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+    store.addToolCall(payload)
   })
+
+  subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+    store.completeToolCall(payload)
+  })
+
+  // Log cross-device sync events for debugging
+  subscribeEvent<TaskStatusChangedPayload>('task:status_changed', () => {
+    // console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
+  })
+
+  subscribeEvent<SessionStatusChangedPayload>('session:status_changed', () => {
+    // console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
+  })
+
+  subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', () => {
+    // console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
+  })
+
+  subscribeEvent<AgentCompletedPayload>('agent:completed', () => {
+    // console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
+  })
+
+  subscribeEvent<AgentFailedPayload>('agent:failed', () => {
+    // console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
+  })
+
+  // console.log('[CrossDeviceSync] Global event listeners registered')
 }

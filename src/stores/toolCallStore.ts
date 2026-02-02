@@ -2,6 +2,7 @@
 // Manages tool call state for collapsible tool call display
 
 import { create } from 'zustand'
+import { subscribeEvent } from '@/lib/events-client'
 import type { ToolCall, ToolCallStartedPayload, ToolCallCompletedPayload } from '@/types'
 
 interface ToolCallStore {
@@ -100,17 +101,15 @@ export const useToolCallStore = create<ToolCallStore>((set, get) => ({
 export function setupToolCallEventListeners() {
   if (typeof window === 'undefined') return
 
-  import('@/lib/events-client').then(({ subscribeEvent }) => {
-    const store = useToolCallStore.getState()
+  const store = useToolCallStore.getState()
 
-    // Listen for tool call started events
-    subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
-      store.addToolCall(payload)
-    })
+  // Listen for tool call started events
+  subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+    store.addToolCall(payload)
+  })
 
-    // Listen for tool call completed events
-    subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
-      store.completeToolCall(payload)
-    })
+  // Listen for tool call completed events
+  subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+    store.completeToolCall(payload)
   })
 }
