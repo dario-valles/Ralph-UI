@@ -19,6 +19,8 @@ vi.mock('@/lib/backend-api', () => ({
     previewExtraction: vi.fn(),
     startWatchingPlanFile: vi.fn(),
     stopWatchingPlanFile: vi.fn(),
+    // detectPrdFromHistory is called in background by loadHistory, returns Promise
+    detectPrdFromHistory: vi.fn().mockResolvedValue(null),
   },
 }))
 
@@ -33,6 +35,7 @@ describe('prdChatStore', () => {
     title: 'Test Session',
     messageCount: 0,
     structuredMode: false,
+    guidedMode: true,
   }
 
   const mockSession2: ChatSession = {
@@ -324,8 +327,10 @@ describe('prdChatStore', () => {
       const messages = [mockUserMessage, mockAssistantMessage]
       vi.mocked(prdChatApi.getHistory).mockResolvedValue(messages)
 
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockSession })
+
       const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
       expect(prdChatApi.getHistory).toHaveBeenCalledWith('session-1', '/test/project')
@@ -340,8 +345,10 @@ describe('prdChatStore', () => {
         return []
       })
 
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockSession })
+
       const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
       expect(loadingDuringCall).toBe(true)
@@ -351,8 +358,10 @@ describe('prdChatStore', () => {
       const error = new Error('Failed to load history')
       vi.mocked(prdChatApi.getHistory).mockRejectedValue(error)
 
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockSession })
+
       const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
       await store.loadHistory('session-1')
 
       expect(usePRDChatStore.getState().error).toBe('Failed to load history')
@@ -363,18 +372,20 @@ describe('prdChatStore', () => {
       const newMessages = [mockAssistantMessage]
       vi.mocked(prdChatApi.getHistory).mockResolvedValue(newMessages)
 
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockSession, messages: [mockUserMessage] })
+
       const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
-      store.messages = [mockUserMessage]
       await store.loadHistory('session-1')
 
       expect(usePRDChatStore.getState().messages).toEqual(newMessages)
     })
 
     it('should set error if no project path available', async () => {
-      const store = usePRDChatStore.getState()
-      store.currentSession = null
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: null })
 
+      const store = usePRDChatStore.getState()
       await store.loadHistory('session-1')
 
       expect(usePRDChatStore.getState().error).toBe('No project path available')
@@ -615,9 +626,10 @@ describe('prdChatStore', () => {
         .mockResolvedValueOnce(session1Messages)
         .mockResolvedValueOnce(session2Messages)
 
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
+      // Use setState to properly update the store (direct mutation doesn't work with Zustand's get())
+      usePRDChatStore.setState({ currentSession: mockSession })
 
+      const store = usePRDChatStore.getState()
       await store.loadHistory('session-1')
       expect(usePRDChatStore.getState().messages).toEqual(session1Messages)
 
@@ -634,10 +646,10 @@ describe('prdChatStore', () => {
     it('should enable structured mode for current session', async () => {
       vi.mocked(prdChatApi.setStructuredMode).mockResolvedValue(undefined)
 
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockSession
-      store.sessions = [mockSession]
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockSession, sessions: [mockSession] })
 
+      const store = usePRDChatStore.getState()
       await store.setStructuredMode(true)
 
       expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith('session-1', '/test/project', true)
@@ -647,10 +659,10 @@ describe('prdChatStore', () => {
     it('should disable structured mode for current session', async () => {
       vi.mocked(prdChatApi.setStructuredMode).mockResolvedValue(undefined)
 
-      const store = usePRDChatStore.getState()
-      store.currentSession = mockStructuredSession
-      store.sessions = [mockStructuredSession]
+      // Use setState to properly update the store
+      usePRDChatStore.setState({ currentSession: mockStructuredSession, sessions: [mockStructuredSession] })
 
+      const store = usePRDChatStore.getState()
       await store.setStructuredMode(false)
 
       expect(prdChatApi.setStructuredMode).toHaveBeenCalledWith(
