@@ -801,6 +801,18 @@ When the user shares their idea, acknowledge it warmly, then ask a follow-up que
     // Include planning documents if available (persists across session resumption)
     inject_planning_context(&mut prompt, planning_context);
 
+    // Add PRD file path instruction - even in Discovery phase, the agent should know
+    // the correct path in case user transitions or explicitly asks to write PRD
+    if let Some(ref project_path) = session.project_path {
+        let path_reminder = get_prd_path_reminder(
+            project_path,
+            &session.id,
+            session.title.as_deref(),
+            session.prd_id.as_deref(),
+        );
+        prompt.push_str(&path_reminder);
+    }
+
     prompt.push_str(&format!("User: {}\n\nAssistant:", current_message));
     prompt
 }
@@ -946,11 +958,14 @@ fn get_prd_path_reminder(
     let prd_name = get_prd_filename(session_id, title, prd_id);
     format!(
         "\n---\n\
-        ⚠️ FINAL REMINDER - PRD ONLY, NO CODE:\n\
-        - Write PRD to: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\
-        - DO NOT create code files, config files, or any other files\n\
-        - DO NOT implement features - that happens in Ralph Loop, not here\n\
-        - Your job: Document requirements. Implementation: Ralph Loop.\n\
+        ⚠️ CRITICAL PRD FILE LOCATION - READ BEFORE RESPONDING:\n\n\
+        **If you need to create or update the PRD, use THIS EXACT path:**\n\
+        `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
+        ❌ NEVER create PRD files elsewhere (not in project root, not in docs/, not anywhere else)\n\
+        ❌ NEVER create code files, config files, or implementation files\n\
+        ✅ ONLY write to `.ralph-ui/prds/` directory\n\
+        ✅ Your job: Document requirements in the PRD file above\n\n\
+        Implementation happens in Ralph Loop, NOT here.\n\
         ---\n"
     )
 }
@@ -984,10 +999,15 @@ pub fn get_prd_plan_instruction(
     let prd_name = get_prd_filename(session_id, title, prd_id);
 
     format!(
-        "\n=== PLAN FILE INSTRUCTION ===\n\n\
-        **CRITICAL: You MUST use this EXACT filename - do not change it:**\n\
+        "\n=== PRD FILE LOCATION - CRITICAL ===\n\n\
+        🎯 **YOUR PRD FILE PATH (use this EXACT path):**\n\
         `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
-        ⚠️ IMPORTANT: The system tracks this specific file. Using any other filename will cause the PRD to be lost and not appear in the UI.\n\n\
+        ⛔ **FORBIDDEN LOCATIONS** - NEVER create PRD files here:\n\
+        - Project root (e.g., `{project_path}/PRD.md`) ❌\n\
+        - docs/ folder ❌\n\
+        - Any location outside `.ralph-ui/prds/` ❌\n\n\
+        ✅ **ONLY** write to: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
+        The system tracks this specific file. Using any other filename will cause the PRD to be lost and not appear in the UI.\n\n\
         This file should contain:\n\
         - Current understanding of requirements\n\
         - Key decisions and rationale\n\
@@ -1008,9 +1028,7 @@ pub fn get_prd_plan_instruction(
         - Criterion 2\n\
         ```\n\n\
         Never use `**US-1.1:**` bold format. Always use `#### US-X.X:` headers.\n\n\
-        UPDATE THIS FILE NOW at the exact path specified above.\n\
-        Write to: `{project_path}/.ralph-ui/prds/{prd_name}.md`\n\n\
-        === END PLAN FILE INSTRUCTION ===\n\n"
+        === END PRD FILE LOCATION ===\n\n"
     )
 }
 
@@ -1410,8 +1428,8 @@ mod tests {
         assert!(reminder.contains("camera-feature-"));
         assert!(reminder.contains(".md"));
         // Should contain the warning markers
-        assert!(reminder.contains("FINAL REMINDER"));
-        assert!(reminder.contains("DO NOT create code files"));
+        assert!(reminder.contains("CRITICAL PRD FILE LOCATION"));
+        assert!(reminder.contains("NEVER create PRD files elsewhere"));
         assert!(reminder.contains("Ralph Loop"));
     }
 
@@ -1425,20 +1443,22 @@ mod tests {
         let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false, None);
 
         // Should contain both the full instruction AND the reminder
-        assert!(prompt.contains("PLAN FILE INSTRUCTION"));
-        assert!(prompt.contains("FINAL REMINDER - PRD ONLY, NO CODE"));
+        assert!(prompt.contains("PRD FILE LOCATION - CRITICAL"));
+        assert!(prompt.contains("CRITICAL PRD FILE LOCATION - READ BEFORE RESPONDING"));
 
         // The path reminder should appear AFTER the planning context injection
         // and BEFORE the user message
-        let reminder_pos = prompt.find("FINAL REMINDER - PRD ONLY, NO CODE").unwrap();
+        let reminder_pos = prompt
+            .find("CRITICAL PRD FILE LOCATION - READ BEFORE RESPONDING")
+            .unwrap();
         let user_msg_pos = prompt.find("User: Create a PRD").unwrap();
         assert!(
             reminder_pos < user_msg_pos,
             "Path reminder should appear before user message"
         );
 
-        // The path reminder should be near the end (after history section would be)
-        let plan_instruction_pos = prompt.find("PLAN FILE INSTRUCTION").unwrap();
+        // The path reminder should be near the end (after main file location section)
+        let plan_instruction_pos = prompt.find("PRD FILE LOCATION - CRITICAL").unwrap();
         assert!(
             reminder_pos > plan_instruction_pos,
             "Path reminder should appear after the main plan instruction"
@@ -1475,7 +1495,7 @@ mod tests {
         assert!(!prompt.contains("Previous message"));
 
         // But the path reminder should STILL be present
-        assert!(prompt.contains("FINAL REMINDER - PRD ONLY, NO CODE"));
+        assert!(prompt.contains("CRITICAL PRD FILE LOCATION - READ BEFORE RESPONDING"));
         assert!(prompt.contains(".ralph-ui/prds/my-feature-"));
     }
 
@@ -1488,9 +1508,9 @@ mod tests {
         let prompt = build_prd_chat_prompt(&session, &history, "Create a PRD", &[], false, None);
 
         // Should NOT contain path reminder since there's no project path
-        assert!(!prompt.contains("SYSTEM REQUIREMENT - PRD FILE PATH"));
+        assert!(!prompt.contains("CRITICAL PRD FILE LOCATION"));
         // Should also not contain the main plan instruction
-        assert!(!prompt.contains("PLAN FILE INSTRUCTION"));
+        assert!(!prompt.contains("PRD FILE LOCATION - CRITICAL"));
     }
 
     #[test]
@@ -1604,5 +1624,42 @@ mod tests {
 
         // No assistant messages yet, should still be in discovery
         assert_eq!(phase, Some(WorkflowPhase::Discovery));
+    }
+
+    #[test]
+    fn test_build_deep_questioning_prompt_includes_path_reminder() {
+        let mut session = make_test_session("discovery123");
+        session.project_path = Some("/my/project".to_string());
+        session.title = Some("Discovery Feature".to_string());
+        // Enable guided mode to trigger discovery phase
+        session.guided_mode = true;
+
+        let history: Vec<ChatMessage> = vec![];
+        let prompt = build_deep_questioning_prompt(
+            &session,
+            &history,
+            "I want to build a todo app",
+            &[],
+            false,
+            None,
+            None,
+        );
+
+        // Should contain the path reminder even in discovery phase
+        assert!(
+            prompt.contains("CRITICAL PRD FILE LOCATION"),
+            "Discovery prompt should include PRD path reminder"
+        );
+        assert!(
+            prompt.contains(".ralph-ui/prds/"),
+            "Discovery prompt should specify the correct PRD directory"
+        );
+        // The reminder should appear before the user message
+        let reminder_pos = prompt.find("CRITICAL PRD FILE LOCATION").unwrap();
+        let user_msg_pos = prompt.find("User: I want to build a todo app").unwrap();
+        assert!(
+            reminder_pos < user_msg_pos,
+            "Path reminder should appear before user message"
+        );
     }
 }

@@ -49,6 +49,7 @@ static MD_FILE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Matches patterns like:
 /// - "renamed to: docs/file.md"
 /// - "at: docs/PRD-more-components.md"
+/// - "located at: docs/file.md"
 /// - "saved to docs/file.md"
 /// - "created docs/file.md"
 /// - "wrote docs/file.md"
@@ -57,7 +58,8 @@ static MD_RESPONSE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
     // Match .md file paths in agent responses with common prefixes
     // Captures both relative paths (docs/file.md) and absolute paths (/path/to/file.md)
     // The path can be optionally quoted
-    Regex::new(r#"(?i)(?:renamed to[:\s]+|at[:\s]+|to[:\s]+|saved (?:to )?|wrote (?:to )?|created |moved to[:\s]+)['"]?([^\s'"<>|*?\n]+\.md)['"]?"#)
+    // "(?:located )?at" matches both "at:" and "located at:"
+    Regex::new(r#"(?i)(?:renamed to[:\s]+|(?:located )?at[:\s]+|to[:\s]+|saved (?:to )?|wrote (?:to )?|created |moved to[:\s]+)['"]?([^\s'"<>|*?\n]+\.md)['"]?"#)
         .unwrap()
 });
 
@@ -1125,6 +1127,17 @@ mod tests {
         assert_eq!(
             caps.unwrap().get(1).unwrap().as_str(),
             "docs/more-componenets-5e9364cd.md"
+        );
+    }
+
+    #[test]
+    fn test_md_response_path_located_at() {
+        let line = "The PRD is located at: /Users/dario/personal/mac-stop-working-exercise/PRD.md";
+        let caps = MD_RESPONSE_PATH_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(
+            caps.unwrap().get(1).unwrap().as_str(),
+            "/Users/dario/personal/mac-stop-working-exercise/PRD.md"
         );
     }
 
