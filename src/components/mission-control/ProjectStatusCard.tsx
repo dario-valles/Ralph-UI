@@ -14,10 +14,16 @@ import {
   Copy,
   List,
   BookOpen,
+  Star,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tooltip } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +32,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/projectStore'
 import { toast } from '@/stores/toastStore'
@@ -80,8 +94,14 @@ function formatLastActivity(date: Date | null): string {
 export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCardProps) {
   const { project, health, lastActivity, activeExecutionId, prdCount } = projectStatus
   const [contextEditorOpen, setContextEditorOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [newName, setNewName] = useState(project.name)
 
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
+  const deleteProject = useProjectStore((s) => s.deleteProject)
+  const toggleFavorite = useProjectStore((s) => s.toggleFavorite)
+  const updateProjectName = useProjectStore((s) => s.updateProjectName)
 
   // Show "Running" badge when there's an active execution
   const isRunning = !!activeExecutionId
@@ -99,6 +119,50 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
     onNavigate?.()
   }
 
+  const handleDelete = async () => {
+    try {
+      await deleteProject(project.id)
+      toast.success('Project removed', `"${project.name}" has been removed from your projects`)
+    } catch {
+      toast.error('Failed to remove project', 'Please try again')
+    }
+    setDeleteDialogOpen(false)
+  }
+
+  const handleRename = async () => {
+    const trimmedName = newName.trim()
+    if (!trimmedName || trimmedName === project.name) {
+      setRenameDialogOpen(false)
+      return
+    }
+    try {
+      await updateProjectName(project.id, trimmedName)
+      toast.success('Project renamed', `Project renamed to "${trimmedName}"`)
+    } catch {
+      toast.error('Failed to rename project', 'Please try again')
+    }
+    setRenameDialogOpen(false)
+  }
+
+  const handleToggleFavorite = async () => {
+    try {
+      await toggleFavorite(project.id)
+      toast.success(
+        project.isFavorite ? 'Removed from favorites' : 'Added to favorites',
+        project.isFavorite
+          ? `"${project.name}" removed from favorites`
+          : `"${project.name}" added to favorites`
+      )
+    } catch {
+      toast.error('Failed to update favorite', 'Please try again')
+    }
+  }
+
+  const openRenameDialog = () => {
+    setNewName(project.name)
+    setRenameDialogOpen(true)
+  }
+
   return (
     <Card
       className={cn(
@@ -114,7 +178,13 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
               <FolderOpen className={cn('h-4 w-4', config.color)} />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-medium truncate">{project.name}</h3>
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-medium truncate">{project.name}</h3>
+                {/* Favorite star indicator */}
+                {project.isFavorite && (
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                )}
+              </div>
               <p className="text-xs text-muted-foreground truncate" title={project.path}>
                 {project.path}
               </p>
@@ -134,43 +204,37 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
                   <span className="sr-only">Open menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>Project Actions</DropdownMenuLabel>
                 <DropdownMenuItem onClick={handleCopyPath}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copy Path
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/ralph-loop"
-                    state={{ projectPath: project.path }}
-                    onClick={handleProjectAction}
-                  >
-                    <Play className="mr-2 h-4 w-4" />
-                    Start Ralph Loop
-                  </Link>
+                <DropdownMenuItem onClick={openRenameDialog}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Rename
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/prds" onClick={handleProjectAction}>
-                    <List className="mr-2 h-4 w-4" />
-                    View PRDs
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/prds/chat"
-                    state={{ projectPath: project.path, startNew: true }}
-                    onClick={handleProjectAction}
-                  >
-                    <MessageSquarePlus className="mr-2 h-4 w-4" />
-                    New PRD Chat
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setContextEditorOpen(true)}>
                   <BookOpen className="mr-2 h-4 w-4" />
                   Project Context
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleToggleFavorite}>
+                  <Star
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      project.isFavorite && 'fill-amber-400 text-amber-400'
+                    )}
+                  />
+                  {project.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Remove Project
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -183,17 +247,15 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
             <Clock className="h-3 w-3" />
             {formatLastActivity(lastActivity)}
           </div>
-          {prdCount !== null && prdCount > 0 && (
-            <Link
-              to="/prds"
-              onClick={handleProjectAction}
-              className="flex items-center gap-1 hover:text-primary transition-colors hover:underline"
-              title="View all PRDs"
-            >
-              <FileText className="h-3 w-3" />
-              {prdCount} PRD{prdCount !== 1 ? 's' : ''}
-            </Link>
-          )}
+          <Link
+            to="/prds"
+            onClick={handleProjectAction}
+            className="flex items-center gap-1 hover:text-primary transition-colors hover:underline"
+            title="View all PRDs"
+          >
+            <FileText className="h-3 w-3" />
+            {prdCount ?? 0} PRD{prdCount !== 1 ? 's' : ''}
+          </Link>
         </div>
 
         {/* Actions */}
@@ -210,23 +272,21 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
             </Button>
           </Link>
 
-          <Link to="/prds" onClick={handleProjectAction}>
-            <Button variant="outline" size="sm" className="px-3" title="View PRDs">
-              <List className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Tooltip content="View PRDs" side="bottom">
+            <Link to="/prds" onClick={handleProjectAction}>
+              <Button variant="outline" size="sm" className="px-3">
+                <List className="h-4 w-4" />
+              </Button>
+            </Link>
+          </Tooltip>
 
-          <Link to="/prds/chat" state={{ projectPath: project.path, startNew: true }}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="px-3"
-              onClick={handleProjectAction}
-              title="New PRD Chat"
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Tooltip content="Create PRD" side="bottom">
+            <Link to="/prds/chat" state={{ projectPath: project.path, startNew: true }}>
+              <Button variant="outline" size="sm" className="px-3" onClick={handleProjectAction}>
+                <MessageSquarePlus className="h-4 w-4" />
+              </Button>
+            </Link>
+          </Tooltip>
         </div>
       </CardContent>
 
@@ -236,6 +296,66 @@ export function ProjectStatusCard({ projectStatus, onNavigate }: ProjectStatusCa
         open={contextEditorOpen}
         onOpenChange={setContextEditorOpen}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove project?</DialogTitle>
+            <DialogDescription>
+              This will remove <span className="font-medium">"{project.name}"</span> from your
+              projects list. Your files and PRDs will not be deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+            >
+              Remove Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+            <DialogDescription>Enter a new name for this project.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="project-name" className="text-sm font-medium">
+              Project Name
+            </Label>
+            <Input
+              id="project-name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Enter project name"
+              className="mt-2"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleRename()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRename} disabled={!newName.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
