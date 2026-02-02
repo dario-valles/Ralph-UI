@@ -193,6 +193,9 @@ describe('PRDChatPanel', () => {
   const mockUpdatePlanContent = vi.fn()
   const mockUpdateSessionAgent = vi.fn()
 
+  const mockLoadContextConfig = vi.fn()
+  const mockToggleContextInjection = vi.fn()
+
   const defaultStoreState = {
     sessions: mockSessions,
     currentSession: mockSessions[0],
@@ -208,6 +211,10 @@ describe('PRDChatPanel', () => {
     watchedPlanContent: null,
     watchedPlanPath: null,
     isWatchingPlan: false,
+    // Context State
+    contextConfig: null,
+    hasProjectContext: false,
+    contextPreview: null,
     // Actions
     sendMessage: mockSendMessage,
     startSession: mockStartSession,
@@ -225,6 +232,8 @@ describe('PRDChatPanel', () => {
     stopWatchingPlanFile: mockStopWatchingPlanFile,
     updatePlanContent: mockUpdatePlanContent,
     updateSessionAgent: mockUpdateSessionAgent,
+    loadContextConfig: mockLoadContextConfig,
+    toggleContextInjection: mockToggleContextInjection,
   }
 
   beforeEach(() => {

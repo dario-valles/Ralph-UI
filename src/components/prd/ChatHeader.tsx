@@ -2,6 +2,7 @@ import { CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NativeSelect as Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,10 +19,12 @@ import {
   ScrollText,
   ChevronDown,
   Play,
+  FileText,
+  ExternalLink,
 } from 'lucide-react'
 import { ModelSelector } from '@/components/shared/ModelSelector'
 import { GroupedAgentModelSelector } from '@/components/shared/GroupedAgentModelSelector'
-import type { ChatSession, QualityAssessment } from '@/types'
+import type { ChatSession, QualityAssessment, ContextConfig } from '@/types'
 import type { AgentType } from '@/types/agent'
 import type { AgentOption } from '@/hooks/useAgentModelSelector'
 import type { ModelInfo } from '@/lib/model-api'
@@ -62,6 +65,12 @@ interface ChatHeaderProps {
   isPlanVisible: boolean
   /** Scroll direction for auto-hide (mobile) */
   scrollDirection: 'up' | 'down' | null
+  /** Context configuration for the project */
+  contextConfig: ContextConfig | null
+  /** Whether project has context files */
+  hasProjectContext: boolean
+  /** Preview of context content */
+  contextPreview: string | null
   /** Handler for agent option change (new API) */
   onAgentOptionChange: (value: string) => void
   /** Handler for model change */
@@ -76,6 +85,10 @@ interface ChatHeaderProps {
   onRefreshQuality: () => void
   /** Handler for executing PRD */
   onExecutePrd: () => void
+  /** Handler for toggling context injection */
+  onToggleContext: (enabled: boolean) => void
+  /** Handler for opening context editor */
+  onEditContext: () => void
 }
 
 /**
@@ -100,6 +113,9 @@ export function ChatHeader({
   watchedPlanPath,
   isPlanVisible,
   scrollDirection,
+  contextConfig,
+  hasProjectContext,
+  contextPreview,
   onAgentOptionChange,
   onModelChange,
   onSelectSession,
@@ -107,7 +123,11 @@ export function ChatHeader({
   onPlanToggle,
   onRefreshQuality,
   onExecutePrd,
+  onToggleContext,
+  onEditContext,
 }: ChatHeaderProps) {
+  // Determine if context injection is active
+  const isContextEnabled = contextConfig?.enabled && contextConfig?.includeInPrdChat
   return (
     <>
       {/* Mobile Header - Single compact row with auto-hide on scroll */}
@@ -189,10 +209,15 @@ export function ChatHeader({
             hasMessages={hasMessages}
             qualityAssessment={qualityAssessment}
             watchedPlanPath={watchedPlanPath}
+            hasProjectContext={hasProjectContext}
+            isContextEnabled={!!isContextEnabled}
+            contextPreview={contextPreview}
             onAgentOptionChange={onAgentOptionChange}
             onModelChange={onModelChange}
             onRefreshQuality={onRefreshQuality}
             onExecutePrd={onExecutePrd}
+            onToggleContext={onToggleContext}
+            onEditContext={onEditContext}
           />
         </div>
       </div>
@@ -222,6 +247,17 @@ export function ChatHeader({
               agentWidth="w-28"
               modelWidth="w-40 xl:w-48"
             />
+
+            {/* Context Indicator */}
+            {currentSession?.projectPath && hasProjectContext && (
+              <ContextIndicator
+                isEnabled={!!isContextEnabled}
+                contextPreview={contextPreview}
+                onToggle={onToggleContext}
+                onEdit={onEditContext}
+                disabled={streaming}
+              />
+            )}
 
             {/* Plan Sidebar Toggle */}
             {currentSession?.projectPath && (
@@ -284,10 +320,15 @@ interface MobileActionsDropdownProps {
   hasMessages: boolean
   qualityAssessment: QualityAssessment | null
   watchedPlanPath: string | null
+  hasProjectContext: boolean
+  isContextEnabled: boolean
+  contextPreview: string | null
   onAgentOptionChange: (value: string) => void
   onModelChange: (modelId: string) => void
   onRefreshQuality: () => void
   onExecutePrd: () => void
+  onToggleContext: (enabled: boolean) => void
+  onEditContext: () => void
 }
 
 function MobileActionsDropdown({
@@ -302,10 +343,15 @@ function MobileActionsDropdown({
   hasMessages,
   qualityAssessment,
   watchedPlanPath,
+  hasProjectContext,
+  isContextEnabled,
+  contextPreview,
   onAgentOptionChange,
   onModelChange,
   onRefreshQuality,
   onExecutePrd,
+  onToggleContext,
+  onEditContext,
 }: MobileActionsDropdownProps) {
   return (
     <DropdownMenu>
@@ -362,6 +408,47 @@ function MobileActionsDropdown({
             </div>
           </div>
         </div>
+
+        {/* Context section - only show if project has context */}
+        {hasProjectContext && (
+          <div className="px-3 py-2.5 border-b border-border/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "h-5 w-5 rounded-md flex items-center justify-center shadow-sm",
+                  isContextEnabled
+                    ? "bg-gradient-to-br from-blue-500 to-cyan-600"
+                    : "bg-muted"
+                )}>
+                  <FileText className="h-3 w-3 text-white" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-foreground/80">Project Context</span>
+                  <p className="text-[10px] text-muted-foreground">
+                    {isContextEnabled ? 'Included in prompts' : 'Not included'}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isContextEnabled}
+                onCheckedChange={onToggleContext}
+                aria-label="Toggle context injection"
+              />
+            </div>
+            {contextPreview && isContextEnabled && (
+              <p className="text-[10px] text-muted-foreground mt-2 line-clamp-2 italic">
+                {contextPreview}
+              </p>
+            )}
+            <button
+              onClick={onEditContext}
+              className="text-[10px] text-primary hover:underline mt-1.5 flex items-center gap-1"
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              Edit context
+            </button>
+          </div>
+        )}
 
         {/* Actions section */}
         <div className="p-2">
@@ -482,6 +569,96 @@ function DesktopActionsDropdown({
             <span className="text-muted-foreground text-xs">Send a message first</span>
           </DropdownMenuItem>
         )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// ============================================================================
+// Context Indicator Component
+// ============================================================================
+
+interface ContextIndicatorProps {
+  isEnabled: boolean
+  contextPreview: string | null
+  onToggle: (enabled: boolean) => void
+  onEdit: () => void
+  disabled?: boolean
+}
+
+/**
+ * Context indicator button with dropdown for toggling and previewing context.
+ * Shows in the PRD Chat header when project has context files.
+ */
+function ContextIndicator({
+  isEnabled,
+  contextPreview,
+  onToggle,
+  onEdit,
+  disabled,
+}: ContextIndicatorProps) {
+  return (
+    <DropdownMenu>
+      <Tooltip content={isEnabled ? 'Context enabled' : 'Context disabled'} side="bottom">
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            aria-label="Toggle project context"
+            className={cn(
+              'h-8 w-8 p-0 rounded-xl relative transition-all',
+              isEnabled
+                ? 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-md shadow-blue-500/25 border-0 hover:from-blue-600 hover:to-cyan-700'
+                : 'border border-border/50 hover:bg-muted/50 text-muted-foreground'
+            )}
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-64 rounded-xl border-border/50 shadow-xl p-0">
+        <div className="p-3 border-b border-border/30">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "h-6 w-6 rounded-lg flex items-center justify-center shadow-sm",
+                isEnabled
+                  ? "bg-gradient-to-br from-blue-500 to-cyan-600"
+                  : "bg-muted"
+              )}>
+                <FileText className="h-3.5 w-3.5 text-white" />
+              </div>
+              <span className="text-sm font-semibold">Project Context</span>
+            </div>
+            <Switch
+              checked={isEnabled}
+              onCheckedChange={onToggle}
+              aria-label="Toggle context injection"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isEnabled
+              ? 'Context will be included in AI prompts'
+              : 'Context is disabled for this chat'}
+          </p>
+        </div>
+        {contextPreview && (
+          <div className="p-3 border-b border-border/30 bg-muted/30">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+              Preview
+            </p>
+            <p className="text-xs text-foreground/80 line-clamp-3 italic">
+              {contextPreview}
+            </p>
+          </div>
+        )}
+        <div className="p-2">
+          <DropdownMenuItem onClick={onEdit} className="rounded-lg">
+            <ExternalLink className="h-4 w-4 mr-2 text-primary" />
+            Edit Context
+          </DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )

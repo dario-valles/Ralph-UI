@@ -241,6 +241,12 @@ pub async fn save_context_from_chat(
         ContextMode::Single,
     )?;
 
+    // Auto-enable context injection when saving from chat
+    let mut config = context_ops::read_context_config(project_path_obj)?;
+    config.enabled = true;
+    config.include_in_prd_chat = true;
+    context_ops::save_context_config(project_path_obj, &config)?;
+
     // Mark session as saved
     context_ops::mark_context_chat_saved(project_path_obj, &session_id)?;
 

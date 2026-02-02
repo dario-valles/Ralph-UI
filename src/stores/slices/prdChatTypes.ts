@@ -15,6 +15,7 @@ import type {
   PRDTypeValue,
 } from '@/types'
 import type { AsyncState } from '@/lib/store-utils'
+import type { ContextSlice } from './contextSlice'
 
 /**
  * Options for starting a chat session
@@ -110,7 +111,11 @@ export interface FileWatchSlice {
 /**
  * Full PRD Chat store type combining all slices
  */
-export type PRDChatStore = ChatCoreState & ChatSessionSlice & MessagingSlice & FileWatchSlice
+export type PRDChatStore = ChatCoreState &
+  ChatSessionSlice &
+  MessagingSlice &
+  FileWatchSlice &
+  ContextSlice
 
 /**
  * Zustand setter type for slices

@@ -101,6 +101,9 @@ export function PRDChatPanel() {
     watchedPlanContent,
     watchedPlanPath,
     isWatchingPlan,
+    contextConfig,
+    hasProjectContext,
+    contextPreview,
     sendMessage,
     startSession,
     deleteSession,
@@ -112,6 +115,8 @@ export function PRDChatPanel() {
     stopWatchingPlanFile,
     updatePlanContent,
     updateSessionAgent,
+    loadContextConfig,
+    toggleContextInjection,
   } = usePRDChatStore()
 
   // Workflow store for execution mode
@@ -395,6 +400,13 @@ export function PRDChatPanel() {
     }
   }, [watchedPlanContent, assessUnifiedQuality])
 
+  // Load context config when session project path changes
+  useEffect(() => {
+    if (currentSession?.projectPath) {
+      loadContextConfig(currentSession.projectPath)
+    }
+  }, [currentSession?.projectPath, loadContextConfig])
+
 
   // ============================================================================
   // Event Handlers
@@ -516,6 +528,33 @@ export function PRDChatPanel() {
       setShowPlanSidebar(!showPlanSidebar)
     }
   }
+
+  /** Toggle context injection for PRD Chat */
+  const handleToggleContext = useCallback(
+    async (enabled: boolean) => {
+      if (!currentSession?.projectPath) return
+      try {
+        await toggleContextInjection(currentSession.projectPath, enabled)
+        toast.success(
+          enabled ? 'Context Enabled' : 'Context Disabled',
+          enabled
+            ? 'Project context will be included in AI prompts'
+            : 'Project context will not be included in AI prompts'
+        )
+      } catch (err) {
+        console.error('[PRDChatPanel] Failed to toggle context:', err)
+        toast.error('Failed to toggle context', err instanceof Error ? err.message : 'Unknown error')
+      }
+    },
+    [currentSession?.projectPath, toggleContextInjection]
+  )
+
+  /** Navigate to context editor */
+  const handleEditContext = useCallback(() => {
+    if (activeProject?.path) {
+      navigate('/context/chat', { state: { projectPath: activeProject.path } })
+    }
+  }, [activeProject?.path, navigate])
 
   const handleExecutionModeChange = async (mode: ExecutionMode) => {
     if (!currentSession?.projectPath || !currentWorkflow) return
@@ -645,6 +684,9 @@ export function PRDChatPanel() {
           watchedPlanPath={watchedPlanPath}
           isPlanVisible={isPlanVisible}
           scrollDirection={scrollDirection}
+          contextConfig={contextConfig}
+          hasProjectContext={hasProjectContext}
+          contextPreview={contextPreview}
           onAgentOptionChange={handleAgentOptionChangeWithValidation}
           onModelChange={setUserSelectedModel}
           onSelectSession={setCurrentSession}
@@ -652,6 +694,8 @@ export function PRDChatPanel() {
           onPlanToggle={handlePlanToggle}
           onRefreshQuality={assessUnifiedQuality}
           onExecutePrd={handleExecutePrd}
+          onToggleContext={handleToggleContext}
+          onEditContext={handleEditContext}
         />
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative min-h-0">

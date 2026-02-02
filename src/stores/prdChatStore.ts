@@ -18,6 +18,8 @@ import {
   createChatSessionSlice,
   createMessagingSlice,
   createFileWatchSlice,
+  createContextSlice,
+  contextSliceInitialState,
 } from './slices'
 
 // Re-export types
@@ -32,6 +34,7 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
   const chatSessionSlice = createChatSessionSlice(set, get)
   const messagingSlice = createMessagingSlice(set, get)
   const fileWatchSlice = createFileWatchSlice(set, get)
+  const contextSlice = createContextSlice(set)
 
   return {
     // Core State (ChatCoreState)
@@ -54,6 +57,9 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     watchedPlanContent: fileWatchSlice.watchedPlanContent,
     watchedPlanPath: fileWatchSlice.watchedPlanPath,
     isWatchingPlan: fileWatchSlice.isWatchingPlan,
+
+    // Context State
+    ...contextSliceInitialState,
 
     // Chat Session Actions
     startSession: chatSessionSlice.startSession,
@@ -78,5 +84,10 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     startWatchingPlanFile: fileWatchSlice.startWatchingPlanFile,
     stopWatchingPlanFile: fileWatchSlice.stopWatchingPlanFile,
     updatePlanContent: fileWatchSlice.updatePlanContent,
+
+    // Context Actions
+    loadContextConfig: contextSlice.loadContextConfig,
+    toggleContextInjection: contextSlice.toggleContextInjection,
+    clearContextState: contextSlice.clearContextState,
   }
 })
