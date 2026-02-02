@@ -1,6 +1,6 @@
 [package]
 name = "ralph-ui"
-version = "0.2.1"
+version = "0.2.2"
 description = "HTTP/WebSocket server for Ralph Wiggum Loop autonomous AI agent system"
 authors = ["Ralph UI Contributors"]
 edition = "2021"
