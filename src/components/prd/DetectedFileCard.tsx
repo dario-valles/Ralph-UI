@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, FolderInput, Loader2, Eye, CheckCircle2 } from 'lucide-react'
+import { FileText, FolderInput, Loader2, Eye, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MdFileDetectedPayload } from '@/types'
 
@@ -30,11 +30,16 @@ export function DetectedFileCard({
   className,
 }: DetectedFileCardProps) {
   const [isAssigning, setIsAssigning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleAssign = async () => {
     setIsAssigning(true)
+    setError(null)
     try {
       await onAssign()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to assign PRD'
+      setError(errorMessage)
     } finally {
       setIsAssigning(false)
     }
@@ -46,6 +51,7 @@ export function DetectedFileCard({
         'w-full max-w-lg mx-auto',
         'bg-blue-500/5 border-blue-500/30 dark:bg-blue-500/10',
         isAssigned && 'bg-green-500/5 border-green-500/30 dark:bg-green-500/10',
+        error && 'bg-red-500/5 border-red-500/30 dark:bg-red-500/10',
         className
       )}
     >
@@ -57,11 +63,15 @@ export function DetectedFileCard({
               'flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
               isAssigned
                 ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                : error
+                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
             )}
           >
             {isAssigned ? (
               <CheckCircle2 className="h-5 w-5" />
+            ) : error ? (
+              <AlertCircle className="h-5 w-5" />
             ) : (
               <FileText className="h-5 w-5" />
             )}
@@ -71,12 +81,19 @@ export function DetectedFileCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-medium text-foreground">
-                {isAssigned ? 'File Assigned' : 'File Created'}
+                {isAssigned ? 'File Assigned' : error ? 'Assignment Failed' : 'File Created'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground font-mono truncate" title={file.filePath}>
               {file.relativePath}
             </p>
+
+            {/* Error message */}
+            {error && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">
+                {error}
+              </p>
+            )}
 
             {/* Actions */}
             {!isAssigned && (
@@ -93,16 +110,26 @@ export function DetectedFileCard({
                   </Button>
                 )}
                 <Button
-                  variant="default"
+                  variant={error ? 'outline' : 'default'}
                   size="sm"
                   onClick={handleAssign}
                   disabled={isAssigning}
-                  className="h-7 px-2.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                  className={cn(
+                    'h-7 px-2.5 text-xs',
+                    error
+                      ? 'border-red-500/50 text-red-600 hover:bg-red-500/10 dark:text-red-400'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  )}
                 >
                   {isAssigning ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       Assigning...
+                    </>
+                  ) : error ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                      Retry
                     </>
                   ) : (
                     <>

@@ -540,7 +540,9 @@ export function PRDChatPanel() {
   /** Handle assigning an external .md file as the PRD */
   const handleAssignFileAsPrd = useCallback(
     async (file: MdFileDetectedPayload) => {
-      if (!currentSession?.projectPath) return
+      if (!currentSession?.projectPath) {
+        throw new Error('No project path available')
+      }
 
       try {
         const result = await prdChatApi.assignFileAsPrd(
@@ -571,6 +573,8 @@ export function PRDChatPanel() {
           'Failed to assign PRD',
           err instanceof Error ? err.message : 'An unexpected error occurred.'
         )
+        // Re-throw so DetectedFileCard can show error state
+        throw err
       }
     },
     [currentSession, markFileAsAssigned, startWatchingPlanFile, setCurrentSession, assessUnifiedQuality]
