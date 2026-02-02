@@ -96,12 +96,7 @@ const TABS: TabConfig[] = [
     label: 'Deps',
     getCount: countDependencies,
   },
-  {
-    value: 'progress',
-    icon: BookOpen,
-    label: 'Progress',
-    getCount: (props) => props.progressSummary?.learningsCount ?? 0,
-  },
+  { value: 'progress', icon: BookOpen, label: 'Progress' },
   { value: 'terminal', icon: Terminal, label: 'Terminal' },
   { value: 'commits', icon: GitCommit, label: 'Git' },
   {
@@ -169,7 +164,7 @@ export function DashboardTabs(props: DashboardTabsProps): React.JSX.Element {
                     <span className="hidden sm:inline">
                       {tab.label ? `${tab.label} ${displayCount}`.trim() : displayCount}
                     </span>
-                    {tab.showMobileCount && count && (
+                    {tab.showMobileCount && count !== undefined && count !== 0 && (
                       <span className="sm:hidden ml-0.5 text-[9px] font-medium">{count}</span>
                     )}
                   </TabsTrigger>
