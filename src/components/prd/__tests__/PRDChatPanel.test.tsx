@@ -564,11 +564,13 @@ describe('PRDChatPanel', () => {
       renderWithRouter(<PRDChatPanel />)
 
       // When no sessions exist, show the type selector to create a new one
-      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Import from GitHub/i })).toBeInTheDocument()
+      // With single-step flow, all types are visible immediately
+      expect(screen.getByRole('button', { name: /Bug Fix/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /New Feature/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Import from GitHub Issues/i })).toBeInTheDocument()
     })
 
-    it('shows workflow options when no sessions exist', () => {
+    it('shows type selection header when no sessions exist', () => {
       mockUsePRDChatStore.mockReturnValue({
         ...defaultStoreState,
         sessions: [],
@@ -578,7 +580,7 @@ describe('PRDChatPanel', () => {
 
       renderWithRouter(<PRDChatPanel />)
 
-      expect(screen.getByText(/How would you like to create your PRD/i)).toBeInTheDocument()
+      expect(screen.getByText(/Create a new PRD/i)).toBeInTheDocument()
     })
 
     it('does not show chat input when no sessions exist', () => {
@@ -798,7 +800,9 @@ describe('PRDChatPanel', () => {
       renderWithRouter(<PRDChatPanel />)
 
       // Type selector is shown instead of empty state
-      expect(screen.getByRole('button', { name: /Full Project Plan/i })).toBeInTheDocument()
+      // With single-step flow, all types are visible immediately
+      expect(screen.getByRole('button', { name: /Bug Fix/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /New Feature/i })).toBeInTheDocument()
     })
   })
 

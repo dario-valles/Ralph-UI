@@ -6,10 +6,61 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MessageSquare, Trash2, Loader2, MoreHorizontal, Copy } from 'lucide-react'
-import type { ChatSession } from '@/types'
+import {
+  MessageSquare,
+  Trash2,
+  Loader2,
+  MoreHorizontal,
+  Copy,
+  Bug,
+  RefreshCcw,
+  Plug,
+  Sparkles,
+  Rocket,
+  FileText,
+  LucideIcon,
+} from 'lucide-react'
+import type { ChatSession, PRDTypeValue } from '@/types'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/date-utils'
+
+// Get the icon component for a PRD type
+function getPrdTypeIcon(prdType?: PRDTypeValue): LucideIcon {
+  switch (prdType) {
+    case 'bug_fix':
+      return Bug
+    case 'refactoring':
+      return RefreshCcw
+    case 'api_integration':
+      return Plug
+    case 'new_feature':
+      return Sparkles
+    case 'full_new_app':
+      return Rocket
+    case 'general':
+    default:
+      return FileText
+  }
+}
+
+// Get the color classes for a PRD type icon
+function getPrdTypeColor(prdType?: PRDTypeValue): string {
+  switch (prdType) {
+    case 'bug_fix':
+      return 'text-red-500 dark:text-red-400'
+    case 'refactoring':
+      return 'text-purple-500 dark:text-purple-400'
+    case 'api_integration':
+      return 'text-green-500 dark:text-green-400'
+    case 'new_feature':
+      return 'text-blue-500 dark:text-blue-400'
+    case 'full_new_app':
+      return 'text-amber-500 dark:text-amber-400'
+    case 'general':
+    default:
+      return 'text-gray-500 dark:text-gray-400'
+  }
+}
 
 interface SessionItemProps {
   session: ChatSession
@@ -43,6 +94,11 @@ export function SessionItem({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {isProcessing ? (
             <Loader2 className="h-4 w-4 shrink-0 text-primary animate-spin" />
+          ) : session.prdType ? (
+            (() => {
+              const TypeIcon = getPrdTypeIcon(session.prdType)
+              return <TypeIcon className={cn('h-4 w-4 shrink-0', getPrdTypeColor(session.prdType))} />
+            })()
           ) : (
             <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}

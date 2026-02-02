@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tooltip } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
   Lightbulb,
   AlertTriangle,
   ChevronDown,
+  HelpCircle,
 } from 'lucide-react'
 import type { QualityAssessment, UnifiedQualityReport } from '@/types'
 import { cn } from '@/lib/utils'
@@ -22,6 +24,13 @@ import {
   getProgressColor,
   getProgressBgColor,
 } from './quality-utils'
+
+// Short hints for each score dimension
+const SCORE_HINTS = {
+  completeness: 'All sections present',
+  clarity: 'Specific & unambiguous',
+  actionability: 'Ready to implement',
+} as const
 
 interface QualityScoreCardProps {
   /** Legacy assessment prop - use unifiedReport instead */
@@ -41,15 +50,27 @@ interface ScoreBarProps {
   label: string
   shortLabel: string
   score: number
+  hint?: string
 }
 
-function ScoreBar({ label, shortLabel, score }: ScoreBarProps) {
+function ScoreBar({ label, shortLabel, score, hint }: ScoreBarProps) {
+  const labelContent = (
+    <span className="text-[11px] text-muted-foreground w-12 shrink-0 flex items-center gap-0.5">
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sm:hidden">{shortLabel}</span>
+      {hint && <HelpCircle className="h-2.5 w-2.5 text-muted-foreground/50" />}
+    </span>
+  )
+
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-muted-foreground w-12 shrink-0">
-        <span className="hidden sm:inline">{label}</span>
-        <span className="sm:hidden">{shortLabel}</span>
-      </span>
+      {hint ? (
+        <Tooltip content={hint} side="left" delayDuration={100}>
+          <span className="cursor-help">{labelContent}</span>
+        </Tooltip>
+      ) : (
+        labelContent
+      )}
       <div className={cn('flex-1 h-1.5 rounded-full overflow-hidden', getProgressBgColor(score))}>
         <div
           className={cn('h-full rounded-full transition-all duration-500', getProgressColor(score))}
@@ -338,9 +359,9 @@ export function QualityScoreCard({
           </div>
           {/* Score Bars */}
           <div className="flex-1 min-w-0 space-y-2 py-1">
-            <ScoreBar label="Complete" shortLabel="Comp" score={legacyAssessment.completeness} />
-            <ScoreBar label="Clarity" shortLabel="Clear" score={legacyAssessment.clarity} />
-            <ScoreBar label="Action" shortLabel="Action" score={legacyAssessment.actionability} />
+            <ScoreBar label="Complete" shortLabel="Comp" score={legacyAssessment.completeness} hint={SCORE_HINTS.completeness} />
+            <ScoreBar label="Clarity" shortLabel="Clear" score={legacyAssessment.clarity} hint={SCORE_HINTS.clarity} />
+            <ScoreBar label="Action" shortLabel="Action" score={legacyAssessment.actionability} hint={SCORE_HINTS.actionability} />
           </div>
         </div>
 
