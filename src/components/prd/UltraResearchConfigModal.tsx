@@ -2,6 +2,7 @@
  * Ultra Research Configuration Modal
  *
  * Allows users to configure multi-agent deep research settings:
+ * - Research query to investigate
  * - Execution mode (parallel vs sequential)
  * - Research agents (2-5 agents with type/provider/model/focus)
  * - Discussion rounds (0-3)
@@ -19,11 +20,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Tooltip } from '@/components/ui/tooltip'
-import { Zap, Layers, Plus, Info, Microscope } from 'lucide-react'
+import { Zap, Layers, Plus, Info, Microscope, Play, Search, Users, MessageSquare } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
 import { useAvailableAgents } from '@/hooks/useAvailableAgents'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
@@ -60,7 +63,7 @@ export function UltraResearchConfigModal() {
  * Inner content - only renders when modal is open, resets state on remount
  */
 function UltraResearchConfigContent() {
-  const { ultraResearchConfig, closeConfigModal, setUltraResearchConfig } = usePRDChatStore()
+  const { ultraResearchConfig, closeConfigModal, setUltraResearchConfig, startUltraResearch, currentSession } = usePRDChatStore()
 
   // Load available agents (static list)
   const { agents: availableAgents, loading: agentsLoading } = useAvailableAgents()
@@ -171,6 +174,8 @@ function UltraResearchConfigContent() {
     initial.synthesizeProviderId
   )
   const [synthesizeModel, setSynthesizeModel] = useState(initial.synthesizeModel)
+  const [researchQuery, setResearchQuery] = useState('')
+  const [isStarting, setIsStarting] = useState(false)
 
   // Load models for synthesizer
   const synthesizerModels = useAvailableModels(
@@ -226,6 +231,39 @@ function UltraResearchConfigContent() {
     closeConfigModal()
   }
 
+  const handleStartResearch = async () => {
+    if (!researchQuery.trim() || !currentSession?.projectPath) return
+
+    setIsStarting(true)
+
+    try {
+      // Save config first
+      const synthesizerValue = synthesizeModel || synthesizerModels.defaultModelId
+      const config: UltraResearchConfig = {
+        id: ultraResearchConfig?.id || '',
+        enabled: true,
+        mode,
+        agents,
+        discussionRounds,
+        synthesizeModel: synthesizerValue,
+      }
+      setUltraResearchConfig(config)
+
+      // Start the research
+      await startUltraResearch(
+        researchQuery.trim(),
+        currentSession.projectPath,
+        currentSession.id
+      )
+
+      closeConfigModal()
+    } catch (error) {
+      console.error('Failed to start research:', error)
+    } finally {
+      setIsStarting(false)
+    }
+  }
+
   const handleCancel = () => {
     // If there was no prior config, disable ultra research
     if (!ultraResearchConfig?.id) {
@@ -235,29 +273,89 @@ function UltraResearchConfigContent() {
   }
 
   const isLoading = agentsLoading || providersLoading
+  const hasValidSession = !!currentSession?.projectPath
 
   return (
-    <DialogContent className="max-w-lg">
+    <DialogContent size="lg" className="max-h-[85vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Microscope className="h-5 w-5 text-purple-600" />
           Ultra Research Configuration
+          <Badge
+            variant="outline"
+            className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-700"
+          >
+            Beta
+          </Badge>
         </DialogTitle>
         <DialogDescription>
           Configure multi-agent deep research for comprehensive PRD creation.
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-6 py-4">
+      <div className="space-y-4 py-2">
+        {/* Research Query Section */}
+        <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-purple-600" />
+            <Label htmlFor="research-query" className="text-sm font-medium">Research Query</Label>
+          </div>
+          <Input
+            id="research-query"
+            value={researchQuery}
+            onChange={(e) => setResearchQuery(e.target.value)}
+            placeholder="What should the agents research? (e.g., 'Best authentication patterns for React apps')"
+            className="bg-background"
+          />
+          <p className="text-xs text-muted-foreground">
+            Describe what you want the research agents to investigate
+          </p>
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-md bg-purple-500/10 border border-purple-500/30 p-2 text-center">
+            <div className="flex items-center justify-center gap-1">
+              <Users className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+              <span className="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                {agents.length}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">Agents</div>
+          </div>
+          <div className="rounded-md bg-blue-500/10 border border-blue-500/30 p-2 text-center">
+            <div className="flex items-center justify-center gap-1">
+              <MessageSquare className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                {discussionRounds}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">Discussion Rounds</div>
+          </div>
+          <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-2 text-center">
+            <div className="flex items-center justify-center gap-1">
+              {mode === 'parallel' ? (
+                <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              ) : (
+                <Layers className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              )}
+              <span className="text-lg font-semibold text-amber-600 dark:text-amber-400 capitalize">
+                {mode.slice(0, 3)}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">Mode</div>
+          </div>
+        </div>
+
         {/* Execution Mode */}
-        <div className="space-y-3">
+        <div className="rounded-md border border-border/50 p-3 space-y-3">
           <Label className="text-sm font-medium">Execution Mode</Label>
           <div className="grid grid-cols-2 gap-3">
             <Card
-              className={`p-3 cursor-pointer transition-colors ${
+              className={`p-3 cursor-pointer transition-all ${
                 mode === 'parallel'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30'
-                  : 'hover:bg-muted/50'
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 shadow-sm'
+                  : 'hover:bg-muted/50 hover:border-border'
               }`}
               onClick={() => setMode('parallel')}
             >
@@ -271,10 +369,10 @@ function UltraResearchConfigContent() {
             </Card>
 
             <Card
-              className={`p-3 cursor-pointer transition-colors ${
+              className={`p-3 cursor-pointer transition-all ${
                 mode === 'sequential'
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30'
-                  : 'hover:bg-muted/50'
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 shadow-sm'
+                  : 'hover:bg-muted/50 hover:border-border'
               }`}
               onClick={() => setMode('sequential')}
             >
@@ -290,7 +388,7 @@ function UltraResearchConfigContent() {
         </div>
 
         {/* Research Agents */}
-        <div className="space-y-3">
+        <div className="rounded-md border border-border/50 p-3 space-y-3">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">
               Research Agents ({agents.length}/{MAX_RESEARCH_AGENTS})
@@ -307,7 +405,7 @@ function UltraResearchConfigContent() {
             </Button>
           </div>
 
-          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+          <div className="space-y-2 max-h-[180px] overflow-y-auto">
             {agents.map((agent, index) => (
               <UltraResearchAgentCardWithModels
                 key={agent.id}
@@ -324,7 +422,7 @@ function UltraResearchConfigContent() {
         </div>
 
         {/* Discussion Rounds */}
-        <div className="space-y-3">
+        <div className="rounded-md border border-border/50 p-3 space-y-3">
           <div className="flex items-center gap-2">
             <Label className="text-sm font-medium">Discussion Rounds: {discussionRounds}</Label>
             <Tooltip content="Agents critique each other's findings before synthesis">
@@ -347,7 +445,7 @@ function UltraResearchConfigContent() {
         </div>
 
         {/* Synthesizer Agent/Model */}
-        <div className="space-y-2">
+        <div className="rounded-md border border-border/50 p-3 space-y-2">
           <Label className="text-sm font-medium">Synthesizer</Label>
           <GroupedAgentModelSelector
             agentOptions={agentOptions}
@@ -370,13 +468,26 @@ function UltraResearchConfigContent() {
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex-col sm:flex-row gap-2">
         <Button variant="outline" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button onClick={handleSave} className="bg-purple-600 hover:bg-purple-700">
+        <Button variant="outline" onClick={handleSave}>
           Save Configuration
         </Button>
+        <Tooltip
+          content={!hasValidSession ? 'Start a chat session first to begin research' : ''}
+          side="top"
+        >
+          <Button
+            onClick={handleStartResearch}
+            disabled={!researchQuery.trim() || !hasValidSession || isStarting}
+            className="bg-purple-600 hover:bg-purple-700 gap-2"
+          >
+            <Play className="h-4 w-4" />
+            {isStarting ? 'Starting...' : 'Start Research'}
+          </Button>
+        </Tooltip>
       </DialogFooter>
     </DialogContent>
   )
