@@ -118,7 +118,11 @@ export function usePRDChatEvents({
   }, [])
 
   const markFileAsAssigned = useCallback((filePath: string) => {
-    setAssignedFilePaths((prev) => new Set([...prev, filePath]))
+    setAssignedFilePaths((prev) => {
+      const next = new Set(prev)
+      next.add(filePath)
+      return next
+    })
   }, [])
 
   // Listen for PRD file update events

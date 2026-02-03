@@ -331,6 +331,21 @@ function VagueWarningItem({ warning }: { warning: VagueLanguageWarning }) {
   )
 }
 
+/** Get badge color class based on pass ratio */
+function getPassedBadgeColor(passedCount: number, totalChecks: number): string {
+  const ratio = passedCount / totalChecks
+  if (ratio === 1) {
+    return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30'
+  }
+  if (ratio >= 0.75) {
+    return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+  }
+  if (ratio >= 0.5) {
+    return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+  }
+  return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
+}
+
 /** Enhanced summary showing passed/total and grade */
 function EnhancedChecksSummary({
   passedCount,
@@ -353,16 +368,7 @@ function EnhancedChecksSummary({
         {/* Passed count badge */}
         <Badge
           variant="outline"
-          className={cn(
-            'gap-1.5',
-            passedCount === totalChecks
-              ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30'
-              : passedCount >= totalChecks * 0.75
-                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                : passedCount >= totalChecks * 0.5
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                  : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
-          )}
+          className={cn('gap-1.5', getPassedBadgeColor(passedCount, totalChecks))}
         >
           <CheckCircle2 className="h-3 w-3" />
           {passedCount}/{totalChecks} checks passed

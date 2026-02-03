@@ -211,13 +211,13 @@ export function UltraResearchProgress() {
                             )}
                           </div>
                         </div>
-                        {streamContent ? (
+                        {streamContent && (
                           isExpanded ? (
                             <ChevronDown className="h-3 w-3 text-muted-foreground" />
                           ) : (
                             <ChevronRight className="h-3 w-3 text-muted-foreground" />
                           )
-                        ) : null}
+                        )}
                       </div>
                     </CollapsibleTrigger>
 

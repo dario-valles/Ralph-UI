@@ -5,6 +5,29 @@ import { FileText, FolderInput, Loader2, Eye, CheckCircle2, AlertCircle, Refresh
 import { cn } from '@/lib/utils'
 import type { MdFileDetectedPayload } from '@/types'
 
+/** Get icon and styling based on card state */
+function getStateConfig(isAssigned: boolean, hasError: boolean) {
+  if (isAssigned) {
+    return {
+      icon: <CheckCircle2 className="h-5 w-5" />,
+      containerClass: 'bg-green-500/10 text-green-600 dark:text-green-400',
+      label: 'File Assigned',
+    }
+  }
+  if (hasError) {
+    return {
+      icon: <AlertCircle className="h-5 w-5" />,
+      containerClass: 'bg-red-500/10 text-red-600 dark:text-red-400',
+      label: 'Assignment Failed',
+    }
+  }
+  return {
+    icon: <FileText className="h-5 w-5" />,
+    containerClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    label: 'File Created',
+  }
+}
+
 interface DetectedFileCardProps {
   /** The detected file payload */
   file: MdFileDetectedPayload
@@ -45,6 +68,8 @@ export function DetectedFileCard({
     }
   }
 
+  const stateConfig = getStateConfig(isAssigned, !!error)
+
   return (
     <Card
       className={cn(
@@ -61,28 +86,16 @@ export function DetectedFileCard({
           <div
             className={cn(
               'flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
-              isAssigned
-                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                : error
-                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+              stateConfig.containerClass
             )}
           >
-            {isAssigned ? (
-              <CheckCircle2 className="h-5 w-5" />
-            ) : error ? (
-              <AlertCircle className="h-5 w-5" />
-            ) : (
-              <FileText className="h-5 w-5" />
-            )}
+            {stateConfig.icon}
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-foreground">
-                {isAssigned ? 'File Assigned' : error ? 'Assignment Failed' : 'File Created'}
-              </span>
+              <span className="text-sm font-medium text-foreground">{stateConfig.label}</span>
             </div>
             <p className="text-xs text-muted-foreground font-mono truncate" title={file.filePath}>
               {file.relativePath}
