@@ -172,6 +172,55 @@ const result = await invoke<T>('command_name', { args })
 - `src/lib/tauri-check.ts` - Centralized `isTauri` check for environment detection
 - `src/test/store-test-utils.ts` - Test utilities: mock factories, `resetStore` helper
 
+### Agent/Model Selection
+**IMPORTANT**: Never use hardcoded agent or model selects. Always use the shared `AgentModelSelector` or `GroupedAgentModelSelector` components with the `useAgentModelSelector` hook.
+
+**Why:**
+- Dynamic provider detection (Z.AI, MiniMax, etc.) for Claude
+- Automatic model loading with proper defaults
+- Consistent UI across the app
+- Unique IDs for form accessibility
+
+**Components:**
+- `AgentModelSelector` - Two variants: `default` (with labels) and `compact` (inline)
+- `GroupedAgentModelSelector` - Compact grouped selector with icons (for headers)
+
+**Hook:**
+```typescript
+import { useAgentModelSelector } from '@/hooks/useAgentModelSelector'
+
+const {
+  agentOptions,           // Dynamic options including "Claude (Z.AI)" variants
+  currentAgentOptionValue, // Composite value like "claude:zai"
+  handleAgentOptionChange, // Handles agent+provider together
+  modelId, setModelId,
+  models, modelsLoading,
+  defaultModelId,
+} = useAgentModelSelector({ initialAgent: 'claude' })
+```
+
+**Usage:**
+```typescript
+<AgentModelSelector
+  variant="compact"
+  idPrefix="unique-id"           // Required when multiple instances exist
+  agentOptions={agentOptions}
+  currentAgentOptionValue={currentAgentOptionValue}
+  onAgentOptionChange={handleAgentOptionChange}
+  agentType={agentType}
+  modelId={modelId}
+  onModelChange={setModelId}
+  models={models}
+  modelsLoading={modelsLoading}
+/>
+```
+
+**Key files:**
+- `src/hooks/useAgentModelSelector.ts` - Combined agent/model selection hook
+- `src/hooks/useAvailableModels.ts` - Model loading with provider support
+- `src/components/shared/AgentModelSelector.tsx` - Reusable selector component
+- `src/components/shared/GroupedAgentModelSelector.tsx` - Header-style grouped selector
+
 ### Component Organization
 - Feature folders under `src/components/` (e.g., `mission-control/`, `agents/`, `sessions/`)
 - shadcn/ui base components in `src/components/ui/`
