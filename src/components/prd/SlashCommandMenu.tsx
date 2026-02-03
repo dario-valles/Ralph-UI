@@ -38,12 +38,17 @@ export function SlashCommandMenu({ isOpen, onSelect, query, selectedIndex }: Sla
     }
   }, [storeCommands.length, loading, loadCommands, activeProjectInfo?.path])
 
-  // Convert store commands to SlashCommands, or fall back to SLASH_COMMANDS
+  // Convert store commands to SlashCommands, merging with action commands from SLASH_COMMANDS
   const allCommands = useMemo(() => {
+    // Get action-type commands from SLASH_COMMANDS (these aren't in the store)
+    const actionCommands = SLASH_COMMANDS.filter((cmd) => cmd.type === 'action')
+
     if (storeCommands.length > 0) {
       // Filter to only enabled commands and convert
       const enabledConfigs = storeCommands.filter((c) => c.enabled)
-      return configsToSlashCommands(enabledConfigs)
+      const templateCommands = configsToSlashCommands(enabledConfigs)
+      // Merge template commands from store with action commands
+      return [...templateCommands, ...actionCommands]
     }
     // Fallback to hardcoded commands if store not loaded
     return SLASH_COMMANDS

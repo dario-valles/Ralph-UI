@@ -27,6 +27,7 @@ pub mod context_ops;
 pub mod index;
 pub mod iterations;
 pub mod projects;
+pub mod research_ops;
 pub mod sessions;
 
 use std::fs;

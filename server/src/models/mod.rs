@@ -4,6 +4,7 @@ pub mod chat_commands;
 pub mod context;
 pub mod prd_chat;
 pub mod state_machine;
+pub mod ultra_research;
 
 pub use chat_commands::{
     ChatCommandConfig, ChatCommandPreference, ChatCommandScope, ChatCommandsFile,
@@ -21,6 +22,14 @@ pub use prd_chat::{
     DiscoveryQuestion, DiscoverySummary, EnhancedQualityCheck, EnhancedQualityReport,
     ExtractedPRDContent, GuidedQuestion, MessageRole, PRDType, QualityAssessment, QualityCheck,
     QualityCheckSeverity, QualityGrade, QuestionType, UnifiedQualityReport, VagueLanguageWarning,
+};
+pub use ultra_research::{
+    CancelResearchRequest, DiscussionEntry, DiscussionEntryPayload, DiscussionEntryType,
+    GetResearchProgressRequest, ResearchAgent, ResearchAgentProgressPayload, ResearchAgentRole,
+    ResearchAgentStatus, ResearchErrorPayload, ResearchExecutionMode, ResearchFinding,
+    ResearchProgress, ResearchSession, ResearchSessionStatus, ResearchSessionUpdatePayload,
+    StartUltraResearchRequest, StartUltraResearchResponse, SynthesisProgressPayload,
+    UltraResearchConfig, DEFAULT_RESEARCH_ANGLES, MAX_DISCUSSION_ROUNDS, MAX_RESEARCH_AGENTS,
 };
 
 use chrono::{DateTime, Utc};

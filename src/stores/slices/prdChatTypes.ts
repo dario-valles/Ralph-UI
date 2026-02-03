@@ -111,11 +111,14 @@ export interface FileWatchSlice {
 /**
  * Full PRD Chat store type combining all slices
  */
+import type { UltraResearchSlice } from './ultraResearchSlice'
+
 export type PRDChatStore = ChatCoreState &
   ChatSessionSlice &
   MessagingSlice &
   FileWatchSlice &
-  ContextSlice
+  ContextSlice &
+  UltraResearchSlice
 
 /**
  * Zustand setter type for slices

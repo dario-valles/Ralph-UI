@@ -97,6 +97,11 @@ impl EventBroadcaster {
         self.tx.subscribe()
     }
 
+    /// Alias for broadcast - allows calling as send(event, payload)
+    pub fn send(&self, event_type: &str, payload: impl Serialize) {
+        self.broadcast(event_type, payload);
+    }
+
     /// Get a reference to the push notifier (if set)
     pub fn get_push_notifier(&self) -> Option<Arc<PushNotifier>> {
         self.push_notifier.clone()

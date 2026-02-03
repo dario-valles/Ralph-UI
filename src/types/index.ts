@@ -288,7 +288,7 @@ export type {
   Requirement as PrdWorkflowRequirement,
   ResearchAgentConfig,
   ResearchConfig,
-  ResearchAgentStatus,
+  PrdWorkflowResearchAgentStatus,
   ResearchStatus as PrdWorkflowResearchStatus,
   DependencyStats,
   PrdWorkflowState,
@@ -351,3 +351,36 @@ export {
   createDefaultContextConfig,
   createDefaultProjectContext,
 } from './context'
+
+// ============================================================================
+// Ultra Research Types
+// ============================================================================
+
+export type {
+  ResearchAgentRole,
+  ResearchAgentStatus,
+  ResearchAgent,
+  ResearchExecutionMode,
+  UltraResearchConfig,
+  ResearchFinding,
+  DiscussionEntryType,
+  DiscussionEntry,
+  ResearchSessionStatus,
+  ResearchSession,
+  ResearchProgress,
+  ResearchAgentProgressPayload,
+  ResearchSessionUpdatePayload,
+  ResearchErrorPayload,
+  StartUltraResearchRequest,
+  StartUltraResearchResponse,
+  CancelResearchRequest,
+  GetResearchProgressRequest,
+} from './ultra-research'
+
+export {
+  createDefaultUltraResearchConfig,
+  createDefaultResearchAgent,
+  MAX_RESEARCH_AGENTS,
+  MAX_DISCUSSION_ROUNDS,
+  DEFAULT_RESEARCH_ANGLES,
+} from './ultra-research'

@@ -12,3 +12,10 @@ export { createChatSessionSlice } from './chatSessionSlice'
 export { createMessagingSlice } from './messagingSlice'
 export { createFileWatchSlice } from './fileWatchSlice'
 export { createContextSlice, contextSliceInitialState, type ContextSlice } from './contextSlice'
+export {
+  createUltraResearchSlice,
+  ultraResearchInitialState,
+  type UltraResearchSlice,
+  type UltraResearchState,
+  type UltraResearchActions,
+} from './ultraResearchSlice'

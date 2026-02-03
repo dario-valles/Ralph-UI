@@ -218,9 +218,9 @@ export interface ResearchConfig {
 }
 
 /**
- * Research agent status
+ * PRD Workflow research agent status
  */
-export interface ResearchAgentStatus {
+export interface PrdWorkflowResearchAgentStatus {
   /** Agent identifier */
   agentId: string
   /** Display name */
@@ -240,7 +240,7 @@ export interface ResearchAgentStatus {
  */
 export interface ResearchStatus {
   /** Status of each research agent */
-  agents: ResearchAgentStatus[]
+  agents: PrdWorkflowResearchAgentStatus[]
   /** Whether synthesis is complete */
   synthesisComplete: boolean
   /** Overall completion percentage (0-100) */

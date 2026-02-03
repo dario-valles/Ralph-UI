@@ -22,6 +22,7 @@ pub mod tasks;
 pub mod templates;
 pub mod terminal;
 pub mod traces;
+pub mod ultra_research;
 
 // Re-export all commands for easy registration
 pub use agents::*;
@@ -46,3 +47,4 @@ pub use tasks::*;
 pub use templates::*;
 pub use terminal::*;
 pub use traces::*;
+pub use ultra_research::*;

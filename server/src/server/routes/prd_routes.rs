@@ -250,6 +250,44 @@ pub async fn route_prd_command(
             )
         }
 
+        // Ultra Research Commands
+        "start_ultra_research" => {
+            let request: crate::models::StartUltraResearchRequest = get_arg(&args, "request")?;
+            let broadcaster = state.broadcaster.clone();
+            let response =
+                commands::ultra_research::start_ultra_research(request, broadcaster).await?;
+            serde_json::to_value(response).map_err(|e| e.to_string())
+        }
+
+        "get_research_session" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let session =
+                commands::ultra_research::get_research_session(&project_path, &session_id)?;
+            serde_json::to_value(session).map_err(|e| e.to_string())
+        }
+
+        "get_research_progress" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            let progress =
+                commands::ultra_research::get_research_progress(&project_path, &session_id)?;
+            serde_json::to_value(progress).map_err(|e| e.to_string())
+        }
+
+        "list_research_sessions" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let sessions = commands::ultra_research::list_research_sessions(&project_path)?;
+            serde_json::to_value(sessions).map_err(|e| e.to_string())
+        }
+
+        "cancel_ultra_research" => {
+            let project_path: String = get_arg(&args, "projectPath")?;
+            let session_id: String = get_arg(&args, "sessionId")?;
+            commands::ultra_research::cancel_ultra_research(&project_path, &session_id)?;
+            serde_json::to_value(true).map_err(|e| e.to_string())
+        }
+
         _ => Err(format!("Unknown PRD command: {}", cmd)),
     }
 }
@@ -284,5 +322,11 @@ pub fn is_prd_command(cmd: &str) -> bool {
             | "assign_file_as_prd"
             | "update_session_prd_id"
             | "detect_prd_from_history"
+            // Ultra Research commands
+            | "start_ultra_research"
+            | "get_research_session"
+            | "get_research_progress"
+            | "list_research_sessions"
+            | "cancel_ultra_research"
     )
 }

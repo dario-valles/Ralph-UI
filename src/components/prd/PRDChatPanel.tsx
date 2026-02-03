@@ -24,7 +24,9 @@ import { ChatHeader } from './ChatHeader'
 import { ChatArea } from './ChatArea'
 import { ChatInputArea, type ChatInputHandle } from './ChatInputArea'
 import { MobilePlanSheet } from './MobilePlanSheet'
+import { UltraResearchConfigModal } from './UltraResearchConfigModal'
 import { prdChatApi, prdApi } from '@/lib/backend-api'
+import type { SlashCommand, SlashCommandResult } from '@/lib/prd-chat-commands'
 import type { MdFileDetectedPayload } from '@/types'
 import { ContextSetupBanner } from '@/components/context'
 import { toast } from '@/stores/toastStore'
@@ -117,6 +119,7 @@ export function PRDChatPanel() {
     updateSessionAgent,
     loadContextConfig,
     toggleContextInjection,
+    openConfigModal,
   } = usePRDChatStore()
 
   // Workflow store for execution mode
@@ -576,6 +579,19 @@ export function PRDChatPanel() {
     [handleSendMessage]
   )
 
+  /** Handle action commands from slash menu (e.g., /ultra-research) */
+  const handleActionCommand = useCallback(
+    async (command: SlashCommand): Promise<SlashCommandResult> => {
+      if (command.id === 'ultra-research') {
+        openConfigModal()
+        return { success: true }
+      }
+      // Unknown action command
+      return { success: false, error: `Unknown action command: ${command.id}` }
+    },
+    [openConfigModal]
+  )
+
   /** Handle assigning an external .md file as the PRD */
   const handleAssignFileAsPrd = useCallback(
     async (file: MdFileDetectedPayload) => {
@@ -768,6 +784,7 @@ export function PRDChatPanel() {
             onRefreshQuality={assessUnifiedQuality}
             onExecutionModeChange={handleExecutionModeChange}
             onMissingSectionClick={handleMissingSectionClick}
+            onActionCommand={handleActionCommand}
           />
         </CardContent>
       </Card>
@@ -819,6 +836,9 @@ export function PRDChatPanel() {
         open={!!executePrdFile}
         onOpenChange={(open) => !open && setExecutePrdFile(null)}
       />
+
+      {/* Ultra Research Config Modal */}
+      <UltraResearchConfigModal />
     </div>
   )
 }

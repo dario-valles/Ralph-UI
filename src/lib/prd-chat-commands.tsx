@@ -13,6 +13,7 @@ import {
   CheckCircle,
   Network,
   FileSliders,
+  Microscope,
 } from 'lucide-react'
 import type { ChatCommandConfig } from '@/types'
 
@@ -434,6 +435,21 @@ Provide a numbered list of stories in the order they should be implemented:
     type: 'template',
     template: '- [ ] Task: [Title]\n',
   },
+  // ==========================================================================
+  // Ultra Research Command
+  // ==========================================================================
+  {
+    id: 'ultra-research',
+    label: 'Ultra Research',
+    description: 'Start multi-agent deep research session',
+    icon: <Microscope className="h-4 w-4 mr-2" />,
+    type: 'action',
+    action: {
+      kind: 'modal',
+      modalId: 'ultra-research-config',
+    },
+    requiresCodebase: true,
+  },
 ]
 
 /**
@@ -496,6 +512,7 @@ export const COMMAND_ICONS: Record<string, React.ReactNode> = {
   story: <FileText className="h-4 w-4 mr-2" />,
   'story-dep': <GitBranch className="h-4 w-4 mr-2" />,
   task: <CheckSquare className="h-4 w-4 mr-2" />,
+  'ultra-research': <Microscope className="h-4 w-4 mr-2" />,
 }
 
 /**

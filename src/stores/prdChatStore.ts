@@ -20,10 +20,13 @@ import {
   createFileWatchSlice,
   createContextSlice,
   contextSliceInitialState,
+  createUltraResearchSlice,
+  ultraResearchInitialState,
+  type UltraResearchSlice,
 } from './slices'
 
 // Re-export types
-export type { StartSessionOptions }
+export type { StartSessionOptions, UltraResearchSlice }
 
 /**
  * PRD Chat Store
@@ -35,6 +38,11 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
   const messagingSlice = createMessagingSlice(set, get)
   const fileWatchSlice = createFileWatchSlice(set, get)
   const contextSlice = createContextSlice(set)
+  // Cast get/set for ultra research slice since it has a subset of the store type
+  const ultraResearchSlice = createUltraResearchSlice(
+    set as Parameters<typeof createUltraResearchSlice>[0],
+    get as Parameters<typeof createUltraResearchSlice>[1]
+  )
 
   return {
     // Core State (ChatCoreState)
@@ -89,5 +97,19 @@ export const usePRDChatStore = create<PRDChatStore>((set, get) => {
     loadContextConfig: contextSlice.loadContextConfig,
     toggleContextInjection: contextSlice.toggleContextInjection,
     clearContextState: contextSlice.clearContextState,
+
+    // Ultra Research State
+    ...ultraResearchInitialState,
+
+    // Ultra Research Actions
+    setUltraResearchConfig: ultraResearchSlice.setUltraResearchConfig,
+    toggleUltraResearch: ultraResearchSlice.toggleUltraResearch,
+    openConfigModal: ultraResearchSlice.openConfigModal,
+    closeConfigModal: ultraResearchSlice.closeConfigModal,
+    startUltraResearch: ultraResearchSlice.startUltraResearch,
+    cancelUltraResearch: ultraResearchSlice.cancelUltraResearch,
+    loadResearchSession: ultraResearchSlice.loadResearchSession,
+    subscribeToResearchEvents: ultraResearchSlice.subscribeToResearchEvents,
+    clearResearchState: ultraResearchSlice.clearResearchState,
   }
 })

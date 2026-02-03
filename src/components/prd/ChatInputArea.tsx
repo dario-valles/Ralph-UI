@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { ListOrdered, GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatSession, QualityAssessment, ChatAttachment, ExecutionMode } from '@/types'
+import type { SlashCommand, SlashCommandResult } from '@/lib/prd-chat-commands'
 
 export type { ChatInputHandle }
 
@@ -22,6 +23,8 @@ interface ChatInputAreaProps {
   onExecutionModeChange?: (mode: ExecutionMode) => void
   /** Callback when a missing section badge is clicked */
   onMissingSectionClick?: (section: string) => void
+  /** Callback when an action command is selected */
+  onActionCommand?: (command: SlashCommand) => Promise<SlashCommandResult>
 }
 
 /**
@@ -40,6 +43,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
     onRefreshQuality,
     onExecutionModeChange,
     onMissingSectionClick,
+    onActionCommand,
   },
   ref
 ) {
@@ -114,6 +118,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
               ? 'Create a session to start chatting...'
               : 'Describe your product requirements...'
           }
+          onActionCommand={onActionCommand}
         />
       </div>
     </>
