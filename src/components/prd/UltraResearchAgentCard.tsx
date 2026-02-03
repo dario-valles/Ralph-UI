@@ -90,6 +90,7 @@ export function UltraResearchAgentCard({
           {/* Agent Type & Model Row */}
           <AgentModelSelector
             variant="compact"
+            idPrefix={`ultra-research-${agent.id}`}
             agentOptions={agentOptions}
             currentAgentOptionValue={currentAgentOptionValue}
             onAgentOptionChange={handleAgentOptionChange}
@@ -107,6 +108,7 @@ export function UltraResearchAgentCard({
           {/* Focus Area */}
           <div>
             <Input
+              id={`ultra-research-${agent.id}-focus`}
               value={agent.angle || ''}
               onChange={(e) => onUpdate({ angle: e.target.value || undefined })}
               placeholder="Focus area (e.g., Security, UX)"

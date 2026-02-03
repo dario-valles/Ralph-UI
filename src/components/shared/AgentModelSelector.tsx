@@ -50,6 +50,8 @@ export interface AgentModelSelectorProps {
   currentAgentOptionValue?: string
   /** Callback when agent option changes (handles agent+provider together) */
   onAgentOptionChange?: (value: string) => void
+  /** ID prefix for form elements (for unique IDs when multiple instances exist) */
+  idPrefix?: string
 }
 
 /**
@@ -70,7 +72,11 @@ export function AgentModelSelector({
   agentOptions,
   currentAgentOptionValue,
   onAgentOptionChange,
+  idPrefix,
 }: AgentModelSelectorProps): React.JSX.Element {
+  // Generate unique IDs for form elements
+  const agentSelectId = idPrefix ? `${idPrefix}-agent-selector` : 'agent-selector'
+  const modelSelectId = idPrefix ? `${idPrefix}-model-selector` : 'model-selector'
   // Determine which API to use for agent selection
   const useNewApi = agentOptions && onAgentOptionChange && currentAgentOptionValue !== undefined
   const currentValue = useNewApi ? currentAgentOptionValue : agentType
@@ -93,12 +99,12 @@ export function AgentModelSelector({
       {/* Agent selector */}
       <div className="flex items-center gap-2">
         {variant === 'default' && (
-          <label htmlFor="agent-selector" className="text-sm text-muted-foreground whitespace-nowrap">
+          <label htmlFor={agentSelectId} className="text-sm text-muted-foreground whitespace-nowrap">
             Agent:
           </label>
         )}
         <NativeSelect
-          id="agent-selector"
+          id={agentSelectId}
           aria-label="Agent"
           value={currentValue}
           onChange={(e) => handleAgentSelectChange(e.target.value)}
@@ -130,12 +136,12 @@ export function AgentModelSelector({
       {/* Model selector */}
       <div className="flex items-center gap-2">
         {variant === 'default' && (
-          <label htmlFor="model-selector" className="text-sm text-muted-foreground whitespace-nowrap">
+          <label htmlFor={modelSelectId} className="text-sm text-muted-foreground whitespace-nowrap">
             Model:
           </label>
         )}
         <ModelSelector
-          id="model-selector"
+          id={modelSelectId}
           ariaLabel="Model"
           value={modelId}
           onChange={onModelChange}
