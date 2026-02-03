@@ -3,11 +3,13 @@
  *
  * Allows users to configure multi-agent deep research settings:
  * - Execution mode (parallel vs sequential)
- * - Research agents (2-5 agents with type/provider/focus)
+ * - Research agents (2-5 agents with type/provider/model/focus)
  * - Discussion rounds (0-3)
- * - Synthesizer model
+ * - Synthesizer agent/model
+ *
+ * Uses the shared AgentModelSelector pattern for consistent provider/model selection.
  */
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -19,20 +21,27 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import { NativeSelect as Select } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Zap, Layers, Plus, Info, Microscope } from 'lucide-react'
 import { usePRDChatStore } from '@/stores/prdChatStore'
-import { UltraResearchAgentCard } from './UltraResearchAgentCard'
+import { useAvailableAgents } from '@/hooks/useAvailableAgents'
+import { useAvailableModels } from '@/hooks/useAvailableModels'
+import { providerApi } from '@/lib/api/provider-api'
+import { GroupedAgentModelSelector } from '@/components/shared/GroupedAgentModelSelector'
+import { UltraResearchAgentCardWithModels } from './UltraResearchAgentCardWithModels'
 import {
   type UltraResearchConfig,
   type ResearchAgent,
   type ResearchExecutionMode,
+  type ApiProviderInfo,
+  type AgentType,
   createDefaultResearchAgent,
   MAX_RESEARCH_AGENTS,
   MAX_DISCUSSION_ROUNDS,
 } from '@/types'
+import { formatAgentName } from '@/types/agent'
+import type { AgentOption } from '@/hooks/useAgentModelSelector'
 
 /**
  * Modal wrapper - handles open/close state
@@ -53,6 +62,76 @@ export function UltraResearchConfigModal() {
 function UltraResearchConfigContent() {
   const { ultraResearchConfig, closeConfigModal, setUltraResearchConfig } = usePRDChatStore()
 
+  // Load available agents (static list)
+  const { agents: availableAgents, loading: agentsLoading } = useAvailableAgents()
+
+  // Load providers for Claude alternatives
+  const [providers, setProviders] = useState<ApiProviderInfo[]>([])
+  const [providersLoading, setProvidersLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchProviders = async () => {
+      setProvidersLoading(true)
+      try {
+        const result = await providerApi.getAll()
+        if (!cancelled) {
+          setProviders(result)
+        }
+      } catch (err) {
+        console.error('Failed to fetch providers:', err)
+      } finally {
+        if (!cancelled) {
+          setProvidersLoading(false)
+        }
+      }
+    }
+
+    fetchProviders()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Build agent options with provider variants for Claude
+  const agentOptions: AgentOption[] = useMemo(() => {
+    return availableAgents.flatMap((agent): AgentOption[] => {
+      if (agent === 'claude') {
+        const claudeOptions: AgentOption[] = [
+          {
+            value: 'claude',
+            label: 'Claude',
+            agentType: 'claude',
+            providerId: undefined,
+          },
+        ]
+
+        // Add configured alternative providers
+        for (const provider of providers) {
+          if (provider.id !== 'anthropic' && provider.hasToken) {
+            claudeOptions.push({
+              value: `claude:${provider.id}`,
+              label: `Claude (${provider.name})`,
+              agentType: 'claude',
+              providerId: provider.id,
+            })
+          }
+        }
+
+        return claudeOptions
+      }
+
+      return [
+        {
+          value: agent,
+          label: formatAgentName(agent),
+          agentType: agent,
+        },
+      ]
+    })
+  }, [availableAgents, providers])
+
   // Initialize state from config or defaults (only runs on mount)
   const getInitialValues = () => {
     if (ultraResearchConfig) {
@@ -63,6 +142,8 @@ function UltraResearchConfigContent() {
             ? ultraResearchConfig.agents
             : [createDefaultResearchAgent('agent-1', 'claude')],
         discussionRounds: ultraResearchConfig.discussionRounds,
+        synthesizeAgent: 'claude' as AgentType,
+        synthesizeProviderId: undefined as string | undefined,
         synthesizeModel: ultraResearchConfig.synthesizeModel,
       }
     }
@@ -73,7 +154,9 @@ function UltraResearchConfigContent() {
         createDefaultResearchAgent('agent-2', 'opencode'),
       ],
       discussionRounds: 1,
-      synthesizeModel: 'claude',
+      synthesizeAgent: 'claude' as AgentType,
+      synthesizeProviderId: undefined as string | undefined,
+      synthesizeModel: '',
     }
   }
 
@@ -83,7 +166,30 @@ function UltraResearchConfigContent() {
   const [mode, setMode] = useState<ResearchExecutionMode>(initial.mode)
   const [agents, setAgents] = useState<ResearchAgent[]>(initial.agents)
   const [discussionRounds, setDiscussionRounds] = useState(initial.discussionRounds)
+  const [synthesizeAgent, setSynthesizeAgent] = useState<AgentType>(initial.synthesizeAgent)
+  const [synthesizeProviderId, setSynthesizeProviderId] = useState<string | undefined>(
+    initial.synthesizeProviderId
+  )
   const [synthesizeModel, setSynthesizeModel] = useState(initial.synthesizeModel)
+
+  // Load models for synthesizer
+  const synthesizerModels = useAvailableModels(
+    synthesizeAgent,
+    synthesizeAgent === 'claude' ? synthesizeProviderId : undefined
+  )
+
+  // Synthesizer agent option value
+  const synthesizerAgentOptionValue =
+    synthesizeProviderId && synthesizeAgent === 'claude'
+      ? `claude:${synthesizeProviderId}`
+      : synthesizeAgent
+
+  const handleSynthesizerAgentChange = (value: string) => {
+    const [agentPart, providerPart] = value.split(':')
+    setSynthesizeAgent(agentPart as AgentType)
+    setSynthesizeProviderId(providerPart || undefined)
+    setSynthesizeModel('') // Reset to default for new agent
+  }
 
   const handleAddAgent = () => {
     if (agents.length >= MAX_RESEARCH_AGENTS) return
@@ -104,13 +210,16 @@ function UltraResearchConfigContent() {
   }
 
   const handleSave = () => {
+    // Store synthesizer as agent:provider:model string or just model
+    const synthesizerValue = synthesizeModel || synthesizerModels.defaultModelId
+
     const config: UltraResearchConfig = {
       id: ultraResearchConfig?.id || '',
       enabled: true,
       mode,
       agents,
       discussionRounds,
-      synthesizeModel,
+      synthesizeModel: synthesizerValue,
     }
 
     setUltraResearchConfig(config)
@@ -124,6 +233,8 @@ function UltraResearchConfigContent() {
     }
     closeConfigModal()
   }
+
+  const isLoading = agentsLoading || providersLoading
 
   return (
     <DialogContent className="max-w-lg">
@@ -198,13 +309,15 @@ function UltraResearchConfigContent() {
 
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
             {agents.map((agent, index) => (
-              <UltraResearchAgentCard
+              <UltraResearchAgentCardWithModels
                 key={agent.id}
                 agent={agent}
                 index={index}
                 onUpdate={(updates) => handleUpdateAgent(index, updates)}
                 onRemove={() => handleRemoveAgent(index)}
                 disabled={agents.length <= 2 && index < 2}
+                agentOptions={agentOptions}
+                agentsLoading={isLoading}
               />
             ))}
           </div>
@@ -233,23 +346,26 @@ function UltraResearchConfigContent() {
           </p>
         </div>
 
-        {/* Synthesizer Model */}
+        {/* Synthesizer Agent/Model */}
         <div className="space-y-2">
-          <Label htmlFor="synthesize-model" className="text-sm font-medium">
-            Synthesizer Model
-          </Label>
-          <Select
-            id="synthesize-model"
-            value={synthesizeModel}
-            onChange={(e) => setSynthesizeModel(e.target.value)}
-            className="w-full h-9"
-          >
-            <option value="claude">Claude</option>
-            <option value="opencode">OpenCode</option>
-            <option value="cursor">Cursor</option>
-          </Select>
+          <Label className="text-sm font-medium">Synthesizer</Label>
+          <GroupedAgentModelSelector
+            agentOptions={agentOptions}
+            currentAgentOptionValue={synthesizerAgentOptionValue}
+            onAgentOptionChange={handleSynthesizerAgentChange}
+            modelId={synthesizeModel}
+            defaultModelId={synthesizerModels.defaultModelId}
+            onModelChange={setSynthesizeModel}
+            models={synthesizerModels.models}
+            modelsLoading={synthesizerModels.loading}
+            agentsLoading={isLoading}
+            disabled={false}
+            idPrefix="synthesizer"
+            agentWidth="w-28"
+            modelWidth="w-40"
+          />
           <p className="text-xs text-muted-foreground">
-            Model used to synthesize all findings into the final PRD
+            Agent and model used to synthesize all findings into the final PRD
           </p>
         </div>
       </div>

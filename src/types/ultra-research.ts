@@ -27,6 +27,8 @@ export interface ResearchAgent {
   agentType: AgentType
   /** Provider ID for Claude agents (e.g., "zai", "minimax") */
   providerId?: string
+  /** Model ID for this agent (optional, uses default if not specified) */
+  modelId?: string
   /** Role in the research process */
   role: ResearchAgentRole
   /** Research focus area (e.g., "Security", "UX/DX", "Performance") */
@@ -251,13 +253,15 @@ export function createDefaultUltraResearchConfig(): UltraResearchConfig {
 export function createDefaultResearchAgent(
   id: string,
   agentType: AgentType = 'claude',
-  providerId?: string
+  providerId?: string,
+  modelId?: string
 ): ResearchAgent {
   return {
     id,
     name: agentType.charAt(0).toUpperCase() + agentType.slice(1),
     agentType,
     providerId,
+    modelId,
     role: 'researcher',
     status: 'idle',
   }

@@ -1,12 +1,17 @@
 /**
  * Ultra Research Agent Card - Configuration card for a single research agent
+ *
+ * Uses the shared AgentModelSelector component for consistent agent/model selection
+ * with dynamic provider support.
  */
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { NativeSelect as Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { X, Bot, Check, Loader2, AlertCircle } from 'lucide-react'
+import { AgentModelSelector } from '@/components/shared/AgentModelSelector'
 import type { ResearchAgent, ResearchAgentStatus, AgentType } from '@/types'
+import type { AgentOption } from '@/hooks/useAgentModelSelector'
+import type { ModelInfo } from '@/lib/model-api'
 
 interface UltraResearchAgentCardProps {
   agent: ResearchAgent
@@ -15,17 +20,17 @@ interface UltraResearchAgentCardProps {
   onRemove: () => void
   disabled?: boolean
   showStatus?: boolean
+  /** Agent options with provider support (from useAgentModelSelector) */
+  agentOptions: AgentOption[]
+  /** Available models for this agent's current configuration */
+  models: ModelInfo[]
+  /** Whether models are loading */
+  modelsLoading: boolean
+  /** Whether agents are loading */
+  agentsLoading: boolean
+  /** Default model ID for the current agent */
+  defaultModelId: string
 }
-
-const AGENT_OPTIONS: { value: AgentType; label: string }[] = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'opencode', label: 'OpenCode' },
-  { value: 'cursor', label: 'Cursor' },
-  { value: 'codex', label: 'Codex' },
-  { value: 'qwen', label: 'Qwen' },
-  { value: 'droid', label: 'Droid' },
-  { value: 'gemini', label: 'Gemini' },
-]
 
 const STATUS_ICONS: { [K in ResearchAgentStatus]: React.ReactNode } = {
   idle: <Bot className="h-3.5 w-3.5 text-muted-foreground" />,
@@ -50,7 +55,28 @@ export function UltraResearchAgentCard({
   onRemove,
   disabled = false,
   showStatus = false,
+  agentOptions,
+  models,
+  modelsLoading,
+  agentsLoading,
+  defaultModelId,
 }: UltraResearchAgentCardProps) {
+  // Build the current composite value for the agent selector
+  const currentAgentOptionValue =
+    agent.providerId && agent.agentType === 'claude'
+      ? `claude:${agent.providerId}`
+      : agent.agentType
+
+  // Handle combined agent+provider change
+  const handleAgentOptionChange = (value: string) => {
+    const [agentPart, providerPart] = value.split(':')
+    onUpdate({
+      agentType: agentPart as AgentType,
+      providerId: providerPart || undefined,
+      modelId: undefined, // Reset to use default for new agent/provider
+    })
+  }
+
   return (
     <Card className="p-3 relative">
       <div className="flex items-start gap-2">
@@ -61,37 +87,22 @@ export function UltraResearchAgentCard({
 
         {/* Agent Config */}
         <div className="flex-1 min-w-0 space-y-2">
-          {/* Agent Type Row */}
-          <div className="flex items-center gap-2">
-            <Select
-              value={agent.agentType}
-              onChange={(e) => onUpdate({ agentType: e.target.value as AgentType })}
-              disabled={disabled}
-              className="flex-1 h-8 text-xs"
-              aria-label="Agent type"
-            >
-              {AGENT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-
-            {/* Provider for Claude */}
-            {agent.agentType === 'claude' && (
-              <Select
-                value={agent.providerId || ''}
-                onChange={(e) => onUpdate({ providerId: e.target.value || undefined })}
-                disabled={disabled}
-                className="w-20 h-8 text-xs"
-                aria-label="Provider"
-              >
-                <option value="">Default</option>
-                <option value="zai">Z.AI</option>
-                <option value="minimax">MiniMax</option>
-              </Select>
-            )}
-          </div>
+          {/* Agent Type & Model Row */}
+          <AgentModelSelector
+            variant="compact"
+            agentOptions={agentOptions}
+            currentAgentOptionValue={currentAgentOptionValue}
+            onAgentOptionChange={handleAgentOptionChange}
+            agentType={agent.agentType}
+            modelId={agent.modelId || ''}
+            onModelChange={(modelId) => onUpdate({ modelId: modelId || undefined })}
+            models={models}
+            modelsLoading={modelsLoading}
+            agentsLoading={agentsLoading}
+            defaultModelId={defaultModelId}
+            disabled={disabled}
+            className="flex-wrap gap-2"
+          />
 
           {/* Focus Area */}
           <div>
