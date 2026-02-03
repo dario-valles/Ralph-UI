@@ -15,6 +15,7 @@ interface UltraResearchAgentCardWithModelsProps {
   onUpdate: (updates: Partial<ResearchAgent>) => void
   onRemove: () => void
   disabled?: boolean
+  canRemove?: boolean
   showStatus?: boolean
   agentOptions: AgentOption[]
   agentsLoading: boolean
@@ -30,6 +31,7 @@ export function UltraResearchAgentCardWithModels({
   onUpdate,
   onRemove,
   disabled = false,
+  canRemove = true,
   showStatus = false,
   agentOptions,
   agentsLoading,
@@ -48,6 +50,7 @@ export function UltraResearchAgentCardWithModels({
       onUpdate={onUpdate}
       onRemove={onRemove}
       disabled={disabled}
+      canRemove={canRemove}
       showStatus={showStatus}
       agentOptions={agentOptions}
       models={models}

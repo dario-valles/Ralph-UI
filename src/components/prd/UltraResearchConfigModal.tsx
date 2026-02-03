@@ -413,7 +413,7 @@ function UltraResearchConfigContent() {
                 index={index}
                 onUpdate={(updates) => handleUpdateAgent(index, updates)}
                 onRemove={() => handleRemoveAgent(index)}
-                disabled={agents.length <= 2 && index < 2}
+                canRemove={agents.length > 2}
                 agentOptions={agentOptions}
                 agentsLoading={isLoading}
               />

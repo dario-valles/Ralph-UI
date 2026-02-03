@@ -18,7 +18,10 @@ interface UltraResearchAgentCardProps {
   index: number
   onUpdate: (updates: Partial<ResearchAgent>) => void
   onRemove: () => void
+  /** Whether the card inputs are disabled (e.g., during research) */
   disabled?: boolean
+  /** Whether the agent can be removed (false when at minimum agent count) */
+  canRemove?: boolean
   showStatus?: boolean
   /** Agent options with provider support (from useAgentModelSelector) */
   agentOptions: AgentOption[]
@@ -54,6 +57,7 @@ export function UltraResearchAgentCard({
   onUpdate,
   onRemove,
   disabled = false,
+  canRemove = true,
   showStatus = false,
   agentOptions,
   models,
@@ -127,7 +131,7 @@ export function UltraResearchAgentCard({
         </div>
 
         {/* Remove Button */}
-        {!disabled && (
+        {canRemove && (
           <Button
             variant="ghost"
             size="sm"
