@@ -780,6 +780,9 @@ export function PRDChatPanel() {
             streaming={streaming}
             qualityAssessment={qualityAssessment}
             executionMode={currentWorkflow?.executionMode}
+            projectPath={currentSession?.projectPath}
+            workflowId={currentWorkflow?.id}
+            requirements={currentWorkflow?.requirements}
             onSendMessage={handleSendMessage}
             onRefreshQuality={assessUnifiedQuality}
             onExecutionModeChange={handleExecutionModeChange}

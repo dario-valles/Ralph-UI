@@ -1,6 +1,7 @@
-import { forwardRef } from 'react'
+import { forwardRef, useState, useImperativeHandle, useRef } from 'react'
 import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { FloatingQualityBadge } from './FloatingQualityBadge'
+import { ParallelModeDialog } from './ParallelModeDialog'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +9,9 @@ import { Switch } from '@/components/ui/switch'
 import { ListOrdered, GitBranch, Microscope, Settings2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePRDChatStore } from '@/stores/prdChatStore'
+import { getSlashCommand } from '@/lib/prd-chat-commands'
 import type { ChatSession, QualityAssessment, ChatAttachment, ExecutionMode } from '@/types'
+import type { Requirement } from '@/types/prd-workflow'
 import type { SlashCommand, SlashCommandResult } from '@/lib/prd-chat-commands'
 
 export type { ChatInputHandle }
@@ -20,6 +23,12 @@ interface ChatInputAreaProps {
   streaming: boolean
   qualityAssessment: QualityAssessment | null
   executionMode?: ExecutionMode
+  /** Project path for the current session (used for parallel mode dialog) */
+  projectPath?: string | null
+  /** Workflow ID (used for parallel mode dialog) */
+  workflowId?: string | null
+  /** Requirements from the workflow (used for parallel mode dialog) */
+  requirements?: Record<string, Requirement>
   onSendMessage: (content: string, attachments?: ChatAttachment[]) => void
   onRefreshQuality: () => void
   onExecutionModeChange?: (mode: ExecutionMode) => void
@@ -41,6 +50,9 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
     streaming,
     qualityAssessment,
     executionMode,
+    projectPath,
+    workflowId,
+    requirements = {},
     onSendMessage,
     onRefreshQuality,
     onExecutionModeChange,
@@ -49,6 +61,15 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
   },
   ref
 ) {
+  const chatInputRef = useRef<ChatInputHandle>(null)
+  const [showParallelDialog, setShowParallelDialog] = useState(false)
+
+  // Forward ref to parent, exposing chat input methods
+  useImperativeHandle(ref, () => ({
+    insertText: (text: string) => chatInputRef.current?.insertText(text),
+    focus: () => chatInputRef.current?.focus(),
+  }))
+
   const isDisabled = loading || streaming || !currentSession
   const currentMode = executionMode || 'sequential'
 
@@ -59,6 +80,32 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
   const isResearching =
     activeResearchSession?.status &&
     !['complete', 'error', 'cancelled'].includes(activeResearchSession.status)
+
+  // Handle execution mode button click
+  const handleParallelClick = () => {
+    // Only show dialog when switching FROM sequential TO parallel
+    if (currentMode === 'sequential') {
+      setShowParallelDialog(true)
+    } else {
+      // Already in parallel mode, just switch to sequential (no dialog needed)
+      onExecutionModeChange?.('sequential')
+    }
+  }
+
+  // Handle parallel mode confirmation from dialog
+  const handleParallelConfirm = () => {
+    setShowParallelDialog(false)
+    onExecutionModeChange?.('parallel')
+  }
+
+  // Handle "Optimize for Parallel" button - inserts /parallel-prep template
+  const handleOptimizeForParallel = () => {
+    const command = getSlashCommand('parallel-prep')
+    if (command?.template) {
+      chatInputRef.current?.insertText(command.template)
+      chatInputRef.current?.focus()
+    }
+  }
 
   return (
     <>
@@ -101,7 +148,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onExecutionModeChange('parallel')}
+                      onClick={handleParallelClick}
                       disabled={isDisabled}
                       className={cn(
                         'h-7 px-2.5 text-xs gap-1 rounded-none',
@@ -169,7 +216,7 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
         )}
 
         <ChatInput
-          ref={ref}
+          ref={chatInputRef}
           onSend={onSendMessage}
           disabled={isDisabled}
           placeholder={
@@ -180,6 +227,17 @@ export const ChatInputArea = forwardRef<ChatInputHandle, ChatInputAreaProps>(fun
           onActionCommand={onActionCommand}
         />
       </div>
+
+      {/* Parallel Mode Confirmation Dialog */}
+      <ParallelModeDialog
+        open={showParallelDialog}
+        onOpenChange={setShowParallelDialog}
+        onConfirm={handleParallelConfirm}
+        onOptimize={handleOptimizeForParallel}
+        projectPath={projectPath ?? null}
+        workflowId={workflowId ?? null}
+        requirements={requirements}
+      />
     </>
   )
 })

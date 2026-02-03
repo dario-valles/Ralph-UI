@@ -14,6 +14,7 @@ import {
   Network,
   FileSliders,
   Microscope,
+  Workflow,
 } from 'lucide-react'
 import type { ChatCommandConfig } from '@/types'
 
@@ -387,6 +388,45 @@ Provide a numbered list of stories in the order they should be implemented:
     type: 'template',
     template: 'Please critique the current requirements for clarity, completeness, and feasibility.',
   },
+  {
+    id: 'parallel-prep',
+    label: 'Parallel Prep',
+    description: 'Optimize PRD for parallel execution',
+    icon: <Workflow className="h-4 w-4 mr-2" />,
+    type: 'template',
+    template: `Analyze this PRD for parallel execution optimization.
+
+## Current Dependency Analysis
+1. List all stories and their dependencies
+2. Identify bottleneck stories (blocking 3+ others)
+3. Find over-dependent stories that could be independent
+
+## Parallelization Recommendations
+For each story that could be parallelized:
+- Current: depends on [X, Y, Z]
+- Suggested: depends on [X only] or [independent]
+- Rationale: why this dependency can be removed
+
+## Parallel Execution Plan
+Create a Mermaid diagram showing execution waves:
+
+\`\`\`mermaid
+gantt
+    title Parallel Execution Waves
+    dateFormat X
+    axisFormat %s
+    section Wave 1 (Parallel)
+    Story-1: 0, 1
+    Story-2: 0, 1
+    section Wave 2 (Parallel)
+    Story-3: 1, 2
+\`\`\`
+
+## Summary
+- Stories ready for Wave 1: [list]
+- Total execution waves: [N]
+- Estimated speedup vs sequential: [X%]`,
+  },
 
   // ==========================================================================
   // Template Commands (Insert Text)
@@ -508,6 +548,7 @@ export const COMMAND_ICONS: Record<string, React.ReactNode> = {
   dependencies: <Network className="h-4 w-4 mr-2" />,
   template: <FileSliders className="h-4 w-4 mr-2" />,
   critique: <Sparkles className="h-4 w-4 mr-2" />,
+  'parallel-prep': <Workflow className="h-4 w-4 mr-2" />,
   epic: <Layers className="h-4 w-4 mr-2" />,
   story: <FileText className="h-4 w-4 mr-2" />,
   'story-dep': <GitBranch className="h-4 w-4 mr-2" />,
