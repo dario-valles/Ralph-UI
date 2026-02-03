@@ -183,11 +183,14 @@ export function createWebSocketPty(options: WebSocketPtyOptions): Promise<WebSoc
         // Forward to callbacks as terminal output
         dataCallbacks.forEach((cb) => cb(event.data))
       } else if (event.data instanceof Blob) {
-        // Handle binary data
+        // Handle binary data - guard against callbacks being cleared during async operation
         event.data
           .arrayBuffer()
           .then((buffer) => {
-            dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+            // Only invoke callbacks if connection is still active
+            if (isConnected && dataCallbacks.length > 0) {
+              dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+            }
           })
           .catch((err) => {
             console.error('Failed to read blob data:', err)
@@ -331,10 +334,14 @@ export function reconnectWebSocketPty(options: ReconnectOptions): Promise<WebSoc
 
         dataCallbacks.forEach((cb) => cb(event.data))
       } else if (event.data instanceof Blob) {
+        // Handle binary data - guard against callbacks being cleared during async operation
         event.data
           .arrayBuffer()
           .then((buffer) => {
-            dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+            // Only invoke callbacks if connection is still active
+            if (isConnected && dataCallbacks.length > 0) {
+              dataCallbacks.forEach((cb) => cb(new Uint8Array(buffer)))
+            }
           })
           .catch((err) => {
             console.error('Failed to read blob data:', err)

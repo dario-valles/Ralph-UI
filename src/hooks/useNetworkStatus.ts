@@ -85,6 +85,7 @@ export function useNetworkStatus() {
 
   // Sync offline queue when connection is restored (US-5)
   useEffect(() => {
+    let cancelled = false
     const wasDisconnected = prevStatusRef.current !== 'connected'
     const isNowConnected = status === 'connected'
     prevStatusRef.current = status
@@ -96,6 +97,8 @@ export function useNetworkStatus() {
       toast.default('Syncing...', `Syncing ${queueLength} offline ${pluralize(queueLength)}`)
 
       syncQueuedActions().then(({ synced, failed }) => {
+        if (cancelled) return
+
         if (synced > 0) {
           console.log(`[NetworkStatus] Synced ${synced} actions`)
         }
@@ -131,6 +134,10 @@ export function useNetworkStatus() {
           )
         }
       })
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [status, queueLength])
 }

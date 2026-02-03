@@ -76,6 +76,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup blur timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Expose imperative handle for inserting text
   useImperativeHandle(ref, () => ({
@@ -466,7 +476,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             onBlur={() => {
               setIsFocused(false)
               // Delay closing menu to allow click events to register
-              setTimeout(() => setSlashMenuOpen(false), 200)
+              blurTimeoutRef.current = setTimeout(() => setSlashMenuOpen(false), 200)
             }}
             placeholder={placeholder || 'Type your message... (Try / for commands)'}
             disabled={disabled}

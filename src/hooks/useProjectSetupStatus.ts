@@ -36,11 +36,39 @@ export function useProjectSetupStatus(projectPath: string | null): ProjectSetupS
   }, [projectPath])
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchStatus = async () => {
-      await checkStatus()
+      if (!projectPath) {
+        setStatus(EMPTY_STATUS)
+        return
+      }
+
+      setStatus((prev) => ({ ...prev, loading: true }))
+
+      try {
+        const [hasContext, prdCount] = await Promise.all([
+          invoke<boolean>('has_context_files', { projectPath }),
+          prdApi.getCount(projectPath).then((r) => r.count).catch(() => 0),
+        ])
+
+        if (!cancelled) {
+          setStatus({ hasContext, hasFirstPrd: prdCount > 0, loading: false })
+        }
+      } catch (error) {
+        console.error('Failed to check project setup status:', error)
+        if (!cancelled) {
+          setStatus(EMPTY_STATUS)
+        }
+      }
     }
+
     fetchStatus()
-  }, [checkStatus])
+
+    return () => {
+      cancelled = true
+    }
+  }, [projectPath])
 
   return { ...status, refresh: checkStatus }
 }

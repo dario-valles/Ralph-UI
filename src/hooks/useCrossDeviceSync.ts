@@ -128,6 +128,9 @@ export function useCrossDeviceSync(options: CrossDeviceSyncOptions = {}) {
       const results = await Promise.all(subscriptions)
       if (isMounted) {
         unsubscribers.push(...results)
+      } else {
+        // Clean up immediately if unmounted during setup
+        results.forEach((unsub) => unsub())
       }
     }
 
@@ -193,8 +196,9 @@ export async function fetchSessionAgents(sessionId: string) {
   }
 }
 
-// Track if global listeners have been set up
+// Track if global listeners have been set up and store cleanup functions
 let globalListenersInitialized = false
+const globalUnsubscribers: (() => void)[] = []
 
 /**
  * Sets up global event listeners for cross-device synchronization.
@@ -204,7 +208,7 @@ let globalListenersInitialized = false
  * - Tool call tracking (agent tool usage display)
  * - Real-time sync events logging (for debugging)
  */
-export function setupGlobalSyncListeners(): void {
+export async function setupGlobalSyncListeners(): Promise<void> {
   if (globalListenersInitialized) {
     // console.log('[CrossDeviceSync] Global listeners already initialized')
     return
@@ -220,34 +224,55 @@ export function setupGlobalSyncListeners(): void {
   // Set up tool call listeners
   const store = useToolCallStore.getState()
 
-  subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
-    store.addToolCall(payload)
-  })
+  try {
+    const unsubToolStarted = await subscribeEvent<ToolCallStartedPayload>('tool:started', (payload) => {
+      store.addToolCall(payload)
+    })
+    globalUnsubscribers.push(unsubToolStarted)
 
-  subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
-    store.completeToolCall(payload)
-  })
+    const unsubToolCompleted = await subscribeEvent<ToolCallCompletedPayload>('tool:completed', (payload) => {
+      store.completeToolCall(payload)
+    })
+    globalUnsubscribers.push(unsubToolCompleted)
 
-  // Log cross-device sync events for debugging
-  subscribeEvent<TaskStatusChangedPayload>('task:status_changed', () => {
-    // console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
-  })
+    // Log cross-device sync events for debugging
+    const unsubTaskChanged = await subscribeEvent<TaskStatusChangedPayload>('task:status_changed', () => {
+      // console.log('[CrossDeviceSync] Task status changed:', payload.taskId, payload.newStatus)
+    })
+    globalUnsubscribers.push(unsubTaskChanged)
 
-  subscribeEvent<SessionStatusChangedPayload>('session:status_changed', () => {
-    // console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
-  })
+    const unsubSessionChanged = await subscribeEvent<SessionStatusChangedPayload>('session:status_changed', () => {
+      // console.log('[CrossDeviceSync] Session status changed:', payload.sessionId, payload.newStatus)
+    })
+    globalUnsubscribers.push(unsubSessionChanged)
 
-  subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', () => {
-    // console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
-  })
+    const unsubAgentChanged = await subscribeEvent<AgentStatusChangedPayload>('agent:status_changed', () => {
+      // console.log('[CrossDeviceSync] Agent status changed:', payload.agentId, payload.newStatus)
+    })
+    globalUnsubscribers.push(unsubAgentChanged)
 
-  subscribeEvent<AgentCompletedPayload>('agent:completed', () => {
-    // console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
-  })
+    const unsubAgentCompleted = await subscribeEvent<AgentCompletedPayload>('agent:completed', () => {
+      // console.log('[CrossDeviceSync] Agent completed:', payload.agentId)
+    })
+    globalUnsubscribers.push(unsubAgentCompleted)
 
-  subscribeEvent<AgentFailedPayload>('agent:failed', () => {
-    // console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
-  })
+    const unsubAgentFailed = await subscribeEvent<AgentFailedPayload>('agent:failed', () => {
+      // console.log('[CrossDeviceSync] Agent failed:', payload.agentId, payload.error)
+    })
+    globalUnsubscribers.push(unsubAgentFailed)
 
-  // console.log('[CrossDeviceSync] Global event listeners registered')
+    // console.log('[CrossDeviceSync] Global event listeners registered')
+  } catch (error) {
+    console.error('[CrossDeviceSync] Failed to setup global listeners:', error)
+  }
+}
+
+/**
+ * Cleans up global event listeners.
+ * Call this when the app is unmounting or being disposed.
+ */
+export function cleanupGlobalSyncListeners(): void {
+  globalUnsubscribers.forEach((unsub) => unsub())
+  globalUnsubscribers.length = 0
+  globalListenersInitialized = false
 }

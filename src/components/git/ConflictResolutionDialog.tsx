@@ -43,16 +43,16 @@ export function ConflictResolutionDialog({
     setResult(null)
     setProgress(0)
 
-    try {
-      // Start progress animation
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          // Slow down as we approach 90%
-          const increment = Math.max(1, (90 - prev) / 10)
-          return Math.min(90, prev + increment)
-        })
-      }, 500)
+    // Start progress animation
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        // Slow down as we approach 90%
+        const increment = Math.max(1, (90 - prev) / 10)
+        return Math.min(90, prev + increment)
+      })
+    }, 500)
 
+    try {
       const resolutionResult = await gitApi.resolveConflictsWithAI(
         repoPath,
         agentType,
@@ -60,7 +60,6 @@ export function ConflictResolutionDialog({
         120 // timeout per conflict in seconds
       )
 
-      clearInterval(progressInterval)
       setProgress(100)
       setResult(resolutionResult)
 
@@ -74,6 +73,7 @@ export function ConflictResolutionDialog({
       setError(err instanceof Error ? err.message : String(err))
       setProgress(0)
     } finally {
+      clearInterval(progressInterval)
       setResolving(false)
     }
   }

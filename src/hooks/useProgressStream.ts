@@ -146,6 +146,7 @@ export function useProgressStream(
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     const unlisteners: (() => void)[] = []
 
     const setupListeners = async () => {
@@ -154,68 +155,98 @@ export function useProgressStream(
         const unlistenProgress = await subscribeEvent<RalphProgressEvent>(
           'ralph:progress',
           (payload) => {
+            if (cancelled) return
             // Filter by execution ID or PRD name if specified
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setProgress(payload)
           }
         )
+        if (cancelled) {
+          unlistenProgress()
+          return
+        }
         unlisteners.push(unlistenProgress)
 
         // Listen to iteration started events
         const unlistenStarted = await subscribeEvent<RalphIterationStartedEvent>(
           'ralph:iteration_started',
           (payload) => {
+            if (cancelled) return
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setIterationStarted(payload)
           }
         )
+        if (cancelled) {
+          unlistenStarted()
+          return
+        }
         unlisteners.push(unlistenStarted)
 
         // Listen to iteration completed events
         const unlistenCompleted = await subscribeEvent<RalphIterationCompletedEvent>(
           'ralph:iteration_completed',
           (payload) => {
+            if (cancelled) return
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setIterationCompleted(payload)
           }
         )
+        if (cancelled) {
+          unlistenCompleted()
+          return
+        }
         unlisteners.push(unlistenCompleted)
 
         // Listen to loop completed events (when all stories pass)
         const unlistenLoopCompleted = await subscribeEvent<RalphLoopCompletedEvent>(
           'ralph:loop_completed',
           (payload) => {
+            if (cancelled) return
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setLoopCompleted(payload)
           }
         )
+        if (cancelled) {
+          unlistenLoopCompleted()
+          return
+        }
         unlisteners.push(unlistenLoopCompleted)
 
         // Listen to loop error events
         const unlistenLoopError = await subscribeEvent<RalphLoopErrorEvent>(
           'ralph:loop_error',
           (payload) => {
+            if (cancelled) return
             if (executionId && payload.executionId !== executionId) return
             if (prdName && payload.prdName !== prdName) return
             setLoopError(payload)
           }
         )
+        if (cancelled) {
+          unlistenLoopError()
+          return
+        }
         unlisteners.push(unlistenLoopError)
 
-        setIsConnected(true)
+        if (!cancelled) {
+          setIsConnected(true)
+        }
       } catch (error) {
         console.error('[useProgressStream] Failed to setup listeners:', error)
-        setIsConnected(false)
+        if (!cancelled) {
+          setIsConnected(false)
+        }
       }
     }
 
     setupListeners()
 
     return () => {
+      cancelled = true
       // Cleanup listeners
       unlisteners.forEach((unlisten) => unlisten())
     }

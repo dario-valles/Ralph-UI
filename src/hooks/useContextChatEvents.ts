@@ -43,6 +43,7 @@ export function useContextChatEvents({
   useEffect(() => {
     if (!sessionId) return
 
+    let cancelled = false
     let unlisten: (() => void) | undefined
 
     const setupListener = async () => {
@@ -50,11 +51,15 @@ export function useContextChatEvents({
         unlisten = await subscribeEvent<ContextChatChunkPayload>(
           'context:chat_chunk',
           (payload) => {
+            if (cancelled) return
             if (payload.sessionId === sessionId) {
               setStreamingContent((prev) => prev + payload.content + '\n')
             }
           }
         )
+        if (cancelled && unlisten) {
+          unlisten()
+        }
       } catch (err) {
         console.warn('Failed to set up context:chat_chunk event listener:', err)
       }
@@ -62,7 +67,10 @@ export function useContextChatEvents({
 
     setupListener()
 
-    return () => unlisten?.()
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
   }, [sessionId])
 
   return {

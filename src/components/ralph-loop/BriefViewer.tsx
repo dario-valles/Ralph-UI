@@ -123,6 +123,18 @@ export function BriefViewer({
   const historicalBriefsRef = useRef(historicalBriefs)
   historicalBriefsRef.current = historicalBriefs
 
+  // Track copy feedback timeout for cleanup
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup copy timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const loadHistoricalBriefs = useCallback(async () => {
     try {
       const briefs = await ralphLoopApi.getHistoricalBriefs(projectPath, prdName)
@@ -185,7 +197,11 @@ export function BriefViewer({
       await navigator.clipboard.writeText(briefContent)
       setCopied(true)
       toast.success('Brief copied to clipboard')
-      setTimeout(() => setCopied(false), 2000)
+      // Clear previous timeout if any
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error('Failed to copy to clipboard')
     }

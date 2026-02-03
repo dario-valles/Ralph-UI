@@ -15,6 +15,7 @@ export function useRalphLoopNotifications(): void {
   const navigate = useNavigate()
 
   useEffect(() => {
+    let cancelled = false
     const unlisteners: (() => void)[] = []
 
     const setupListeners = async () => {
@@ -23,18 +24,24 @@ export function useRalphLoopNotifications(): void {
         const unlistenCompleted = await subscribeEvent<RalphLoopCompletedPayload>(
           'ralph:loop_completed',
           () => {
+            if (cancelled) return
             // Only play sound if completion notifications are enabled
             if (isNotificationEnabled('completion')) {
               triggerNotificationSound('completion')
             }
           }
         )
+        if (cancelled) {
+          unlistenCompleted()
+          return
+        }
         unlisteners.push(unlistenCompleted)
 
         // Listen for Ralph loop error events (US-004: play sound, US-005: check toggles)
         const unlistenError = await subscribeEvent<RalphLoopErrorPayload>(
           'ralph:loop_error',
           (payload) => {
+            if (cancelled) return
             // Play appropriate sound based on error type (US-004, US-005)
             // triggerNotificationSound already checks if the notification type is enabled
             if (payload.errorType === 'max_iterations') {
@@ -78,6 +85,10 @@ export function useRalphLoopNotifications(): void {
             // Only max_iterations needs the in-app action buttons
           }
         )
+        if (cancelled) {
+          unlistenError()
+          return
+        }
         unlisteners.push(unlistenError)
       } catch (error) {
         console.error('[useRalphLoopNotifications] Failed to setup listeners:', error)
@@ -87,6 +98,7 @@ export function useRalphLoopNotifications(): void {
     setupListeners()
 
     return () => {
+      cancelled = true
       unlisteners.forEach((unlisten) => unlisten())
     }
   }, [navigate])
