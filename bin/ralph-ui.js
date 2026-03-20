@@ -348,7 +348,8 @@ async function downloadBinary(version = null, showWelcome = false) {
     const displayVersion = version || releaseVersion
 
     const target = getPlatformTarget()
-    const assetName = `ralph-ui-${target}.tar.gz`
+    const isWindows = process.platform === 'win32'
+    const assetName = `ralph-ui-${target}${isWindows ? '.zip' : '.tar.gz'}`
 
     const asset = release.assets.find((a) => a.name === assetName)
     if (!asset) {
@@ -366,22 +367,35 @@ async function downloadBinary(version = null, showWelcome = false) {
     }
 
     // Download and extract
-    const tarPath = join(cacheDir, assetName)
-    await downloadFileWithProgress(asset.browser_download_url, tarPath)
+    const archivePath = join(cacheDir, assetName)
+    await downloadFileWithProgress(asset.browser_download_url, archivePath)
 
     // Remove old binary if exists
     if (existsSync(binaryPath)) {
       unlinkSync(binaryPath)
     }
 
-    // Extract using tar (available on all platforms with Node.js)
-    execFileSync('tar', ['-xzf', tarPath, '-C', cacheDir], { stdio: 'pipe' })
+    // Extract archive
+    if (isWindows) {
+      // Use PowerShell's Expand-Archive for .zip files on Windows
+      execFileSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          `Expand-Archive -Path '${archivePath}' -DestinationPath '${cacheDir}' -Force`,
+        ],
+        { stdio: 'pipe' }
+      )
+    } else {
+      execFileSync('tar', ['-xzf', archivePath, '-C', cacheDir], { stdio: 'pipe' })
+    }
 
-    // Clean up tar file
-    unlinkSync(tarPath)
+    // Clean up archive file
+    unlinkSync(archivePath)
 
     // Make executable on Unix
-    if (process.platform !== 'win32') {
+    if (!isWindows) {
       chmodSync(binaryPath, 0o755)
     }
 
